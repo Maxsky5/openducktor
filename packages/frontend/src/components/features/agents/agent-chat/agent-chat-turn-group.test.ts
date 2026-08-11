@@ -42,7 +42,7 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
     activeStreamingAssistantMessageId: null,
   },
   sessionAgentColors: {},
-  sessionIdentity: createSessionIdentity(),
+  transcriptTarget: createSessionIdentity(),
   runtimePresentation: {
     runtimeKind: "opencode",
     presentToolCall: presentRegularToolCall,
@@ -146,7 +146,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
 
   test("scope changes invalidate turn groups", () => {
     const previousProps = baseProps({
-      sessionIdentity: {
+      transcriptTarget: {
         ...createSessionIdentity(),
         sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
       },
@@ -155,12 +155,31 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     expect(
       areAgentChatTurnGroupPropsEqual(previousProps, {
         ...previousProps,
-        sessionIdentity: {
+        transcriptTarget: {
           ...createSessionIdentity(),
           sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
         },
       }),
     ).toBe(false);
+  });
+
+  test("recreated equivalent workflow scopes keep turn groups stable", () => {
+    const previousProps = baseProps({
+      transcriptTarget: {
+        ...createSessionIdentity(),
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      },
+    });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(previousProps, {
+        ...previousProps,
+        transcriptTarget: {
+          ...createSessionIdentity(),
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+        },
+      }),
+    ).toBe(true);
   });
 
   test("changed message row identity invalidates turn groups", () => {
@@ -333,7 +352,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         baseProps({
           ...props,
           sessionAgentColors: { build: "text-sky-700" },
-          sessionIdentity: createSessionIdentity(),
+          transcriptTarget: createSessionIdentity(),
         }),
       ),
     ).toBe(true);

@@ -94,11 +94,37 @@ export function useSessionTranscriptSurfaceModel({
     }),
     [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
   );
-  const chatReadiness = deriveAgentChatReadiness({
-    transcriptState: sessionHistory.transcriptState,
-    runtimeReadiness,
-    runtimeBlockedAction,
-  });
+  const failedTranscriptAction = useMemo(
+    () =>
+      sessionHistory.retryHistory
+        ? {
+            label: "Retry",
+            onAction: sessionHistory.retryHistory,
+            disabled: sessionHistory.isRetryingHistory,
+            isPending: sessionHistory.isRetryingHistory,
+          }
+        : null,
+    [sessionHistory.isRetryingHistory, sessionHistory.retryHistory],
+  );
+  const chatReadiness = useMemo(
+    () =>
+      deriveAgentChatReadiness({
+        transcriptState: sessionHistory.transcriptState,
+        runtimeReadiness: {
+          state: runtimeReadiness.state,
+          message: runtimeReadiness.message,
+        },
+        runtimeBlockedAction,
+        failedTranscriptAction,
+      }),
+    [
+      failedTranscriptAction,
+      runtimeBlockedAction,
+      runtimeReadiness.message,
+      runtimeReadiness.state,
+      sessionHistory.transcriptState,
+    ],
+  );
   const runtimePresentation = useMemo(
     () =>
       resolveAgentChatRuntimePresentation({

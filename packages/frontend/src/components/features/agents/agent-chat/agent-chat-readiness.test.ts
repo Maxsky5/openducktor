@@ -47,6 +47,20 @@ describe("deriveAgentChatReadiness", () => {
     });
   });
 
+  test("projects session loading separately from runtime startup", () => {
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: { kind: "session_loading", reason: "history" },
+      runtimeReadiness: readyRuntimeReadiness,
+    });
+
+    expect(readiness.transcriptNotice).toEqual({
+      kind: "session_loading",
+      severity: "loading",
+      title: "Loading session",
+      description: "Loading the selected conversation.",
+    });
+  });
+
   test("projects an explicit disabled recheck action for blocked runtimes", () => {
     const recheck = () => {};
     const action = {
@@ -72,6 +86,23 @@ describe("deriveAgentChatReadiness", () => {
       title: "Runtime unavailable",
       description: "Runtime unavailable",
       action,
+    });
+  });
+
+  test("keeps a blocked runtime explicit when its source omits the error message", () => {
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: { kind: "runtime_waiting" },
+      runtimeReadiness: {
+        ...readyRuntimeReadiness,
+        state: "blocked",
+        message: null,
+      },
+    });
+
+    expect(readiness.transcriptNotice).toMatchObject({
+      kind: "runtime_blocked",
+      severity: "error",
+      description: "Runtime readiness is blocked without an error message.",
     });
   });
 
@@ -123,9 +154,11 @@ describe("deriveAgentChatReadiness", () => {
   });
 
   test("keeps an incomplete-history warning for a visible transcript", () => {
+    const retry = () => {};
     const readiness = deriveAgentChatReadiness({
       transcriptState: { kind: "visible", historyFailure },
       runtimeReadiness: readyRuntimeReadiness,
+      failedTranscriptAction: { label: "Retry", onAction: retry },
     });
 
     expect(readiness.transcriptNotice).toEqual({
@@ -139,6 +172,49 @@ describe("deriveAgentChatReadiness", () => {
         { label: "Page cursor", value: "First page" },
         { label: "Diagnostic ID", value: historyFailure.diagnosticId },
       ],
+      action: { label: "Retry", onAction: retry },
+    });
+  });
+
+  test("omits unavailable history diagnostics and keeps a real page cursor", () => {
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: {
+        kind: "failed",
+        message: "History failed",
+        historyFailure: {
+          code: "request_failed",
+          summary: "History failed",
+          detail: "Request failed",
+          pageCursor: "cursor-2",
+        },
+      },
+      runtimeReadiness: readyRuntimeReadiness,
+    });
+
+    expect(readiness.transcriptNotice).toMatchObject({
+      details: [
+        { label: "Error", value: "Request failed" },
+        { label: "Page cursor", value: "cursor-2" },
+      ],
+    });
+  });
+
+  test("omits optional history diagnostics when none are available", () => {
+    const readiness = deriveAgentChatReadiness({
+      transcriptState: {
+        kind: "failed",
+        message: "History failed",
+        historyFailure: {
+          code: "request_failed",
+          summary: "History failed",
+          detail: "Request failed",
+        },
+      },
+      runtimeReadiness: readyRuntimeReadiness,
+    });
+
+    expect(readiness.transcriptNotice).toMatchObject({
+      details: [{ label: "Error", value: "Request failed" }],
     });
   });
 });

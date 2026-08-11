@@ -167,13 +167,12 @@ describe("AgentChat", () => {
 
   test("renders the todo stack immediately above the composer", () => {
     const model = buildModel();
-    const { transcript: _transcript, ...threadFields } = model.thread;
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
           ...model,
           thread: completeThreadModel({
-            ...threadFields,
+            ...model.thread,
             transcript: buildSessionTranscript(
               buildSession({
                 status: "idle",
@@ -194,13 +193,12 @@ describe("AgentChat", () => {
 
   test("renders session auxiliary errors in the bottom stack above the composer", () => {
     const model = buildModel();
-    const { transcript: _transcript, ...threadFields } = model.thread;
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
           ...model,
           thread: completeThreadModel({
-            ...threadFields,
+            ...model.thread,
             transcript: buildSessionTranscript(
               buildSession({
                 status: "idle",

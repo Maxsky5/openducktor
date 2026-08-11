@@ -21,6 +21,14 @@ describe("resolveAgentChatRuntimePresentation", () => {
       kind: "regular",
       displayName: "Shell command",
     });
+    expect(presentation.presentToolCall("bash", "   ")).toEqual({
+      kind: "regular",
+      displayName: "bash",
+    });
+    expect(presentation.presentToolCall("openducktor_odt_set_plan", "Plan update")).toEqual({
+      kind: "workflow",
+      displayName: "Plan update",
+    });
   });
 
   test("keeps non-runtime chats explicit", () => {
@@ -35,5 +43,18 @@ describe("resolveAgentChatRuntimePresentation", () => {
       kind: "regular",
       displayName: "custom_tool",
     });
+    expect(presentation.presentToolCall("odt_build_completed")).toEqual({
+      kind: "workflow",
+      displayName: "build_completed",
+    });
+  });
+
+  test("keeps approval outcomes absent when the runtime definition is unavailable", () => {
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [],
+      runtimeKind: "codex",
+    });
+
+    expect(presentation.supportedApprovalReplyOutcomes).toBeNull();
   });
 });

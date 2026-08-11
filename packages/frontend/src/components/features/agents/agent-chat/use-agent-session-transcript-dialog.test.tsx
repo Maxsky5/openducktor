@@ -191,6 +191,89 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   }
 
+  test("retries failed runtime transcript history from the error notice", async () => {
+    const sessionStore = createAgentSessionsStore("/repo-a");
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const runtimeDefinitionsContext = createRuntimeDefinitionsContextValue({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    });
+    const repoRuntimeHealthContext = createRepoRuntimeHealthContextValue({
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture(),
+      },
+    });
+    let historyAttempts = 0;
+    const operations: AgentOperationsContextValue = {
+      readSessionTodos: async () => [],
+      readSessionHistory: async () => {
+        historyAttempts += 1;
+        if (historyAttempts === 1) {
+          throw new Error("History unavailable");
+        }
+        return [
+          {
+            messageId: "recovered-message",
+            role: "user",
+            timestamp: "2026-08-11T20:00:00.000Z",
+            text: "Recovered history",
+            displayParts: [],
+            state: "read",
+            parts: [],
+          },
+        ];
+      },
+      loadAgentSessionHistory: async () => null,
+      loadAgentSessionContext: async () => undefined,
+      startAgentSession: async () => {
+        throw new Error("Not configured");
+      },
+      sendAgentMessage: async () => undefined,
+      stopAgentSession: async () => undefined,
+      updateAgentSessionModel: () => undefined,
+      replyAgentApproval: async () => undefined,
+      answerAgentQuestion: async () => undefined,
+    };
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={queryClient}>
+        <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
+          <RepoRuntimeHealthContext.Provider value={repoRuntimeHealthContext}>
+            <AgentSessionsContext.Provider value={sessionStore}>
+              <AgentOperationsContext.Provider value={operations}>
+                {children}
+              </AgentOperationsContext.Provider>
+            </AgentSessionsContext.Provider>
+          </RepoRuntimeHealthContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </QueryClientProvider>
+    );
+    const rendered = render(
+      <AgentSessionTranscriptDialog
+        workspaceRepoPath="/repo-a"
+        target={transcriptTarget}
+        open
+        onOpenChange={() => undefined}
+        title="Subagent activity"
+        description="View what this subagent did."
+      />,
+      { wrapper },
+    );
+
+    try {
+      expect(await screen.findByText("Failed to load session")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(await screen.findByText("Recovered history")).toBeTruthy();
+      expect(historyAttempts).toBe(2);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
     <ActiveWorkspaceContext.Provider
       value={{

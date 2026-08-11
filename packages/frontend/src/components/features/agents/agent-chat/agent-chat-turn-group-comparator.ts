@@ -21,7 +21,7 @@ export type AgentChatTurnGroupProps = {
   turn: AgentChatRenderedTurn;
   modelCatalog?: AgentChatThreadModel["modelCatalog"];
   sessionAgentColors: Record<string, string>;
-  sessionIdentity: AgentSessionTranscriptTarget | null;
+  transcriptTarget: AgentSessionTranscriptTarget | null;
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   subagentPendingApprovalCountBySessionKey: AgentChatThreadModel["subagentPendingApprovalCountBySessionKey"];
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
@@ -227,8 +227,8 @@ export const areAgentChatTurnGroupPropsEqual = (
     previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentColorsEqual(previousProps.sessionAgentColors, nextProps.sessionAgentColors) &&
     areAgentSessionTranscriptTargetsEqual(
-      previousProps.sessionIdentity,
-      nextProps.sessionIdentity,
+      previousProps.transcriptTarget,
+      nextProps.transcriptTarget,
     ) &&
     previousProps.runtimePresentation === nextProps.runtimePresentation &&
     previousProps.resolveRowRef === nextProps.resolveRowRef &&
@@ -239,7 +239,7 @@ export const areAgentChatTurnGroupPropsEqual = (
       nextApprovalCounts: nextProps.subagentPendingApprovalCountBySessionKey,
       previousQuestionCounts: previousProps.subagentPendingQuestionCountBySessionKey,
       nextQuestionCounts: nextProps.subagentPendingQuestionCountBySessionKey,
-      sessionIdentity: nextProps.sessionIdentity,
+      sessionIdentity: nextProps.transcriptTarget,
     })
   );
 };

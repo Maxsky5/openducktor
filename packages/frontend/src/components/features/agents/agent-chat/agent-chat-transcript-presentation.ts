@@ -1,7 +1,4 @@
-import {
-  type AgentSessionTranscriptState,
-  isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentChatTranscriptNotice,
   AgentChatTranscriptPresentation,
@@ -43,7 +40,7 @@ export const resolveAgentChatTranscriptPresentation = ({
     session: null,
     target,
     displayedSessionKey: sessionKey,
-    shouldResetWindow: isAgentSessionTranscriptLoading(state),
+    shouldResetWindow: state.kind === "session_loading",
     notice,
   };
 };

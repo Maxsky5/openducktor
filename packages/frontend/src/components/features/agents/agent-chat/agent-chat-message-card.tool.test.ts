@@ -295,7 +295,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     {
       id: "tool-todowrite",
       tool: "todowrite",
-      toolType: "generic" as const,
       content: "Tool todowrite completed",
       timestamp: "2026-02-22T10:20:31.000Z",
       input: { todos: [] },
@@ -304,7 +303,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     {
       id: "tool-namespaced-todowrite",
       tool: "openducktor_odt_todowrite",
-      toolType: "generic" as const,
       content: "Tool openducktor_odt_todowrite completed",
       timestamp: "2026-02-22T10:20:32.000Z",
       input: { todos: [] },
@@ -313,7 +311,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     {
       id: "tool-todoread",
       tool: "todoread",
-      toolType: "generic" as const,
       content: "Tool todoread completed",
       timestamp: "2026-02-22T10:20:33.000Z",
       input: {},
@@ -322,7 +319,6 @@ describe("AgentChatMessageCard tool presentation", () => {
     {
       id: "tool-namespaced-todoread",
       tool: "openducktor_odt_todoread",
-      toolType: "generic" as const,
       content: "Tool openducktor_odt_todoread completed",
       timestamp: "2026-02-22T10:20:34.000Z",
       input: {},

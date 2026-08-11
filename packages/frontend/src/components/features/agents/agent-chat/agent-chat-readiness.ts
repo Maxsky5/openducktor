@@ -8,7 +8,7 @@ import type {
 
 type DeriveAgentChatReadinessInput = {
   transcriptState: AgentSessionTranscriptState;
-  runtimeReadiness: RepoRuntimeReadiness;
+  runtimeReadiness: Pick<RepoRuntimeReadiness, "state" | "message">;
   runtimeBlockedAction?: AgentChatTranscriptNoticeAction | null;
   failedTranscriptAction?: AgentChatTranscriptNoticeAction | null;
 };
@@ -54,16 +54,13 @@ export const deriveAgentChatReadiness = ({
 }: DeriveAgentChatReadinessInput): AgentChatReadiness => {
   let transcriptNotice: AgentChatTranscriptNotice | null = null;
 
-  if (
-    transcriptState.kind === "runtime_waiting" &&
-    runtimeReadiness.state === "blocked" &&
-    runtimeReadiness.message
-  ) {
+  if (transcriptState.kind === "runtime_waiting" && runtimeReadiness.state === "blocked") {
     transcriptNotice = {
       kind: "runtime_blocked",
       severity: "error",
       title: "Runtime unavailable",
-      description: runtimeReadiness.message,
+      description:
+        runtimeReadiness.message ?? "Runtime readiness is blocked without an error message.",
       ...(runtimeBlockedAction ? { action: runtimeBlockedAction } : {}),
     };
   } else if (transcriptState.kind === "runtime_waiting") {

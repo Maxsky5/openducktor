@@ -265,12 +265,25 @@ export function useAgentStudioChatModel({
     }),
     [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
   );
-  const chatReadiness = deriveAgentChatReadiness({
-    transcriptState: selectedSessionTranscriptState,
-    runtimeReadiness,
-    runtimeBlockedAction,
-    failedTranscriptAction,
-  });
+  const chatReadiness = useMemo(
+    () =>
+      deriveAgentChatReadiness({
+        transcriptState: selectedSessionTranscriptState,
+        runtimeReadiness: {
+          state: runtimeReadiness.state,
+          message: runtimeReadiness.message,
+        },
+        runtimeBlockedAction,
+        failedTranscriptAction,
+      }),
+    [
+      failedTranscriptAction,
+      runtimeBlockedAction,
+      runtimeReadiness.message,
+      runtimeReadiness.state,
+      selectedSessionTranscriptState,
+    ],
+  );
   const runtimePresentation = useMemo(
     () =>
       resolveAgentChatRuntimePresentation({

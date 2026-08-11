@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  createDefaultTestSessionIdentity,
+  createCodexMessageCardTestProps,
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
   renderMessageCardToHtml,
 } from "./agent-chat-message-card-test-harness";
-import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 
 describe("AgentChatMessageCard messages", () => {
   test("renders assistant footer with agent, provider/model, and variant labels", () => {
@@ -94,15 +93,7 @@ describe("AgentChatMessageCard messages", () => {
             variant: "high",
           },
         },
-        sessionIdentity: {
-          ...createDefaultTestSessionIdentity(),
-          runtimeKind: "codex",
-        },
-        runtimePresentation: {
-          runtimeKind: "codex",
-          presentToolCall: presentRegularToolCall,
-          supportedApprovalReplyOutcomes: null,
-        },
+        ...createCodexMessageCardTestProps(),
         sessionAgentColors: {},
       }),
     );
@@ -394,15 +385,7 @@ describe("AgentChatMessageCard messages", () => {
             modelId: "gpt-5.3-codex",
           },
         },
-        sessionIdentity: {
-          ...createDefaultTestSessionIdentity(),
-          runtimeKind: "codex",
-        },
-        runtimePresentation: {
-          runtimeKind: "codex",
-          presentToolCall: presentRegularToolCall,
-          supportedApprovalReplyOutcomes: null,
-        },
+        ...createCodexMessageCardTestProps(),
         sessionAgentColors: {},
       }),
     );

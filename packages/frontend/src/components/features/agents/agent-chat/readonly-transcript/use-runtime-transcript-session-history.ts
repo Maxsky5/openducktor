@@ -51,6 +51,8 @@ type RuntimeTranscriptSessionHistory = {
   session: AgentChatTranscriptSession | null;
   interactionSession: AgentSessionState | null;
   transcriptState: AgentSessionTranscriptState;
+  retryHistory: (() => void) | null;
+  isRetryingHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
@@ -201,11 +203,16 @@ export function useRuntimeTranscriptSessionHistory({
       repoReadinessState,
     });
   }, [emptyReason, historyQuery.error, repoReadinessState, runtimePolicyError, session]);
+  const retryHistory = useCallback(() => {
+    void historyQuery.refetch();
+  }, [historyQuery.refetch]);
 
   return {
     session,
     interactionSession: matchingSession,
     transcriptState,
+    retryHistory: historyQuery.error ? retryHistory : null,
+    isRetryingHistory: historyQuery.isFetching,
     replyAgentApproval,
     answerAgentQuestion,
   };

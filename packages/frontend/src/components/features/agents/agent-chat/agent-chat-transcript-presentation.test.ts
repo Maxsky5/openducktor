@@ -70,4 +70,49 @@ describe("resolveAgentChatTranscriptPresentation", () => {
       notice,
     });
   });
+
+  test("keeps a visible session while its runtime starts", () => {
+    const session = createSession();
+
+    expect(
+      resolveAgentChatTranscriptPresentation({
+        sessionKey: agentSessionIdentityKey(session),
+        session,
+        target: session,
+        state: { kind: "runtime_waiting" },
+        notice: null,
+      }),
+    ).toMatchObject({
+      kind: "session",
+      session,
+      shouldResetWindow: false,
+    });
+  });
+
+  test.each([
+    { state: { kind: "empty", reason: "inactive" } as const, shouldResetWindow: false },
+    { state: { kind: "failed", message: "History failed" } as const, shouldResetWindow: false },
+    { state: { kind: "runtime_waiting" } as const, shouldResetWindow: false },
+    { state: { kind: "visible" } as const, shouldResetWindow: false },
+  ])(
+    "returns an empty presentation for sessionless $state.kind state",
+    ({ state, shouldResetWindow }) => {
+      expect(
+        resolveAgentChatTranscriptPresentation({
+          sessionKey: null,
+          session: null,
+          target: null,
+          state,
+          notice: null,
+        }),
+      ).toEqual({
+        kind: "empty",
+        session: null,
+        target: null,
+        displayedSessionKey: null,
+        shouldResetWindow,
+        notice: null,
+      });
+    },
+  );
 });

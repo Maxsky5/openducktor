@@ -12,8 +12,6 @@ type ReadonlyTranscriptSessionInput = AgentSessionTranscriptTarget & {
   history: AgentSessionHistoryMessage[];
 };
 
-const EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT = "1970-01-01T00:00:00.000Z";
-
 const updateHash = (hash: number, value: string): number => {
   let nextHash = hash;
   for (let index = 0; index < value.length; index += 1) {
@@ -55,51 +53,6 @@ export const createReadonlyTranscriptSession = ({
     }),
     transcriptHistoryVersion(history),
   ),
-});
-
-export const createReadonlyRuntimeSessionState = ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory,
-  history,
-}: ReadonlyTranscriptSessionInput): AgentSessionState => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  taskId: "",
-  role: null,
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: history[0]?.timestamp ?? EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
-  historyLoadState: "loaded",
-  messages: createSessionMessagesState(
-    externalSessionId,
-    historyToChatMessages(history, {
-      role: null,
-    }),
-    transcriptHistoryVersion(history),
-  ),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-});
-
-export const createEmptyReadonlyRuntimeSessionState = ({
-  externalSessionId,
-  runtimeKind,
-  workingDirectory,
-}: AgentSessionTranscriptTarget): AgentSessionState => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  taskId: "",
-  role: null,
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: EMPTY_READONLY_RUNTIME_SESSION_STARTED_AT,
-  historyLoadState: "loading",
-  messages: createSessionMessagesState(externalSessionId),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
 });
 
 const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>
