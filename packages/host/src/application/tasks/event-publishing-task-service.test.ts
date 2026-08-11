@@ -88,6 +88,45 @@ describe("createEventPublishingTaskService", () => {
     ).resolves.toEqual(taskCard());
     expect(reports).toEqual(["acceptance failure reported"]);
   });
+  test("publishes a committed create before returning its cleanup failure", async () => {
+    const publishedTaskIds: string[] = [];
+    const failure = new HostOperationError({
+      operation: "create-task",
+      message: "Asset cleanup failed.",
+    });
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({
+        createTask: () =>
+          Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "create-task",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+              failure,
+            }),
+          ),
+      }),
+      taskSyncService: {
+        publishExternalTaskCreated: (_repoPath, taskId) =>
+          Effect.sync(() => {
+            publishedTaskIds.push(taskId);
+          }),
+        publishTasksUpdated: () => Effect.dieMessage("unexpected task update publication"),
+        syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service
+          .createTask({
+            repoPath: "/repo",
+            task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toBe(failure);
+    expect(publishedTaskIds).toEqual(["task-1"]);
+  });
   test("publishes set-plan partial progress and preserves the original failure", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({

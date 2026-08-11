@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
   createAgentSessionRecord,
@@ -83,6 +84,41 @@ const metadataWithSessions = (
   agentSessions,
 });
 describe("createTaskService task mutations and reset", () => {
+  test("reports committed task asset cleanup failures as mutation progress", async () => {
+    const createdTaskId = "task-2";
+    const failure = new TaskAssetError({
+      operation: "create",
+      code: "purge",
+      taskId: createdTaskId,
+      assetIds: [],
+      failedPhase: "cleanup_after_commit",
+      durableState: "committed_cleanup_pending",
+      retryAllowed: false,
+      message: "Asset cleanup failed.",
+    });
+    const service = createTaskServiceWithMutationProgress({
+      taskStore: {
+        createTask: () => Effect.fail(failure),
+      },
+    });
+
+    const result = await Effect.runPromise(
+      service
+        .createTask({
+          repoPath: "/repo",
+          task: { title: "Task", issueType: "task", aiReviewEnabled: true, priority: 2 },
+        })
+        .pipe(Effect.flip),
+    );
+
+    expect(result).toBeInstanceOf(TaskMutationProgressFailure);
+    expect(result).toMatchObject({
+      operation: "create-task",
+      changes: { taskIds: [createdTaskId], removedTaskIds: [] },
+      failure,
+    });
+  });
+
   test("creates a task after validating parent relationships and enriches the result", async () => {
     const calls: unknown[] = [];
     const createdTask = task({ id: "task-2", parentId: "epic-1", status: "open" });

@@ -172,7 +172,7 @@ export const createTaskAssetAwareUpdate =
       const updated = yield* persistence.updateTaskWithDescriptionAssets({
         repoPath: input.repoPath,
         taskId: input.taskId,
-        expectedDescription: currentTask.description,
+        expectedTask: currentTask,
         expectedAssetIds: existing.map((asset) => asset.id),
         patch: input.patch,
         insertAssets: toNewTaskAssetRecords(stagedAssets),

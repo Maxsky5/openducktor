@@ -9,6 +9,7 @@ import {
   taskAssetRenderContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRecord, TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
@@ -131,6 +132,27 @@ export const createTaskAssetReadService = (input: {
   registry: Pick<TaskAssetRegistryPort, "getAsset">;
   resolveRepoPath(workspaceId: string): Effect.Effect<string, unknown>;
 }): TaskAssetReadService => {
+  const mapWorkspaceError = (
+    cause: unknown,
+    context: Omit<TaskAssetRenderContext, "assetId">,
+    assetIds: string[],
+  ) => {
+    const missingWorkspace = cause instanceof HostValidationError && cause.field === "workspaceId";
+    return new TaskAssetError({
+      operation: "serve",
+      code: missingWorkspace ? "validation" : "filesystem",
+      taskId: context.taskId,
+      assetIds,
+      failedPhase: "resolve_workspace",
+      durableState: "unchanged",
+      retryAllowed: false,
+      message: missingWorkspace
+        ? "Task assets were not found."
+        : "Task asset workspace could not be read.",
+      ...(missingWorkspace ? {} : { cause }),
+    });
+  };
+
   const getRegisteredAsset = (repoPath: string, context: TaskAssetRenderContext) =>
     input.registry
       .getAsset({
@@ -188,8 +210,8 @@ export const createTaskAssetReadService = (input: {
         const repoPath = yield* input
           .resolveRepoPath(parsed.data.workspaceId)
           .pipe(
-            Effect.mapError(() =>
-              serveError("resolve_workspace", "Task asset was not found.", parsed.data),
+            Effect.mapError((cause) =>
+              mapWorkspaceError(cause, parsed.data, [parsed.data.assetId]),
             ),
           );
         const record = yield* getRegisteredAsset(repoPath, parsed.data);
@@ -215,21 +237,9 @@ export const createTaskAssetReadService = (input: {
           });
         }
         const { assetIds, ...renderContext } = parsed.data;
-        const repoPath = yield* input.resolveRepoPath(renderContext.workspaceId).pipe(
-          Effect.mapError(
-            () =>
-              new TaskAssetError({
-                operation: "serve",
-                code: "validation",
-                taskId: renderContext.taskId,
-                assetIds,
-                failedPhase: "resolve_workspace",
-                durableState: "unchanged",
-                retryAllowed: false,
-                message: "Task assets were not found.",
-              }),
-          ),
-        );
+        const repoPath = yield* input
+          .resolveRepoPath(renderContext.workspaceId)
+          .pipe(Effect.mapError((cause) => mapWorkspaceError(cause, renderContext, assetIds)));
         const registeredAssets = yield* Effect.forEach(assetIds, (assetId) => {
           const context = { ...renderContext, assetId };
           return getRegisteredAsset(repoPath, context).pipe(

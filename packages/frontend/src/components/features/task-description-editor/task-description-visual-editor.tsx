@@ -83,6 +83,7 @@ export default function TaskDescriptionVisualEditor({
   const imageContext = useMemo(() => ({ previews, renderContext }), [previews, renderContext]);
 
   const editor = useEditor({
+    editable: !uploading,
     extensions: createTaskDescriptionMarkdownExtensions({
       codeBlock: MermaidCodeBlock,
       image: VisualImage,
@@ -127,6 +128,13 @@ export default function TaskDescriptionVisualEditor({
     editor.commands.setContent(body, { contentType: "markdown", emitUpdate: false });
     hydratedBody.current = body;
   }, [body, editor]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || editor.isEditable === !uploading) {
+      return;
+    }
+    editor.setEditable(!uploading);
+  }, [editor, uploading]);
 
   const uploadFiles = useCallback(
     (files: File[]): void => {

@@ -68,6 +68,28 @@ export const createTaskAssetQuarantineFiles = ({
     }
     return manifest;
   };
+  const listIds = async (): Promise<string[]> => {
+    if (!(await existingStat(quarantineRoot))) {
+      return [];
+    }
+    const entries = await readdir(quarantineRoot, { withFileTypes: true });
+    const quarantineIds: string[] = [];
+    for (const entry of entries) {
+      const entryPath = path.join(quarantineRoot, entry.name);
+      if (entry.name.startsWith(PUBLICATION_PREFIX) && !ACTIVE_PUBLICATIONS.has(entryPath)) {
+        await rm(entryPath, { force: true, recursive: true });
+        continue;
+      }
+      if (reservedDirectoryNames.includes(entry.name)) {
+        continue;
+      }
+      if (!entry.isDirectory() || !taskAssetIdSchema.safeParse(entry.name).success) {
+        throw new Error(`Unexpected task asset quarantine entry '${entry.name}'.`);
+      }
+      quarantineIds.push(entry.name);
+    }
+    return quarantineIds.sort();
+  };
   const moves = (manifest: QuarantineManifest) => {
     if (manifest.operation === "delete") {
       return [
@@ -109,29 +131,24 @@ export const createTaskAssetQuarantineFiles = ({
         ACTIVE_PUBLICATIONS.delete(publicationRoot);
       }
     },
+    async claim(destinationRoot: string): Promise<string[]> {
+      const claimed: string[] = [];
+      await mkdir(destinationRoot, { recursive: true });
+      for (const quarantineId of await listIds()) {
+        try {
+          await rename(root(quarantineId), path.join(destinationRoot, quarantineId));
+          claimed.push(quarantineId);
+        } catch (cause) {
+          if (!isMissing(cause)) {
+            throw cause;
+          }
+        }
+      }
+      return claimed;
+    },
     async list(): Promise<TaskAssetQuarantine[]> {
-      if (!(await existingStat(quarantineRoot))) {
-        return [];
-      }
-      const entries = await readdir(quarantineRoot, { withFileTypes: true });
-      const quarantineIds: string[] = [];
-      for (const entry of entries) {
-        const entryPath = path.join(quarantineRoot, entry.name);
-        if (entry.name.startsWith(PUBLICATION_PREFIX) && !ACTIVE_PUBLICATIONS.has(entryPath)) {
-          await rm(entryPath, { force: true, recursive: true });
-          continue;
-        }
-        if (reservedDirectoryNames.includes(entry.name)) {
-          continue;
-        }
-        if (!entry.isDirectory() || !taskAssetIdSchema.safeParse(entry.name).success) {
-          throw new Error(`Unexpected task asset quarantine entry '${entry.name}'.`);
-        }
-        quarantineIds.push(entry.name);
-      }
-      quarantineIds.sort();
       const manifests: TaskAssetQuarantine[] = [];
-      for (const quarantineId of quarantineIds) {
+      for (const quarantineId of await listIds()) {
         const { version: _version, ...entry } = await read(quarantineId);
         manifests.push(entry);
       }

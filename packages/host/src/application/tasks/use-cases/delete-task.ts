@@ -1,6 +1,7 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import { TaskAssetError } from "../../../effect/task-asset-error";
 import { requireDependencies } from "../support/required-task-dependencies";
 import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
 import {
@@ -15,7 +16,8 @@ import {
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskDeleteUseCase = ({
   devServerService,
@@ -27,7 +29,7 @@ export const createTaskDeleteUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionBootstrapCoordinator,
-}: CreateTaskServiceInput): Pick<TaskService, "deleteTask"> => ({
+}: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, deleteSubtasks } = input;
@@ -164,16 +166,23 @@ export const createTaskDeleteUseCase = ({
           changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
         };
       }).pipe(
-        Effect.catchAll((error) =>
-          Effect.fail(
-            appendTaskCleanupProgress(error, {
-              operation: "task_delete",
-              removedWorktrees: cleanupProgress.removedWorktrees,
-              deletedBranches: cleanupProgress.deletedBranches,
-              completedSteps: cleanupProgress.completedSteps,
-            }),
-          ),
-        ),
+        Effect.catchAll((error) => {
+          const failure = appendTaskCleanupProgress(error, {
+            operation: "task_delete",
+            removedWorktrees: cleanupProgress.removedWorktrees,
+            deletedBranches: cleanupProgress.deletedBranches,
+            completedSteps: cleanupProgress.completedSteps,
+          });
+          const result =
+            error instanceof TaskAssetError && error.durableState === "committed_cleanup_pending"
+              ? new TaskMutationProgressFailure({
+                  operation: "delete-task",
+                  changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
+                  failure,
+                })
+              : failure;
+          return Effect.fail(result);
+        }),
       );
     }).pipe(Effect.scoped);
   },

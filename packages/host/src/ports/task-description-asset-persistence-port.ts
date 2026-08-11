@@ -13,7 +13,7 @@ export type TaskDescriptionAssetPersistencePort = {
   updateTaskWithDescriptionAssets(input: {
     repoPath: string;
     taskId: string;
-    expectedDescription: string;
+    expectedTask: TaskCard;
     expectedAssetIds: string[];
     patch: TaskUpdatePatch;
     insertAssets: NewTaskAssetRecord[];

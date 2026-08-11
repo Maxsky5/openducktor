@@ -119,7 +119,7 @@ describe("SQLite task asset registry", () => {
       registry.updateTaskWithDescriptionAssets({
         repoPath: harness.repoPath,
         taskId: task.id,
-        expectedDescription: "",
+        expectedTask: task,
         expectedAssetIds: [firstId],
         patch: { description: `![two](odt-asset:${secondId})` },
         insertAssets: [
@@ -169,7 +169,7 @@ describe("SQLite task asset registry", () => {
       registry.updateTaskWithDescriptionAssets({
         repoPath: harness.repoPath,
         taskId: task.id,
-        expectedDescription: "Original",
+        expectedTask: task,
         expectedAssetIds: [],
         patch: { description: "First save" },
         insertAssets: [],
@@ -181,7 +181,7 @@ describe("SQLite task asset registry", () => {
       registry.updateTaskWithDescriptionAssets({
         repoPath: harness.repoPath,
         taskId: task.id,
-        expectedDescription: "Original",
+        expectedTask: task,
         expectedAssetIds: [],
         patch: { description: "Stale save" },
         insertAssets: [],
@@ -208,5 +208,55 @@ describe("SQLite task asset registry", () => {
         )
       ).description,
     ).toBe("First save");
+  });
+
+  test("rejects an asset update when another save changed a patched task field", async () => {
+    const harness = await createSqliteTaskStoreHarness();
+    cleanups.add(harness.cleanup);
+    const registry = createSqliteTaskAssetRegistry({
+      resolveDatabasePath: ({ workspaceId }) =>
+        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
+      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    });
+    const expectedTask = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath: harness.repoPath,
+        task: {
+          title: "Original title",
+          issueType: "task",
+          aiReviewEnabled: true,
+          priority: 2,
+          description: "Original description",
+        },
+      }),
+    );
+    await Effect.runPromise(
+      harness.store.updateTask({
+        repoPath: harness.repoPath,
+        taskId: expectedTask.id,
+        patch: { title: "Concurrent title" },
+      }),
+    );
+
+    const exit = await Effect.runPromiseExit(
+      registry.updateTaskWithDescriptionAssets({
+        repoPath: harness.repoPath,
+        taskId: expectedTask.id,
+        expectedAssetIds: [],
+        expectedTask,
+        patch: { title: "Stale title", description: "New description" },
+        insertAssets: [],
+        removeAssetIds: [],
+      }),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(
+      (
+        await Effect.runPromise(
+          harness.store.getTask({ repoPath: harness.repoPath, taskId: expectedTask.id }),
+        )
+      ).title,
+    ).toBe("Concurrent title");
   });
 });

@@ -15,7 +15,7 @@ import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
-import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
+import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import {
   taskAssetFileTryPromise as tryPromise,
   validateTaskAssetContext as validateContext,
@@ -70,6 +70,7 @@ export const createNodeTaskAssetFilePort = (
     });
   const quarantineFiles = quarantineFilesForRoot(ownedQuarantineRoot, []);
   const legacyQuarantineFiles = quarantineFilesForRoot(quarantineRoot, ["instances"]);
+  const claimedQuarantineIds = new Set<string>();
   const findQuarantineFiles = async (quarantineId: string) => {
     if (!taskAssetIdSchema.safeParse(quarantineId).success) {
       throw new Error("Task asset quarantine ID is invalid.");
@@ -359,13 +360,23 @@ export const createNodeTaskAssetFilePort = (
     listQuarantines() {
       return tryPromise(
         async () => {
-          const quarantines = await legacyQuarantineFiles.list();
+          await ownerState.ensureCurrent();
+          for (const quarantineId of await legacyQuarantineFiles.claim(ownedQuarantineRoot)) {
+            claimedQuarantineIds.add(quarantineId);
+          }
           for (const owner of await ownerState.listDead()) {
             const ownerFiles = quarantineFilesForRoot(
               ownerState.quarantineRootFor(owner.instanceId),
               [],
             );
-            quarantines.push(...(await ownerFiles.list()));
+            for (const quarantineId of await ownerFiles.claim(ownedQuarantineRoot)) {
+              claimedQuarantineIds.add(quarantineId);
+            }
+          }
+          const quarantines: TaskAssetQuarantine[] = [];
+          for (const quarantineId of [...claimedQuarantineIds].sort()) {
+            const { version: _version, ...manifest } = await quarantineFiles.read(quarantineId);
+            quarantines.push(manifest);
           }
           return quarantines;
         },
@@ -388,6 +399,7 @@ export const createNodeTaskAssetFilePort = (
           assetIds: manifest.assetIds,
           taskId: manifest.taskId,
         });
+        claimedQuarantineIds.delete(quarantineId);
       });
     },
     purgeQuarantine(quarantineId) {
@@ -401,6 +413,7 @@ export const createNodeTaskAssetFilePort = (
           assetIds: manifest.assetIds,
           taskId: manifest.taskId,
         });
+        claimedQuarantineIds.delete(quarantineId);
       });
     },
     readDurable(input) {

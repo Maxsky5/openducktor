@@ -574,6 +574,22 @@ describe("TaskDescriptionEditor", () => {
     });
   });
 
+  test("keeps the Visual editor read-only while an image upload is pending", async () => {
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={() => {}}
+        uploads={[{ id: "upload-1", fileName: "diagram.png", status: "uploading" }]}
+      />,
+    );
+
+    await waitFor(() => {
+      const editor = view.container.querySelector(".tiptap");
+      expect(editor?.getAttribute("contenteditable")).toBe("false");
+    });
+  });
+
   test("stages an image pasted into Visual mode", async () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440001";
     const onChange = mock((_value: string) => {});

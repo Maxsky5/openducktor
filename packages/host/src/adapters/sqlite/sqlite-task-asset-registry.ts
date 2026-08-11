@@ -1,3 +1,4 @@
+import type { TaskCard, TaskUpdatePatch } from "@openducktor/contracts";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
@@ -64,6 +65,27 @@ const sameAssetIds = (left: string[], right: string[]) => {
   }
   const rightIds = new Set(right);
   return left.every((assetId) => rightIds.has(assetId));
+};
+
+const samePatchedTaskFields = (
+  current: TaskCard,
+  expected: TaskCard,
+  patch: TaskUpdatePatch,
+): boolean => {
+  if (patch.title !== undefined && current.title !== expected.title) return false;
+  if (patch.description !== undefined && current.description !== expected.description) return false;
+  if (patch.priority !== undefined && current.priority !== expected.priority) return false;
+  if (patch.issueType !== undefined && current.issueType !== expected.issueType) return false;
+  if (patch.aiReviewEnabled !== undefined && current.aiReviewEnabled !== expected.aiReviewEnabled) {
+    return false;
+  }
+  if (patch.labels !== undefined && !sameAssetIds(current.labels, expected.labels)) return false;
+  if (patch.parentId !== undefined && current.parentId !== expected.parentId) return false;
+  if (patch.targetBranch !== undefined) {
+    if (current.targetBranch?.branch !== expected.targetBranch?.branch) return false;
+    if (current.targetBranch?.remote !== expected.targetBranch?.remote) return false;
+  }
+  return true;
 };
 
 export const createSqliteTaskAssetRegistry = ({
@@ -186,7 +208,7 @@ export const createSqliteTaskAssetRegistry = ({
             "sqliteTaskAssetRegistry.updateTaskWithDescriptionAssets",
             (transaction) =>
               Effect.gen(function* () {
-                const task = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
+                const currentTask = yield* getTaskCard(transaction, input.taskId, input.repoPath);
                 const currentAssets = yield* transaction.execute(
                   (database) =>
                     database
@@ -202,7 +224,7 @@ export const createSqliteTaskAssetRegistry = ({
                 );
                 const currentAssetIds = currentAssets.map((asset) => asset.id);
                 if (
-                  (task.description ?? "") !== input.expectedDescription ||
+                  !samePatchedTaskFields(currentTask, input.expectedTask, input.patch) ||
                   !sameAssetIds(currentAssetIds, input.expectedAssetIds)
                 ) {
                   return yield* new TaskAssetError({
@@ -213,8 +235,7 @@ export const createSqliteTaskAssetRegistry = ({
                     failedPhase: "verify_update_snapshot",
                     durableState: "unchanged",
                     retryAllowed: true,
-                    message:
-                      "The task description changed while it was being saved. Refresh the task and try again.",
+                    message: "The task changed while it was being saved. Refresh and try again.",
                   });
                 }
                 yield* insertAssets(transaction, input.taskId, input.insertAssets);

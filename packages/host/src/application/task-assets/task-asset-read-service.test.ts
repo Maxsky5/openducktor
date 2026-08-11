@@ -4,6 +4,7 @@ import {
   TASK_ASSET_MAX_FILE_BYTES,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskAssetReadService } from "./task-asset-read-service";
 
 const context = {
@@ -69,6 +70,53 @@ describe("task asset read service", () => {
 
     expect(await Effect.runPromise(service.read(context))).toBeNull();
     expect(readDisk).toBe(false);
+  });
+
+  test("keeps missing workspaces distinct from operational settings failures", async () => {
+    const dependencies = {
+      registry: { getAsset: () => Effect.dieMessage("unexpected registry read") },
+      filePort: { readDurable: () => Effect.dieMessage("unexpected durable read") },
+    };
+    const missing = createTaskAssetReadService({
+      ...dependencies,
+      resolveRepoPath: () =>
+        Effect.fail(
+          new HostValidationError({ message: "Workspace is not configured", field: "workspaceId" }),
+        ),
+    });
+    const unavailable = createTaskAssetReadService({
+      ...dependencies,
+      resolveRepoPath: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "settings.read",
+            message: "Settings could not be read.",
+          }),
+        ),
+    });
+
+    await expect(Effect.runPromise(missing.read(context).pipe(Effect.flip))).resolves.toMatchObject(
+      {
+        code: "validation",
+        failedPhase: "resolve_workspace",
+      },
+    );
+    await expect(
+      Effect.runPromise(
+        unavailable
+          .readBatch({
+            workspaceId: context.workspaceId,
+            taskId: context.taskId,
+            scope: context.scope,
+            assetIds: [context.assetId],
+          })
+          .pipe(Effect.flip),
+      ),
+    ).resolves.toMatchObject({
+      code: "filesystem",
+      failedPhase: "resolve_workspace",
+      cause: expect.any(HostOperationError),
+    });
   });
 
   test("rejects invalid registered byte sizes before reading a durable file", async () => {
