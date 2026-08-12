@@ -1,6 +1,8 @@
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
+import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { TaskService } from "../tasks/task-service";
@@ -105,8 +107,20 @@ const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
   > as unknown as WorkspaceSettingsService;
 const createTaskService = (service: Partial<TaskService>): TaskService =>
   service as unknown as TaskService;
-const createOdtMcpBridgeServiceForTest = (input: Parameters<typeof createOdtMcpBridgeService>[0]) =>
-  createOdtMcpBridgeService(input);
+type TestOdtMcpBridgeServiceInput = Omit<
+  Parameters<typeof createOdtMcpBridgeService>[0],
+  "taskAssetReadService"
+> & {
+  taskAssetReadService?: TaskAssetReadService;
+};
+const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =>
+  createOdtMcpBridgeService({
+    taskAssetReadService: input.taskAssetReadService ?? {
+      read: () => Effect.succeed(null),
+      readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+    },
+    ...input,
+  });
 describe("createOdtMcpBridgeService", () => {
   test("reports MCP tool coverage and workspaces", async () => {
     const service = createOdtMcpBridgeServiceForTest({
@@ -119,6 +133,202 @@ describe("createOdtMcpBridgeService", () => {
     });
     await expect(Effect.runPromise(service.getWorkspaces({}))).resolves.toMatchObject({
       workspaces: [{ workspaceId: "repo", repoPath: "/repo" }],
+    });
+  });
+  test("reads a requested asset batch in caller order through the owned task scope", async () => {
+    const firstAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const secondAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
+    const calls: unknown[] = [];
+    const taskAssetReadService: TaskAssetReadService = {
+      read: () => Effect.succeed(null),
+      readBatch(input) {
+        calls.push(input);
+        return Effect.succeed({
+          kind: "available",
+          assets: [
+            {
+              assetId: firstAssetId,
+              asset: {
+                bytes: Uint8Array.from([1, 2, 3]),
+                mediaType: "image/png" as const,
+                headers: {},
+              },
+            },
+            {
+              assetId: secondAssetId,
+              asset: {
+                bytes: Uint8Array.from([4, 5]),
+                mediaType: "image/webp" as const,
+                headers: {},
+              },
+            },
+          ],
+        });
+      },
+    };
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createTaskService({
+        listTasks: () => Effect.succeed([taskCard()]),
+      }),
+      taskAssetReadService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.invoke("odt_read_task_assets", {
+          workspaceId: "repo",
+          taskId: "Add bridge",
+          assetIds: [firstAssetId, secondAssetId],
+        }),
+      ),
+    ).resolves.toEqual({
+      assets: [
+        {
+          assetId: firstAssetId,
+          mediaType: "image/png",
+          byteSize: 3,
+          dataBase64: "AQID",
+        },
+        {
+          assetId: secondAssetId,
+          mediaType: "image/webp",
+          byteSize: 2,
+          dataBase64: "BAU=",
+        },
+      ],
+    });
+    expect(calls).toEqual([
+      {
+        workspaceId: "repo",
+        taskId: "task-1",
+        scope: "description",
+        assetIds: [firstAssetId, secondAssetId],
+      },
+    ]);
+  });
+
+  test("fails the whole asset batch when any requested asset is unavailable", async () => {
+    const availableAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const missingAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createTaskService({
+        listTasks: () => Effect.succeed([taskCard()]),
+      }),
+      taskAssetReadService: {
+        read: () => Effect.succeed(null),
+        readBatch: () =>
+          Effect.succeed({
+            kind: "missing",
+            assetIds: [missingAssetId],
+          }),
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.invoke("odt_read_task_assets", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          assetIds: [availableAssetId, missingAssetId],
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      message: "One or more requested task description assets were not found.",
+      details: {
+        field: "assetIds",
+        taskId: "task-1",
+        missingAssetIds: [missingAssetId],
+      },
+    });
+  });
+
+  test("keeps task asset read failures actionable at the bridge boundary", async () => {
+    const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createTaskService({
+        listTasks: () => Effect.succeed([taskCard()]),
+      }),
+      taskAssetReadService: {
+        read: () => Effect.succeed(null),
+        readBatch() {
+          return Effect.fail(
+            new TaskAssetError({
+              operation: "serve",
+              code: "database",
+              taskId: "task-1",
+              assetIds: [assetId],
+              failedPhase: "validate_registered_byte_size",
+              durableState: "unchanged",
+              retryAllowed: false,
+              message: "Task asset content does not match its registry entry.",
+            }),
+          );
+        },
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.invoke("odt_read_task_assets", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          assetIds: [assetId],
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "odt_mcp_bridge.read_task_assets",
+      message: "Task asset content does not match its registry entry.",
+      details: {
+        taskId: "task-1",
+        assetIds: [assetId],
+        failedPhase: "validate_registered_byte_size",
+      },
+    });
+  });
+
+  test("returns an actionable validation error for an oversized asset batch", async () => {
+    const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createTaskService({
+        listTasks: () => Effect.succeed([taskCard()]),
+      }),
+      taskAssetReadService: {
+        read: () => Effect.succeed(null),
+        readBatch: () =>
+          Effect.succeed({
+            kind: "too_large",
+            requestedBytes: 20 * 1024 * 1024 + 1,
+            maxBytes: 20 * 1024 * 1024,
+          }),
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.invoke("odt_read_task_assets", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          assetIds: [assetId],
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      _tag: "HostValidationError",
+      field: "assetIds",
+      message: "Requested task description assets exceed the per-call byte limit.",
+      details: {
+        field: "assetIds",
+        taskId: "task-1",
+        requestedBytes: 20 * 1024 * 1024 + 1,
+        maxBytes: 20 * 1024 * 1024,
+      },
     });
   });
   test("sets a spec through repo-scoped task service calls", async () => {

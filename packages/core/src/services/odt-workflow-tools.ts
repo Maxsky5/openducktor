@@ -10,6 +10,7 @@ export const ODT_WORKFLOW_TOOL_NAMES =
 
 export const ODT_WORKFLOW_READ_TOOL_NAMES = [
   "odt_read_task",
+  "odt_read_task_assets",
   "odt_read_task_documents",
 ] as const satisfies readonly AgentToolName[];
 type WorkflowToolAliasesByCanonical = RuntimeDescriptor["workflowToolAliasesByCanonical"];

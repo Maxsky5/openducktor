@@ -32,6 +32,7 @@ import {
   parseAgentSessionIdentity,
   parseAgentSessionRecord,
   parseCreateInput,
+  parseDescriptionAssets,
   parseOptionalNote,
   parsePlanSubtasks,
   parsePullRequest,
@@ -140,9 +141,11 @@ export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
 
 export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => {
   const record = requireRecord(input, "task_create input");
+  const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     task: parseCreateInput(record.input),
+    ...(descriptionAssets ? { descriptionAssets } : {}),
   };
 };
 
@@ -157,10 +160,19 @@ export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
 
 export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
   const record = requireRecord(input, "task_update input");
+  const patch = parseUpdatePatch(record.patch);
+  const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
+  if (descriptionAssets && !Object.hasOwn(patch, "description")) {
+    throw new HostValidationError({
+      message: "descriptionAssets requires a description patch.",
+      field: "descriptionAssets",
+    });
+  }
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
-    patch: parseUpdatePatch(record.patch),
+    patch,
+    ...(descriptionAssets ? { descriptionAssets } : {}),
   };
 };
 

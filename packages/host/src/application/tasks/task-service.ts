@@ -27,6 +27,7 @@ import {
   HostOperationError as HostOperationErrorValue,
   isHostError,
 } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
@@ -104,6 +105,7 @@ export type TaskServiceError =
   | HostValidationError
   | RuntimeRegistryError
   | SettingsConfigError
+  | TaskAssetError
   | TaskPolicyError
   | TaskStoreError
   | ToolDiscoveryError
@@ -199,16 +201,25 @@ export type TaskSetPlanResult = {
 export type TaskServiceWithMutationProgress = Omit<
   TaskService,
   | "buildCompleted"
+  | "createTask"
+  | "deleteTask"
   | "directMerge"
   | "linkMergedPullRequest"
   | "resetImplementation"
   | "resetTask"
   | "setPlan"
   | "setSpec"
+  | "updateTask"
 > & {
   buildCompleted(
     input: BuildCompletedInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  createTask(
+    input: CreateTaskUseCaseInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  deleteTask(
+    input: DeleteTaskInput,
+  ): Effect.Effect<TaskDeleteResult, TaskServiceError | TaskMutationProgressFailure>;
   directMerge(
     input: DirectMergeInput,
   ): Effect.Effect<TaskDirectMergeResult, TaskServiceError | TaskMutationProgressFailure>;
@@ -227,6 +238,9 @@ export type TaskServiceWithMutationProgress = Omit<
   setPlan(
     input: SetPlanInput,
   ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
+  updateTask(
+    input: UpdateTaskInput,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
 };
 export type RepoPullRequestSyncResult = {
   ran: boolean;
@@ -251,7 +265,7 @@ export type CreateTaskServiceInput = {
   taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof TaskPolicyError || isHostError(cause);
+  cause instanceof TaskAssetError || cause instanceof TaskPolicyError || isHostError(cause);
 
 const toTaskServiceError = (cause: unknown): TaskServiceError => {
   if (isTaskServiceError(cause)) {
@@ -376,9 +390,9 @@ const createTaskServiceImplementation = (
     taskSessionStartupLeaseAbort: (input) =>
       mapTaskServiceErrors(service.taskSessionStartupLeaseAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
-    createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
+    createTask: (input) => mapTaskMutationProgressErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),
-    deleteTask: (input) => mapTaskServiceErrors(service.deleteTask(input)),
+    deleteTask: (input) => mapTaskMutationProgressErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
     directMerge: (input) => mapTaskMutationProgressErrors(service.directMerge(input)),
     getApprovalContext: (input) => mapTaskServiceErrors(service.getApprovalContext(input)),
@@ -406,7 +420,7 @@ const createTaskServiceImplementation = (
     specGet: (input) => mapTaskServiceErrors(service.specGet(input)),
     transitionTask: (input) => mapTaskServiceErrors(service.transitionTask(input)),
     unlinkPullRequest: (input) => mapTaskServiceErrors(service.unlinkPullRequest(input)),
-    updateTask: (input) => mapTaskServiceErrors(service.updateTask(input)),
+    updateTask: (input) => mapTaskMutationProgressErrors(service.updateTask(input)),
     upsertPullRequest: (input) => mapTaskServiceErrors(service.upsertPullRequest(input)),
   };
 };
@@ -415,64 +429,29 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
   return withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
 };
 
+const discardTaskMutationProgress = <A>(
+  effect: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
+): Effect.Effect<A, TaskServiceError> =>
+  effect.pipe(
+    Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
+      Effect.fail(progressFailure.failure),
+    ),
+  );
+
 const withoutTaskMutationProgress = (taskService: TaskServiceWithMutationProgress): TaskService => {
   return {
     ...taskService,
-    buildCompleted: (buildCompletedInput) =>
-      taskService
-        .buildCompleted(buildCompletedInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    directMerge: (directMergeInput) =>
-      taskService
-        .directMerge(directMergeInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    linkMergedPullRequest: (linkMergedPullRequestInput) =>
-      taskService
-        .linkMergedPullRequest(linkMergedPullRequestInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    resetImplementation: (resetImplementationInput) =>
-      taskService
-        .resetImplementation(resetImplementationInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    resetTask: (resetTaskInput) =>
-      taskService
-        .resetTask(resetTaskInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    setSpec: (setSpecInput) =>
-      taskService
-        .setSpec(setSpecInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
-    setPlan: (setPlanInput) =>
-      taskService
-        .setPlan(setPlanInput)
-        .pipe(
-          Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-            Effect.fail(progressFailure.failure),
-          ),
-        ),
+    buildCompleted: (input) => discardTaskMutationProgress(taskService.buildCompleted(input)),
+    createTask: (input) => discardTaskMutationProgress(taskService.createTask(input)),
+    deleteTask: (input) => discardTaskMutationProgress(taskService.deleteTask(input)),
+    directMerge: (input) => discardTaskMutationProgress(taskService.directMerge(input)),
+    linkMergedPullRequest: (input) =>
+      discardTaskMutationProgress(taskService.linkMergedPullRequest(input)),
+    resetImplementation: (input) =>
+      discardTaskMutationProgress(taskService.resetImplementation(input)),
+    resetTask: (input) => discardTaskMutationProgress(taskService.resetTask(input)),
+    setPlan: (input) => discardTaskMutationProgress(taskService.setPlan(input)),
+    setSpec: (input) => discardTaskMutationProgress(taskService.setSpec(input)),
+    updateTask: (input) => discardTaskMutationProgress(taskService.updateTask(input)),
   };
 };

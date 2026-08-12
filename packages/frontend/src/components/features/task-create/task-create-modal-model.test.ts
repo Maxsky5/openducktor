@@ -42,6 +42,15 @@ describe("task-create-modal-model", () => {
     expect(toTaskUpdatePatch(baseState).parentId).toBeUndefined();
   });
 
+  test("trims outer Markdown whitespace in create and update payloads", () => {
+    const description = "  ---\r\ntitle: exact\r\n---\r\n\r\n-   item  \r\n  ";
+    const state = { ...baseState, description };
+    const expected = "---\r\ntitle: exact\r\n---\r\n\r\n-   item";
+
+    expect(toTaskCreateInput(state).description).toBe(expected);
+    expect(toTaskUpdatePatch(state).description).toBe(expected);
+  });
+
   test("reports unsaved document changes by active section", () => {
     expect(hasUnsavedDocumentChanges("spec", { isSpecDirty: true, isPlanDirty: false })).toBe(true);
     expect(hasUnsavedDocumentChanges("plan", { isSpecDirty: true, isPlanDirty: false })).toBe(

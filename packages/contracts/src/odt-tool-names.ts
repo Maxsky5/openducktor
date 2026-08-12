@@ -2,6 +2,7 @@ export const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
 
 export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_read_task",
+  "odt_read_task_assets",
   "odt_read_task_documents",
   "odt_set_spec",
   "odt_set_plan",

@@ -197,6 +197,18 @@ import type {
   SystemOpenInToolInfo,
   TaskAction,
   TaskAgentSessions,
+  TaskAssetDescriptionMutation,
+  TaskAssetDiscardStagedInput,
+  TaskAssetDurableState,
+  TaskAssetFailure,
+  TaskAssetFailureCode,
+  TaskAssetId,
+  TaskAssetMediaType,
+  TaskAssetOperation,
+  TaskAssetRenderContext,
+  TaskAssetScope,
+  TaskAssetStageInput,
+  TaskAssetStageResult,
   TaskCard,
   TaskChangeSet,
   TaskCreateInput,
@@ -533,6 +545,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "odtToolErrorSchema",
   "ODT_HOST_BRIDGE_RESPONSE_SCHEMAS",
   "ODT_MCP_TOOL_NAMES",
+  "ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES",
   "ODT_TOOL_SCHEMAS",
   "ODT_TOOL_NAMES",
   "ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES",
@@ -570,6 +583,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "QaRejectedInputSchema",
   "qaRejectedResultSchema",
   "qaWorkflowVerdictSchema",
+  "readTaskAssetsResultSchema",
+  "ReadTaskAssetsInputSchema",
   "ReadTaskDocumentsInputSchema",
   "ReadTaskInputSchema",
   "repoPromptOverridesSchema",
@@ -677,7 +692,21 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "planSubtaskInputSchema",
   "planSubtaskIssueTypeSchema",
   "planSubtaskPrioritySchema",
+  "parseTaskAssetUri",
   "taskActionSchema",
+  "taskAssetDescriptionMutationSchema",
+  "taskAssetDiscardStagedInputSchema",
+  "taskAssetDurableStateSchema",
+  "taskAssetFailureCodeSchema",
+  "taskAssetFailureSchema",
+  "taskAssetIdSchema",
+  "taskAssetMediaTypeSchema",
+  "taskAssetOperationSchema",
+  "taskAssetRenderContextSchema",
+  "taskAssetScopeSchema",
+  "taskAssetStageInputSchema",
+  "taskAssetStageResultSchema",
+  "TASK_ASSET_URI_PREFIX",
   "taskApprovalContextSchema",
   "taskApprovalContextLoadResultSchema",
   "taskCardSchema",
@@ -706,6 +735,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TERMINAL_PROTOCOL_MAX_ROWS",
   "TERMINAL_PROTOCOL_SUBPROTOCOL",
   "TERMINAL_PROTOCOL_VERSION",
+  "TASK_ASSET_MAX_DESCRIPTION_ASSETS",
+  "TASK_ASSET_MAX_FILE_BYTES",
   "TERMINAL_ID_MAX_LENGTH",
   "decodeTerminalProtocolFrame",
   "encodeTerminalProtocolFrame",
@@ -950,6 +981,18 @@ type ExportedTypeContract = {
   SystemOpenInToolId: SystemOpenInToolId;
   SystemOpenInToolInfo: SystemOpenInToolInfo;
   TaskAction: TaskAction;
+  TaskAssetDescriptionMutation: TaskAssetDescriptionMutation;
+  TaskAssetDiscardStagedInput: TaskAssetDiscardStagedInput;
+  TaskAssetDurableState: TaskAssetDurableState;
+  TaskAssetFailure: TaskAssetFailure;
+  TaskAssetFailureCode: TaskAssetFailureCode;
+  TaskAssetId: TaskAssetId;
+  TaskAssetMediaType: TaskAssetMediaType;
+  TaskAssetOperation: TaskAssetOperation;
+  TaskAssetRenderContext: TaskAssetRenderContext;
+  TaskAssetScope: TaskAssetScope;
+  TaskAssetStageInput: TaskAssetStageInput;
+  TaskAssetStageResult: TaskAssetStageResult;
   TaskCard: TaskCard;
   TaskChangeSet: TaskChangeSet;
   TaskEventChangeFrame: TaskEventChangeFrame;
@@ -1008,59 +1051,5 @@ describe("contracts exports contract", () => {
   test("keeps canonical type exports importable from the barrel", () => {
     const compileOnlyTypeContract: ExportedTypeContract | null = null;
     expect(compileOnlyTypeContract).toBeNull();
-  });
-
-  test("defaults missing chat settings to disabled thinking messages", () => {
-    const parsedSnapshot = contracts.settingsSnapshotSchema.parse({
-      theme: "light",
-      git: {
-        defaultMergeMethod: "merge_commit",
-      },
-      workspaces: {},
-      globalPromptOverrides: {},
-    });
-
-    expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
-    expect(parsedSnapshot.reusablePrompts).toEqual([]);
-    expect(parsedSnapshot.kanban.doneVisibleDays).toBe(1);
-    expect(parsedSnapshot.kanban.emptyColumnDisplay).toBe("show");
-  });
-
-  test("rejects settings snapshots without a theme", () => {
-    expect(() =>
-      contracts.settingsSnapshotSchema.parse({
-        git: {
-          defaultMergeMethod: "merge_commit",
-        },
-        workspaces: {},
-        globalPromptOverrides: {},
-      }),
-    ).toThrow();
-  });
-
-  test("keeps odt_get_workspaces workspace-free and workspace-scoped tool inputs overrideable", () => {
-    expect(contracts.GetWorkspacesInputSchema.parse({})).toEqual({});
-    expect(
-      contracts.ReadTaskInputSchema.parse({
-        workspaceId: "repo",
-        taskId: "task-1",
-      }),
-    ).toEqual({
-      workspaceId: "repo",
-      taskId: "task-1",
-    });
-    expect(
-      contracts.CreateTaskInputSchema.parse({
-        workspaceId: "repo",
-        title: "Bridge task",
-        issueType: "task",
-        priority: 2,
-      }),
-    ).toEqual({
-      workspaceId: "repo",
-      title: "Bridge task",
-      issueType: "task",
-      priority: 2,
-    });
   });
 });

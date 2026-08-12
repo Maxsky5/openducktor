@@ -9,6 +9,7 @@ import {
   type OdtHostBridgeReady,
   type QaApprovedResult,
   type QaRejectedResult,
+  type ReadTaskAssetsResult,
   type SearchTasksResult,
   type SetPlanResult,
   type SetPullRequestResult,
@@ -19,7 +20,8 @@ import {
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
   WorkspaceSettingsError,
@@ -66,6 +68,7 @@ export type WorkspaceScopedOdtToolResult =
   | CreateTaskResult
   | QaApprovedResult
   | QaRejectedResult
+  | ReadTaskAssetsResult
   | SearchTasksResult
   | SetPlanResult
   | SetPullRequestResult
@@ -82,10 +85,12 @@ export type OdtMcpBridgeService = {
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
 export type CreateOdtMcpBridgeServiceInput = {
+  taskAssetReadService: TaskAssetReadService;
   taskService: TaskService;
   workspaceSettingsService: WorkspaceSettingsService;
 };
 export const createOdtMcpBridgeService = ({
+  taskAssetReadService,
   taskService,
   workspaceSettingsService,
 }: CreateOdtMcpBridgeServiceInput): OdtMcpBridgeService => {
@@ -183,6 +188,63 @@ export const createOdtMcpBridgeService = ({
               limit: parsed.limit,
               totalCount: tasks.length,
               hasMore: tasks.length > results.length,
+            });
+          }
+          case "odt_read_task_assets": {
+            const parsed = yield* parseToolInput(toolName, input);
+            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+            const batch = yield* taskAssetReadService
+              .readBatch({
+                workspaceId: parsed.workspaceId ?? "",
+                taskId: task.id,
+                scope: "description",
+                assetIds: parsed.assetIds,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new HostOperationError({
+                      operation: "odt_mcp_bridge.read_task_assets",
+                      message: cause.message,
+                      cause,
+                      details: {
+                        taskId: task.id,
+                        assetIds: parsed.assetIds,
+                        failedPhase: cause.failedPhase,
+                      },
+                    }),
+                ),
+              );
+            if (batch.kind === "missing") {
+              return yield* new HostValidationError({
+                field: "assetIds",
+                message: "One or more requested task description assets were not found.",
+                details: {
+                  field: "assetIds",
+                  taskId: task.id,
+                  missingAssetIds: batch.assetIds,
+                },
+              });
+            }
+            if (batch.kind === "too_large") {
+              return yield* new HostValidationError({
+                field: "assetIds",
+                message: "Requested task description assets exceed the per-call byte limit.",
+                details: {
+                  field: "assetIds",
+                  taskId: task.id,
+                  requestedBytes: batch.requestedBytes,
+                  maxBytes: batch.maxBytes,
+                },
+              });
+            }
+            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_assets, {
+              assets: batch.assets.map(({ assetId, asset }) => ({
+                assetId,
+                mediaType: asset.mediaType,
+                byteSize: asset.bytes.byteLength,
+                dataBase64: Buffer.from(asset.bytes).toString("base64"),
+              })),
             });
           }
           case "odt_read_task": {

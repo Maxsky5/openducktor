@@ -1,4 +1,9 @@
-import { issueTypeSchema, qaReportVerdictSchema, taskStatusSchema } from "@openducktor/contracts";
+import {
+  issueTypeSchema,
+  qaReportVerdictSchema,
+  taskAssetScopeSchema,
+  taskStatusSchema,
+} from "@openducktor/contracts";
 import { sql } from "drizzle-orm";
 import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import type { SqliteDrizzleSession } from "../../infrastructure/sqlite/sqlite-drizzle-client";
@@ -25,6 +30,7 @@ const TASK_QA_REPORT_VERDICTS = nonEmptyEnumOptions(
   qaReportVerdictSchema.options,
   "qaReportVerdictSchema",
 );
+const TASK_ASSET_SCOPES = nonEmptyEnumOptions(taskAssetScopeSchema.options, "taskAssetScopeSchema");
 
 const enumCheckValues = (values: readonly string[]) =>
   sql.raw(values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", "));
@@ -96,7 +102,28 @@ export const taskDocuments = sqliteTable(
   ],
 );
 
+export const taskAssets = sqliteTable(
+  "task_assets",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    scope: text("scope", { enum: TASK_ASSET_SCOPES }).notNull(),
+    originalName: text("original_name").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: integer("created_at_ms", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    check("chk_task_assets_scope", sql`${table.scope} in (${enumCheckValues(TASK_ASSET_SCOPES)})`),
+    check("chk_task_assets_byte_size", sql`${table.byteSize} >= 0`),
+    index("idx_task_assets_task_scope").on(table.taskId, table.scope),
+  ],
+);
+
 export const taskStoreSchema = {
+  taskAssets,
   taskDocuments,
   tasks,
 };
@@ -105,4 +132,6 @@ export type TaskRow = typeof tasks.$inferSelect;
 export type TaskInsert = typeof tasks.$inferInsert;
 export type TaskDocumentRow = typeof taskDocuments.$inferSelect;
 export type TaskDocumentInsert = typeof taskDocuments.$inferInsert;
+export type TaskAssetRow = typeof taskAssets.$inferSelect;
+export type TaskAssetInsert = typeof taskAssets.$inferInsert;
 export type TaskStoreSession = SqliteDrizzleSession<typeof taskStoreSchema>;

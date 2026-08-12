@@ -5,12 +5,15 @@ import type { TaskServiceError } from "./task-service";
 export class TaskMutationProgressFailure extends Data.TaggedError("TaskMutationProgressFailure")<{
   readonly operation:
     | "build-completed"
+    | "create-task"
+    | "delete-task"
     | "direct-merge"
     | "link-merged-pull-request"
     | "reset-implementation"
     | "reset-task"
     | "set-plan"
     | "set-spec"
+    | "update-task"
     | "repo-pull-request-sync";
   readonly changes: TaskChangeSet;
   readonly failure: TaskServiceError;

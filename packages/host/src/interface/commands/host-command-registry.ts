@@ -80,6 +80,8 @@ export const HOST_COMMAND_NAMES = [
   "system_list_open_in_tools",
   "system_open_directory_in_tool",
   "task_approval_context_get",
+  "task_asset_discard_staged",
+  "task_asset_stage",
   "task_close",
   "task_create",
   "task_delete",

@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
   TerminalFailure,
@@ -72,6 +73,7 @@ export type ShellBridge = HostBridge & {
   capabilities: ShellCapabilities;
   openExternalUrl: (url: string) => Promise<void>;
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
+  resolveTaskAssetSrc: (context: TaskAssetRenderContext) => Promise<string>;
   terminals: TerminalBridge;
 };
 
@@ -142,6 +144,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   },
   openExternalUrl: failUnavailable,
   resolveLocalAttachmentPreviewSrc: failUnavailable,
+  resolveTaskAssetSrc: failUnavailable,
   terminals: { connect: failUnavailable },
 });
 

@@ -59,12 +59,16 @@ describe("createTaskMutationCommands", () => {
       priority: 2,
     });
 
-    expect(taskCreate).toHaveBeenCalledWith("/repo", {
-      title: "Ship the release",
-      issueType: "task",
-      aiReviewEnabled: true,
-      priority: 2,
-    });
+    expect(taskCreate).toHaveBeenCalledWith(
+      "/repo",
+      {
+        title: "Ship the release",
+        issueType: "task",
+        aiReviewEnabled: true,
+        priority: 2,
+      },
+      undefined,
+    );
     expect(received).toHaveLength(1);
   });
 
@@ -151,12 +155,16 @@ describe("createTaskMutationCommands", () => {
 
     expect(received[0]?.refreshStrategy).toEqual({ kind: "repo" });
     expect(refreshImpacts).toEqual(["task-list-only"]);
-    expect(taskCreate).toHaveBeenCalledWith("/current-repo", {
-      title: "Create task",
-      issueType: "task",
-      aiReviewEnabled: true,
-      priority: 2,
-    });
+    expect(taskCreate).toHaveBeenCalledWith(
+      "/current-repo",
+      {
+        title: "Create task",
+        issueType: "task",
+        aiReviewEnabled: true,
+        priority: 2,
+      },
+      undefined,
+    );
   });
 
   test("does not report success or refresh after a create host failure", async () => {
@@ -199,14 +207,60 @@ describe("createTaskMutationCommands", () => {
       }),
     ).rejects.toThrow("Create failed");
 
-    expect(taskCreate).toHaveBeenCalledWith("/repo", {
-      title: "Create task",
-      issueType: "task",
-      aiReviewEnabled: true,
-      priority: 2,
-    });
+    expect(taskCreate).toHaveBeenCalledWith(
+      "/repo",
+      {
+        title: "Create task",
+        issueType: "task",
+        aiReviewEnabled: true,
+        priority: 2,
+      },
+      undefined,
+    );
     expect(outcomes).toEqual(["failure:Failed to create task"]);
     expect(refreshImpacts).toEqual([]);
+  });
+
+  test("forwards staged description assets through create and update", async () => {
+    const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
+    const taskCreate = mock(async () => undefined);
+    const taskUpdate = mock(async () => undefined);
+    const commands = createTaskMutationCommands({
+      activeRepoPath: "/repo",
+      activeWorkspaceId: "workspace-1",
+      tasks: [],
+      runTaskMutation: createRunTaskMutation(received),
+      hostPort: { ...createHostPort(), taskCreate, taskUpdate },
+      queryClient: createQueryClient(),
+      cacheImpact: createCacheImpact(),
+      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
+    });
+    const assets = {
+      stagedAssetIds: ["550e8400-e29b-41d4-a716-446655440000"],
+    };
+
+    await commands.createTask(
+      {
+        title: "Create task",
+        issueType: "task",
+        aiReviewEnabled: true,
+        priority: 2,
+      },
+      assets,
+    );
+    await commands.updateTask("task-1", { description: "Updated" }, assets);
+
+    expect(taskCreate).toHaveBeenCalledWith(
+      "/repo",
+      {
+        title: "Create task",
+        issueType: "task",
+        aiReviewEnabled: true,
+        priority: 2,
+      },
+      assets,
+    );
+    expect(taskUpdate).toHaveBeenCalledWith("/repo", "task-1", { description: "Updated" }, assets);
   });
 
   test("deletes the full task subtree and requests cached document removal for every deleted id", async () => {

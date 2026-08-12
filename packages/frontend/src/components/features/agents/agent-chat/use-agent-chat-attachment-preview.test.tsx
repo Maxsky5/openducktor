@@ -42,6 +42,7 @@ const configureAttachmentPreviewShellBridge = (
     },
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc,
+    resolveTaskAssetSrc: async () => "asset://task-preview",
     terminals: createUnavailableShellBridge().terminals,
   });
 };

@@ -102,13 +102,86 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
     const tableNames = readTableNames(databasePath);
     expect(tableNames).toEqual(
-      expect.arrayContaining(["__drizzle_migrations", "task_documents", "tasks"]),
+      expect.arrayContaining(["__drizzle_migrations", "task_assets", "task_documents", "tasks"]),
     );
     expect(tableNames).not.toContain("task_store_schema_migrations");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(1);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
+  });
+
+  test("enforces the approved task asset registry shape and cascades task deletion", async () => {
+    const { databasePath, repoPath, store } = await createRepositoryHarness();
+    const task = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: { title: "With asset", issueType: "task", aiReviewEnabled: true, priority: 2 },
+      }),
+    );
+    const database = new Database(databasePath);
+    database.run("PRAGMA foreign_keys = ON");
+
+    try {
+      database
+        .query(
+          "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          "550e8400-e29b-41d4-a716-446655440000",
+          task.id,
+          "description",
+          "diagram.png",
+          "image/png",
+          12,
+          Date.now(),
+        );
+
+      expect(() =>
+        database
+          .query(
+            "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          )
+          .run(
+            "550e8400-e29b-41d4-a716-446655440001",
+            task.id,
+            "plan",
+            "bad.png",
+            "image/png",
+            1,
+            Date.now(),
+          ),
+      ).toThrow();
+      expect(() =>
+        database
+          .query(
+            "INSERT INTO task_assets (id, task_id, scope, original_name, media_type, byte_size, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          )
+          .run(
+            "550e8400-e29b-41d4-a716-446655440002",
+            task.id,
+            "description",
+            "bad.png",
+            "image/png",
+            -1,
+            Date.now(),
+          ),
+      ).toThrow();
+    } finally {
+      database.close();
+    }
+
+    await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id, deleteSubtasks: false }));
+    const verification = new Database(databasePath);
+    try {
+      const row = verification.query("SELECT count(*) AS count FROM task_assets").get() as {
+        count: number;
+      };
+      expect(row.count).toBe(0);
+    } finally {
+      verification.close();
+    }
   });
 
   test("generates hash-based task ids with a workspace prefix", async () => {
@@ -133,6 +206,50 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(first.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
     expect(second.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
     expect(second.id).not.toBe(first.id);
+  });
+
+  test("rejects a missing parent inside the create transaction", async () => {
+    const { repoPath, store } = await createRepositoryHarness();
+
+    await expect(
+      Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: {
+            title: "Orphan",
+            issueType: "task",
+            priority: 2,
+            aiReviewEnabled: true,
+            parentId: "missing-parent",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Task not found: missing-parent");
+    expect(await Effect.runPromise(store.listTasks({ repoPath }))).toEqual([]);
+  });
+
+  test("rejects a missing parent inside the update transaction", async () => {
+    const { repoPath, store } = await createRepositoryHarness();
+    const task = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: { title: "Standalone", issueType: "task", priority: 2, aiReviewEnabled: true },
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        store.updateTask({
+          repoPath,
+          taskId: task.id,
+          patch: { parentId: "missing-parent" },
+        }),
+      ),
+    ).rejects.toThrow("Task not found: missing-parent");
+    expect(await Effect.runPromise(store.getTask({ repoPath, taskId: task.id }))).toMatchObject({
+      id: task.id,
+      parentId: undefined,
+    });
   });
 
   test("caps generated task id prefixes at ten characters", async () => {

@@ -9,6 +9,7 @@ import {
   HostResourceError,
   isHostError,
 } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
@@ -22,6 +23,7 @@ export type HostCommandHandlerError =
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError
   | HostError
+  | TaskAssetError
   | TaskPolicyError
   | TerminalServiceError;
 
@@ -53,6 +55,9 @@ const toHostCommandHandlerError = (
   command: HostCommandName,
 ): HostCommandHandlerError => {
   if (isHostError(cause)) {
+    return cause;
+  }
+  if (cause instanceof TaskAssetError) {
     return cause;
   }
   return new HostOperationError({

@@ -1,5 +1,6 @@
 import type {
   GitTargetBranch,
+  TaskAssetDescriptionMutation,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -35,8 +36,12 @@ type UseTaskMutationCommandsArgs = {
 };
 
 export type TaskMutationCommands = {
-  createTask: (input: TaskCreateInput) => Promise<void>;
-  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;
+  updateTask: (
+    taskId: string,
+    patch: TaskUpdatePatch,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   closeTask: (taskId: string) => Promise<void>;
@@ -46,8 +51,17 @@ export type TaskMutationCommands = {
 };
 
 export type TaskMutationCommandHostPort = {
-  taskCreate: (repoPath: string, input: TaskCreateInput) => Promise<unknown>;
-  taskUpdate: (repoPath: string, taskId: string, patch: TaskUpdatePatch) => Promise<unknown>;
+  taskCreate: (
+    repoPath: string,
+    input: TaskCreateInput,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<unknown>;
+  taskUpdate: (
+    repoPath: string,
+    taskId: string,
+    patch: TaskUpdatePatch,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<unknown>;
   taskDelete: (repoPath: string, taskId: string, deleteSubtasks: boolean) => Promise<unknown>;
   taskClose: (repoPath: string, taskId: string) => Promise<unknown>;
   taskTransition: (
@@ -86,7 +100,10 @@ export const createTaskMutationCommands = ({
   cacheImpact,
   taskChatDraftCleanup,
 }: CreateTaskMutationCommandsArgs): TaskMutationCommands => {
-  const createTask = async (input: TaskCreateInput): Promise<void> => {
+  const createTask = async (
+    input: TaskCreateInput,
+    assets?: TaskAssetDescriptionMutation,
+  ): Promise<void> => {
     requireActiveRepo(activeRepoPath);
     const title = toNormalizedTitle(input.title);
     if (!title) return;
@@ -94,7 +111,7 @@ export const createTaskMutationCommands = ({
     await runTaskMutation({
       refreshStrategy: { kind: "repo" },
       run: async (repoPath) => {
-        await hostPort.taskCreate(repoPath, { ...input, title });
+        await hostPort.taskCreate(repoPath, { ...input, title }, assets);
       },
       successTitle: "Task created",
       successDescription: title,
@@ -102,11 +119,15 @@ export const createTaskMutationCommands = ({
     });
   };
 
-  const updateTask = async (taskId: string, patch: TaskUpdatePatch): Promise<void> => {
+  const updateTask = async (
+    taskId: string,
+    patch: TaskUpdatePatch,
+    assets?: TaskAssetDescriptionMutation,
+  ): Promise<void> => {
     await runTaskMutation({
       refreshStrategy: { kind: "task", taskId },
       run: async (repoPath) => {
-        await hostPort.taskUpdate(repoPath, taskId, patch);
+        await hostPort.taskUpdate(repoPath, taskId, patch, assets);
       },
       successTitle: "Task updated",
       successDescription: toUpdateSuccessDescription(taskId, patch),

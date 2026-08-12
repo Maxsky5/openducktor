@@ -1,6 +1,7 @@
 import type {
   GitTargetBranch,
   PullRequest,
+  TaskAssetDescriptionMutation,
   TaskCard,
   TaskCreateInput,
   TaskStatus,
@@ -34,8 +35,12 @@ export type UseTaskOperationsResult = {
   linkMergedPullRequest: () => Promise<void>;
   cancelLinkMergedPullRequest: () => void;
   unlinkPullRequest: (taskId: string) => Promise<void>;
-  createTask: (input: TaskCreateInput) => Promise<void>;
-  updateTask: (taskId: string, patch: TaskUpdatePatch) => Promise<void>;
+  createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;
+  updateTask: (
+    taskId: string,
+    patch: TaskUpdatePatch,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   closeTask: (taskId: string) => Promise<void>;
@@ -49,4 +54,5 @@ export type UseTaskOperationsResult = {
 export type TaskMutationRefreshStrategy =
   | { kind: "repo" }
   | { kind: "task"; taskId: string }
+  | { kind: "invalidate-task"; taskId: string }
   | { kind: "remove-task"; taskIds: string[] };

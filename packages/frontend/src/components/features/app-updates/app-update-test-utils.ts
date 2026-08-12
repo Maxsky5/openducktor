@@ -74,5 +74,6 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
   },
   openExternalUrl: async () => {},
   resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
+  resolveTaskAssetSrc: async () => "asset://task-preview",
   terminals: createUnavailableShellBridge().terminals,
 });

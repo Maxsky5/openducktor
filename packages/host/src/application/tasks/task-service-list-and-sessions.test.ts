@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskService } from "./task-service";
 import {
   createAgentSessionRecord,
@@ -12,6 +13,35 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService list and session reads", () => {
+  test("preserves typed task asset failures from task mutations", async () => {
+    const failure = new TaskAssetError({
+      operation: "create",
+      code: "promotion",
+      taskId: "task-1",
+      assetIds: ["550e8400-e29b-41d4-a716-446655440000"],
+      failedPhase: "promote_staged_file",
+      durableState: "unchanged",
+      retryAllowed: true,
+      message: "Failed to promote a staged task asset.",
+    });
+    const service = createTaskService({
+      taskStore: {
+        createTask: () => Effect.fail(failure),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        Effect.flip(
+          service.createTask({
+            repoPath: "/repo",
+            task: task(),
+          }),
+        ),
+      ),
+    ).resolves.toBe(failure);
+  });
+
   test("loads agent sessions for task IDs with one task-store call", async () => {
     const session = createAgentSessionRecord();
     const calls: unknown[] = [];

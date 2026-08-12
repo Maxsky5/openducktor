@@ -170,7 +170,7 @@ Key boundary:
 
 1. If data shape changes, update `packages/contracts` first.
 2. If `odt_*` tool shape or names change, update MCP schemas, core tool normalization/policy, adapter behavior, and UI assumptions together.
-3. If public MCP tool shapes (`odt_create_task`, `odt_search_tasks`, `odt_read_task`, `odt_read_task_documents`) change, update package docs and public MCP schemas together.
+3. If public MCP tool shapes (`odt_create_task`, `odt_search_tasks`, `odt_read_task`, `odt_read_task_assets`, `odt_read_task_documents`) change, update package docs and public MCP schemas together.
 4. If workflow transitions/actions change, update the TypeScript host task policies first, then docs and frontend rendering expectations.
 5. Keep shell commands/IPC as transport/mapping layers; place policy in host application/domain layers.
 6. Preserve the host task store as lifecycle source of truth; do not move lifecycle authority into UI-local state.

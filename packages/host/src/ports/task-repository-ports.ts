@@ -6,6 +6,7 @@ import type {
   QaReportVerdict,
   RepoStoreHealth,
   TaskAgentSessions,
+  TaskAssetDescriptionMutation,
   TaskCard,
   TaskCreateInput,
   TaskMetadataDocument,
@@ -23,8 +24,10 @@ import type {
   HostResourceError,
   HostValidationError,
 } from "../effect/host-errors";
+import type { TaskAssetError } from "../effect/task-asset-error";
 
 export type TaskStoreError =
+  | TaskAssetError
   | HostDependencyError
   | HostInvariantError
   | HostOperationError
@@ -54,11 +57,13 @@ export type TaskWriter = {
   createTask(input: {
     repoPath: string;
     task: TaskCreateInput;
+    descriptionAssets?: TaskAssetDescriptionMutation;
   }): Effect.Effect<TaskCard, TaskStoreError>;
   deleteTask(input: {
     repoPath: string;
     taskId: string;
     deleteSubtasks: boolean;
+    expectedTaskIds?: readonly string[];
   }): Effect.Effect<boolean, TaskStoreError>;
   transitionTask(input: {
     repoPath: string;
@@ -69,6 +74,7 @@ export type TaskWriter = {
     repoPath: string;
     taskId: string;
     patch: TaskUpdatePatch;
+    descriptionAssets?: TaskAssetDescriptionMutation;
   }): Effect.Effect<TaskCard, TaskStoreError>;
 };
 export type WorkflowDocumentRepository = {

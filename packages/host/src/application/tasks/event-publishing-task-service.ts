@@ -165,9 +165,19 @@ export const createEventPublishingTaskService = ({
       ),
     createTask: (input) =>
       Effect.gen(function* () {
-        const created = yield* taskService.createTask(input);
-        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, created.id);
-        return created;
+        const result = yield* Effect.either(taskService.createTask(input));
+        if (result._tag === "Left") {
+          if (result.left instanceof TaskMutationProgressFailure) {
+            const [taskId] = result.left.changes.taskIds;
+            if (taskId) {
+              yield* taskSyncService.publishExternalTaskCreated(input.repoPath, taskId);
+            }
+            return yield* Effect.fail(result.left.failure);
+          }
+          return yield* Effect.fail(result.left);
+        }
+        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.right.id);
+        return result.right;
       }),
     deleteTask: (input) =>
       publishAfterMutation(

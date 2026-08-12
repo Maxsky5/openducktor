@@ -92,6 +92,7 @@ The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and
 - `odt_create_task`
 - `odt_search_tasks`
 - `odt_read_task`
+- `odt_read_task_assets`
 - `odt_read_task_documents`
 
 The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
@@ -199,6 +200,16 @@ Use `odt_read_task` first to discover the task summary object, including task st
 - `taskId`
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
+
+`odt_read_task_assets` input:
+
+- `workspaceId?` optional per-call workspace override
+- `taskId`
+- `assetIds`: 1 to 50 distinct asset UUIDs
+
+Use one call when the requested assets have a raw total of at most 20 MiB. Split only larger sets. The host checks the exact workspace, canonical task, description scope, media type, per-file byte size, and aggregate byte size before reading files. It keeps request order and fails the whole call if any asset is unavailable.
+
+The result contains a short label and a native MCP `image` content block for each asset. It does not expose the private bridge JSON as `structuredContent`, declare an MCP `outputSchema`, or return storage paths and runtime URLs.
 
 `odt_read_task_documents` input:
 

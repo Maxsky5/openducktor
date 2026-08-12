@@ -1,14 +1,16 @@
+import type { TaskAssetStageResult } from "@openducktor/contracts";
 import { ListTodo } from "lucide-react";
 import type { ReactElement } from "react";
 import { ISSUE_TYPE_OPTIONS } from "@/components/features/task-composer/constants";
 import { issueTypeGuidance } from "@/components/features/task-composer/utils";
+import TaskDescriptionEditor from "@/components/features/task-description-editor/task-description-editor";
+import type { TaskDescriptionAssetUpload } from "@/components/features/task-description-editor/use-task-description-asset-draft";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TagSelector } from "@/components/ui/tag-selector";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { ComposerMode, ComposerState } from "@/types/task-composer";
 
@@ -19,6 +21,11 @@ type TaskDetailsFormProps = {
   knownLabels: string[];
   onStateChange: (patch: Partial<ComposerState>) => void;
   onRequestTypeChange: () => void;
+  workspaceId: string | null;
+  taskId: string | null;
+  onDescriptionImageUpload(file: File): Promise<TaskAssetStageResult>;
+  descriptionAssetUploads: TaskDescriptionAssetUpload[];
+  descriptionAssetPreviews: ReadonlyMap<string, string>;
 };
 
 export function TaskDetailsForm({
@@ -28,6 +35,11 @@ export function TaskDetailsForm({
   knownLabels,
   onStateChange,
   onRequestTypeChange,
+  workspaceId,
+  taskId,
+  onDescriptionImageUpload,
+  descriptionAssetUploads,
+  descriptionAssetPreviews,
 }: TaskDetailsFormProps): ReactElement {
   const selectedType = ISSUE_TYPE_OPTIONS.find((option) => option.value === state.issueType);
   const SelectedIcon = selectedType?.icon ?? ListTodo;
@@ -110,12 +122,15 @@ export function TaskDetailsForm({
 
       <div className="grid gap-2">
         <Label htmlFor="task-description">Description</Label>
-        <Textarea
-          id="task-description"
-          rows={6}
-          value={state.description}
-          placeholder="Problem context, scope, and expected output."
-          onChange={(event) => onStateChange({ description: event.currentTarget.value })}
+        <TaskDescriptionEditor
+          key={`${workspaceId ?? "no-workspace"}:${taskId ?? "new-task"}`}
+          markdown={state.description}
+          workspaceId={workspaceId}
+          taskId={taskId}
+          onUpload={onDescriptionImageUpload}
+          uploads={descriptionAssetUploads}
+          previews={descriptionAssetPreviews}
+          onChange={(description) => onStateChange({ description })}
         />
       </div>
 

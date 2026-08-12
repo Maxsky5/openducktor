@@ -45,6 +45,7 @@ import {
   type ElectronAppUpdateCheckInput,
   type ElectronHostEventEnvelope,
 } from "../shared/electron-bridge-contract";
+import { ELECTRON_TASK_ASSET_PROTOCOL } from "../shared/electron-task-asset-url";
 import {
   createElectronAppUpdateService,
   type ElectronAppUpdateService,
@@ -76,6 +77,7 @@ import { createElectronMainLogger, initializeElectronMainLogger } from "./electr
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
+import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
@@ -209,6 +211,15 @@ const registerPrivilegedProtocolSchemes = (): void => {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
+      privileges: {
+        secure: true,
+        standard: true,
+        stream: true,
+        supportFetchAPI: true,
+      },
+    },
+    {
+      scheme: ELECTRON_TASK_ASSET_PROTOCOL,
       privileges: {
         secure: true,
         standard: true,
@@ -897,6 +908,10 @@ const configureElectronReadyRuntimeEffect = ({
         net,
         resolveLocalAttachmentPath: (filePath) =>
           resolveLocalAttachmentPathForPreview(hostCommandRouter, filePath),
+        session: rendererSession,
+      });
+      registerElectronTaskAssetProtocol({
+        readService: hostCommandRouter.taskAssetReadService,
         session: rendererSession,
       });
       installApplicationMenu({

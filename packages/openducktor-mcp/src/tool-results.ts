@@ -1,15 +1,13 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
   OdtToolErrorCode,
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
+import { readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z } from "zod";
 
-export type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-};
+export type ToolResult = CallToolResult;
 
 export type OdtToolErrorDetails = Record<string, unknown>;
 
@@ -98,6 +96,23 @@ export const toToolResult = (payload: unknown): ToolResult => {
       },
     ],
     ...(isStructuredToolPayload(payload) ? { structuredContent: payload } : {}),
+  };
+};
+
+export const toTaskAssetsToolResult = (payload: unknown): ToolResult => {
+  const parsed = readTaskAssetsResultSchema.parse(payload);
+  return {
+    content: parsed.assets.flatMap((asset) => [
+      {
+        type: "text" as const,
+        text: `Task description asset ${asset.assetId} (${asset.mediaType}, ${asset.byteSize} bytes)`,
+      },
+      {
+        type: "image" as const,
+        data: asset.dataBase64,
+        mimeType: asset.mediaType,
+      },
+    ]),
   };
 };
 

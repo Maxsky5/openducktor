@@ -3,6 +3,7 @@ import {
   TerminalServiceError,
   terminalServiceErrorToFailure,
 } from "../../application/terminals/terminal-service";
+import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset-error";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
@@ -10,6 +11,12 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
     return {
       kind: "terminal",
       terminalFailure: terminalServiceErrorToFailure(cause),
+    };
+  }
+  if (cause instanceof TaskAssetError) {
+    return {
+      kind: "task_asset",
+      taskAssetFailure: taskAssetErrorToFailure(cause),
     };
   }
   if (cause instanceof CodexSessionHistoryError) {

@@ -1062,4 +1062,19 @@ describe("local host SSE subscriptions", () => {
       "http://127.0.0.1:14327/local-attachment-preview?path=%2Ftmp%2Fpreview.png",
     );
   });
+
+  test("buildTaskAssetUrl keeps runtime routing outside Markdown", async () => {
+    const { buildTaskAssetUrl } = await loadLocalHostTransport();
+
+    expect(
+      buildTaskAssetUrl("http://127.0.0.1:14327/", {
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        scope: "description",
+        assetId: "550e8400-e29b-41d4-a716-446655440000",
+      }),
+    ).toBe(
+      "http://127.0.0.1:14327/task-assets/workspace-1/task-1/description/550e8400-e29b-41d4-a716-446655440000",
+    );
+  });
 });

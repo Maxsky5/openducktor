@@ -1,10 +1,18 @@
+import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
+import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
+const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
+const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
+const MarkdownRendererMermaidCandidate = lazy(
+  () => import("./markdown-renderer-mermaid-candidate"),
+);
 
 export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 
@@ -21,6 +29,8 @@ type MarkdownRendererProps = {
   components?: Components;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
+  stripTaskDescriptionFrontMatter?: boolean;
 };
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -78,8 +88,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   components: componentOverrides,
   premiumCodeBlocks = false,
   fallback,
+  taskAssetContext,
+  stripTaskDescriptionFrontMatter = false,
 }: MarkdownRendererProps): ReactElement | null {
-  const content = markdown.trim();
+  const content = prepareMarkdownRenderContent(markdown, stripTaskDescriptionFrontMatter);
   if (!content) {
     return null;
   }
@@ -87,15 +99,67 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const components = componentOverrides
     ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
     : MARKDOWN_COMPONENTS[variant];
-  return (
-    <div className={cn(MARKDOWN_CLASSES[variant], className)}>
-      {premiumCodeBlocks ? (
-        <Suspense fallback={fallback ?? null}>
-          <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
-        </Suspense>
-      ) : (
-        <MarkdownSync markdown={content} components={components} />
-      )}
-    </div>
-  );
+  const hasMathCandidate = content.includes("$");
+  const hasMermaidCandidate = content.includes("mermaid");
+  const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
+  const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
+  const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
+
+  let renderedContent: ReactElement;
+  if (needsRichRenderer) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <MarkdownRendererRich
+          markdown={content}
+          components={components}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
+  } else if (premiumCodeBlocks) {
+    renderedContent = (
+      <Suspense fallback={fallback ?? null}>
+        <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
+      </Suspense>
+    );
+  } else {
+    renderedContent = <MarkdownSync markdown={content} components={components} />;
+  }
+
+  if (hasMermaidCandidate) {
+    renderedContent = (
+      <Suspense fallback={renderedContent}>
+        <MarkdownRendererMermaidCandidate
+          markdown={content}
+          components={components}
+          fallbackContent={renderedContent}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
+  }
+
+  if (hasMathCandidate && !hasMermaidCandidate) {
+    renderedContent = (
+      <Suspense fallback={renderedContent}>
+        <MarkdownRendererMathCandidate
+          markdown={content}
+          components={components}
+          fallbackContent={renderedContent}
+          premiumCodeBlocks={premiumCodeBlocks}
+          fallback={fallback}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+        />
+      </Suspense>
+    );
+  }
+
+  return <div className={cn(MARKDOWN_CLASSES[variant], className)}>{renderedContent}</div>;
 });

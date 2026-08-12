@@ -13,6 +13,7 @@ import {
 } from "./effect/web-errors";
 import {
   buildLocalAttachmentPreviewUrl,
+  buildTaskAssetUrl,
   createLocalHostClient,
   ensureLocalHostSessionDedupedEffect,
   observeLocalHostAgentSessions,
@@ -89,6 +90,13 @@ export const createBrowserShellBridge = (): ShellBridge => {
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
     resolveLocalAttachmentPreviewSrc: (path) =>
       runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),
+    resolveTaskAssetSrc: (context) =>
+      runWebBoundary(
+        Effect.gen(function* () {
+          yield* ensureLocalHostSessionDedupedEffect();
+          return buildTaskAssetUrl(yield* getBrowserBackendUrlEffect(), context);
+        }),
+      ),
     terminals: createBrowserTerminalBridge(),
   };
 };

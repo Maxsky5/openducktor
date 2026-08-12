@@ -1,3 +1,4 @@
+import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import {
   type MouseEvent,
   memo,
@@ -17,6 +18,8 @@ type TaskDetailsMarkdownContentProps = {
   empty: string;
   active: boolean;
   copyableMarkdown?: string;
+  stripTaskDescriptionFrontMatter?: boolean;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
 const LARGE_MARKDOWN_DEFER_THRESHOLD = 2000;
@@ -24,40 +27,49 @@ const LABELED_CODE_FENCE_PATTERN = /^[ \t]{0,3}(?:```|~~~)[ \t]*[^\s`~]/im;
 type TaskDetailsRenderedMarkdownProps = {
   markdown: string;
   hasLabeledCodeFence: boolean;
+  stripTaskDescriptionFrontMatter: boolean;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
-function TaskDetailsRenderedMarkdown({
+const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
   markdown,
   hasLabeledCodeFence,
+  stripTaskDescriptionFrontMatter,
+  taskAssetContext,
 }: TaskDetailsRenderedMarkdownProps): ReactElement {
   return (
     <MarkdownRenderer
       markdown={markdown}
       variant="document"
       premiumCodeBlocks={hasLabeledCodeFence}
+      stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
       fallback={
         <p className="text-xs text-muted-foreground">
           Rendering markdown with syntax highlighting…
         </p>
       }
+      {...(taskAssetContext ? { taskAssetContext } : {})}
     />
   );
-}
+});
 
 type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
   active: boolean;
   copyableMarkdown: string | undefined;
   copied: boolean;
   onCopy: (e: MouseEvent<HTMLButtonElement>) => void;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 };
 
 function DeferredTaskDetailsMarkdown({
   active,
   markdown,
   hasLabeledCodeFence,
+  stripTaskDescriptionFrontMatter,
   copyableMarkdown,
   copied,
   onCopy,
+  taskAssetContext,
 }: DeferredTaskDetailsMarkdownProps): ReactElement {
   const [isMarkdownReady, setIsMarkdownReady] = useReducer(
     (_current: boolean, next: boolean) => next,
@@ -96,6 +108,8 @@ function DeferredTaskDetailsMarkdown({
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}
+          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
         />
       </div>
       {copyableMarkdown ? (
@@ -116,6 +130,8 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   empty,
   active,
   copyableMarkdown,
+  stripTaskDescriptionFrontMatter = false,
+  taskAssetContext,
 }: TaskDetailsMarkdownContentProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
@@ -152,9 +168,11 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         active={active}
         markdown={markdown}
         hasLabeledCodeFence={hasLabeledCodeFence}
+        stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
         copyableMarkdown={copyableMarkdown}
         copied={copied}
         onCopy={handleCopy}
+        {...(taskAssetContext ? { taskAssetContext } : {})}
       />
     );
   }
@@ -165,6 +183,8 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
           hasLabeledCodeFence={hasLabeledCodeFence}
+          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
         />
       </div>
       {copyableMarkdown ? (

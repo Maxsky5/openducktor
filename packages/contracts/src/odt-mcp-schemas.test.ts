@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   getWorkspacesResultSchema,
+  ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   odtToolErrorPayloadSchema,
   publicTaskSchema,
+  ReadTaskAssetsInputSchema,
   ReadTaskInputSchema,
+  readTaskAssetsResultSchema,
   SetPlanInputSchema,
   taskSummarySchema,
 } from "./odt-mcp-schemas";
@@ -82,6 +85,7 @@ describe("odt mcp public task schemas", () => {
         "odt_qa_approved",
         "odt_qa_rejected",
         "odt_read_task",
+        "odt_read_task_assets",
         "odt_read_task_documents",
         "odt_search_tasks",
         "odt_set_plan",
@@ -114,6 +118,119 @@ describe("odt mcp public task schemas", () => {
     expect(description).toBe(
       "Optional workspaceId. Overrides startup workspace; workflow agents omit.",
     );
+  });
+
+  test("read task assets accepts one ordered batch and rejects empty or duplicate ids", () => {
+    const firstAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const secondAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
+
+    expect(
+      ReadTaskAssetsInputSchema.parse({
+        workspaceId: "repo",
+        taskId: "task-1",
+        assetIds: [firstAssetId, secondAssetId],
+      }),
+    ).toEqual({
+      workspaceId: "repo",
+      taskId: "task-1",
+      assetIds: [firstAssetId, secondAssetId],
+    });
+    expect(ReadTaskAssetsInputSchema.safeParse({ taskId: "task-1", assetIds: [] }).success).toBe(
+      false,
+    );
+    expect(
+      ReadTaskAssetsInputSchema.safeParse({
+        taskId: "task-1",
+        assetIds: [firstAssetId, firstAssetId],
+      }).success,
+    ).toBe(false);
+    expect(
+      ReadTaskAssetsInputSchema.safeParse({
+        taskId: "task-1",
+        assetIds: Array.from(
+          { length: 51 },
+          (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
+        ),
+      }).success,
+    ).toBe(false);
+  });
+
+  test("read task assets bridge result validates ordered base64 image payloads", () => {
+    const firstAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
+    const secondAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
+
+    expect(
+      readTaskAssetsResultSchema.parse({
+        assets: [
+          {
+            assetId: firstAssetId,
+            mediaType: "image/png",
+            byteSize: 3,
+            dataBase64: "AQID",
+          },
+          {
+            assetId: secondAssetId,
+            mediaType: "image/webp",
+            byteSize: 2,
+            dataBase64: "BAU=",
+          },
+        ],
+      }),
+    ).toEqual({
+      assets: [
+        {
+          assetId: firstAssetId,
+          mediaType: "image/png",
+          byteSize: 3,
+          dataBase64: "AQID",
+        },
+        {
+          assetId: secondAssetId,
+          mediaType: "image/webp",
+          byteSize: 2,
+          dataBase64: "BAU=",
+        },
+      ],
+    });
+    expect(readTaskAssetsResultSchema.safeParse({ assets: [] }).success).toBe(false);
+    expect(
+      readTaskAssetsResultSchema.safeParse({
+        assets: [
+          {
+            assetId: firstAssetId,
+            mediaType: "image/png",
+            byteSize: 2,
+            dataBase64: "AQID",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    const aggregateResult = readTaskAssetsResultSchema.safeParse({
+      assets: [
+        {
+          assetId: firstAssetId,
+          mediaType: "image/png",
+          byteSize: ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
+          dataBase64: "AQ==",
+        },
+        {
+          assetId: secondAssetId,
+          mediaType: "image/webp",
+          byteSize: 1,
+          dataBase64: "Ag==",
+        },
+      ],
+    });
+    expect(aggregateResult.success).toBe(false);
+    if (!aggregateResult.success) {
+      expect(aggregateResult.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ["assets"],
+          message: `Task asset batches must be ${ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES} bytes or smaller.`,
+        }),
+      );
+    }
   });
 
   test("get workspaces result keeps workspace records in an object payload", () => {

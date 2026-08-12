@@ -180,9 +180,9 @@ Keep this contract stable. If you change any item below, update all related laye
 
 - MCP server name: `openducktor`.
 - Tool schemas: `packages/openducktor-mcp/src/lib.ts` (`ODT_TOOL_SCHEMAS`).
-- Workflow tools: `odt_read_task`, `odt_set_spec`, `odt_set_plan`, `odt_build_blocked`, `odt_build_resumed`, `odt_build_completed`, `odt_qa_approved`, `odt_qa_rejected`.
+- Workflow tools: `odt_read_task`, `odt_read_task_assets`, `odt_read_task_documents`, `odt_set_spec`, `odt_set_plan`, `odt_build_blocked`, `odt_build_resumed`, `odt_build_completed`, `odt_set_pull_request`, `odt_qa_approved`, `odt_qa_rejected`.
 - Role-to-tool policy: `packages/core/src/types/agent-orchestrator.ts` (`AGENT_ROLE_TOOL_POLICY`).
-- Role allowlist: `spec` → `odt_read_task, odt_set_spec`; `planner` → `odt_read_task, odt_set_plan`; `build` → `odt_read_task, odt_build_*`; `qa` → `odt_read_task, odt_qa_*`.
+- Role allowlist: all roles may use `odt_read_task`, `odt_read_task_assets`, and `odt_read_task_documents`; `spec` adds `odt_set_spec`; `planner` adds `odt_set_plan`; `build` adds `odt_build_*` and `odt_set_pull_request`; `qa` adds `odt_qa_*`.
 - Workflow tool normalization: `packages/core/src/services/odt-workflow-tools.ts`.
 - Agent Studio root: `packages/frontend/src/pages/agents/agents-page.tsx`; orchestration in `use-agent-studio-*.ts` hooks.
 - Runtime/session orchestration: `packages/frontend/src/state/operations/use-agent-orchestrator-operations.ts`.

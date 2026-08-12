@@ -1,0 +1,801 @@
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import { fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
+import { useState } from "react";
+import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
+import TaskDescriptionEditor from "./task-description-editor";
+
+const EDITOR_WAIT_TIMEOUT_MS = 2_000;
+const waitFor = <Result,>(callback: () => Result): Promise<Result> =>
+  testingLibraryWaitFor(callback, { timeout: EDITOR_WAIT_TIMEOUT_MS });
+
+const createProps = () => ({
+  workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+  taskId: "task-1",
+  onUpload: async () => ({
+    assetId: "550e8400-e29b-41d4-a716-446655440000",
+    scope: "description" as const,
+    originalName: "diagram.png",
+    verifiedMediaType: "image/png" as const,
+    byteSize: 3,
+  }),
+  uploads: [],
+  previews: new Map<string, string>(),
+});
+
+const createDeferred = <T,>() => {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return {
+    promise,
+    resolve(value: T) {
+      resolve?.(value);
+    },
+  };
+};
+
+describe("TaskDescriptionEditor", () => {
+  test("shows one stable Visual editor surface while the first rich bundle loads", () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+
+    const loadingSurface = view.getByRole("status", { name: "Loading Visual editor" });
+    expect(loadingSurface.className).toContain("bg-card");
+    expect(view.queryByRole("textbox")).toBeNull();
+    expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+  });
+
+  test("mounts the Visual editor and a stable Mermaid viewport before the preview is ready", async () => {
+    const renderModule = await import("@/components/ui/markdown-mermaid-render");
+    let resolveRender: ((svg: string) => void) | undefined;
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+
+    try {
+      const view = render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown={"1. ```mermaid\n   graph TD\n     A --> B\n   ```"}
+          onChange={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
+      expect(view.container.querySelector(".tiptap")).not.toBeNull();
+      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+      expect(viewport.getAttribute("aria-busy")).toBe("true");
+
+      resolveRender?.(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy());
+      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+    } finally {
+      renderSpy.mockRestore();
+    }
+  }, 4_000);
+
+  test("keeps Markdown typing stable and uses the normal interface font", async () => {
+    const ControlledEditor = () => {
+      const [markdown, setMarkdown] = useState("Body");
+      return (
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={setMarkdown} />
+      );
+    };
+    const view = render(<ControlledEditor />);
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    const textarea = view.getByRole("textbox") as HTMLTextAreaElement;
+    expect(textarea.className).toContain("font-sans");
+    expect(textarea.className).not.toContain("font-mono");
+
+    fireEvent.change(textarea, { target: { value: "Body!" } });
+
+    expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Body!");
+  });
+
+  test("uses the card surface for the Visual editor in both themes", async () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    const visualSurface = view.container.querySelector(".tiptap")?.parentElement?.parentElement;
+    expect(visualSurface?.className).toContain("bg-card");
+    expect(visualSurface?.className).not.toContain("bg-background");
+  });
+
+  test("uses the Network icon for Mermaid diagrams", async () => {
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={() => {}} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    const mermaidButton = view.getByRole("button", { name: "Mermaid diagram" });
+    expect(mermaidButton.querySelector(".lucide-network")).not.toBeNull();
+    expect(mermaidButton.querySelector(".lucide-braces")).toBeNull();
+  });
+
+  test("switching modes without edits preserves the original source", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "-   unusual marker\r\n";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+
+    await waitFor(() =>
+      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.queryByRole("status", { name: "Loading Visual editor" })).toBeNull();
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["ordered bold text", "1. **bold**"],
+    ["ordered italic text", "1. *italic*"],
+    ["ordered strikethrough text", "1. ~~strike~~"],
+    ["ordered inline code", "1. `code`"],
+    ["an ordered link", "1. [link](https://example.com)"],
+    ["an ordered HTTP image", "1. ![HTTP image](https://example.com/image.png)"],
+    [
+      "an ordered task asset image",
+      "1. ![Asset image](odt-asset:550e8400-e29b-41d4-a716-446655440000)",
+    ],
+    [
+      "ordered mixed inline formatting followed by another block",
+      "1. **bold**, *italic*, ~~strike~~, `code`, and [link](https://example.com)\n\n   > quote",
+    ],
+    ["1. ordered math with trailing prose", "1. $$\n   x\n   $$\n\n   After"],
+    ["10. ordered math with trailing prose", "10. $$\n    x\n    $$\n\n    After"],
+    ["99. ordered math with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
+    ["repeated ordered math", "1. $$\n   x\n   $$\n\n   $$\n   y\n   $$\n\n   After"],
+    ["ordered math before nested content", "1. $$\n   x\n   $$\n\n   - nested"],
+    ["an ordered blockquote", "1. > quote"],
+    ["a multi-digit ordered blockquote", "10. > quote"],
+    ["an ordered fenced code block", "1. ```ts\n   const value = 1\n   ```"],
+    ["an ordered Mermaid block", "1. ```mermaid\n   graph TD\n     A --> B\n   ```"],
+    ["an ordered blockquote followed by prose", "1. > quote\n\n   After"],
+    ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
+    ["a nested ordered list followed by parent prose", "1. Before\n   1. Nested\n\n   After"],
+    ["a nested ordered list followed by a parent quote", "1. Before\n   1. Nested\n\n   > quote"],
+    ["a nested ordered list followed by a parent bullet", "1. Before\n   1. Nested\n\n   - bullet"],
+    [
+      "a nested ordered list followed by parent block math",
+      "1. Before\n   1. Nested\n\n   $$\n   x\n   $$",
+    ],
+    [
+      "a nested ordered list followed by a parent fence",
+      "1. Before\n   1. Nested\n\n   ```ts\n   value\n   ```",
+    ],
+    ["an ordered fence containing a list lookalike", "1. ```md\n   1. fake\n   ```"],
+    [
+      "an ordered Mermaid fence containing a list lookalike",
+      '1. ```mermaid\n   graph TD\n     A["1. fake"]\n   ```',
+    ],
+    ["a zero-start dot marker", "0. > quote"],
+    ["a zero-start parenthesis marker", "0) > quote"],
+    ["a blank-separated nested zero-start ordered list", "1. Parent\n\n   0. Child"],
+    ["a blank-separated nested non-one ordered list", "1. Parent\n\n   2. Child"],
+    ["a blank-separated nested multi-digit ordered list", "1. Parent\n\n   20. Child"],
+    [
+      "ordered math followed by fenced code",
+      "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
+    ],
+    [
+      "ordered math followed by Mermaid",
+      "1. $$\n   x\n   $$\n\n   ```mermaid\n   graph TD\n     A --> B\n   ```",
+    ],
+    [
+      "ordered math followed by an image",
+      "1. $$\n   x\n   $$\n\n   ![Diagram](https://example.com/diagram.png)",
+    ],
+    ["ordered math followed by a thematic rule", "1. $$\n   x\n   $$\n\n   ---"],
+    ["a leading blockquote", "- > quote"],
+    ["a leading fenced code block", "- ```ts\n  const value = 1\n  ```"],
+    ["a leading Mermaid block", "- ```mermaid\n  graph TD\n    A --> B\n  ```"],
+    ["a leading heading", "- # Heading"],
+    ["a leading nested list", "- - nested"],
+    ["a blockquote followed by prose", "- > quote\n\n  After"],
+  ])(
+    "opens supported list composition %s in Visual mode without rewriting source",
+    async (_name, markdown) => {
+      const onChange = mock((_value: string) => {});
+      const view = render(
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+      );
+
+      await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+      expect(view.queryByRole("alert", { name: "Visual mode compatibility error" })).toBeNull();
+
+      fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+
+      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+    5_000,
+  );
+
+  test.each([
+    ["zero", "1. Parent\n   0. Child"],
+    ["non-one", "1. Parent\n   2. Child"],
+    ["multi-digit", "1. Parent\n   20. Child"],
+  ])(
+    "keeps an ambiguous nested %s-start ordered list unchanged in Markdown mode",
+    async (_name, markdown) => {
+      const onChange = mock((_value: string) => {});
+      const view = render(
+        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+      );
+
+      const textarea = await waitFor(() => view.getByRole("textbox"));
+      expect((textarea as HTMLTextAreaElement).value).toBe(markdown);
+      expect(view.getByRole("alert").textContent).toContain("blank line");
+      fireEvent.click(view.getByRole("button", { name: "Visual" }));
+      expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+    5_000,
+  );
+
+  test("keeps unsupported syntax in Markdown mode with an actionable reason", async () => {
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
+        onChange={() => {}}
+      />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
+    expect(view.getByRole("textbox")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.getByRole("textbox")).toBeTruthy();
+  });
+
+  test("stages and inserts an image while compatibility keeps the editor in Markdown mode", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440012";
+    const file = new File([new Uint8Array([1])], "source.png", { type: "image/png" });
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock(async () => ({
+      assetId,
+      scope: "description" as const,
+      originalName: file.name,
+      verifiedMediaType: "image/png" as const,
+      byteSize: file.size,
+    }));
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+
+    const input = await waitFor(() => view.getByLabelText("Task description images"));
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(String(onChange.mock.lastCall?.[0])).toContain(`odt-asset:${assetId}`),
+    );
+  });
+
+  test("keeps escaped-pipe GFM tables in Markdown mode before TipTap can serialize them", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps links that fail the live codec round trip in Markdown mode", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "[a](<https://x.test/a b>)";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "cannot be preserved",
+    );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.getByRole("textbox")).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps renderer-lossy same-line double-dollar math unchanged in Markdown mode", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "Before $$x$$ after";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Block math delimiters",
+    );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps malformed block math in Markdown mode with an actionable reason", async () => {
+    const markdown = "$$\nx\n\nThen $y$";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Block math delimiters",
+    );
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect(view.getByRole("textbox")).toBeTruthy();
+  });
+
+  test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
+    const markdown = "---\ntitle: Keep comments # exact\n---\nBody";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
+    );
+
+    expect(view.getByText(/Front matter preserved/)).toBeTruthy();
+    await waitFor(() =>
+      expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+  });
+
+  test("external replacements hydrate Visual mode without emitting updates", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="First" onChange={onChange} />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    view.rerender(
+      <TaskDescriptionEditor {...createProps()} markdown="Second" onChange={onChange} />,
+    );
+
+    await waitFor(() => expect(view.container.textContent).toContain("Second"));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps Visual mode mounted when a controlled parent accepts a user edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const ControlledEditor = () => {
+      const [markdown, setMarkdown] = useState("Formula");
+      return (
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown={markdown}
+          onChange={(nextMarkdown) => {
+            onChange(nextMarkdown);
+            setMarkdown(nextMarkdown);
+          }}
+        />
+      );
+    };
+    const view = render(<ControlledEditor />);
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    fireEvent.change(input, { target: { value: "x" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(onChange).toHaveBeenCalled();
+    expect(view.container.querySelector(".tiptap")).not.toBeNull();
+    expect(
+      view.queryByRole("textbox", { name: "Problem context, scope, and expected output." }),
+    ).toBeNull();
+  });
+
+  test("resets mode and gate when switching from an incompatible task to a compatible task", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        taskId="task-incompatible"
+        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
+        onChange={onChange}
+      />,
+    );
+
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
+    expect(view.getByRole("textbox")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+
+    view.rerender(
+      <TaskDescriptionEditor
+        {...createProps()}
+        taskId="task-compatible"
+        markdown="Compatible body"
+        onChange={onChange}
+      />,
+    );
+
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+    expect(view.queryByRole("alert", { name: "Visual mode compatibility error" })).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("resets to a gated Markdown mode when switching to an incompatible task", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        taskId="task-compatible"
+        markdown="Compatible body"
+        onChange={onChange}
+      />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    view.rerender(
+      <TaskDescriptionEditor
+        {...createProps()}
+        taskId="task-incompatible"
+        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
+        onChange={onChange}
+      />,
+    );
+
+    expect(await waitFor(() => view.getByRole("textbox"))).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
+      "Reference-style links",
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("the image picker stages and inserts a logical asset reference", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440000";
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock(async () => ({
+      assetId,
+      scope: "description" as const,
+      originalName: "diagram.png",
+      verifiedMediaType: "image/png" as const,
+      byteSize: 3,
+    }));
+    const originalCreateObjectUrl = URL.createObjectURL;
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    URL.createObjectURL = () => "blob:diagram";
+    URL.revokeObjectURL = () => {};
+
+    try {
+      const view = render(
+        <TaskDescriptionEditor
+          {...createProps()}
+          markdown="Body"
+          onChange={onChange}
+          onUpload={onUpload}
+        />,
+      );
+      await waitFor(() => expect(view.getByRole("button", { name: "Insert image" })).toBeTruthy());
+      const input = view.container.querySelector('input[type="file"]');
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error("Expected the task image picker input.");
+      }
+      const file = new File([new Uint8Array([1, 2, 3])], "diagram.png", {
+        type: "image/png",
+      });
+      fireEvent.change(input, { target: { files: [file] } });
+
+      await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file));
+      await waitFor(() =>
+        expect(
+          onChange.mock.calls.some(([value]) => String(value).includes(`odt-asset:${assetId}`)),
+        ).toBe(true),
+      );
+    } finally {
+      URL.createObjectURL = originalCreateObjectUrl;
+      URL.revokeObjectURL = originalRevokeObjectUrl;
+    }
+  });
+
+  test("inserts concurrent image uploads at their original location in file order", async () => {
+    const firstAssetId = "550e8400-e29b-41d4-a716-446655440010";
+    const secondAssetId = "550e8400-e29b-41d4-a716-446655440011";
+    const firstUpload =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+    const secondUpload =
+      createDeferred<Awaited<ReturnType<ReturnType<typeof createProps>["onUpload"]>>>();
+    const firstFile = new File([new Uint8Array([1])], "first.png", { type: "image/png" });
+    const secondFile = new File([new Uint8Array([2])], "second.png", { type: "image/png" });
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock((file: File) =>
+      file === firstFile ? firstUpload.promise : secondUpload.promise,
+    );
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Before"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Insert image" })).toBeTruthy());
+    const input = view.getByLabelText("Task description images");
+
+    fireEvent.change(input, { target: { files: [firstFile, secondFile] } });
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    secondUpload.resolve({
+      assetId: secondAssetId,
+      scope: "description",
+      originalName: secondFile.name,
+      verifiedMediaType: "image/png",
+      byteSize: secondFile.size,
+    });
+    firstUpload.resolve({
+      assetId: firstAssetId,
+      scope: "description",
+      originalName: firstFile.name,
+      verifiedMediaType: "image/png",
+      byteSize: firstFile.size,
+    });
+
+    await waitFor(() => {
+      const markdown = String(onChange.mock.lastCall?.[0] ?? "");
+      expect(markdown.indexOf(firstAssetId)).toBeGreaterThan(-1);
+      expect(markdown.indexOf(secondAssetId)).toBeGreaterThan(markdown.indexOf(firstAssetId));
+    });
+  });
+
+  test("keeps the Visual editor read-only while an image upload is pending", async () => {
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={() => {}}
+        uploads={[{ id: "upload-1", fileName: "diagram.png", status: "uploading" }]}
+      />,
+    );
+
+    await waitFor(() => {
+      const editor = view.container.querySelector(".tiptap");
+      expect(editor?.getAttribute("contenteditable")).toBe("false");
+    });
+  });
+
+  test("stages an image pasted into Visual mode", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440001";
+    const onChange = mock((_value: string) => {});
+    const onUpload = mock(async (file: File) => ({
+      assetId,
+      scope: "description" as const,
+      originalName: file.name,
+      verifiedMediaType: "image/png" as const,
+      byteSize: file.size,
+    }));
+    const file = new File([new Uint8Array([1])], "pasted.png", { type: "image/png" });
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    fireEvent.paste(view.container.querySelector(".tiptap") as Element, {
+      clipboardData: { files: [file] },
+    });
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => String(value).includes(`odt-asset:${assetId}`)),
+      ).toBe(true),
+    );
+  });
+
+  test("keeps successful drag-and-drop uploads when another file fails", async () => {
+    const assetId = "550e8400-e29b-41d4-a716-446655440002";
+    const onChange = mock((_value: string) => {});
+    const failedFile = new File([new Uint8Array([1])], "bad.png", { type: "image/png" });
+    const acceptedFile = new File([new Uint8Array([2])], "accepted.png", {
+      type: "image/png",
+    });
+    const onUpload = mock(async (file: File) => {
+      if (file === failedFile) {
+        throw new Error("Rejected image");
+      }
+      return {
+        assetId,
+        scope: "description" as const,
+        originalName: file.name,
+        verifiedMediaType: "image/png" as const,
+        byteSize: file.size,
+      };
+    });
+    const view = render(
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown="Body"
+        onChange={onChange}
+        onUpload={onUpload}
+      />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
+
+    fireEvent.drop(view.container.querySelector(".tiptap") as Element, {
+      dataTransfer: { files: [failedFile, acceptedFile] },
+    });
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => String(value).includes(`odt-asset:${assetId}`)),
+      ).toBe(true),
+    );
+  });
+
+  test("inserts an arbitrary inline formula from the accessible math editor", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Formula" onChange={onChange} />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const dialog = await waitFor(() => view.getByRole("dialog", { name: "Insert inline formula" }));
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "\\frac{a}{b}" } });
+    fireEvent.click(view.getByRole("button", { name: "Insert formula" }));
+
+    await waitFor(() => expect(dialog.isConnected).toBe(false));
+    await waitFor(() =>
+      expect(onChange.mock.calls.some(([value]) => String(value).includes("$\\frac{a}{b}$"))).toBe(
+        true,
+      ),
+    );
+  });
+
+  test("preserves renderer meaning for whitespace-closed block math after an unrelated Visual edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "$$\r\nx^2\r\n$$\t\r\n\r\nBody";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+    expect(hasMarkdownMath(markdown)).toBe(true);
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    fireEvent.change(input, { target: { value: "y" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => {
+          const emittedMarkdown = String(value);
+          return (
+            hasMarkdownMath(emittedMarkdown) &&
+            emittedMarkdown.includes("$$\nx^2\n$$") &&
+            emittedMarkdown.includes("$y$")
+          );
+        }),
+      ).toBe(true),
+    );
+  });
+
+  test("preserves nested block math after an unrelated Visual edit", async () => {
+    const onChange = mock((_value: string) => {});
+    const markdown = "> $$\n> x\n> $$";
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
+    );
+    expect(hasMarkdownMath(markdown)).toBe(true);
+    await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Inline math" }));
+    const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
+    fireEvent.change(input, { target: { value: "y" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => {
+          const emittedMarkdown = String(value);
+          return hasMarkdownMath(emittedMarkdown) && emittedMarkdown.includes("> $$");
+        }),
+      ).toBe(true),
+    );
+  });
+
+  test("edits a selected formula and validates or cancels without changing Markdown", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Formula $x$" onChange={onChange} />,
+    );
+    const mathNode = await waitFor(() => {
+      const node = view.container.querySelector('[data-type="inline-math"]');
+      expect(node).not.toBeNull();
+      return node as Element;
+    });
+
+    fireEvent.click(mathNode);
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
+    ).toBeTruthy();
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    expect((input as HTMLInputElement).value).toBe("x");
+    fireEvent.change(input, { target: { value: "\\frac{" } });
+    fireEvent.click(view.getByRole("button", { name: "Save formula" }));
+    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("valid LaTeX");
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(view.queryByRole("dialog", { name: "Edit inline formula" })).toBeNull(),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(mathNode);
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
+    ).toBeTruthy();
+    const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(replacement, { target: { value: "y^2" } });
+    fireEvent.submit(replacement.closest("form") as HTMLFormElement);
+    await waitFor(() =>
+      expect(onChange.mock.calls.some(([value]) => String(value).includes("$y^2$"))).toBe(true),
+    );
+  });
+
+  test("inserts arbitrary block math with the documented keyboard shortcut", async () => {
+    const onChange = mock((_value: string) => {});
+    const view = render(
+      <TaskDescriptionEditor {...createProps()} markdown="Body" onChange={onChange} />,
+    );
+    await waitFor(() => expect(view.getByRole("button", { name: "Block math" })).toBeTruthy());
+
+    fireEvent.click(view.getByRole("button", { name: "Block math" }));
+    expect(
+      await waitFor(() => view.getByRole("dialog", { name: "Insert block formula" })),
+    ).toBeTruthy();
+    const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    fireEvent.change(input, { target: { value: "\\sum_{i=1}^{n} i" } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(
+        onChange.mock.calls.some(([value]) => String(value).includes("$$\n\\sum_{i=1}^{n} i\n$$")),
+      ).toBe(true),
+    );
+  });
+});

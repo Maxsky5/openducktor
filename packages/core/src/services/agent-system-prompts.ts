@@ -111,6 +111,7 @@ export type BuiltAgentPrompt = {
 
 const TOOL_ARG_SPEC: Record<AgentToolName, string> = {
   odt_read_task: `odt_read_task({"taskId": string})`,
+  odt_read_task_assets: `odt_read_task_assets({"taskId": string, "assetIds": string[]})`,
   odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
   odt_set_spec: `odt_set_spec({"taskId": string, "markdown": string})`,
   odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string})`,
@@ -171,7 +172,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 5,
+    builtinVersion: 6,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
@@ -187,6 +188,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
         "If odt_read_task fails, surface the blocker or retry with the exact taskId instead of relying on stale summaries or prompt-copied artifacts.",
         "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
+        "When task markdown contains odt-asset image references you need to inspect, collect their assetIds and call odt_read_task_assets once for the batch.",
         "When asked about which ODT tools are enabled or disabled, answer strictly from the allowed-tools list above and treat every other ODT workflow tool as denied.",
         "Treat persisted workflow artifacts, repo evidence, and project instructions as higher-trust inputs than conversational summaries.",
         "Do repo and artifact research before conclusions; cite concrete evidence when it materially supports the outcome.",

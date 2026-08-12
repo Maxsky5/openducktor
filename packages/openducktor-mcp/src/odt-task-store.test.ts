@@ -48,6 +48,36 @@ describe("OdtTaskStore", () => {
     ]);
   });
 
+  test("delegates a task asset batch in one host bridge call", async () => {
+    const assetIds = [
+      "28cb7c3d-5ec4-47e8-bffe-090223eae3b7",
+      "96d20c03-a470-47f6-9472-1a1d34cd23df",
+    ];
+    const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
+    const payload = { assets: [] };
+    const client = {
+      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      getWorkspaces: async () => workspacesPayload,
+      call: async (toolName, workspaceId, input) => {
+        calls.push({ toolName, workspaceId, input });
+        return payload;
+      },
+    } as OdtHostBridgeClientPort;
+    const store = new OdtTaskStore(
+      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
+      { client },
+    );
+
+    await expect(store.readTaskAssets({ taskId: "task-1", assetIds })).resolves.toEqual(payload);
+    expect(calls).toEqual([
+      {
+        toolName: "odt_read_task_assets",
+        workspaceId: "repo",
+        input: { taskId: "task-1", assetIds },
+      },
+    ]);
+  });
+
   test("tool input workspaceId overrides the startup default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client = {

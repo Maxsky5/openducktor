@@ -1,5 +1,4 @@
 import type { TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
-import { normalizeLines } from "@/components/features/task-composer";
 import type { ComposerState, EditTaskSection } from "@/types/task-composer";
 
 type DocumentSection = Extract<EditTaskSection, "spec" | "plan">;
@@ -12,7 +11,7 @@ export const toTaskCreateInput = (state: ComposerState): TaskCreateInput => ({
   issueType: state.issueType,
   aiReviewEnabled: state.aiReviewEnabled,
   priority: state.priority,
-  description: normalizeLines(state.description),
+  description: state.description.trim() || undefined,
   labels: state.labels,
 });
 

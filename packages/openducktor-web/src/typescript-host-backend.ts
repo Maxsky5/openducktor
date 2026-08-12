@@ -15,6 +15,7 @@ import {
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
+  type TaskAssetReadService,
   type ToolDiscoveryId,
 } from "@openducktor/host";
 import { Cause, Effect } from "effect";
@@ -27,6 +28,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
   routeTaskEventHttpRequest,
   TASK_EVENT_STREAM_TOKEN_HEADER,
@@ -579,6 +581,7 @@ const routeCorsRequest = ({
   corsHeaders,
   eventBus,
   hostCommandRouter,
+  taskAssetReadService,
   taskEventLeaseManager,
   localAttachments,
   logger,
@@ -593,6 +596,7 @@ const routeCorsRequest = ({
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskAssetReadService: TaskAssetReadService;
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -678,6 +682,17 @@ const routeCorsRequest = ({
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
+    const taskAssetResponse = yield* routeTaskAssetHttpRequest({
+      appToken,
+      corsHeaders,
+      request,
+      taskAssetReadService,
+      validateAppSessionCookie,
+    });
+    if (taskAssetResponse) {
+      return taskAssetResponse;
+    }
+
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
     if (invokeMatch && request.method === "POST") {
       yield* validateAppTokenHeader(request, appToken);
@@ -722,6 +737,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken,
   eventBus,
   hostCommandRouter,
+  taskAssetReadService,
   taskEventLeaseManager,
   localAttachments,
   logger,
@@ -736,6 +752,7 @@ export const handleTypescriptHostBackendRequest = ({
   controlToken: string;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
+  taskAssetReadService: TaskAssetReadService;
   taskEventLeaseManager?: TaskEventLeaseManager;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   logger: WebLogger;
@@ -762,6 +779,7 @@ export const handleTypescriptHostBackendRequest = ({
       eventBus,
       hostCommandRouter,
       ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
+      taskAssetReadService,
       localAttachments,
       logger,
       request,
@@ -915,6 +933,7 @@ export const startTypescriptHostBackendEffect = ({
                     eventBus,
                     hostCommandRouter,
                     taskEventLeaseManager,
+                    taskAssetReadService: hostCommandRouter.taskAssetReadService,
                     localAttachments,
                     logger,
                     request,
