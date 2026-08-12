@@ -33,6 +33,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -60,6 +61,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -88,6 +90,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -129,6 +132,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -175,6 +179,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
         agentID: "agent-child-1",
       },
     );
@@ -234,6 +239,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: abortController.signal,
         toolUseID: "question-child-1",
+        requestId: "sdk-request-1",
         agentID: "agent-child-1",
       },
     );
@@ -280,6 +286,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
         agentID: "nested-agent",
       },
     );
@@ -336,6 +343,7 @@ describe("createClaudeCanUseTool", () => {
       {
         signal: abortController.signal,
         toolUseID: "question-nested-1",
+        requestId: "sdk-request-1",
         agentID: "nested-agent",
       },
     );

@@ -38,6 +38,7 @@ describe("Claude permission questions", () => {
     const resultPromise = canUseTool("AskUserQuestion", input, {
       signal: new AbortController().signal,
       toolUseID: "tool-use-1",
+      requestId: "sdk-request-1",
     });
 
     expect(events).toEqual([
@@ -113,6 +114,7 @@ describe("Claude permission questions", () => {
     const resultPromise = canUseTool("mcp__openducktor_ui__AskUserQuestion", input, {
       signal: new AbortController().signal,
       toolUseID: "tool-use-1",
+      requestId: "sdk-request-1",
     });
 
     expect(events).toEqual([
@@ -171,6 +173,7 @@ describe("Claude permission questions", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -231,6 +234,7 @@ describe("Claude permission questions", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -259,6 +263,7 @@ describe("Claude permission questions", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -296,6 +301,7 @@ describe("Claude permission questions", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -322,6 +328,7 @@ describe("Claude permission questions", () => {
     const resultPromise = canUseTool("mcp__semble__search", toolInput, {
       signal: new AbortController().signal,
       toolUseID: "tool-use-1",
+      requestId: "sdk-request-1",
     });
 
     expect(events).toEqual([

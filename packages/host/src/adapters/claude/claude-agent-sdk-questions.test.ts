@@ -93,7 +93,7 @@ describe("createClaudeUserDialogHandler", () => {
         payload: questionPayload,
         toolUseID: "tool-use-1",
       },
-      { signal: new AbortController().signal },
+      { signal: new AbortController().signal, requestId: "sdk-request-1" },
     );
 
     expect(events).toEqual([
@@ -155,7 +155,7 @@ describe("createClaudeUserDialogHandler", () => {
         payload: questionPayload,
         toolUseID: "tool-use-1",
       },
-      { signal: abortController.signal },
+      { signal: abortController.signal, requestId: "sdk-request-1" },
     );
 
     expect(session.pendingQuestions.has("request-1")).toBe(true);
@@ -194,7 +194,7 @@ describe("createClaudeUserDialogHandler", () => {
           payload: createQuestionPayload(),
           toolUseID: "tool-use-1",
         },
-        { signal: abortController.signal },
+        { signal: abortController.signal, requestId: "sdk-request-1" },
       ),
     ).resolves.toEqual({ behavior: "cancelled" });
     expect(session.pendingQuestions.size).toBe(0);
@@ -220,7 +220,7 @@ describe("createClaudeUserDialogHandler", () => {
           payload: createQuestionPayload(),
           toolUseID: "tool-use-1",
         },
-        { signal: new AbortController().signal },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
       ),
     ).rejects.toBe(deliveryError);
     expect(session.pendingQuestions.has("request-1")).toBe(false);
@@ -243,7 +243,7 @@ describe("createClaudeUserDialogHandler", () => {
           payload: {},
           toolUseID: "tool-use-1",
         },
-        { signal: new AbortController().signal },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
       ),
     ).resolves.toEqual({ behavior: "cancelled" });
     expect(events).toEqual([]);
@@ -267,7 +267,7 @@ describe("createClaudeUserDialogHandler", () => {
           payload: { questions: [] },
           toolUseID: "tool-use-1",
         },
-        { signal: new AbortController().signal },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
       ),
     ).rejects.toThrow("Claude AskUserQuestion dialog payload is invalid.");
     expect(events).toEqual([]);
@@ -298,7 +298,7 @@ describe("createClaudeUserDialogHandler", () => {
           },
           toolUseID: "tool-use-1",
         },
-        { signal: new AbortController().signal },
+        { signal: new AbortController().signal, requestId: "sdk-request-1" },
       ),
     ).rejects.toThrow("Claude AskUserQuestion dialog payload is invalid.");
     expect(events).toEqual([]);
