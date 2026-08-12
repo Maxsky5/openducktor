@@ -1,4 +1,3 @@
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   forEachSessionMessageFrom,
@@ -65,11 +64,9 @@ const isVisibleTranscriptMessage = (
 
 const updateAggregateMetadataForMessage = ({
   message,
-  isSessionWorking,
   metadata,
 }: {
   message: AgentChatMessage;
-  isSessionWorking: boolean;
   metadata: AgentChatTranscriptMetadata;
 }): void => {
   if (
@@ -80,7 +77,7 @@ const updateAggregateMetadataForMessage = ({
     metadata.hasAttachmentMessages = true;
   }
 
-  if (isSessionWorking && isAssistantMessageStreaming(message)) {
+  if (isAssistantMessageStreaming(message)) {
     metadata.activeStreamingAssistantMessageId = message.id;
   }
 };
@@ -143,7 +140,6 @@ export function createAgentChatTranscriptModelBuilder(
   const turnRowStartIndexes: number[] = [];
   const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
-  const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageKey: null,
@@ -152,7 +148,7 @@ export function createAgentChatTranscriptModelBuilder(
   let nextMessageIndex = 0;
 
   const processMessage = (message: AgentChatMessage, messageIndex: number): void => {
-    updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
+    updateAggregateMetadataForMessage({ message, metadata });
 
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
@@ -227,10 +223,7 @@ const findRowIndexForMessage = (rows: AgentChatTranscriptRow[], messageId: strin
   return matchingRowIndex;
 };
 
-const buildMetadataFromRows = (
-  rows: AgentChatTranscriptRow[],
-  isSessionWorking: boolean,
-): AgentChatTranscriptMetadata => {
+const buildMetadataFromRows = (rows: AgentChatTranscriptRow[]): AgentChatTranscriptMetadata => {
   const metadata: AgentChatTranscriptMetadata = {
     hasAttachmentMessages: false,
     lastUserMessageKey: null,
@@ -239,7 +232,7 @@ const buildMetadataFromRows = (
 
   for (const row of rows) {
     if (row.kind === "message") {
-      updateAggregateMetadataForMessage({ message: row.message, isSessionWorking, metadata });
+      updateAggregateMetadataForMessage({ message: row.message, metadata });
       if (row.message.role === "user") {
         metadata.lastUserMessageKey = row.key;
       }
@@ -247,19 +240,6 @@ const buildMetadataFromRows = (
   }
 
   return metadata;
-};
-
-export const findActiveStreamingAssistantMessageIdInRows = (
-  rows: AgentChatTranscriptRow[],
-): string | null => {
-  for (let rowIndex = rows.length - 1; rowIndex >= 0; rowIndex -= 1) {
-    const row = rows[rowIndex];
-    if (row?.kind === "message" && isAssistantMessageStreaming(row.message)) {
-      return row.message.id;
-    }
-  }
-
-  return null;
 };
 
 // This helper intentionally trusts the caller's incremental safety plan. Use append mode only
@@ -304,14 +284,13 @@ export function updateAgentChatTranscriptModelFromPrefix({
   }
 
   const rows = previousTranscriptModel.rows.slice(0, firstTailRowIndex);
-  const isSessionWorking = isAgentSessionActivityWorking(session.activityState);
-  const metadata = buildMetadataFromRows(rows, isSessionWorking);
+  const metadata = buildMetadataFromRows(rows);
 
   let messageIndex = startMessageIndex;
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
     const currentMessageIndex = messageIndex;
     messageIndex += 1;
-    updateAggregateMetadataForMessage({ message, isSessionWorking, metadata });
+    updateAggregateMetadataForMessage({ message, metadata });
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }

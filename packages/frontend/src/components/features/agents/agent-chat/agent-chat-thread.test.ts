@@ -849,7 +849,7 @@ describe("AgentChatThread", () => {
     });
   });
 
-  test("shows the loader before rendering cached large transcripts after switching back", async () => {
+  test("renders cached large transcripts immediately after switching back", async () => {
     await withAnimationFrameTestDriver(async (animationFrameDriver) => {
       const largeMessages = Array.from({ length: 18 }, (_, turnIndex) => [
         buildMessage("user", `Turn ${turnIndex + 1} request`, {
@@ -917,14 +917,8 @@ describe("AgentChatThread", () => {
         }),
       );
 
-      expect(rendered.queryByText("Loading session")).not.toBeNull();
-      expect(rendered.queryByText("Turn 18 reply 18")).toBeNull();
-
-      await waitFor(async () => {
-        await animationFrameDriver.flushFrames();
-        await animationFrameDriver.flushTimers();
-        expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
-      });
+      expect(rendered.queryByText("Loading session")).toBeNull();
+      expect(rendered.queryByText("Turn 18 reply 18")).not.toBeNull();
       const immediateRowCount = rendered.container.querySelectorAll("[data-row-key]").length;
       expect(immediateRowCount).toBeGreaterThan(0);
       expect(immediateRowCount).toBeLessThan(largeMessages.length);
@@ -1177,9 +1171,9 @@ describe("AgentChatThread", () => {
         },
       }),
     );
-    await act(flush);
-
-    expect(rendered.container.textContent).toContain("Message 81");
+    await waitFor(() => {
+      expect(rendered.container.textContent).toContain("Message 81");
+    });
     rendered.unmount();
   });
 

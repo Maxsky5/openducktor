@@ -102,6 +102,48 @@ describe("useAgentChatTranscriptModel", () => {
     await harness.unmount();
   });
 
+  test("schedules a small full cache miss after switching sessions", async () => {
+    const initialSession = buildSession({
+      externalSessionId: "session-small-cache-miss-initial",
+      messages: [buildMessage("assistant", "Initial", { id: "assistant-initial" })],
+    });
+    const switchedSession = buildSession({
+      externalSessionId: "session-small-cache-miss-target",
+      messages: [buildMessage("assistant", "Ready later", { id: "assistant-target" })],
+    });
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptModel(props));
+      return null;
+    };
+
+    const rendered = render(
+      createElement(Probe, {
+        session: initialSession,
+        showThinkingMessages: true,
+      }),
+    );
+
+    const observationsBeforeSwitch = observedStates.length;
+    rendered.rerender(
+      createElement(Probe, {
+        session: switchedSession,
+        showThinkingMessages: true,
+      }),
+    );
+
+    expect(observedStates[observationsBeforeSwitch]?.transcriptState.rows).toEqual([]);
+    expect(observedStates[observationsBeforeSwitch]?.isTranscriptModelMissing).toBe(true);
+
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+    expect(observedStates.at(-1)?.transcriptState.rows.length).toBeGreaterThan(0);
+
+    rendered.unmount();
+  });
+
   test("discards stale derivation after switching sessions before queued work runs", async () => {
     const firstSession = createLargeSession("session-stale-a");
     const secondSession = createLargeSession("session-stale-b");
@@ -132,16 +174,16 @@ describe("useAgentChatTranscriptModel", () => {
       showThinkingMessages: true,
     });
 
-    await harness.update({
-      session: {
-        ...session,
-        title: "Updated title with the same transcript revision",
-      },
-      showThinkingMessages: true,
-    });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
-      timeoutMs: 1_000,
-    });
+    for (let updateIndex = 0; updateIndex < 5; updateIndex += 1) {
+      await harness.update({
+        session: {
+          ...session,
+          title: `Updated title ${updateIndex}`,
+        },
+        showThinkingMessages: true,
+      });
+      await animationFrameDriver.flushTimers(1);
+    }
 
     expect(harness.getLatest().transcriptState.rows.length).toBeGreaterThan(0);
     expect(harness.getLatest().hasCurrentRowsForActiveSession).toBe(true);
@@ -268,6 +310,9 @@ describe("useAgentChatTranscriptModel", () => {
       }),
       showThinkingMessages: true,
     });
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
+    });
 
     const latest = harness.getLatest();
     expect(latest.hasCurrentRowsForActiveSession).toBe(true);
@@ -347,6 +392,9 @@ describe("useAgentChatTranscriptModel", () => {
         ),
       }),
       showThinkingMessages: true,
+    });
+    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+      timeoutMs: 1_000,
     });
 
     const latest = harness.getLatest();
@@ -493,7 +541,7 @@ describe("useAgentChatTranscriptModel", () => {
     await harness.unmount();
   });
 
-  test("publishes cached rows asynchronously when switching back to an unchanged idle session", async () => {
+  test("shows cached rows on the first render when switching back to an unchanged idle session", async () => {
     const firstMessages = Array.from({ length: 500 }, (_, index) =>
       buildMessage(index % 2 === 0 ? "user" : "assistant", `First ${index + 1}`, {
         id: `first-message-${index + 1}`,
@@ -548,15 +596,82 @@ describe("useAgentChatTranscriptModel", () => {
     );
 
     const firstRenderAfterSwitchBack = observedStates[observationsBeforeSwitchBack];
-    expect(firstRenderAfterSwitchBack?.transcriptState.rows).toEqual([]);
-    expect(firstRenderAfterSwitchBack?.isTranscriptModelMissing).toBe(true);
+    expect(firstRenderAfterSwitchBack?.transcriptState.rows).toBe(cachedRows);
+    expect(firstRenderAfterSwitchBack?.isTranscriptModelMissing).toBe(false);
+
+    rendered.unmount();
+  });
+
+  test("keeps cached rows visible when the restored session changes before derivation runs", async () => {
+    const firstMessages = Array.from({ length: 500 }, (_, index) =>
+      buildMessage(index % 2 === 0 ? "user" : "assistant", `First ${index + 1}`, {
+        id: `first-message-${index + 1}`,
+      }),
+    );
+    const firstSession = buildSession({
+      externalSessionId: "session-cache-revision-a",
+      status: "idle",
+      messages: createSessionMessagesState("session-cache-revision-a", firstMessages, 1),
+    });
+    const secondSession = createLargeSession("session-cache-revision-b");
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptModel(props));
+      return null;
+    };
+    const rendered = render(
+      createElement(Probe, { session: firstSession, showThinkingMessages: true }),
+    );
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+    const cachedRows = observedStates.at(-1)?.transcriptState.rows;
+
+    rendered.rerender(createElement(Probe, { session: secondSession, showThinkingMessages: true }));
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+
+    const restoredSession = buildSession({
+      ...firstSession,
+      messages: createSessionMessagesState("session-cache-revision-a", firstMessages, 1),
+    });
+    rendered.rerender(
+      createElement(Probe, { session: restoredSession, showThinkingMessages: true }),
+    );
+    const revisedSession = buildSession({
+      ...restoredSession,
+      messages: createSessionMessagesState(
+        "session-cache-revision-a",
+        [
+          buildMessage("user", "Changed first message", { id: "first-message-1" }),
+          ...firstMessages.slice(1),
+        ],
+        2,
+      ),
+    });
+    rendered.rerender(
+      createElement(Probe, { session: revisedSession, showThinkingMessages: true }),
+    );
+
+    const firstRevisedRender = observedStates.at(-1);
+    expect(firstRevisedRender?.transcriptState.rows).toBe(cachedRows);
+    expect(firstRevisedRender?.isTranscriptModelMissing).toBe(false);
+    expect(firstRevisedRender?.isTranscriptModelPending).toBe(true);
 
     await flushTranscriptDerivation(
       () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
       { timeoutMs: 1_000 },
     );
-    expect(observedStates.at(-1)?.transcriptState.rows).toBe(cachedRows);
-    expect(observedStates.at(-1)?.isTranscriptModelMissing).toBe(false);
+    expect(
+      observedStates
+        .at(-1)
+        ?.transcriptState.rows.some(
+          (row) => row.kind === "message" && row.message.content === "Changed first message",
+        ),
+    ).toBe(true);
 
     rendered.unmount();
   });

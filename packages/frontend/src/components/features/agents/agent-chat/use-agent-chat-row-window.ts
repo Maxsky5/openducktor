@@ -31,6 +31,11 @@ type RowRange = {
   endRowExclusive: number;
 };
 
+type SessionRowRange = {
+  sessionKey: string | null;
+  range: RowRange;
+};
+
 type PrependScrollSnapshot = {
   scrollHeight: number;
   overflowAnchor: string;
@@ -115,9 +120,13 @@ export function useAgentChatRowWindow({
   shouldFollowLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
-  const [range, setRangeState] = useState<RowRange>(() => latestRange(rows.length));
+  const [sessionRange, setSessionRange] = useState<SessionRowRange>(() => ({
+    sessionKey: displayedSessionKey,
+    range: latestRange(rows.length),
+  }));
+  const didSessionChange = sessionRange.sessionKey !== displayedSessionKey;
+  const range = didSessionChange ? latestRange(rows.length) : sessionRange.range;
   const rangeRef = useRef(range);
-  const previousSessionKeyRef = useRef<string | null>(displayedSessionKey);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousRowsLengthRef = useRef(rows.length);
   const previousFirstVisibleRowKeyRef = useRef(rows[range.startRow]?.key ?? null);
@@ -127,16 +136,31 @@ export function useAgentChatRowWindow({
   const shouldTrimTopAfterAppendRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
+  useLayoutEffect(() => {
+    if (!didSessionChange) {
+      return;
+    }
+
+    const nextRange = latestRange(rows.length);
+    rangeRef.current = nextRange;
+    pendingLatestResetRef.current = shouldResetForTranscriptLoad && rows.length === 0;
+    previousRowsLengthRef.current = rows.length;
+    previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
+    setSessionRange({ sessionKey: displayedSessionKey, range: nextRange });
+  }, [didSessionChange, displayedSessionKey, rows, shouldResetForTranscriptLoad]);
+
   const setRange = useCallback(
     (nextRange: RowRange) => {
       const clampedRange = clampRange(nextRange, rows.length);
       rangeRef.current = clampedRange;
       previousFirstVisibleRowKeyRef.current = rows[clampedRange.startRow]?.key ?? null;
-      setRangeState((currentRange) =>
-        areRangesEqual(currentRange, clampedRange) ? currentRange : clampedRange,
+      setSessionRange((current) =>
+        current.sessionKey === displayedSessionKey && areRangesEqual(current.range, clampedRange)
+          ? current
+          : { sessionKey: displayedSessionKey, range: clampedRange },
       );
     },
-    [rows],
+    [displayedSessionKey, rows],
   );
 
   const selectFirstRowWindow = useCallback(() => {
@@ -285,30 +309,24 @@ export function useAgentChatRowWindow({
   }, [expandAfter, expandBefore, messagesContainerRef, range]);
 
   useLayoutEffect(() => {
-    const didSessionChange = previousSessionKeyRef.current !== displayedSessionKey;
     const previousRowsLength = previousRowsLengthRef.current;
     const previousRange = rangeRef.current;
     const previousFirstVisibleRowKey = previousFirstVisibleRowKeyRef.current;
     previousRowsLengthRef.current = rows.length;
 
     if (didSessionChange) {
-      previousSessionKeyRef.current = displayedSessionKey;
-      pendingLatestResetRef.current = shouldResetForTranscriptLoad && rows.length === 0;
+      return;
     }
 
-    if ((didSessionChange || pendingLatestResetRef.current) && rows.length > 0) {
+    if (pendingLatestResetRef.current && rows.length > 0) {
       pendingLatestResetRef.current = false;
-      const nextRange = latestRange(rows.length);
-      setRange(nextRange);
-      previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
+      setRange(latestRange(rows.length));
       return;
     }
 
     if (rows.length !== previousRowsLength) {
       if (shouldFollowLatestWindow && previousRange.endRowExclusive === previousRowsLength) {
-        const nextRange = latestRange(rows.length);
-        setRange(nextRange);
-        previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
+        setRange(latestRange(rows.length));
         return;
       }
 
@@ -323,28 +341,18 @@ export function useAgentChatRowWindow({
             endRowExclusive: Math.min(rows.length, nextFirstVisibleIndex + previousWindowSize),
           };
           setRange(nextRange);
-          previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
           return;
         }
       }
     }
 
     if (rows.length > 0 && previousRange.startRow >= rows.length) {
-      const nextRange = latestRange(rows.length);
-      setRange(nextRange);
-      previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
+      setRange(latestRange(rows.length));
       return;
     }
 
     previousFirstVisibleRowKeyRef.current = rows[rangeRef.current.startRow]?.key ?? null;
-  }, [
-    displayedSessionKey,
-    rows,
-    rows.length,
-    setRange,
-    shouldFollowLatestWindow,
-    shouldResetForTranscriptLoad,
-  ]);
+  }, [didSessionChange, rows, rows.length, setRange, shouldFollowLatestWindow]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;

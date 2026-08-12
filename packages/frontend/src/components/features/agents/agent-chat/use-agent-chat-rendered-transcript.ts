@@ -1,12 +1,4 @@
-import {
-  type RefObject,
-  startTransition,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentChatThreadModel, AgentChatTranscriptPresentation } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
@@ -77,49 +69,14 @@ export function useAgentChatRenderedTranscript({
   const { session, displayedSessionKey, shouldResetWindow, notice } = transcript;
   const { showThinkingMessages } = useAgentChatSettings();
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
-  const renderableFrameRef = useRef<number | null>(null);
-  const [renderableSessionKey, setRenderableSessionKey] = useState(displayedSessionKey);
-  const isSessionSwitchPending = renderableSessionKey !== displayedSessionKey;
-  const renderableSession = isSessionSwitchPending ? null : session;
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({
-      session: renderableSession,
+      session,
       showThinkingMessages,
     });
-  useEffect(() => {
-    if (renderableSessionKey === displayedSessionKey) {
-      return;
-    }
-
-    const requestFrame = globalThis.requestAnimationFrame;
-    if (typeof requestFrame !== "function") {
-      startTransition(() => {
-        setRenderableSessionKey(displayedSessionKey);
-      });
-      return;
-    }
-
-    renderableFrameRef.current = requestFrame(() => {
-      renderableFrameRef.current = null;
-      startTransition(() => {
-        setRenderableSessionKey(displayedSessionKey);
-      });
-    });
-
-    return () => {
-      if (renderableFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(renderableFrameRef.current);
-        renderableFrameRef.current = null;
-      }
-    };
-  }, [displayedSessionKey, renderableSessionKey]);
-  const effectiveShouldResetTranscriptWindow =
-    shouldResetWindow || isTranscriptModelMissing || isSessionSwitchPending;
+  const effectiveShouldResetTranscriptWindow = shouldResetWindow || isTranscriptModelMissing;
   const effectiveTranscriptNotice =
-    notice ??
-    (isTranscriptModelMissing || isSessionSwitchPending ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
-  const windowRows = isSessionSwitchPending ? [] : transcriptModelState.rows;
-  const windowTurnAnchors = isSessionSwitchPending ? [] : transcriptModelState.turnAnchors;
+    notice ?? (isTranscriptModelMissing ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
   const {
     visibleRows,
     visibleTurnAnchors,
@@ -129,8 +86,8 @@ export function useAgentChatRenderedTranscript({
     scrollToTop,
     scrollToBottomOnSend,
   } = useAgentChatWindow({
-    rows: windowRows,
-    turnAnchors: windowTurnAnchors,
+    rows: transcriptModelState.rows,
+    turnAnchors: transcriptModelState.turnAnchors,
     displayedSessionKey,
     shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
     isSessionWorking,
