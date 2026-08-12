@@ -485,10 +485,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
 
   const runtimeDisabled = isSelectionCatalogLoading || isReuseMode;
   const runtimeProfileDisabled =
-    isReuseMode ||
-    isSelectionCatalogLoading ||
-    !supportsProfiles ||
-    runtimeProfileOptions.length === 0;
+    isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
   const modelDisabled = isReuseMode || isSelectionCatalogLoading;
   const variantDisabled =
     isReuseMode ||

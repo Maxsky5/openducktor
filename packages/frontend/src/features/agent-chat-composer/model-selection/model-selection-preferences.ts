@@ -9,6 +9,16 @@ import {
   pickDefaultVisibleSelectionForCatalog,
 } from "./model-selection-state";
 
+const availableRuntimeKindFor = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeKind: RuntimeKind | null | undefined,
+): RuntimeKind | null => {
+  if (!runtimeKind) {
+    return null;
+  }
+  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? runtimeKind : null;
+};
+
 export const resolveChatComposerSelectedRuntimeKind = ({
   selectedSessionModel,
   draftSelection,
@@ -22,25 +32,11 @@ export const resolveChatComposerSelectedRuntimeKind = ({
   defaultRuntimeKind: RuntimeKind | null | undefined;
   runtimeDefinitions: RuntimeDescriptor[];
 }): RuntimeKind | null => {
-  const availableDraftRuntimeKind =
-    draftSelection?.runtimeKind &&
-    findRuntimeDefinition(runtimeDefinitions, draftSelection.runtimeKind)
-      ? draftSelection.runtimeKind
-      : null;
-  const availableDefaultSelectionRuntimeKind =
-    defaultSelection?.runtimeKind &&
-    findRuntimeDefinition(runtimeDefinitions, defaultSelection.runtimeKind)
-      ? defaultSelection.runtimeKind
-      : null;
-  const availableDefaultRuntimeKind =
-    defaultRuntimeKind && findRuntimeDefinition(runtimeDefinitions, defaultRuntimeKind)
-      ? defaultRuntimeKind
-      : null;
   return (
     selectedSessionModel?.runtimeKind ??
-    availableDraftRuntimeKind ??
-    availableDefaultSelectionRuntimeKind ??
-    availableDefaultRuntimeKind ??
+    availableRuntimeKindFor(runtimeDefinitions, draftSelection?.runtimeKind) ??
+    availableRuntimeKindFor(runtimeDefinitions, defaultSelection?.runtimeKind) ??
+    availableRuntimeKindFor(runtimeDefinitions, defaultRuntimeKind) ??
     null
   );
 };
@@ -107,12 +103,12 @@ export const resolveChatComposerModelSelections = ({
     };
   }
 
+  const selectionCatalog = source.composerCatalog;
   const defaultSelectionForComposer = resolveNewSessionDefaultSelection({
-    composerCatalog: source.composerCatalog,
+    composerCatalog: selectionCatalog,
     defaultSelection,
     isAwaitingDefaultSelection: source.isAwaitingDefaultSelection,
   });
-  const selectionCatalog = source.composerCatalog;
   const draftSelectionForComposer = selectionCatalog
     ? coerceVisibleSelectionToCatalog(selectionCatalog, source.draftSelection)
     : source.draftSelection;
