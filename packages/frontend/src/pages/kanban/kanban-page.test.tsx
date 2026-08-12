@@ -644,9 +644,11 @@ const confirmSessionStartModal = async (
 
   if (profileId) {
     await act(async () => {
-      (page.getSessionStartModalModel()?.onSelectAgent as ((value: string) => void) | undefined)?.(
-        profileId,
-      );
+      (
+        page.getSessionStartModalModel()?.onSelectRuntimeProfile as
+          | ((value: string) => void)
+          | undefined
+      )?.(profileId);
       await Promise.resolve();
     });
   }
@@ -1164,7 +1166,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await act(async () => {
       (sessionStartModal.onSelectModel as (value: string) => void)("openai/gpt-5");
-      (sessionStartModal.onSelectAgent as (value: string) => void)("build-agent");
+      (sessionStartModal.onSelectRuntimeProfile as (value: string) => void)("build-agent");
       (sessionStartModal.onSelectVariant as (value: string) => void)("default");
     });
 

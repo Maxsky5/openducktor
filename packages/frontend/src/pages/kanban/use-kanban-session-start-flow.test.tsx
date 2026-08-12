@@ -507,7 +507,7 @@ describe("useKanbanSessionStartFlow", () => {
       harness.getLatest().sessionStartModal?.selectedSourceSessionValue ?? null;
 
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectAgent("builder");
+      state.sessionStartModal?.onSelectRuntimeProfile("builder");
       state.sessionStartModal?.onSelectModel("openai/gpt-5");
     });
 

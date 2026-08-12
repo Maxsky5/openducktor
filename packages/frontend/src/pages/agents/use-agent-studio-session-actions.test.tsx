@@ -310,7 +310,7 @@ const confirmSessionStartModal = async (
   );
   await harness.run((state) => {
     state.sessionStartModal?.onSelectModel("openai/gpt-5");
-    state.sessionStartModal?.onSelectAgent("spec");
+    state.sessionStartModal?.onSelectRuntimeProfile("spec");
     state.sessionStartModal?.onSelectVariant("default");
   });
   await harness.waitFor((state) => {
@@ -580,7 +580,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.waitFor((state) => state.sessionStartModal !== null);
     await harness.run((state) => {
       state.sessionStartModal?.onSelectModel("openai/gpt-5");
-      state.sessionStartModal?.onSelectAgent("build");
+      state.sessionStartModal?.onSelectRuntimeProfile("build");
       state.sessionStartModal?.onSelectVariant("default");
     });
     await harness.waitFor((state) => {

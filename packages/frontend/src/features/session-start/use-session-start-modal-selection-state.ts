@@ -29,7 +29,7 @@ type UseSessionStartModalSelectionStateResult = {
     runtimeKind: RuntimeKind | null,
     selectedModel: AgentModelSelection | null,
   ) => void;
-  handleSelectAgent: (profileId: string) => void;
+  handleSelectRuntimeProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectVariant: (variant: string) => void;
@@ -130,7 +130,7 @@ export function useSessionStartModalSelectionState({
     [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
 
-  const handleSelectAgent = useCallback(
+  const handleSelectRuntimeProfile = useCallback(
     (profileId: string): void => {
       if (!selectedRuntimeKind) {
         return;
@@ -181,7 +181,7 @@ export function useSessionStartModalSelectionState({
     resolvedSelection,
     resetSelection,
     initializeSelection,
-    handleSelectAgent,
+    handleSelectRuntimeProfile,
     handleSelectModel,
     handleSelectRuntime,
     handleSelectVariant,

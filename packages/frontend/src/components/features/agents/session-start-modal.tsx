@@ -48,7 +48,7 @@ export type SessionStartModalModel = {
   supportsVariants: boolean;
   selectionCatalogError: string | null;
   isSelectionCatalogLoading: boolean;
-  agentOptions: ComboboxOption[];
+  runtimeProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
@@ -63,7 +63,7 @@ export type SessionStartModalModel = {
   onSelectSourceSessionValue: (sourceSessionValue: string) => void;
   onSelectTargetBranch?: (branch: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
-  onSelectAgent: (agent: string) => void;
+  onSelectRuntimeProfile: (profileId: string) => void;
   onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
   allowRunInBackground?: boolean;
@@ -214,35 +214,36 @@ function RuntimeField({
   );
 }
 
-type AgentFieldProps = {
-  agentOptions: ComboboxOption[];
+type RuntimeProfileFieldProps = {
+  runtimeProfileOptions: ComboboxOption[];
   disabled: boolean;
   helperText: string | null;
-  selectedAgent: string;
-  supportsProfiles: boolean;
-  onSelectAgent: (agent: string) => void;
+  selectedProfileId: string;
+  onSelectRuntimeProfile: (profileId: string) => void;
 };
 
-function AgentField({
-  agentOptions,
+function RuntimeProfileField({
+  runtimeProfileOptions,
   disabled,
   helperText,
-  selectedAgent,
-  supportsProfiles,
-  onSelectAgent,
-}: AgentFieldProps): ReactElement {
+  selectedProfileId,
+  onSelectRuntimeProfile,
+}: RuntimeProfileFieldProps): ReactElement {
   return (
-    <div className="grid gap-1.5" data-testid="session-start-agent-field">
-      <label className="text-sm font-medium text-foreground" htmlFor="session-start-agent">
+    <div className="grid gap-1.5" data-testid="session-start-runtime-profile-field">
+      <label
+        className="text-sm font-medium text-foreground"
+        htmlFor="session-start-runtime-profile"
+      >
         Runtime profile
       </label>
       <Combobox
-        value={selectedAgent}
-        options={agentOptions}
-        placeholder={supportsProfiles ? "Select runtime profile" : "Profile handled by runtime"}
+        value={selectedProfileId}
+        options={runtimeProfileOptions}
+        placeholder="Select runtime profile"
         disabled={disabled}
         className="sm:min-w-[20rem]"
-        onValueChange={onSelectAgent}
+        onValueChange={onSelectRuntimeProfile}
       />
       {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
     </div>
@@ -387,16 +388,14 @@ function SessionStartModalFooter({
   );
 }
 
-const agentHelperTextFor = ({
-  agentOptions,
+const runtimeProfileHelperTextFor = ({
+  runtimeProfileOptions,
   isReuseMode,
   isSelectionCatalogLoading,
-  supportsProfiles,
 }: {
-  agentOptions: ComboboxOption[];
+  runtimeProfileOptions: ComboboxOption[];
   isReuseMode: boolean;
   isSelectionCatalogLoading: boolean;
-  supportsProfiles: boolean;
 }): string | null => {
   if (isReuseMode) {
     return "Reuse mode keeps the previous session runtime profile, model, and variant.";
@@ -404,10 +403,7 @@ const agentHelperTextFor = ({
   if (isSelectionCatalogLoading) {
     return "Loading profiles for the selected runtime.";
   }
-  if (!supportsProfiles) {
-    return "This runtime manages profile selection automatically.";
-  }
-  if (agentOptions.length === 0) {
+  if (runtimeProfileOptions.length === 0) {
     return "No profiles are available for this runtime.";
   }
   return null;
@@ -428,7 +424,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     supportsVariants,
     selectionCatalogError,
     isSelectionCatalogLoading,
-    agentOptions,
+    runtimeProfileOptions,
     modelOptions,
     modelGroups,
     variantOptions,
@@ -443,7 +439,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onSelectSourceSessionValue,
     onSelectTargetBranch,
     onSelectRuntime,
-    onSelectAgent,
+    onSelectRuntimeProfile,
     onSelectModel,
     onSelectVariant,
     allowRunInBackground = false,
@@ -452,7 +448,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm,
   } = model;
 
-  const selectedAgent = selectedModelSelection?.profileId ?? "";
+  const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedModel = selectedModelSelection
     ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
     : "";
@@ -488,8 +484,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   };
 
   const runtimeDisabled = isSelectionCatalogLoading || isReuseMode;
-  const agentDisabled =
-    isReuseMode || isSelectionCatalogLoading || !supportsProfiles || agentOptions.length === 0;
+  const runtimeProfileDisabled =
+    isReuseMode ||
+    isSelectionCatalogLoading ||
+    !supportsProfiles ||
+    runtimeProfileOptions.length === 0;
   const modelDisabled = isReuseMode || isSelectionCatalogLoading;
   const variantDisabled =
     isReuseMode ||
@@ -497,11 +496,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     !selectedModelSelection ||
     !supportsVariants ||
     variantOptions.length === 0;
-  const agentHelperText = agentHelperTextFor({
-    agentOptions,
+  const runtimeProfileHelperText = runtimeProfileHelperTextFor({
+    runtimeProfileOptions,
     isReuseMode,
     isSelectionCatalogLoading,
-    supportsProfiles,
   });
 
   return (
@@ -557,13 +555,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               />
 
               {supportsProfiles ? (
-                <AgentField
-                  agentOptions={agentOptions}
-                  disabled={agentDisabled}
-                  helperText={agentHelperText}
-                  selectedAgent={selectedAgent}
-                  supportsProfiles={supportsProfiles}
-                  onSelectAgent={onSelectAgent}
+                <RuntimeProfileField
+                  runtimeProfileOptions={runtimeProfileOptions}
+                  disabled={runtimeProfileDisabled}
+                  helperText={runtimeProfileHelperText}
+                  selectedProfileId={selectedProfileId}
+                  onSelectRuntimeProfile={onSelectRuntimeProfile}
                 />
               ) : null}
 
