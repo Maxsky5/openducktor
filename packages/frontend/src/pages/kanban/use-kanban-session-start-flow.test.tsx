@@ -502,7 +502,7 @@ describe("useKanbanSessionStartFlow", () => {
       startPromise = state.onPullRequestGenerate("TASK-1");
     });
 
-    await harness.waitFor((state) => state.sessionStartModal != null);
+    await harness.waitFor((state) => state.sessionStartModal != null, 1_000);
     const selectedSourceSessionValue =
       harness.getLatest().sessionStartModal?.selectedSourceSessionValue ?? null;
 
@@ -555,7 +555,7 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.run((state) => {
       state.sessionStartModal?.onSelectStartMode("fork");
     });
-    await harness.waitFor((state) => state.sessionStartModal?.selectedStartMode === "fork");
+    await harness.waitFor((state) => state.sessionStartModal?.selectedStartMode === "fork", 1_000);
 
     const modal = harness.getLatest().sessionStartModal;
     const selectedSourceSessionValue = modal?.selectedSourceSessionValue ?? null;
