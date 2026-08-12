@@ -23,6 +23,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -65,6 +66,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -97,6 +99,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: abortController.signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -121,6 +124,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -158,6 +162,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -188,6 +193,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -214,6 +220,7 @@ describe("Claude permission request lifecycle", () => {
     const resultPromise = canUseTool("Agent", toolInput, {
       signal: new AbortController().signal,
       toolUseID: "tool-use-1",
+      requestId: "sdk-request-1",
     });
 
     expect(events).toEqual([
@@ -251,6 +258,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
     const searchResult = await canUseTool(
@@ -259,6 +267,7 @@ describe("Claude permission request lifecycle", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-2",
+        requestId: "sdk-request-2",
       },
     );
 

@@ -25,7 +25,7 @@ const requireMarkdownHook = <Hook>(
 ): NonNullable<Hook> => {
   if (typeof hook !== "function") {
     throw new Error(
-      `TipTap 3.28.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
+      `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );
   }
   return hook as NonNullable<Hook>;
@@ -212,7 +212,7 @@ const findTrailingTokens = (
   }
 
   throw new Error(
-    `TipTap 3.28.0 ${tokenKind} tokens do not expose the trailing Markdown after block math. Align all TipTap packages before starting the editor.`,
+    `TipTap 3.30.0 ${tokenKind} tokens do not expose the trailing Markdown after block math. Align all TipTap packages before starting the editor.`,
   );
 };
 

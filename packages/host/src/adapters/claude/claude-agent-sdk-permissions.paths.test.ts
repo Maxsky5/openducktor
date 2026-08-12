@@ -27,6 +27,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
         blockedPath: "c:\\repo\\fairnest\\apps\\api\\src\\auth.ts",
       },
     );
@@ -66,6 +67,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
     session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
@@ -96,6 +98,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
     session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
@@ -113,6 +116,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-2",
+        requestId: "sdk-request-2",
       },
     );
     session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
@@ -146,6 +150,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
         blockedPath: "/repo/fairnest/apps/api/src/lib/auth.ts",
       },
     );
@@ -182,6 +187,7 @@ describe("Claude permission path routing", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-use-1",
+          requestId: "sdk-request-1",
           blockedPath: filePath,
         },
       ),
@@ -213,6 +219,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 
@@ -265,6 +272,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
         displayName: "Bash",
       },
     );
@@ -312,6 +320,7 @@ describe("Claude permission path routing", () => {
       {
         signal: new AbortController().signal,
         toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
       },
     );
 

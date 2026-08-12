@@ -135,6 +135,7 @@ describe("isClaudeSubagentTranscriptComplete", () => {
           uuid: "assistant-final",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           message: {
             role: "assistant",
             content: [{ type: "text", text: "Review complete." }],
@@ -150,6 +151,7 @@ describe("isClaudeSubagentTranscriptComplete", () => {
           uuid: "assistant-tool",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           message: {
             role: "assistant",
             content: [{ type: "text", text: "Still working." }],
@@ -165,6 +167,7 @@ describe("isClaudeSubagentTranscriptComplete", () => {
           uuid: "assistant-final",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           message: {
             role: "assistant",
             content: [{ type: "text", text: "First pass complete." }],
@@ -176,6 +179,7 @@ describe("isClaudeSubagentTranscriptComplete", () => {
           uuid: "user-resume",
           session_id: "session-1",
           parent_tool_use_id: null,
+          parent_agent_id: null,
           message: {
             role: "user",
             content: "Review one more file.",
@@ -193,6 +197,7 @@ describe("reconciledClaudeSubagentStatus", () => {
       uuid,
       session_id: "session-1",
       parent_tool_use_id: null,
+      parent_agent_id: null,
       message: {
         role: "assistant",
         content: [{ type: "text", text }],

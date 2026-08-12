@@ -36,6 +36,7 @@ type ClaudeSessionMessageFixture = {
   readonly session_id?: string;
   readonly message: unknown;
   readonly parent_tool_use_id?: string | null;
+  readonly parent_agent_id?: string | null;
 };
 
 /** Builds the complete public SessionMessage envelope and preserves extra mirrored metadata. */
@@ -45,6 +46,7 @@ export const claudeSessionMessageFixture = <Fixture extends ClaudeSessionMessage
   ...message,
   session_id: message.session_id ?? "session-1",
   parent_tool_use_id: message.parent_tool_use_id ?? null,
+  parent_agent_id: message.parent_agent_id ?? null,
 });
 
 export const claudeSessionMessageFixtures = (
