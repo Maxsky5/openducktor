@@ -68,6 +68,7 @@ import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
   applyRuntimeContextToSession,
+  assertRuntimeContextCompatibleWithSession,
   preserveRuntimeContextForExistingThread,
   sessionStateFromExistingThread,
   sessionStateFromThreadFork,
@@ -86,10 +87,7 @@ import {
   listCodexSessionRuntimeSnapshots,
   readCodexSessionRuntimeSnapshot,
 } from "./codex-session-runtime-snapshot-reader";
-import {
-  CODEX_REPOSITORY_SESSION_TITLE,
-  resolveCodexSessionScopePolicy,
-} from "./codex-session-scope-policy";
+import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import {
   CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -375,7 +373,7 @@ export class CodexAppServerAdapter
           `Cannot resume Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${currentRef.repoPath}' and working directory '${currentRef.workingDirectory}'.`,
         );
       }
-      applyRuntimeContextToSession(current, input, "resume session");
+      assertRuntimeContextCompatibleWithSession(current, input, "resume session");
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
@@ -685,7 +683,7 @@ export class CodexAppServerAdapter
     });
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.sessionScope.kind === "repository") {
-      session.summary = { ...session.summary, title: CODEX_REPOSITORY_SESSION_TITLE };
+      session.summary = { ...session.summary, title: sessionPolicy.title };
     }
     const { summary } = session;
     const existingThreadSession = preserveRuntimeContextForExistingThread(
@@ -696,7 +694,7 @@ export class CodexAppServerAdapter
     if (sessionPolicy.sessionScope.kind === "repository") {
       await client.threadSetName({
         threadId: session.threadId,
-        name: CODEX_REPOSITORY_SESSION_TITLE,
+        name: sessionPolicy.title,
       });
     }
     return summary;

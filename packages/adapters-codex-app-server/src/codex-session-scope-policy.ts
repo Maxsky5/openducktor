@@ -1,9 +1,7 @@
 import type { CodexEffectivePolicy } from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import { formatAgentSessionTitle } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
-
-export const CODEX_REPOSITORY_SESSION_TITLE = "Repository session";
 
 export type CodexSessionScopePolicy = {
   sessionScope: AgentSessionScope;
@@ -28,32 +26,14 @@ export const resolveCodexSessionScopePolicy = (
   if (sessionScope.kind === "repository") {
     return {
       sessionScope,
-      title: CODEX_REPOSITORY_SESSION_TITLE,
+      title: formatAgentSessionTitle(sessionScope),
       runtimePolicy: policy,
       threadConfig: REPOSITORY_THREAD_CONFIG,
     };
   }
   return {
     sessionScope,
-    title: formatWorkflowAgentSessionTitle(sessionScope.role, sessionScope.taskId),
+    title: formatAgentSessionTitle(sessionScope),
     runtimePolicy: policy,
   };
 };
-
-export const codexSessionScopeKindsMatch = (
-  left: AgentSessionScope,
-  right: AgentSessionScope,
-): boolean => {
-  if (left.kind !== right.kind) {
-    return false;
-  }
-  if (left.kind === "repository") {
-    return true;
-  }
-  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
-};
-
-export const describeCodexSessionScope = (scope: AgentSessionScope): string =>
-  scope.kind === "repository"
-    ? "repository scope"
-    : `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;

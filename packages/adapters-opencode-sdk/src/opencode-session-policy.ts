@@ -1,13 +1,11 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import { formatAgentSessionTitle } from "@openducktor/core";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
   type OpencodePermissionRule,
 } from "./workflow-tool-permissions";
-
-export const OPENCODE_REPOSITORY_SESSION_TITLE = "Repository session";
 
 export type OpencodeSessionPolicy = {
   sessionScope: AgentSessionScope;
@@ -30,7 +28,7 @@ export const resolveOpencodeSessionPolicy = (
   if (sessionScope.kind === "workflow") {
     return {
       sessionScope,
-      title: formatWorkflowAgentSessionTitle(sessionScope.role, sessionScope.taskId),
+      title: formatAgentSessionTitle(sessionScope),
       activityLabel: sessionScope.role,
       permission: buildRoleScopedPermissionRules({
         role: sessionScope.role,
@@ -41,27 +39,9 @@ export const resolveOpencodeSessionPolicy = (
   }
   return {
     sessionScope,
-    title: OPENCODE_REPOSITORY_SESSION_TITLE,
+    title: formatAgentSessionTitle(sessionScope),
     activityLabel: "repository",
     permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),
     toolSelection: { kind: "repository" },
   };
 };
-
-export const opencodeSessionScopeKindsMatch = (
-  left: AgentSessionScope,
-  right: AgentSessionScope,
-): boolean => {
-  if (left.kind !== right.kind) {
-    return false;
-  }
-  if (left.kind === "repository") {
-    return true;
-  }
-  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
-};
-
-export const describeOpencodeSessionScope = (scope: AgentSessionScope): string =>
-  scope.kind === "repository"
-    ? "repository scope"
-    : `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;

@@ -7,7 +7,11 @@ import type {
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import {
+  agentSessionScopesEqual,
+  agentSessionStatusFromActivity,
+  describeAgentSessionScope,
+} from "@openducktor/core";
 import {
   type CodexThreadSnapshot,
   codexThreadStatusSnapshot,
@@ -15,11 +19,7 @@ import {
   requireThreadSnapshotFromReadResponse,
   toSessionSummary,
 } from "./codex-app-server-threads";
-import {
-  codexSessionScopeKindsMatch,
-  describeCodexSessionScope,
-  resolveCodexSessionScopePolicy,
-} from "./codex-session-scope-policy";
+import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import type {
   CodexSessionState,
   CodexThreadForkResult,
@@ -56,7 +56,7 @@ const buildSessionState = (
   ...(liveStatus ? { liveStatus } : {}),
 });
 
-export const applyRuntimeContextToSession = (
+export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
   action = "apply runtime context",
@@ -67,12 +67,24 @@ export const applyRuntimeContextToSession = (
     const registeredAssociation = session.summary.sessionAssociation;
     if (
       registeredAssociation.kind !== "unbound" &&
-      !codexSessionScopeKindsMatch(registeredAssociation, sessionScope)
+      !agentSessionScopesEqual(registeredAssociation, sessionScope)
     ) {
       throw new Error(
-        `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeCodexSessionScope(registeredAssociation)} does not match the requested ${describeCodexSessionScope(sessionScope)}.`,
+        `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeAgentSessionScope(registeredAssociation)} does not match the requested ${describeAgentSessionScope(sessionScope)}.`,
       );
     }
+  }
+};
+
+export const applyRuntimeContextToSession = (
+  session: CodexSessionState,
+  input: PolicyBoundSessionRef,
+  action = "apply runtime context",
+): void => {
+  assertRuntimeContextCompatibleWithSession(session, input, action);
+  const sessionScope = (input as { sessionScope?: StartAgentSessionInput["sessionScope"] })
+    .sessionScope;
+  if (sessionScope) {
     const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
     session.summary = {
       ...session.summary,

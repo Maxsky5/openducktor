@@ -1,6 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import { formatAgentSessionTitle } from "@openducktor/core";
 import {
   assertGlobalEventSupport,
   isRelevantSubscriberEvent,
@@ -13,7 +13,6 @@ import {
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
-import { OPENCODE_REPOSITORY_SESSION_TITLE } from "./opencode-session-policy";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -21,17 +20,6 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
-
-const resolveSessionTitle = (sessionInput: SessionInput): string | undefined => {
-  const sessionScope = sessionInput.sessionScope;
-  if (!sessionScope) {
-    return undefined;
-  }
-  if (sessionScope.kind === "repository") {
-    return OPENCODE_REPOSITORY_SESSION_TITLE;
-  }
-  return formatWorkflowAgentSessionTitle(sessionScope.role, sessionScope.taskId);
-};
 
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
@@ -385,7 +373,9 @@ export const registerSession = (
 ): AgentSessionSummary => {
   const startsActive = input.emitStartedEvent !== false;
   const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
-  const title = resolveSessionTitle(input.sessionInput);
+  const title = input.sessionInput.sessionScope
+    ? formatAgentSessionTitle(input.sessionInput.sessionScope)
+    : undefined;
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,

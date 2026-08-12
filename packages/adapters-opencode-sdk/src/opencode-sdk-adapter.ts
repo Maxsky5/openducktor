@@ -35,8 +35,10 @@ import type {
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
+  agentSessionScopesEqual,
   assertAgentRuntimePolicyBinding,
   classifySystemSlashCommandInvocation,
+  describeAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -70,9 +72,7 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import {
-  describeOpencodeSessionScope,
   type OpencodeSessionPolicy,
-  opencodeSessionScopeKindsMatch,
   resolveOpencodeSessionPolicy,
 } from "./opencode-session-policy";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
@@ -140,20 +140,31 @@ const applyRepositorySessionPolicy = async (input: {
   }
 };
 
+const assertRuntimeContextCompatibleWithSession = (
+  session: SessionRecord,
+  input: PolicyBoundSessionRef,
+  action: string,
+): void => {
+  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
+  if (sessionScope) {
+    const registeredScope = session.input.sessionScope;
+    if (registeredScope && !agentSessionScopesEqual(registeredScope, sessionScope)) {
+      throw new Error(
+        `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(registeredScope)} does not match the requested ${describeAgentSessionScope(sessionScope)}.`,
+      );
+    }
+  }
+};
+
 const applyRuntimeContextToSession = (
   session: SessionRecord,
   input: PolicyBoundSessionRef,
   action: string,
 ): void => {
+  assertRuntimeContextCompatibleWithSession(session, input, action);
   session.input = { ...session.input };
   const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
   if (sessionScope) {
-    const registeredScope = session.input.sessionScope;
-    if (registeredScope && !opencodeSessionScopeKindsMatch(registeredScope, sessionScope)) {
-      throw new Error(
-        `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeOpencodeSessionScope(registeredScope)} does not match the requested ${describeOpencodeSessionScope(sessionScope)}.`,
-      );
-    }
     session.input.sessionScope = sessionScope;
     const policy = resolveOpencodeSessionPolicy(sessionScope, OPENCODE_RUNTIME_DESCRIPTOR, action);
     session.summary = {
@@ -278,13 +289,14 @@ export class OpencodeSdkAdapter
           `Cannot resume OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
         );
       }
-      applyRuntimeContextToSession(existing, input, "resume session");
+      assertRuntimeContextCompatibleWithSession(existing, input, "resume session");
       await applyRepositorySessionPolicy({
         client: existing.client,
         externalSessionId: input.externalSessionId,
         policy,
         workingDirectory: input.workingDirectory,
       });
+      applyRuntimeContextToSession(existing, input, "resume session");
       return existing.summary;
     }
 
@@ -327,7 +339,7 @@ export class OpencodeSdkAdapter
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
-      applyRuntimeContextToSession(existing, input, "ensure session state");
+      assertRuntimeContextCompatibleWithSession(existing, input, "ensure session state");
       if (input.sessionScope) {
         await applyRepositorySessionPolicy({
           client: existing.client,
@@ -340,6 +352,7 @@ export class OpencodeSdkAdapter
           workingDirectory: input.workingDirectory,
         });
       }
+      applyRuntimeContextToSession(existing, input, "ensure session state");
       return existing.summary;
     }
 

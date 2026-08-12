@@ -691,6 +691,50 @@ describe("opencode-sdk-adapter", () => {
     );
   });
 
+  test("keeps retained model and system prompt when a repository policy update fails", async () => {
+    const sessionScope = { kind: "repository" } as const;
+    const mockClient = makeMockClient({
+      sessionUpdateResult: {
+        data: undefined,
+        error: new Error("permission update rejected"),
+        response: { status: 409, statusText: "Conflict" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      runtimeKind: "opencode",
+      sessionScope,
+      runtimePolicy: opencodeRuntimePolicy,
+      systemPrompt: "original system prompt",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.resumeSession({
+        ...sessionRef(),
+        sessionScope,
+        runtimePolicy: opencodeRuntimePolicy,
+        systemPrompt: "replacement system prompt",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: update repository session policy for session 'external-session-1'",
+    );
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("external-session-1", { sessionScope, systemPrompt: undefined }),
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+
+    expect(mockClient.promptAsyncCalls[0]).toMatchObject({
+      system: "original system prompt",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      variant: "medium",
+    });
+  });
+
   test("startSession requires the live repo runtime before creating a new session", async () => {
     const mockClient = makeMockClient();
     const requireRepoRuntime = mock(async () => makeRuntimeSummary("local_http"));
