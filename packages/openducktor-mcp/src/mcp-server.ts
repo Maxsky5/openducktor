@@ -1,5 +1,5 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { type CallToolResult, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, type ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import packageJson from "../package.json" with { type: "json" };
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
@@ -52,7 +52,9 @@ type ToolResultContract =
       formatResult(payload: unknown): ToolResult;
     };
 
-type RegisterToolCallback = Parameters<McpServer["registerTool"]>[2];
+type RegisterToolCallback<Name extends RegisteredToolName> = ToolCallback<
+  (typeof ODT_TOOL_SCHEMAS)[Name]
+>;
 
 const structuredResult = (toolName: RegisteredToolName): ToolResultContract => ({
   kind: "structured",
@@ -153,9 +155,8 @@ const registerOdtTool = <Name extends RegisteredToolName>(
           description: tool.description,
           inputSchema: schema,
         };
-  // Indexing the heterogeneous schema map loses the generic name/schema correlation. Keep the
-  // assertion at that boundary and derive its shape from the installed SDK contract.
-  const callback = (async (input: unknown): Promise<CallToolResult> => {
+  // Indexed access loses the generic name/schema correlation, so restore it at this boundary.
+  const callback = (async (input: unknown) => {
     try {
       rejectForbiddenWorkspaceIdInput(tool.name, input, options);
       const parsedInput = schema.parse(input) as ToolInputByName<Name>;
@@ -164,7 +165,7 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     } catch (error) {
       return toToolError(error);
     }
-  }) as RegisterToolCallback;
+  }) as RegisterToolCallback<Name>;
 
   server.registerTool(tool.name, config, callback);
 };
