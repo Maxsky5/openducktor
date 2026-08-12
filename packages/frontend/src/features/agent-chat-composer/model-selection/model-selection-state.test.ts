@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import {
-  createDraftModelSelectionState,
-  draftModelSelectionReducer,
   resolveInitialModelSelection,
   resolveModelSelectionForModelChange,
   resolveModelSelectionForProfileChange,
@@ -207,7 +205,7 @@ describe("model-selection-state", () => {
     ).toEqual(EXPLICIT_SELECTION);
   });
 
-  test("normalizes a draft after a catalog reload and removes missing selected values", () => {
+  test("normalizes a draft against a reloaded catalog and removes missing selected values", () => {
     const staleSelection: AgentModelSelection = {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -215,60 +213,17 @@ describe("model-selection-state", () => {
       variant: "removed",
       profileId: "removed-profile",
     };
-    const initialState = createDraftModelSelectionState({
-      contextKey: "/repo",
-      isDefaultSelectionReady: true,
-    });
-    const touchedState = draftModelSelectionReducer(initialState, {
-      type: "draftSelectionApplied",
-      contextKey: "/repo",
-      isDefaultSelectionReady: true,
-      selection: staleSelection,
-      selectionKey: "repository-chat",
-    });
-    const reloadedState = draftModelSelectionReducer(touchedState, {
-      type: "draftSelectionSynced",
-      catalog: CATALOG,
-      contextKey: "/repo",
-      defaultSelection: null,
-      isDefaultSelectionReady: true,
-      selectionKey: "repository-chat",
-    });
-
-    expect(reloadedState.draftSelections["repository-chat"]).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-    });
     expect(
       resolvePreferredModelSelection({
         catalog: CATALOG,
         preferredSelection: staleSelection,
         fallbackSelection: null,
       }),
-    ).toEqual(reloadedState.draftSelections["repository-chat"] ?? null);
-  });
-
-  test("feeds workflow and non-workflow defaults through the same reducer interface", () => {
-    const initialState = createDraftModelSelectionState({
-      contextKey: "/repo",
-      isDefaultSelectionReady: true,
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
     });
-    const syncDefault = (selectionKey: string, defaultSelection: AgentModelSelection) =>
-      draftModelSelectionReducer(initialState, {
-        type: "draftSelectionSynced",
-        catalog: CATALOG,
-        contextKey: "/repo",
-        defaultSelection,
-        isDefaultSelectionReady: true,
-        selectionKey,
-      });
-
-    const workflowState = syncDefault("build", EXPLICIT_SELECTION);
-    const repositoryChatState = syncDefault("repository-chat", EXPLICIT_SELECTION);
-
-    expect(workflowState.draftSelections.build).toEqual(EXPLICIT_SELECTION);
-    expect(repositoryChatState.draftSelections["repository-chat"]).toEqual(EXPLICIT_SELECTION);
   });
 });

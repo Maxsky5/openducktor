@@ -157,12 +157,12 @@ export function useAgentStudioChatComposer({
       }),
     [availableRuntimeDefinitions, repoSettings, role],
   );
-  const { draftSelection, isAwaitingDefaultSelection, applyDraftSelection, syncDraftSelection } =
-    useDraftModelSelectionState({
-      contextKey: workspaceRepoPath,
-      isDefaultSelectionReady: repoSettings !== null,
-      selectionKey: role,
-    });
+  const { draftSelection, applyDraftSelection } = useDraftModelSelectionState({
+    contextKey: workspaceRepoPath,
+    defaultSelection: roleDefaultSelection,
+    isDefaultSelectionReady: repoSettings !== null,
+    selectionKey: role,
+  });
   const selectedRuntimeKind = useMemo(
     () =>
       resolveChatComposerSelectedRuntimeKind({
@@ -269,13 +269,6 @@ export function useAgentStudioChatComposer({
       supportsSubagentReferences,
       loadSubagentsForRepo,
     });
-  useEffect(() => {
-    syncDraftSelection({
-      catalog: composerCatalog,
-      defaultSelection: roleDefaultSelection,
-    });
-  }, [composerCatalog, roleDefaultSelection, syncDraftSelection]);
-
   const {
     selectionCatalog,
     selectedModelSelection,
@@ -296,7 +289,6 @@ export function useAgentStudioChatComposer({
           kind: "new_session",
           composerCatalog,
           draftSelection,
-          isAwaitingDefaultSelection,
         };
 
     return resolveChatComposerModelSelections({
@@ -306,7 +298,6 @@ export function useAgentStudioChatComposer({
   }, [
     composerCatalog,
     draftSelection,
-    isAwaitingDefaultSelection,
     roleDefaultSelection,
     selectedSessionIdentity,
     selectedSessionModel,

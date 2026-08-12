@@ -99,10 +99,9 @@ export const resolvePreferredModelSelection = ({
   preferredSelection: AgentModelSelection | null;
   fallbackSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
-  const preferredBase =
-    preferredSelection ?? fallbackSelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
   return (
-    coerceVisibleSelectionToCatalog(catalog, preferredBase) ??
+    coerceVisibleSelectionToCatalog(catalog, preferredSelection) ??
+    coerceVisibleSelectionToCatalog(catalog, fallbackSelection) ??
     pickDefaultVisibleSelectionForCatalog(catalog)
   );
 };
@@ -253,105 +252,5 @@ export const resolveModelSelectionForVariantChange = ({
   return {
     ...selectionWithoutVariant,
     ...(normalizedVariant ? { variant: normalizedVariant } : {}),
-  };
-};
-
-export type DraftModelSelectionState = {
-  contextKey: string | null;
-  draftSelections: Record<string, AgentModelSelection | null>;
-  touchedSelectionKeys: Record<string, boolean>;
-  isAwaitingDefaultSelection: boolean;
-};
-
-export type DraftModelSelectionAction =
-  | {
-      type: "draftSelectionApplied";
-      contextKey: string | null;
-      isDefaultSelectionReady: boolean;
-      selection: AgentModelSelection | null;
-      selectionKey: string;
-    }
-  | {
-      type: "draftSelectionSynced";
-      catalog: AgentModelCatalog | null;
-      contextKey: string | null;
-      defaultSelection: AgentModelSelection | null;
-      isDefaultSelectionReady: boolean;
-      selectionKey: string;
-    };
-
-export const createDraftModelSelectionState = ({
-  contextKey,
-  isDefaultSelectionReady,
-}: {
-  contextKey: string | null;
-  isDefaultSelectionReady: boolean;
-}): DraftModelSelectionState => ({
-  contextKey,
-  draftSelections: {},
-  touchedSelectionKeys: {},
-  isAwaitingDefaultSelection: Boolean(contextKey) && !isDefaultSelectionReady,
-});
-
-export const getDraftModelSelectionStateForContext = (
-  state: DraftModelSelectionState,
-  contextKey: string | null,
-  isDefaultSelectionReady: boolean,
-): DraftModelSelectionState => {
-  if (state.contextKey !== contextKey) {
-    return createDraftModelSelectionState({ contextKey, isDefaultSelectionReady });
-  }
-
-  if (state.isAwaitingDefaultSelection && isDefaultSelectionReady) {
-    return { ...state, isAwaitingDefaultSelection: false };
-  }
-
-  return state;
-};
-
-export const draftModelSelectionReducer = (
-  state: DraftModelSelectionState,
-  action: DraftModelSelectionAction,
-): DraftModelSelectionState => {
-  const currentState = getDraftModelSelectionStateForContext(
-    state,
-    action.contextKey,
-    action.isDefaultSelectionReady,
-  );
-
-  if (action.type === "draftSelectionApplied") {
-    return {
-      ...currentState,
-      draftSelections: {
-        ...currentState.draftSelections,
-        [action.selectionKey]: action.selection,
-      },
-      touchedSelectionKeys: {
-        ...currentState.touchedSelectionKeys,
-        [action.selectionKey]: true,
-      },
-    };
-  }
-
-  if (!action.catalog) {
-    return currentState;
-  }
-
-  const existing = currentState.draftSelections[action.selectionKey] ?? null;
-  const normalized = resolvePreferredModelSelection({
-    catalog: action.catalog,
-    preferredSelection: currentState.touchedSelectionKeys[action.selectionKey] ? existing : null,
-    fallbackSelection: action.defaultSelection,
-  });
-  if (isSameSelection(existing, normalized)) {
-    return currentState;
-  }
-
-  return {
-    ...currentState,
-    draftSelections: {
-      ...currentState.draftSelections,
-      [action.selectionKey]: normalized,
-    },
   };
 };

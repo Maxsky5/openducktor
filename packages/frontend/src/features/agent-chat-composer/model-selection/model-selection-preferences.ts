@@ -7,6 +7,7 @@ import {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
+  resolvePreferredModelSelection,
 } from "./model-selection-state";
 
 const availableRuntimeKindFor = (
@@ -60,7 +61,6 @@ export type ChatComposerModelSelectionSource =
       kind: "new_session";
       composerCatalog: AgentModelCatalog | null;
       draftSelection: AgentModelSelection | null;
-      isAwaitingDefaultSelection: boolean;
     }
   | {
       kind: "session";
@@ -104,17 +104,13 @@ export const resolveChatComposerModelSelections = ({
   }
 
   const selectionCatalog = source.composerCatalog;
-  const defaultSelectionForComposer = resolveNewSessionDefaultSelection({
-    composerCatalog: selectionCatalog,
-    defaultSelection,
-    isAwaitingDefaultSelection: source.isAwaitingDefaultSelection,
-  });
-  const draftSelectionForComposer = selectionCatalog
-    ? coerceVisibleSelectionToCatalog(selectionCatalog, source.draftSelection)
+  const selectionForNewSession = selectionCatalog
+    ? resolvePreferredModelSelection({
+        catalog: selectionCatalog,
+        fallbackSelection: defaultSelection,
+        preferredSelection: source.draftSelection,
+      })
     : source.draftSelection;
-  const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
-  const selectionForNewSession =
-    draftSelectionForComposer ?? defaultSelectionForComposer ?? fallbackCatalogSelection;
 
   return {
     selectionCatalog,
@@ -148,21 +144,6 @@ export const resolveSessionModelRepairCommand = ({
     session: sessionIdentity,
     selection: repairSelection,
   };
-};
-
-const resolveNewSessionDefaultSelection = ({
-  composerCatalog,
-  defaultSelection,
-  isAwaitingDefaultSelection,
-}: {
-  composerCatalog: AgentModelCatalog | null;
-  defaultSelection: AgentModelSelection | null;
-  isAwaitingDefaultSelection: boolean;
-}): AgentModelSelection | null => {
-  if (!composerCatalog) {
-    return isAwaitingDefaultSelection ? null : defaultSelection;
-  }
-  return coerceVisibleSelectionToCatalog(composerCatalog, defaultSelection);
 };
 
 type LoadedSessionSelection = {
