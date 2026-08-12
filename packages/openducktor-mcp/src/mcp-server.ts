@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { type CallToolResult, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import packageJson from "../package.json" with { type: "json" };
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
@@ -44,7 +44,7 @@ type RegisteredToolSpecs = {
 type ToolResultContract =
   | {
       kind: "structured";
-      outputSchema: unknown;
+      outputSchema: (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[RegisteredToolName];
       formatResult(payload: unknown): ToolResult;
     }
   | {
@@ -52,15 +52,7 @@ type ToolResultContract =
       formatResult(payload: unknown): ToolResult;
     };
 
-type RegisterContractToolConfig =
-  | { title: string; description: string; inputSchema: unknown; outputSchema: unknown }
-  | { title: string; description: string; inputSchema: unknown };
-
-type RegisterContractTool = (
-  name: string,
-  config: RegisterContractToolConfig,
-  callback: (input: unknown) => Promise<ToolResult>,
-) => void;
+type RegisterToolCallback = Parameters<McpServer["registerTool"]>[2];
 
 const structuredResult = (toolName: RegisteredToolName): ToolResultContract => ({
   kind: "structured",
@@ -148,7 +140,6 @@ const registerOdtTool = <Name extends RegisteredToolName>(
   options: { forbidWorkspaceIdInput: boolean },
 ): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name];
-  const registerContractTool = server.registerTool.bind(server) as RegisterContractTool;
   const config =
     tool.result.kind === "structured"
       ? {
@@ -162,8 +153,9 @@ const registerOdtTool = <Name extends RegisteredToolName>(
           description: tool.description,
           inputSchema: schema,
         };
-
-  registerContractTool(tool.name, config, async (input: unknown) => {
+  // Indexing the heterogeneous schema map loses the generic name/schema correlation. Keep the
+  // assertion at that boundary and derive its shape from the installed SDK contract.
+  const callback = (async (input: unknown): Promise<CallToolResult> => {
     try {
       rejectForbiddenWorkspaceIdInput(tool.name, input, options);
       const parsedInput = schema.parse(input) as ToolInputByName<Name>;
@@ -172,7 +164,9 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     } catch (error) {
       return toToolError(error);
     }
-  });
+  }) as RegisterToolCallback;
+
+  server.registerTool(tool.name, config, callback);
 };
 
 type ListedOdtTool = {
