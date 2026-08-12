@@ -355,7 +355,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         }),
       ),
     ).rejects.toThrow(
-      "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repository session 'repository-history'",
+      "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repo '/repo' while attempting to load Codex session history",
     );
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transportFactory).toHaveBeenCalledTimes(0);

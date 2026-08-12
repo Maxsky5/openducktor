@@ -9,11 +9,12 @@ import {
   type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
   requireRepoRuntimeRef,
+  requireSessionWorkingDirectory,
   type SearchAgentFilesInput,
   type StartAgentSessionInput,
 } from "@openducktor/core";
 import { createCodexAppServerClient } from "./app-server-client";
-import { describeCodexRuntimeSession, resolveCodexRuntimeClientInput } from "./runtime-connection";
+import { resolveCodexRuntimeClientInput } from "./runtime-connection";
 import type { CodexAppServerAdapterOptions, CodexAppServerClient } from "./types";
 
 type RuntimeClientInput =
@@ -57,7 +58,7 @@ export class CodexRuntimeClientResolver {
     const resolver = this.options.repoRuntimeResolver;
     if (!resolver) {
       throw new Error(
-        `Codex runtime '<unresolved>' is missing required route contract 'stdio' for ${describeCodexRuntimeSession(input)} in repo '${input.repoPath}' while attempting to ${action}; repo runtime resolver is unavailable.`,
+        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime 'codex'.`,
       );
     }
 
@@ -71,20 +72,10 @@ export class CodexRuntimeClientResolver {
     };
     const runtime = await resolver.requireRepoRuntime(runtimeRef);
 
-    const { runtimeId } = resolveCodexRuntimeClientInput(
-      runtime,
-      {
-        repoPath: runtimeRef.repoPath,
-        runtimeKind: runtimeRef.runtimeKind,
-        ...("workingDirectory" in input ? { workingDirectory: input.workingDirectory } : {}),
-        ...("sessionScope" in input ? { sessionScope: input.sessionScope } : {}),
-        ...("externalSessionId" in input ? { externalSessionId: input.externalSessionId } : {}),
-        ...("parentExternalSessionId" in input
-          ? { parentExternalSessionId: input.parentExternalSessionId }
-          : {}),
-      },
-      action,
-    );
+    const { runtimeId } = resolveCodexRuntimeClientInput(runtime, runtimeRef, action);
+    if ("workingDirectory" in input) {
+      requireSessionWorkingDirectory(input.workingDirectory, action);
+    }
 
     return {
       runtimeId,
