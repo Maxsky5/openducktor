@@ -456,7 +456,7 @@ describe("agent chat transcript model", () => {
     expect(rows[0]?.key).toBe(`${sessionKey}:0:assistant-live`);
   });
 
-  test("buildAgentChatTranscriptModel marks active streaming assistant only while session activity is running", () => {
+  test("buildAgentChatTranscriptModel keeps streaming metadata independent of session activity", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
@@ -487,10 +487,10 @@ describe("agent chat transcript model", () => {
     });
 
     expect(runningRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
-    expect(idleRowsState.activeStreamingAssistantMessageId).toBeNull();
+    expect(idleRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
   });
 
-  test("buildAgentChatTranscriptModel restores streaming metadata when session activity resumes", () => {
+  test("buildAgentChatTranscriptModel preserves streaming metadata when session activity resumes", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {
         id: "assistant-live",
@@ -520,7 +520,7 @@ describe("agent chat transcript model", () => {
       showThinkingMessages: true,
     });
 
-    expect(idleRowsState.activeStreamingAssistantMessageId).toBeNull();
+    expect(idleRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
     expect(resumedRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
   });
 });

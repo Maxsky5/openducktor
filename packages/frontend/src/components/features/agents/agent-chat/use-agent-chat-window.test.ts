@@ -1911,6 +1911,47 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("switching large sessions exposes the next latest row window on its first render", async () => {
+    const firstSessionRows = createTurnRows(50, "session-1");
+    const secondSessionRows = createTurnRows(60, "session-2");
+    const observedResults: HookResult[] = [];
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const messagesContentRef = createRef<HTMLDivElement>();
+    const harness = createSharedHookHarness(
+      (props: HarnessProps) => {
+        const result = useAgentChatWindow({
+          ...props,
+          turnAnchors: props.turnAnchors ?? buildAgentChatTurnAnchors(props.rows),
+          messagesContainerRef,
+          messagesContentRef,
+        });
+        observedResults.push(result);
+        return result;
+      },
+      {
+        rows: firstSessionRows,
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
+      },
+    );
+    await harness.mount();
+    await harness.run((result) => result.scrollToTop());
+    const observationsBeforeSwitch = observedResults.length;
+
+    await harness.update({
+      rows: secondSessionRows,
+      displayedSessionKey: "session-2",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    const firstSwitchedRender = observedResults[observationsBeforeSwitch];
+    const expectedStart = secondSessionRows.length - AGENT_CHAT_ROW_WINDOW_SIZE;
+    expect(firstSwitchedRender?.windowStart).toBe(expectedStart);
+    expect(firstSwitchedRender?.visibleRows[0]).toBe(secondSessionRows[expectedStart]);
+
+    await harness.unmount();
+  });
+
   test("switching sessions clears manual scroll state so late-rendered content stays pinned", async () => {
     const firstSessionRows = createTurnRows(12, "session-1");
     const secondSessionRows = createTurnRows(12, "session-2");
