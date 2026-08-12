@@ -35,10 +35,8 @@ import type {
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
-  agentSessionScopesEqual,
   assertAgentRuntimePolicyBinding,
   classifySystemSlashCommandInvocation,
-  describeAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -72,9 +70,11 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import {
-  type OpencodeSessionPolicy,
-  resolveOpencodeSessionPolicy,
-} from "./opencode-session-policy";
+  applyRepositorySessionPolicy,
+  applyRuntimeContextToSession,
+  assertRuntimeContextCompatibleWithSession,
+} from "./opencode-session-binding";
+import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -113,77 +113,6 @@ import {
 
 const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
-};
-
-const applyRepositorySessionPolicy = async (input: {
-  client: SessionRecord["client"];
-  externalSessionId: string;
-  policy: OpencodeSessionPolicy;
-  workingDirectory: string;
-}): Promise<void> => {
-  if (input.policy.toolSelection.kind !== "repository") {
-    return;
-  }
-  const action = `update repository session policy for session '${input.externalSessionId}'`;
-  try {
-    const updated = await input.client.session.update({
-      directory: input.workingDirectory,
-      sessionID: input.externalSessionId,
-      title: input.policy.title,
-      permission: input.policy.permission,
-    });
-    if (updated.data === undefined || updated.data === null) {
-      throw toOpenCodeRequestError(action, updated.error, updated.response);
-    }
-  } catch (error) {
-    throw toOpenCodeRequestError(action, error);
-  }
-};
-
-const assertRuntimeContextCompatibleWithSession = (
-  session: SessionRecord,
-  input: PolicyBoundSessionRef,
-  action: string,
-): void => {
-  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
-  if (sessionScope) {
-    const registeredScope = session.input.sessionScope;
-    if (registeredScope && !agentSessionScopesEqual(registeredScope, sessionScope)) {
-      throw new Error(
-        `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(registeredScope)} does not match the requested ${describeAgentSessionScope(sessionScope)}.`,
-      );
-    }
-  }
-};
-
-const applyRuntimeContextToSession = (
-  session: SessionRecord,
-  input: PolicyBoundSessionRef,
-  action: string,
-): void => {
-  assertRuntimeContextCompatibleWithSession(session, input, action);
-  session.input = { ...session.input };
-  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
-  if (sessionScope) {
-    session.input.sessionScope = sessionScope;
-    const policy = resolveOpencodeSessionPolicy(sessionScope, OPENCODE_RUNTIME_DESCRIPTOR, action);
-    session.summary = {
-      ...session.summary,
-      title: policy.title,
-      sessionAssociation: sessionScope,
-    };
-  }
-  session.input.runtimePolicy = input.runtimePolicy;
-  if (input.model !== undefined) {
-    if (input.model) {
-      session.input.model = input.model;
-    } else {
-      delete session.input.model;
-    }
-  }
-  if (input.systemPrompt !== undefined) {
-    session.input.systemPrompt = input.systemPrompt;
-  }
 };
 
 const assertOpenCodeRuntimePolicyBinding = (

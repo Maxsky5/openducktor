@@ -73,6 +73,7 @@ describe("session runtime policy", () => {
         externalSessionId: "unbound-session",
         runtimeKind: "opencode",
         workingDirectory: "/repo",
+        sessionScope: null,
       },
       async () => createSettingsSnapshotFixture(),
     );

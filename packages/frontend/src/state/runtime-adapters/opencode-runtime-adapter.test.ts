@@ -29,7 +29,7 @@ describe("createOpenCodeRuntimeAdapter", () => {
           repoPath: "/repo",
         }),
       ).rejects.toThrow(
-        "OpenCode runtime 'runtime-1' is missing required route contract 'local_http' for unbound session '<new>' in repo '/repo' while attempting to list available models; received route 'stdio'.",
+        "OpenCode runtime 'runtime-1' is missing required route contract 'local_http' for repo '/repo' while attempting to list available models; received route 'stdio'.",
       );
 
       expect(runtimeRequireCalls).toEqual([["/repo", "opencode"]]);

@@ -1,5 +1,6 @@
 import type { RepoPromptOverrides, SessionHistoryFailure, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -209,7 +210,12 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
     const sessionRef = await resolveRuntimeSessionContextRef(
       repoPath,
-      sessionForHistory,
+      {
+        ...sessionForHistory,
+        sessionScope: sessionForHistory.role
+          ? workflowAgentSessionScope(sessionForHistory.taskId, sessionForHistory.role)
+          : null,
+      },
       loadSettingsSnapshot ??
         (() => {
           throw new Error(

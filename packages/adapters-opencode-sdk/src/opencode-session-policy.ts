@@ -8,7 +8,6 @@ import {
 } from "./workflow-tool-permissions";
 
 export type OpencodeSessionPolicy = {
-  sessionScope: AgentSessionScope;
   title: string;
   activityLabel: string;
   permission: OpencodePermissionRule[];
@@ -27,7 +26,6 @@ export const resolveOpencodeSessionPolicy = (
   }
   if (sessionScope.kind === "workflow") {
     return {
-      sessionScope,
       title: formatAgentSessionTitle(sessionScope),
       activityLabel: sessionScope.role,
       permission: buildRoleScopedPermissionRules({
@@ -38,7 +36,6 @@ export const resolveOpencodeSessionPolicy = (
     };
   }
   return {
-    sessionScope,
     title: formatAgentSessionTitle(sessionScope),
     activityLabel: "repository",
     permission: buildRepositoryScopedPermissionRules(runtimeDescriptor),

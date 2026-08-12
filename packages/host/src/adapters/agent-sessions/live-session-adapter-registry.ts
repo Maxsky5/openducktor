@@ -3,24 +3,8 @@ import { HostInvariantError, HostResourceError } from "../../effect/host-errors"
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
-  AgentSessionLiveAdapterScope,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
-
-const REQUIRED_ROUTE_CONTRACT_BY_RUNTIME_KIND = {
-  claude: "host_service",
-  codex: "stdio",
-  opencode: "local_http",
-} as const satisfies Record<AgentSessionLiveAdapterScope["runtimeKind"], string>;
-
-const requiredRouteContract = (runtimeKind: AgentSessionLiveAdapterScope["runtimeKind"]): string =>
-  REQUIRED_ROUTE_CONTRACT_BY_RUNTIME_KIND[runtimeKind];
-
-const missingScopeRouteMessage = (scope: AgentSessionLiveAdapterScope): string => {
-  const scopeKind = scope.sessionScope?.kind ?? "unbound";
-  const sessionId = scope.externalSessionId ?? scope.parentExternalSessionId ?? "<new>";
-  return `Cannot resolve ${scopeKind} session '${sessionId}' for runtime kind '${scope.runtimeKind}' because runtime id '<unresolved>' has no registered live route with required route contract '${requiredRouteContract(scope.runtimeKind)}' in repo '${scope.repoPath}'.`;
-};
 
 export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegistryPort => {
   const adaptersByRuntimeId = new Map<string, AgentSessionLiveAdapterPort>();
@@ -92,12 +76,8 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
           new HostResourceError({
             resource: "agent_session_live_adapter",
             operation: "resolveForScope",
-            message: missingScopeRouteMessage(scope),
-            details: {
-              scope,
-              runtimeId: null,
-              requiredRouteContract: requiredRouteContract(scope.runtimeKind),
-            },
+            message: `No live ${scope.runtimeKind} runtime owns repo '${scope.repoPath}'.`,
+            details: { scope },
           }),
         );
       }

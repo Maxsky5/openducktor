@@ -15,7 +15,6 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
-  AgentSessionScope,
   AgentSessionTranscriptEvent,
   RuntimeKind,
   SlashCommandCatalog,
@@ -70,11 +69,7 @@ export type AgentSessionLiveAdapterBinding = {
   readonly repoPath: string;
 };
 
-export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind"> &
-  Partial<Pick<AgentSessionLiveRef, "workingDirectory" | "externalSessionId">> & {
-    readonly parentExternalSessionId?: string;
-    readonly sessionScope?: AgentSessionScope | undefined;
-  };
+export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 export type AgentSessionLiveAdapterPort = {
   readonly binding: AgentSessionLiveAdapterBinding;

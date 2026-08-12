@@ -1024,7 +1024,7 @@ describe("createAgentSessionLiveStateService", () => {
     expect(sendInput).toEqual(input);
   });
 
-  test("fails repository bound operations with the missing live-route contract", async () => {
+  test("fails scoped operations when the workspace has no live runtime", async () => {
     const { service } = createHarness();
     const ref = {
       repoPath: "/repo",
@@ -1035,11 +1035,7 @@ describe("createAgentSessionLiveStateService", () => {
     };
     const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {
       const error = await expectHostFailure(effect);
-      expect(error.message).toContain("repository session 'repository-session'");
-      expect(error.message).toContain("runtime kind 'codex'");
-      expect(error.message).toContain("runtime id '<unresolved>'");
-      expect(error.message).toContain("required route contract 'stdio'");
-      expect(error.message).toContain("repo '/repo'");
+      expect(error.message).toBe("No live codex runtime owns repo '/repo'.");
     };
 
     await expectMissingRoute(service.resumeSession(ref));

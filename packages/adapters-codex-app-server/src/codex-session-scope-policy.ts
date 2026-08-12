@@ -3,12 +3,21 @@ import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/
 import { formatAgentSessionTitle } from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
 
-export type CodexSessionScopePolicy = {
-  sessionScope: AgentSessionScope;
+type CodexSessionScopePolicyBase = {
   title: string;
   runtimePolicy: CodexEffectivePolicy;
-  threadConfig?: Record<string, unknown>;
 };
+
+export type CodexSessionScopePolicy =
+  | (CodexSessionScopePolicyBase & {
+      kind: "workflow";
+      sessionScope: Extract<AgentSessionScope, { kind: "workflow" }>;
+    })
+  | (CodexSessionScopePolicyBase & {
+      kind: "repository";
+      sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
+      threadConfig: typeof REPOSITORY_THREAD_CONFIG;
+    });
 
 const REPOSITORY_THREAD_CONFIG = {
   "mcp_servers.openducktor.enabled": false,
@@ -25,6 +34,7 @@ export const resolveCodexSessionScopePolicy = (
   const policy = requireCodexRuntimePolicy(runtimePolicy, action);
   if (sessionScope.kind === "repository") {
     return {
+      kind: "repository",
       sessionScope,
       title: formatAgentSessionTitle(sessionScope),
       runtimePolicy: policy,
@@ -32,6 +42,7 @@ export const resolveCodexSessionScopePolicy = (
     };
   }
   return {
+    kind: "workflow",
     sessionScope,
     title: formatAgentSessionTitle(sessionScope),
     runtimePolicy: policy,

@@ -1,15 +1,11 @@
-import {
-  ODT_MCP_TOOL_NAMES,
-  OPENCODE_ODT_TOOL_ID_PREFIXES,
-  type RuntimeDescriptor,
-  toOpencodeExposedOdtToolIds,
-} from "@openducktor/contracts";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
   isReadOnlyAgentRole,
   ODT_WORKFLOW_TOOL_NAMES,
 } from "@openducktor/core";
+import { resolveOpencodeBaseToolPolicy } from "./opencode-tool-policy";
 
 type PermissionAction = "allow" | "deny" | "ask";
 
@@ -17,28 +13,6 @@ export type OpencodePermissionRule = {
   permission: string;
   pattern: string;
   action: PermissionAction;
-};
-
-const ODT_MCP_PERMISSION_WILDCARDS = OPENCODE_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}*`);
-const OPENCODE_SUBAGENT_TOOL_NAME = "task";
-const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
-
-const buildOdtToolDenyPermissions = (runtimeDescriptor: RuntimeDescriptor): Set<string> => {
-  const permissions = new Set<string>();
-
-  for (const toolName of ODT_MCP_TOOL_NAMES) {
-    for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
-      permissions.add(permission);
-    }
-  }
-
-  for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
-    for (const alias of runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []) {
-      permissions.add(alias);
-    }
-  }
-
-  return permissions;
 };
 
 const buildScopePermissionRules = (input: {
@@ -59,33 +33,11 @@ const buildScopePermissionRules = (input: {
     }
   }
 
-  if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
+  for (const entry of resolveOpencodeBaseToolPolicy(runtimeDescriptor)) {
     rules.push({
-      permission: OPENCODE_SUBAGENT_TOOL_NAME,
+      permission: entry.toolId,
       pattern: "*",
-      action: "allow",
-    });
-    for (const permission of OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES) {
-      rules.push({
-        permission,
-        pattern: "*",
-        action: "deny",
-      });
-    }
-  }
-
-  for (const permission of ODT_MCP_PERMISSION_WILDCARDS) {
-    rules.push({
-      permission,
-      pattern: "*",
-      action: "deny",
-    });
-  }
-  for (const permission of buildOdtToolDenyPermissions(runtimeDescriptor)) {
-    rules.push({
-      permission,
-      pattern: "*",
-      action: "deny",
+      action: entry.enabled ? "allow" : "deny",
     });
   }
 
