@@ -10,6 +10,7 @@ import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
+import { createDiscoveredRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
@@ -22,12 +23,20 @@ type CodexWorkspaceRuntimeStarterInput = Parameters<
 >[0];
 type CodexWorkspaceRuntimeStarterTestInput = Omit<
   CodexWorkspaceRuntimeStarterInput,
-  "runtimeDistribution" | "toolDiscovery" | "liveSessionLifecycle" | "prepareLiveSessionAdapter"
+  | "runtimeDistribution"
+  | "toolDiscovery"
+  | "settingsConfig"
+  | "liveSessionLifecycle"
+  | "prepareLiveSessionAdapter"
 > &
   Partial<
     Pick<
       CodexWorkspaceRuntimeStarterInput,
-      "runtimeDistribution" | "toolDiscovery" | "liveSessionLifecycle" | "prepareLiveSessionAdapter"
+      | "runtimeDistribution"
+      | "toolDiscovery"
+      | "settingsConfig"
+      | "liveSessionLifecycle"
+      | "prepareLiveSessionAdapter"
     >
   > & {
     systemCommands?: SystemCommandPort;
@@ -45,6 +54,7 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
     liveSessionLifecycle,
     prepareLiveSessionAdapter,
     processEnv,
+    settingsConfig,
     systemCommands,
     toolDiscovery,
     ...starterInput
@@ -54,14 +64,17 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => mutation.pipe(Effect.map((result) => result.value)),
   } satisfies RuntimeLiveSessionLifecyclePort;
+  const effectiveToolDiscovery =
+    toolDiscovery ??
+    createToolDiscoveryAdapter({
+      ...(processEnv === undefined ? {} : { env: processEnv }),
+      systemCommands: systemCommands ?? createSystemCommands(),
+    });
   return createEffectCodexWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    toolDiscovery:
-      toolDiscovery ??
-      createToolDiscoveryAdapter({
-        ...(processEnv === undefined ? {} : { env: processEnv }),
-        systemCommands: systemCommands ?? createSystemCommands(),
-      }),
+    toolDiscovery: effectiveToolDiscovery,
+    settingsConfig:
+      settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
     ...(processEnv === undefined ? {} : { processEnv }),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
     prepareLiveSessionAdapter:
@@ -100,6 +113,9 @@ const createSystemCommands = (): SystemCommandPort => ({
 const createFakeToolDiscovery = (
   paths: Partial<Record<ToolDiscoveryId, string>>,
 ): ToolDiscoveryPort => ({
+  discoverTool(toolId) {
+    return this.resolveTool(toolId);
+  },
   resolveTool(toolId) {
     const path = paths[toolId];
     return path === undefined
@@ -115,6 +131,16 @@ const createFakeToolDiscovery = (
     return path === undefined
       ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
       : Effect.succeed(path);
+  },
+  validateToolPath(toolId, executablePath) {
+    const expectedPath = paths[toolId];
+    return expectedPath === executablePath
+      ? Effect.succeed({
+          displayLabel: "Saved path",
+          path: executablePath,
+          sourceCategory: "provided_path",
+        })
+      : Effect.dieMessage(`Unexpected fake tool path for ${toolId}: ${executablePath}`);
   },
 });
 

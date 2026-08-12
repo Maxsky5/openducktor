@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Cause, Effect, Exit, Scope } from "effect";
+import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
 import {
   HostOperationError,
   HostResourceError,
@@ -20,6 +21,7 @@ import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { CodexLiveSessionAdapterPreparer } from "../agent-sessions/codex-live-session-adapter";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -42,6 +44,7 @@ export type CodexMcpBridgeConnectionResolver = (
 
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
+  settingsConfig: SettingsConfigPort;
   codexAppServer: CodexAppServerTransportRegistry;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   prepareLiveSessionAdapter: CodexLiveSessionAdapterPreparer;
@@ -62,6 +65,7 @@ const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
 export const createCodexWorkspaceRuntimeStarter = ({
   toolDiscovery,
+  settingsConfig,
   codexAppServer,
   liveSessionLifecycle,
   prepareLiveSessionAdapter,
@@ -107,7 +111,11 @@ export const createCodexWorkspaceRuntimeStarter = ({
         runtimeDistribution,
         toolDiscovery,
       });
-      const binary = yield* toolDiscovery.resolveToolPath("codex");
+      const binary = yield* resolveSavedRuntimeExecutable({
+        kind: "codex",
+        settingsConfig,
+        toolDiscovery,
+      });
       const runtimeEnv = {
         ...processEnv,
         ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),

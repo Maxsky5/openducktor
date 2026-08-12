@@ -1,6 +1,7 @@
 import {
   type DirectoryListing,
   directoryListingSchema,
+  type FilesystemListDirectoryInput,
   type WorkspaceFileTree,
   type WorkspaceTextFileReadResult,
   type WorkspaceTextFileWriteInput,
@@ -22,9 +23,10 @@ const normalizeWorkspaceFileTreeInput = (
 
 const filesystemListDirectory = async (
   invokeFn: InvokeFn,
-  path?: string,
+  input?: string | FilesystemListDirectoryInput,
 ): Promise<DirectoryListing> => {
-  const payload = await invokeFn("filesystem_list_directory", path ? { path } : undefined);
+  const args = typeof input === "string" ? { path: input } : input;
+  const payload = await invokeFn("filesystem_list_directory", args);
   return directoryListingSchema.parse(payload);
 };
 
@@ -59,8 +61,10 @@ const filesystemWriteTextFile = async (
 export class HostFilesystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  async filesystemListDirectory(path?: string): Promise<DirectoryListing> {
-    return filesystemListDirectory(this.invokeFn, path);
+  async filesystemListDirectory(
+    input?: string | FilesystemListDirectoryInput,
+  ): Promise<DirectoryListing> {
+    return filesystemListDirectory(this.invokeFn, input);
   }
 
   async filesystemListTree(input: string | WorkspaceFileTreeInput): Promise<WorkspaceFileTree> {

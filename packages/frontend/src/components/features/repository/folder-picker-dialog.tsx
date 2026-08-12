@@ -1,6 +1,6 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronUp, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
+import { ChevronUp, File, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useReducer } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { errorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 import { directoryListingQueryOptions } from "@/state/queries/filesystem";
 
 type FolderPickerDialogProps = {
@@ -27,6 +28,7 @@ type FolderPickerDialogProps = {
   confirmLabel: string;
   initialPath?: string;
   requireGitRepo?: boolean;
+  selectionMode?: "directory" | "file";
   onConfirm: (path: string) => Promise<void> | void;
 };
 
@@ -35,6 +37,7 @@ type FolderPickerState = {
   manualPath: string;
   filterText: string;
   confirmedListing: DirectoryListing | null;
+  selectedFilePath: string | null;
   hasResolvedRequestedPath: boolean;
   submitError: string | null;
   isSubmitting: boolean;
@@ -45,6 +48,7 @@ type FolderPickerAction =
   | { type: "filterTextChanged"; value: string }
   | { type: "directoryRequested"; path: string }
   | { type: "directoryConfirmed"; listing: DirectoryListing }
+  | { type: "fileSelected"; path: string }
   | { type: "submitStarted" }
   | { type: "submitFailed"; error: string }
   | { type: "submitFinished" };
@@ -54,6 +58,7 @@ const initialFolderPickerState = (initialPath: string | undefined): FolderPicker
   manualPath: "",
   filterText: "",
   confirmedListing: null,
+  selectedFilePath: null,
   hasResolvedRequestedPath: false,
   submitError: null,
   isSubmitting: false,
@@ -74,6 +79,7 @@ const folderPickerReducer = (
         requestedPath: action.path,
         filterText: "",
         hasResolvedRequestedPath: false,
+        selectedFilePath: null,
         submitError: null,
       };
     case "directoryConfirmed":
@@ -82,6 +88,8 @@ const folderPickerReducer = (
         confirmedListing: action.listing,
         hasResolvedRequestedPath: true,
       };
+    case "fileSelected":
+      return { ...state, selectedFilePath: action.path, submitError: null };
     case "submitStarted":
       return { ...state, submitError: null, isSubmitting: true };
     case "submitFailed":
@@ -95,13 +103,16 @@ function FolderPickerDirectoryBrowser({
   confirmedListing,
   filteredEntries,
   filterText,
+  selectedFilePath,
   status,
   onFilterTextChange,
   onLoadDirectory,
+  onSelectFile,
 }: {
   confirmedListing: DirectoryListing | null;
   filteredEntries: DirectoryListing["entries"];
   filterText: string;
+  selectedFilePath: string | null;
   status: {
     isBusy: boolean;
     isInitialLoad: boolean;
@@ -109,6 +120,7 @@ function FolderPickerDirectoryBrowser({
   };
   onFilterTextChange: (value: string) => void;
   onLoadDirectory: (path?: string | null) => void;
+  onSelectFile: (path: string) => void;
 }): ReactElement {
   const { isBusy, isInitialLoad, isRefreshing } = status;
 
@@ -192,7 +204,7 @@ function FolderPickerDirectoryBrowser({
 
           {!isInitialLoad && confirmedListing && filteredEntries.length === 0 ? (
             <div className="px-3 py-6 text-sm text-muted-foreground">
-              No directories match this view.
+              No entries match this view.
             </div>
           ) : null}
 
@@ -201,14 +213,23 @@ function FolderPickerDirectoryBrowser({
               key={entry.path}
               type="button"
               variant="ghost"
-              className="h-9 w-full justify-between gap-3 rounded-md px-3 text-left"
+              className={cn(
+                "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
+                !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
+              )}
               disabled={isBusy}
-              onClick={() => {
-                onLoadDirectory(entry.path);
-              }}
+              aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+              data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+              onClick={() =>
+                entry.isDirectory ? onLoadDirectory(entry.path) : onSelectFile(entry.path)
+              }
             >
               <span className="flex min-w-0 items-center gap-2.5">
-                <Folder className="size-4 shrink-0 text-primary" />
+                {entry.isDirectory ? (
+                  <Folder className="size-4 shrink-0 text-primary" />
+                ) : (
+                  <File className="size-4 shrink-0 text-muted-foreground" />
+                )}
                 <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
               </span>
               {entry.isGitRepo ? (
@@ -241,6 +262,7 @@ function FolderPickerDialogSession({
   confirmLabel,
   initialPath,
   requireGitRepo = false,
+  selectionMode = "directory",
   onConfirm,
 }: FolderPickerDialogProps): ReactElement {
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
@@ -249,13 +271,14 @@ function FolderPickerDialogSession({
     manualPath,
     filterText,
     confirmedListing,
+    selectedFilePath,
     hasResolvedRequestedPath,
     submitError,
     isSubmitting,
   } = state;
 
   const directoryQuery = useQuery({
-    ...directoryListingQueryOptions(requestedPath),
+    ...directoryListingQueryOptions(requestedPath, undefined, selectionMode === "file"),
     enabled: open,
   });
 
@@ -306,9 +329,12 @@ function FolderPickerDialogSession({
       return;
     }
 
+    const selectedPath = selectionMode === "file" ? selectedFilePath : confirmedListing.currentPath;
+    if (!selectedPath) return;
+
     dispatch({ type: "submitStarted" });
     try {
-      await onConfirm(confirmedListing.currentPath);
+      await onConfirm(selectedPath);
       onOpenChange(false);
     } catch (error: unknown) {
       dispatch({ type: "submitFailed", error: errorMessage(error) });
@@ -325,7 +351,9 @@ function FolderPickerDialogSession({
   const isCurrentPathSelectable = Boolean(
     confirmedListing &&
       hasResolvedRequestedPath &&
-      (!requireGitRepo || confirmedListing.currentPathIsGitRepo),
+      (selectionMode === "file"
+        ? selectedFilePath
+        : !requireGitRepo || confirmedListing.currentPathIsGitRepo),
   );
   const helperMessage =
     requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo
@@ -376,7 +404,7 @@ function FolderPickerDialogSession({
               <Input
                 id="folder-picker-manual-path"
                 value={manualPath}
-                placeholder="/path/to/your/repo"
+                placeholder={selectionMode === "file" ? "/path/to/folder" : "/path/to/your/repo"}
                 className="font-mono"
                 disabled={isBusy}
                 onChange={(event) =>
@@ -400,9 +428,11 @@ function FolderPickerDialogSession({
             confirmedListing={confirmedListing}
             filteredEntries={filteredEntries}
             filterText={filterText}
+            selectedFilePath={selectedFilePath}
             status={{ isBusy, isInitialLoad, isRefreshing }}
             onFilterTextChange={(value) => dispatch({ type: "filterTextChanged", value })}
             onLoadDirectory={loadDirectory}
+            onSelectFile={(path) => dispatch({ type: "fileSelected", path })}
           />
 
           {helperMessage ? (

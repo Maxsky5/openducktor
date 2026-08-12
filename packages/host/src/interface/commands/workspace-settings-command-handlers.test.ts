@@ -308,7 +308,10 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           reusablePrompts: [],
           kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
           autopilot: { rules: [] },
-          agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+          agentRuntimes: {
+            opencode: { enabled: true, executablePath: "/bin/opencode" },
+            codex: { enabled: false, executablePath: "/bin/codex" },
+          },
           workspaces: {},
           globalPromptOverrides: {},
         },

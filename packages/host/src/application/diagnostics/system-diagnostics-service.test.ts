@@ -28,6 +28,7 @@ const runtimeHealth = (
   kind,
   enabled: true,
   ok: error === null,
+  executablePath: `/bin/${kind}`,
   version: error === null ? `${kind} 1.0.0` : null,
   error,
 });
@@ -222,6 +223,11 @@ describe("createSystemDiagnosticsService", () => {
         ...createDefaultGlobalConfig(),
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
+          opencode: {
+            ...DEFAULT_AGENT_RUNTIMES.opencode,
+            enabled: true,
+            executablePath: "/bin/opencode",
+          },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
         },
       }),

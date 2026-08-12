@@ -8,6 +8,12 @@ export const directoryEntrySchema = z.object({
 });
 export type DirectoryEntry = z.infer<typeof directoryEntrySchema>;
 
+export const filesystemListDirectoryInputSchema = z.object({
+  path: z.string().min(1).optional(),
+  includeFiles: z.boolean().optional(),
+});
+export type FilesystemListDirectoryInput = z.infer<typeof filesystemListDirectoryInputSchema>;
+
 export const directoryListingSchema = z.object({
   currentPath: z.string().min(1),
   currentPathIsGitRepo: z.boolean(),

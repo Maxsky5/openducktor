@@ -21,6 +21,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
 
   const {
     workspaces,
+    isLoadingWorkspaces,
+    workspaceLoadError,
     branches,
     activeBranch,
     isSwitchingWorkspace,
@@ -170,8 +172,11 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
   const workspacePresenceValue = useMemo(
     () => ({
       hasWorkspaces: workspaces.length > 0,
+      isLoadingWorkspaces,
+      workspaceLoadError,
+      retryWorkspaces: refreshWorkspaces,
     }),
-    [workspaces.length],
+    [isLoadingWorkspaces, refreshWorkspaces, workspaceLoadError, workspaces.length],
   );
 
   const workspaceOperationsValue = useMemo<WorkspaceOperationsContextValue>(

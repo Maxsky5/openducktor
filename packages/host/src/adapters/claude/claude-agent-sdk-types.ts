@@ -23,6 +23,7 @@ export type {
 } from "../../application/runtimes/claude-agent-sdk-service";
 
 import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -39,6 +40,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;
+  settingsConfig?: SettingsConfigPort;
   toolDiscovery: ToolDiscoveryPort;
   now?: () => string;
   randomId?: () => string;

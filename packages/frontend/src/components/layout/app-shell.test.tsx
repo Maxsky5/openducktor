@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -17,12 +22,18 @@ import {
   WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  runtimeDefinitionsQueryOptions,
+  runtimeExecutablePaths,
+  runtimeExecutablesQueryOptions,
+} from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   ChecksStateContextValue,
   TasksStateContextValue,
   WorkspaceBranchStateContextValue,
+  WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
@@ -136,6 +147,7 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
 type RenderAppShellForTestOptions = {
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
+  workspacePresence?: Partial<WorkspacePresenceContextValue>;
 };
 
 const createChecksState = (): ChecksStateContextValue => ({
@@ -179,6 +191,21 @@ const renderAppShellForTest = (
   const queryClient = createQueryClient();
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
+  queryClient.setQueryData(runtimeDefinitionsQueryOptions().queryKey, [
+    OPENCODE_RUNTIME_DESCRIPTOR,
+    CODEX_RUNTIME_DESCRIPTOR,
+    CLAUDE_RUNTIME_DESCRIPTOR,
+  ]);
+  queryClient.setQueryData(
+    runtimeExecutablesQueryOptions(runtimeExecutablePaths(settingsSnapshot.agentRuntimes)).queryKey,
+    {
+      runtimes: [
+        { kind: "opencode", path: "", ok: false, version: null, error: "Path is empty." },
+        { kind: "codex", path: "", ok: false, version: null, error: "Path is empty." },
+        { kind: "claude", path: "", ok: false, version: null, error: "Path is empty." },
+      ],
+    },
+  );
 
   return render(
     <MemoryRouter initialEntries={["/kanban"]} useTransitions>
@@ -187,7 +214,15 @@ const renderAppShellForTest = (
           <ActiveWorkspaceContext.Provider
             value={{ activeWorkspace, setActiveWorkspace: () => undefined }}
           >
-            <WorkspacePresenceContext.Provider value={{ hasWorkspaces: true }}>
+            <WorkspacePresenceContext.Provider
+              value={{
+                hasWorkspaces: true,
+                isLoadingWorkspaces: false,
+                workspaceLoadError: null,
+                retryWorkspaces: async () => {},
+                ...options.workspacePresence,
+              }}
+            >
               <WorkspaceStateContext.Provider value={createWorkspaceState()}>
                 <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchState()}>
                   <RuntimeDefinitionsContext.Provider
@@ -258,6 +293,30 @@ describe("AppShell", () => {
     }
 
     Reflect.deleteProperty(globalThis, "localStorage");
+  });
+
+  test("waits for the workspace list before choosing an entry path", () => {
+    renderAppShellForTest({ workspacePresence: { isLoadingWorkspaces: true } });
+
+    expect(screen.getByRole("status").textContent).toContain("Loading workspaces");
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("shows onboarding after an empty workspace list loads", () => {
+    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+
+    expect(screen.getByRole("heading", { name: "Welcome to OpenDucktor" })).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("moves from welcome to runtime setup without mounting the workspace shell", () => {
+    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+    expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
+    expect(screen.getAllByText("Executable path")).toHaveLength(3);
+    expect(screen.queryByText("Kanban")).toBeNull();
   });
 
   test("opens the sidebar by default when no preference is stored", () => {

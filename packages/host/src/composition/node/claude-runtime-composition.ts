@@ -14,6 +14,7 @@ import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../applicat
 import type { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
@@ -31,6 +32,7 @@ export type CreateClaudeRuntimeCompositionInput = {
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
+  settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
@@ -42,6 +44,7 @@ export const createClaudeRuntimeComposition = ({
   processEnv,
   resolveMcpBridgeConnection,
   runtimeDistribution,
+  settingsConfig,
   systemCommands,
   toolDiscovery,
   workingDirectoryDependencies,
@@ -54,6 +57,7 @@ export const createClaudeRuntimeComposition = ({
     ...(processEnv ? { processEnv } : {}),
     resolveMcpBridgeConnection,
     runtimeDistribution,
+    settingsConfig,
     sessionStore,
     toolDiscovery,
   });
@@ -75,6 +79,7 @@ export const createClaudeRuntimeComposition = ({
       liveSessionLifecycle,
       prepareLiveSessionAdapter,
       systemCommands,
+      settingsConfig,
       toolDiscovery,
     }),
   };

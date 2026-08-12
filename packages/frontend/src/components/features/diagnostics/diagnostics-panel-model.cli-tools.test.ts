@@ -3,8 +3,8 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeCheck,
   type RuntimeDescriptor,
+  type RuntimeHealth,
 } from "@openducktor/contracts";
 import { buildDisabledRuntimeHealth } from "@/lib/repo-runtime-health";
 import { buildDiagnosticsPanelModel as buildDiagnosticsPanelModelBase } from "./diagnostics-panel-model";
@@ -33,7 +33,7 @@ const buildCliToolsModel = ({
 }: {
   runtimeDefinitions?: RuntimeDescriptor[];
   runtimeDefinitionsError?: string | null;
-  runtimes: RuntimeCheck["runtimes"];
+  runtimes: Array<Omit<RuntimeHealth, "executablePath"> & { executablePath?: string | null }>;
 }) =>
   buildDiagnosticsPanelModel({
     workspaceRepoPath: "/repo",
@@ -49,7 +49,7 @@ const buildCliToolsModel = ({
       ghAuthOk: true,
       ghAuthLogin: "octocat",
       ghAuthError: null,
-      runtimes,
+      runtimes: runtimes.map((runtime) => ({ executablePath: null, ...runtime })),
       errors: [],
     },
     taskStoreCheck: makeTaskStoreCheck(),
@@ -193,7 +193,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
         ghAuthOk: false,
         ghAuthLogin: null,
         ghAuthError: "Timed out after 15000ms",
-        runtimes: [{ kind: "opencode", ok: false, version: null }],
+        runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
         errors: ["Timed out after 15000ms"],
       },
       taskStoreCheck: makeTaskStoreCheck({

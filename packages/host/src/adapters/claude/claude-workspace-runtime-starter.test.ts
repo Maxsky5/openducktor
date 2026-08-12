@@ -6,6 +6,7 @@ import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
 import { createClaudeWorkspaceRuntimeStarter } from "./claude-workspace-runtime-starter";
 
@@ -33,6 +34,9 @@ const createToolDiscovery = ({
 }: {
   claudePath?: string | null;
 } = {}): ToolDiscoveryPort => ({
+  discoverTool(toolId) {
+    return this.resolveTool(toolId);
+  },
   resolveTool(toolId) {
     return this.resolveToolPath(toolId).pipe(
       Effect.map((path) => ({
@@ -53,6 +57,26 @@ const createToolDiscovery = ({
       }),
     );
   },
+  validateToolPath(toolId, executablePath) {
+    if (toolId === "claude" && claudePath === executablePath) {
+      return Effect.succeed({
+        displayLabel: "Saved path",
+        path: executablePath,
+        sourceCategory: "provided_path",
+      });
+    }
+    return Effect.fail(
+      new HostDependencyError({
+        dependency: toolId,
+        message: `${toolId} unavailable`,
+      }),
+    );
+  },
+});
+
+const createRuntimePathDependencies = (claudePath: string | null = process.execPath) => ({
+  settingsConfig: createFixedRuntimeSettingsConfig("claude", claudePath ?? "/missing/claude"),
+  toolDiscovery: createToolDiscovery({ claudePath }),
 });
 
 const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E | null> => {
@@ -116,7 +140,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
       runtimeId: () => "runtime-claude",
       systemCommands: createSystemCommands(),
-      toolDiscovery: createToolDiscovery(),
+      ...createRuntimePathDependencies(),
     });
 
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
@@ -150,7 +174,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
           return Effect.succeed(options?.timeoutMs === 10_000 ? "2.1.220" : null);
         },
       },
-      toolDiscovery: createToolDiscovery(),
+      ...createRuntimePathDependencies(),
     });
 
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
@@ -166,7 +190,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
       runtimeId: () => "runtime-claude",
       systemCommands: createSystemCommands(),
-      toolDiscovery: createToolDiscovery(),
+      ...createRuntimePathDependencies(),
     });
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
 
@@ -187,7 +211,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
         return "runtime-claude";
       },
       systemCommands: createSystemCommands(),
-      toolDiscovery: createToolDiscovery({ claudePath: null }),
+      ...createRuntimePathDependencies(null),
     });
 
     const failure = await firstFailure(starter.startWorkspaceRuntime(createStartInput()));

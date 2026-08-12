@@ -109,6 +109,9 @@ export type WorkspaceBranchStateContextValue = Pick<
 
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
+  isLoadingWorkspaces: boolean;
+  workspaceLoadError: Error | null;
+  retryWorkspaces: () => Promise<void>;
 };
 
 export type ChecksStateContextValue = {

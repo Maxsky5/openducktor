@@ -1,4 +1,8 @@
-import { type DirectoryListing, directoryListingSchema } from "@openducktor/contracts";
+import {
+  type DirectoryListing,
+  directoryListingSchema,
+  type FilesystemListDirectoryInput,
+} from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Data, Effect } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -19,9 +23,6 @@ export class FilesystemListDirectoryError extends Data.TaggedError("FilesystemLi
     );
   }
 }
-export type FilesystemListDirectoryInput = {
-  path?: string;
-};
 export type FilesystemService = {
   listDirectory(
     input?: FilesystemListDirectoryInput,
@@ -118,7 +119,11 @@ const pathExistsEffect = (filesystem: FilesystemPort, inputPath: string) =>
         ),
     ),
   );
-const readDirectoryEntriesEffect = (filesystem: FilesystemPort, currentPath: string) =>
+const readDirectoryEntriesEffect = (
+  filesystem: FilesystemPort,
+  currentPath: string,
+  includeFiles: boolean,
+) =>
   Effect.gen(function* () {
     const entries = yield* filesystem
       .readDirectory(currentPath)
@@ -132,7 +137,7 @@ const readDirectoryEntriesEffect = (filesystem: FilesystemPort, currentPath: str
             ),
         ),
       );
-    const directories = [];
+    const visibleEntries = [];
     for (const entry of entries) {
       const metadata = yield* filesystem
         .stat(entry.path)
@@ -146,21 +151,24 @@ const readDirectoryEntriesEffect = (filesystem: FilesystemPort, currentPath: str
               ),
           ),
         );
-      if (!metadata.isDirectory) {
+      if (!metadata.isDirectory && !includeFiles) {
         continue;
       }
-      directories.push({
+      visibleEntries.push({
         name: entry.name,
         path: entry.path,
-        isDirectory: true,
-        isGitRepo: yield* pathExistsEffect(filesystem, filesystem.join(entry.path, ".git")),
+        isDirectory: metadata.isDirectory,
+        isGitRepo: metadata.isDirectory
+          ? yield* pathExistsEffect(filesystem, filesystem.join(entry.path, ".git"))
+          : false,
       });
     }
-    directories.sort((left, right) => {
+    visibleEntries.sort((left, right) => {
+      if (left.isDirectory !== right.isDirectory) return left.isDirectory ? -1 : 1;
       const insensitive = left.name.toLowerCase().localeCompare(right.name.toLowerCase());
       return insensitive === 0 ? left.name.localeCompare(right.name) : insensitive;
     });
-    return directories;
+    return visibleEntries;
   });
 export const createFilesystemService = (filesystem: FilesystemPort): FilesystemService => ({
   listDirectory(input) {
@@ -196,7 +204,11 @@ export const createFilesystemService = (filesystem: FilesystemPort): FilesystemS
         ),
         parentPath: filesystem.parent(currentPath),
         homePath,
-        entries: yield* readDirectoryEntriesEffect(filesystem, currentPath),
+        entries: yield* readDirectoryEntriesEffect(
+          filesystem,
+          currentPath,
+          input?.includeFiles === true,
+        ),
       };
       return directoryListingSchema.parse(listing);
     });

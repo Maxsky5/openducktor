@@ -1,4 +1,9 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentRuntimes,
+  RuntimeDescriptor,
+  RuntimeExecutableCheck,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { validateRuntimeDefinitionsForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "../operations/host";
@@ -19,6 +24,8 @@ const requireCompatibleRuntimeDefinitions = (
 export const runtimeQueryKeys = {
   all: ["runtime"] as const,
   definitions: () => [...runtimeQueryKeys.all, "definitions"] as const,
+  executables: (paths: Record<RuntimeKind, string>) =>
+    [...runtimeQueryKeys.all, "executables", paths] as const,
 };
 
 export const runtimeDefinitionsQueryOptions = () =>
@@ -26,4 +33,18 @@ export const runtimeDefinitionsQueryOptions = () =>
     queryKey: runtimeQueryKeys.definitions(),
     queryFn: async () => requireCompatibleRuntimeDefinitions(await host.runtimeDefinitionsList()),
     staleTime: RUNTIME_DEFINITIONS_STALE_TIME_MS,
+  });
+
+export const runtimeExecutablePaths = (runtimes: AgentRuntimes): Record<RuntimeKind, string> => ({
+  opencode: runtimes.opencode.executablePath,
+  codex: runtimes.codex.executablePath,
+  claude: runtimes.claude.executablePath,
+});
+
+export const runtimeExecutablesQueryOptions = (paths: Record<RuntimeKind, string>) =>
+  queryOptions({
+    queryKey: runtimeQueryKeys.executables(paths),
+    queryFn: (): Promise<RuntimeExecutableCheck> =>
+      host.runtimeExecutablesCheck({ mode: "validate", paths }),
+    staleTime: 30_000,
   });

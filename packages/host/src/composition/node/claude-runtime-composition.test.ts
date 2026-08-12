@@ -6,6 +6,7 @@ import { HostDependencyError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 
 const createSystemCommands = (): SystemCommandPort => ({
@@ -15,6 +16,9 @@ const createSystemCommands = (): SystemCommandPort => ({
 });
 
 const createToolDiscovery = (): ToolDiscoveryPort => ({
+  discoverTool(toolId) {
+    return this.resolveTool(toolId);
+  },
   resolveTool(toolId) {
     return this.resolveToolPath(toolId).pipe(
       Effect.map((path) => ({
@@ -34,6 +38,17 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
         message: `${toolId} unavailable`,
       }),
     );
+  },
+  validateToolPath(toolId, executablePath) {
+    return toolId === "claude" && executablePath === process.execPath
+      ? Effect.succeed({
+          displayLabel: "Saved path",
+          path: executablePath,
+          sourceCategory: "provided_path",
+        })
+      : Effect.fail(
+          new HostDependencyError({ dependency: toolId, message: `${toolId} unavailable` }),
+        );
   },
 });
 
@@ -80,6 +95,7 @@ describe("createClaudeRuntimeComposition", () => {
       runtimeDistribution: createArtifactRuntimeDistribution({
         mcpLauncher: { kind: "executable", executablePath: process.execPath },
       }),
+      settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
       systemCommands: createSystemCommands(),
       toolDiscovery: createToolDiscovery(),
       workingDirectoryDependencies,

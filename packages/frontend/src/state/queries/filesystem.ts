@@ -22,8 +22,13 @@ const NO_TARGET_BRANCH_QUERY_KEY = "__no_target_branch__";
 
 export const filesystemQueryKeys = {
   all: ["filesystem"] as const,
-  directory: (path?: string) =>
-    [...filesystemQueryKeys.all, "directory", path ?? DEFAULT_PATH_QUERY_KEY] as const,
+  directory: (path?: string, includeFiles = false) =>
+    [
+      ...filesystemQueryKeys.all,
+      "directory",
+      path ?? DEFAULT_PATH_QUERY_KEY,
+      includeFiles,
+    ] as const,
   treeRoot: (rootPath: string) => [...filesystemQueryKeys.all, "tree", rootPath] as const,
   tree: (rootPath: string, targetBranch?: string | null) =>
     [
@@ -48,10 +53,14 @@ export const invalidateWorkspaceFileQueries = async (
 export const directoryListingQueryOptions = (
   path?: string,
   hostClient: FilesystemQueryHost = host,
+  includeFiles = false,
 ) =>
   queryOptions({
-    queryKey: filesystemQueryKeys.directory(path),
-    queryFn: (): Promise<DirectoryListing> => hostClient.filesystemListDirectory(path),
+    queryKey: filesystemQueryKeys.directory(path, includeFiles),
+    queryFn: (): Promise<DirectoryListing> =>
+      includeFiles
+        ? hostClient.filesystemListDirectory({ ...(path ? { path } : {}), includeFiles: true })
+        : hostClient.filesystemListDirectory(path),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });
 

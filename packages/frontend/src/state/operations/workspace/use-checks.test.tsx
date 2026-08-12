@@ -32,7 +32,7 @@ const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck =
   ghAuthOk: true,
   ghAuthLogin: "octocat",
   ghAuthError: null,
-  runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
+  runtimes: [{ kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "0.12.0" }],
   errors: [],
   ...overrides,
 });
@@ -481,7 +481,7 @@ describe("use-checks", () => {
             ghAuthOk: false,
             ghAuthLogin: null,
             ghAuthError: "git missing",
-            runtimes: [{ kind: "opencode", ok: false, version: null }],
+            runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
             errors: ["git missing"],
           });
     });

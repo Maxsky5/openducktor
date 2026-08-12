@@ -11,10 +11,40 @@ export const runtimeHealthSchema = z.object({
   kind: runtimeKindSchema,
   enabled: z.boolean().default(true).optional(),
   ok: z.boolean(),
+  executablePath: z.string().nullable(),
   version: z.string().nullable(),
   error: z.string().nullable().optional(),
 });
 export type RuntimeHealth = z.infer<typeof runtimeHealthSchema>;
+
+export const runtimeExecutableCheckInputSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("discover") }).strict(),
+  z
+    .object({
+      mode: z.literal("validate"),
+      paths: z.record(runtimeKindSchema, z.string()),
+    })
+    .strict(),
+]);
+export type RuntimeExecutableCheckInput = z.infer<typeof runtimeExecutableCheckInputSchema>;
+
+export const runtimeExecutableCheckResultSchema = z
+  .object({
+    kind: runtimeKindSchema,
+    path: z.string(),
+    ok: z.boolean(),
+    version: z.string().nullable(),
+    error: z.string().nullable(),
+  })
+  .strict();
+export type RuntimeExecutableCheckResult = z.infer<typeof runtimeExecutableCheckResultSchema>;
+
+export const runtimeExecutableCheckSchema = z
+  .object({
+    runtimes: z.array(runtimeExecutableCheckResultSchema),
+  })
+  .strict();
+export type RuntimeExecutableCheck = z.infer<typeof runtimeExecutableCheckSchema>;
 
 export const repoStoreHealthCategorySchema = z.enum([
   "healthy",

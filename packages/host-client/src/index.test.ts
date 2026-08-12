@@ -853,7 +853,14 @@ describe("HostClient", () => {
         return {
           gitOk: true,
           gitVersion: "2.45.0",
-          runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
+          runtimes: [
+            {
+              kind: "opencode",
+              ok: true,
+              executablePath: "/bin/opencode",
+              version: "0.12.0",
+            },
+          ],
           errors: [],
         };
       }
@@ -871,6 +878,41 @@ describe("HostClient", () => {
       {
         command: "runtime_check",
         args: { force: true },
+      },
+    ]);
+  });
+
+  test("runtimeExecutablesCheck validates exact paths through its host command", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "runtime_executables_check") {
+        return {
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/opt/opencode",
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.runtimeExecutablesCheck({
+      mode: "validate",
+      paths: { opencode: "/opt/opencode", codex: "", claude: "" },
+    });
+
+    expect(result.runtimes[0]?.path).toBe("/opt/opencode");
+    expect(calls).toEqual([
+      {
+        command: "runtime_executables_check",
+        args: {
+          mode: "validate",
+          paths: { opencode: "/opt/opencode", codex: "", claude: "" },
+        },
       },
     ]);
   });

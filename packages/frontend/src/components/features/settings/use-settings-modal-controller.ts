@@ -13,6 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
@@ -22,6 +23,7 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -217,6 +219,14 @@ export const useSettingsModalController = ({
         : [],
     [runtimeDefinitions, snapshotDraft],
   );
+  const runtimeExecutableQuery = useQuery({
+    ...runtimeExecutablesQueryOptions(
+      snapshotDraft
+        ? runtimeExecutablePaths(snapshotDraft.agentRuntimes)
+        : { opencode: "", codex: "", claude: "" },
+    ),
+    enabled: open && snapshotDraft !== null,
+  });
   const catalogRuntimeKinds = useMemo(
     () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
     [availableRuntimeDefinitions, selectedRepoConfig],
@@ -250,6 +260,7 @@ export const useSettingsModalController = ({
   const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
     runtimeDefinitions,
     snapshotDraft,
+    runtimeExecutableResults: runtimeExecutableQuery.data?.runtimes ?? [],
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
   const codexDangerAcknowledgementKey = useMemo(
@@ -332,14 +343,18 @@ export const useSettingsModalController = ({
       ...settingsSectionErrorCountById,
       repositories:
         settingsSectionErrorCountById.repositories +
-        runtimeAvailabilityValidationState.totalErrorCount +
+        (runtimeAvailabilityValidationState.errorCountByWorkspaceId[selectedWorkspaceId ?? ""] ??
+          0) +
         repoScriptValidationErrorCount,
+      runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors?.length ?? 0,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
     [
       repoScriptValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
-      runtimeAvailabilityValidationState.totalErrorCount,
+      selectedWorkspaceId,
+      runtimeAvailabilityValidationState.errorCountByWorkspaceId,
+      runtimeAvailabilityValidationState.runtimeExecutableErrors?.length,
       settingsSectionErrorCountById,
     ],
   );

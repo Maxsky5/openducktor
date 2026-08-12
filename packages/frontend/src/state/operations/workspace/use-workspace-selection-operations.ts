@@ -27,6 +27,8 @@ type UseWorkspaceSelectionOperationsArgs = {
 
 type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
+  isLoadingWorkspaces: boolean;
+  workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
@@ -106,6 +108,9 @@ export function useWorkspaceSelectionOperations({
   const activeWorkspaceRef = useRef(activeWorkspace);
   const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
   const workspaces = workspaceListQuery.data ?? [];
+  const workspaceLoadError = workspaceListQuery.error
+    ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
+    : null;
   const workspacesRef = useRef(workspaces);
 
   activeWorkspaceRef.current = activeWorkspace;
@@ -353,6 +358,8 @@ export function useWorkspaceSelectionOperations({
 
   return {
     workspaces,
+    isLoadingWorkspaces: workspaceListQuery.isPending,
+    workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,
     addWorkspace,

@@ -1,4 +1,4 @@
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LoaderCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
@@ -57,9 +58,8 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
   }
 };
 
-export const AppShell = memo(function AppShell(): ReactElement {
+const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
-  const { hasWorkspaces } = useWorkspacePresence();
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
@@ -70,7 +70,6 @@ export const AppShell = memo(function AppShell(): ReactElement {
   }
   const diagnosticsAutoOpenedByRepo = diagnosticsAutoOpenedByRepoRef.current;
   const hasActiveWorkspace = activeWorkspace !== null;
-  const isRepositoryModalBlocking = !hasActiveWorkspace && !hasWorkspaces;
   const agentActivity = useShellAgentActivity(activeWorkspace?.repoPath ?? null);
 
   useEffect(() => {
@@ -81,15 +80,9 @@ export const AppShell = memo(function AppShell(): ReactElement {
     setRepositoryModalOpen(true);
   }, [hasActiveWorkspace]);
 
-  const handleRepositoryModalOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && isRepositoryModalBlocking) {
-        return;
-      }
-      setRepositoryModalOpen(open);
-    },
-    [isRepositoryModalBlocking],
-  );
+  const handleRepositoryModalOpenChange = useCallback((open: boolean) => {
+    setRepositoryModalOpen(open);
+  }, []);
 
   const openRepositoryModal = useCallback(() => {
     setRepositoryModalOpen(true);
@@ -226,9 +219,48 @@ export const AppShell = memo(function AppShell(): ReactElement {
       </div>
       <OpenRepositoryModal
         open={isRepositoryModalOpen}
-        canClose={!isRepositoryModalBlocking}
+        canClose
         onOpenChange={handleRepositoryModalOpenChange}
       />
     </>
   );
+});
+
+export const AppShell = memo(function AppShell(): ReactElement {
+  const { hasWorkspaces, isLoadingWorkspaces, workspaceLoadError, retryWorkspaces } =
+    useWorkspacePresence();
+
+  if (isLoadingWorkspaces) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" />
+          Loading workspaces…
+        </div>
+      </main>
+    );
+  }
+
+  if (workspaceLoadError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
+        <div
+          className="flex max-w-md flex-col gap-3 rounded-lg border border-border bg-card p-6"
+          role="alert"
+        >
+          <h1 className="font-semibold">OpenDucktor could not load your workspaces</h1>
+          <p className="text-sm text-muted-foreground">{workspaceLoadError.message}</p>
+          <Button type="button" variant="outline" onClick={() => void retryWorkspaces()}>
+            Retry
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!hasWorkspaces) {
+    return <OnboardingPage />;
+  }
+
+  return <WorkspaceAppShell />;
 });

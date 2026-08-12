@@ -210,7 +210,9 @@ describe("check-diagnostics helpers", () => {
         ghAuthOk: false,
         ghAuthLogin: null,
         ghAuthError: "gh auth missing",
-        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        runtimes: [
+          { kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "1.2.9" },
+        ],
         errors: [],
       },
       runtimeCheckError: null,

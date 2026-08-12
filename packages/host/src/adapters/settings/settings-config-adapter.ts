@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { GlobalConfig } from "@openducktor/contracts";
+import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import { parsePersistedGlobalConfig } from "../../config/global-config";
+import {
+  type LoadedGlobalConfig,
+  parsePersistedGlobalConfig,
+  parsePersistedGlobalConfigV2,
+  readPersistedGlobalConfigVersion,
+} from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
   HostOperationError,
@@ -12,7 +17,7 @@ import {
   toHostPathStatError,
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 
 const USER_SETTINGS_FILENAME = "config.json";
 
@@ -47,14 +52,105 @@ const repoId = (repoPath: string): string => {
 
 export type CreateSettingsConfigAdapterInput = {
   configPath?: string;
+  initializeConfig?: (
+    legacyConfig: PersistedGlobalConfigV2 | null,
+  ) => Effect.Effect<LoadedGlobalConfig, SettingsConfigError>;
 };
+
+const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config: GlobalConfig) =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise({
+      try: () => mkdir(baseDir, { recursive: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "settingsConfig.createConfigDirectory", {
+          path: baseDir,
+        }),
+    }).pipe(
+      Effect.asVoid,
+      Effect.mapError(
+        (error) =>
+          new HostOperationError({
+            operation: "settingsConfig.createConfigDirectory",
+            message: `Failed creating config directory ${baseDir}: ${error.message}`,
+            cause: error,
+            details: { path: baseDir },
+          }),
+      ),
+    );
+
+    const now = yield* Clock.currentTimeMillis;
+    const tempPath = path.join(
+      baseDir,
+      `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${now}`,
+    );
+    const payload = `${JSON.stringify(config, null, 2)}\n`;
+
+    yield* Effect.gen(function* () {
+      yield* Effect.tryPromise(() => writeFile(tempPath, payload, { mode: 0o600 }));
+      yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
+    }).pipe(
+      Effect.mapError((cause) =>
+        toHostOperationError(cause, "settingsConfig.writeConfig", {
+          path: resolvedConfigPath,
+          tempPath,
+        }),
+      ),
+      Effect.mapError(
+        (error) =>
+          new HostOperationError({
+            operation: "settingsConfig.writeConfig",
+            message: `Failed writing config file ${resolvedConfigPath}: ${error.message}`,
+            cause: error,
+            details: { path: resolvedConfigPath, tempPath },
+          }),
+      ),
+    );
+  });
 
 export const createSettingsConfigAdapter = ({
   configPath,
+  initializeConfig,
 }: CreateSettingsConfigAdapterInput = {}): SettingsConfigPort => {
   const resolvedConfigPath =
     configPath ?? path.join(resolveOpenDucktorBaseDir(), USER_SETTINGS_FILENAME);
   const baseDir = path.dirname(resolvedConfigPath);
+  let initializationPromise: Promise<LoadedGlobalConfig> | null = null;
+
+  const initializeOnce = (legacyConfig: PersistedGlobalConfigV2 | null) => {
+    if (!initializeConfig) {
+      return Effect.fail(
+        new HostValidationError({
+          message: `Config file ${resolvedConfigPath} requires runtime path initialization.`,
+          details: { path: resolvedConfigPath },
+        }),
+      );
+    }
+    return Effect.tryPromise({
+      try: () => {
+        if (!initializationPromise) {
+          const currentPromise = Effect.runPromise(
+            initializeConfig(legacyConfig).pipe(
+              Effect.tap((config) => persistGlobalConfig(resolvedConfigPath, baseDir, config)),
+            ),
+          );
+          initializationPromise = currentPromise;
+          const clearInitialization = () => {
+            if (initializationPromise === currentPromise) {
+              initializationPromise = null;
+            }
+          };
+          void currentPromise.then(clearInitialization, clearInitialization);
+        }
+        return initializationPromise;
+      },
+      catch: (cause) =>
+        cause instanceof HostValidationError || cause instanceof HostOperationError
+          ? cause
+          : toHostOperationError(cause, "settingsConfig.initializeConfig", {
+              path: resolvedConfigPath,
+            }),
+    });
+  };
 
   return {
     readConfig() {
@@ -78,11 +174,11 @@ export const createSettingsConfigAdapter = ({
           }),
         );
         if (payload === null) {
-          return null;
+          return initializeConfig ? yield* initializeOnce(null) : null;
         }
 
-        return yield* Effect.try({
-          try: () => parsePersistedGlobalConfig(parseJson(payload)),
+        const parsedPayload = yield* Effect.try({
+          try: () => parseJson(payload),
           catch: (cause) =>
             cause instanceof HostValidationError
               ? new HostValidationError({
@@ -105,57 +201,53 @@ export const createSettingsConfigAdapter = ({
                 }),
           ),
         );
+        const version = yield* Effect.try({
+          try: () => readPersistedGlobalConfigVersion(parsedPayload),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? new HostValidationError({
+                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                  cause,
+                  details: { path: resolvedConfigPath },
+                })
+              : toHostOperationError(cause, "settingsConfig.readConfigVersion", {
+                  path: resolvedConfigPath,
+                }),
+        });
+        if (version === 3) {
+          return yield* Effect.try({
+            try: () => parsePersistedGlobalConfig(parsedPayload),
+            catch: (cause) =>
+              cause instanceof HostValidationError
+                ? new HostValidationError({
+                    message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                    cause,
+                    details: { path: resolvedConfigPath },
+                  })
+                : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                    path: resolvedConfigPath,
+                  }),
+          });
+        }
+
+        const legacyConfig = yield* Effect.try({
+          try: () => parsePersistedGlobalConfigV2(parsedPayload),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? new HostValidationError({
+                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                  cause,
+                  details: { path: resolvedConfigPath },
+                })
+              : toHostOperationError(cause, "settingsConfig.parseLegacyConfig", {
+                  path: resolvedConfigPath,
+                }),
+        });
+        return yield* initializeOnce(legacyConfig);
       });
     },
     writeConfig(config: GlobalConfig) {
-      return Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: () => mkdir(baseDir, { recursive: true }),
-          catch: (cause) =>
-            toHostOperationError(cause, "settingsConfig.createConfigDirectory", {
-              path: baseDir,
-            }),
-        }).pipe(
-          Effect.asVoid,
-          Effect.mapError(
-            (error) =>
-              new HostOperationError({
-                operation: "settingsConfig.createConfigDirectory",
-                message: `Failed creating config directory ${baseDir}: ${error.message}`,
-                cause: error,
-                details: { path: baseDir },
-              }),
-          ),
-        );
-
-        const now = yield* Clock.currentTimeMillis;
-        const tempPath = path.join(
-          baseDir,
-          `.${path.basename(resolvedConfigPath)}.tmp-${process.pid}-${now}`,
-        );
-        const payload = `${JSON.stringify(config, null, 2)}\n`;
-
-        yield* Effect.gen(function* () {
-          yield* Effect.tryPromise(() => writeFile(tempPath, payload, { mode: 0o600 }));
-          yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
-        }).pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(cause, "settingsConfig.writeConfig", {
-              path: resolvedConfigPath,
-              tempPath,
-            }),
-          ),
-          Effect.mapError(
-            (error) =>
-              new HostOperationError({
-                operation: "settingsConfig.writeConfig",
-                message: `Failed writing config file ${resolvedConfigPath}: ${error.message}`,
-                cause: error,
-                details: { path: resolvedConfigPath, tempPath },
-              }),
-          ),
-        );
-      });
+      return persistGlobalConfig(resolvedConfigPath, baseDir, config);
     },
     defaultWorktreeBasePath(workspaceId) {
       return path.join(baseDir, "worktrees", workspaceId.trim());

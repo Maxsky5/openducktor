@@ -14,6 +14,9 @@ import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
+import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
+import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
+import { createRuntimeExecutableCheckService } from "../../application/runtimes/runtime-executable-check-service";
 import { toHostOperationError } from "../../effect/host-errors";
 import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
@@ -129,6 +132,17 @@ const makeNodeHostDefaultPorts = (
     const runtimeHealth =
       input.runtimeHealth ??
       createRuntimeHealthProbe(systemCommands, toolDiscovery, input.runtimeDistribution);
+    const runtimeDefinitionsService = createRuntimeDefinitionsService();
+    const runtimeExecutableCheckService = createRuntimeExecutableCheckService({
+      runtimeDefinitionsService,
+      runtimeHealth,
+      toolDiscovery,
+    });
+    const settingsConfig =
+      input.settingsConfig ??
+      createSettingsConfigAdapter({
+        initializeConfig: createRuntimeConfigInitializer(runtimeExecutableCheckService),
+      });
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
@@ -158,7 +172,7 @@ const makeNodeHostDefaultPorts = (
       processEnv,
       runtimeDistribution: input.runtimeDistribution,
       runtimeHealth,
-      settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
+      settingsConfig,
       systemCommands,
       toolDiscovery,
       terminalPty: input.terminalPty,

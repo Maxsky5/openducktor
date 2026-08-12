@@ -6,13 +6,26 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { fireEvent, screen, render as testingRender, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
 enableReactActEnvironment();
+
+const withQueryProvider = (ui: ReactNode): ReactNode => (
+  <QueryProvider useIsolatedClient>{ui}</QueryProvider>
+);
+
+const render = (ui: ReactNode) => {
+  const rendered = testingRender(withQueryProvider(ui));
+  return {
+    ...rendered,
+    rerender: (next: ReactNode) => rendered.rerender(withQueryProvider(next)),
+  };
+};
 
 const createSection = (
   agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES,
@@ -47,7 +60,12 @@ const renderCodexSectionHtml = (
 
 describe("AgentRuntimesSection", () => {
   test("shows vertical runtime tabs with status badges and selects OpenCode first", () => {
-    const renderer = render(createSection());
+    const renderer = render(
+      createSection({
+        ...DEFAULT_AGENT_RUNTIMES,
+        opencode: { ...DEFAULT_AGENT_RUNTIMES.opencode, enabled: true },
+      }),
+    );
 
     try {
       const tabs = screen.getAllByRole("tab");
@@ -91,7 +109,16 @@ describe("AgentRuntimesSection", () => {
           ghAuthOk: true,
           ghAuthLogin: null,
           ghAuthError: null,
-          runtimes: [{ kind: "claude", enabled: false, ok: true, version: "2.1.0", error: null }],
+          runtimes: [
+            {
+              kind: "claude",
+              enabled: false,
+              ok: true,
+              executablePath: "/bin/claude",
+              version: "2.1.0",
+              error: null,
+            },
+          ],
           errors: [],
         },
         disabled: false,
@@ -124,7 +151,7 @@ describe("AgentRuntimesSection", () => {
     const renderer = render(
       createSection({
         ...DEFAULT_AGENT_RUNTIMES,
-        opencode: { enabled: false },
+        opencode: { enabled: false, executablePath: "" },
       }),
     );
 

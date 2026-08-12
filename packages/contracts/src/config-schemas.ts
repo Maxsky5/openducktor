@@ -93,9 +93,14 @@ const trimmedRequiredString = (field: string) =>
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, `${field} cannot be blank.`);
 
-export const agentRuntimeEnabledConfigSchema = z
+const persistedAgentRuntimeEnabledConfigV2Schema = z
   .object({
     enabled: z.boolean(),
+  })
+  .strict();
+export const agentRuntimeEnabledConfigSchema = persistedAgentRuntimeEnabledConfigV2Schema
+  .extend({
+    executablePath: z.string(),
   })
   .strict();
 export const agentRuntimeConfigSchema = agentRuntimeEnabledConfigSchema;
@@ -143,14 +148,17 @@ const codexRoleOverridesSchema = z
     (overrides) => overrides as Partial<Record<AgentRole, z.infer<typeof codexRoleOverrideSchema>>>,
   );
 
-export const codexRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
+const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2Schema
   .extend({
     defaults: codexPolicyFieldsSchema.default(() => createDefaultCodexRuntimePolicy()),
     roleOverrides: codexRoleOverridesSchema.default({}),
   })
-  .strict()
-  .superRefine((config, context) => {
-    if (config.roleOverrides.build?.sandboxMode === "read-only") {
+  .strict();
+
+const withCodexRuntimeValidation = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.superRefine((config, context) => {
+    const candidate = config as CodexRuntimeConfig;
+    if (candidate.roleOverrides.build?.sandboxMode === "read-only") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message:
@@ -159,6 +167,15 @@ export const codexRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
       });
     }
   });
+
+export const codexRuntimeConfigSchema = withCodexRuntimeValidation(
+  agentRuntimeEnabledConfigSchema
+    .extend({
+      defaults: codexPolicyFieldsSchema.default(() => createDefaultCodexRuntimePolicy()),
+      roleOverrides: codexRoleOverridesSchema.default({}),
+    })
+    .strict(),
+);
 export type CodexRuntimeConfig = z.infer<typeof codexRuntimeConfigSchema>;
 
 export type AgentRuntimeConfig = AgentRuntimeEnabledConfig | CodexRuntimeConfig;
@@ -175,9 +192,14 @@ type DefaultAgentRuntimes = {
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
-  opencode: { enabled: true },
-  codex: { enabled: false, defaults: createDefaultCodexRuntimePolicy(), roleOverrides: {} },
-  claude: { enabled: false },
+  opencode: { enabled: false, executablePath: "" },
+  codex: {
+    enabled: false,
+    executablePath: "",
+    defaults: createDefaultCodexRuntimePolicy(),
+    roleOverrides: {},
+  },
+  claude: { enabled: false, executablePath: "" },
 });
 
 export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes();
@@ -192,13 +214,14 @@ export const agentRuntimesSchema = z
   .transform(
     (value): AgentRuntimes => ({
       ...value,
-      opencode: value.opencode ?? { enabled: true },
+      opencode: value.opencode ?? { enabled: false, executablePath: "" },
       codex: value.codex ?? {
         enabled: false,
+        executablePath: "",
         defaults: createDefaultCodexRuntimePolicy(),
         roleOverrides: {},
       },
-      claude: value.claude ?? { enabled: false },
+      claude: value.claude ?? { enabled: false, executablePath: "" },
     }),
   )
   .default(() => createDefaultAgentRuntimes());
@@ -521,8 +544,34 @@ const themeValueSchema = z.enum(["light", "dark"]);
 export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
 export type Theme = z.infer<typeof themeValueSchema>;
 
-export const globalConfigSchema = z.object({
-  version: z.literal(2),
+const persistedAgentRuntimesV2Schema = z
+  .object({
+    opencode: persistedAgentRuntimeEnabledConfigV2Schema.optional(),
+    codex: withCodexRuntimeValidation(persistedCodexRuntimeConfigV2Schema).optional(),
+    claude: persistedAgentRuntimeEnabledConfigV2Schema.optional(),
+  })
+  .catchall(persistedAgentRuntimeEnabledConfigV2Schema)
+  .transform((value) => ({
+    ...value,
+    opencode: value.opencode ?? { enabled: true },
+    codex: value.codex ?? {
+      enabled: false,
+      defaults: createDefaultCodexRuntimePolicy(),
+      roleOverrides: {},
+    },
+    claude: value.claude ?? { enabled: false },
+  }))
+  .default(() => ({
+    opencode: { enabled: true },
+    codex: {
+      enabled: false,
+      defaults: createDefaultCodexRuntimePolicy(),
+      roleOverrides: {},
+    },
+    claude: { enabled: false },
+  }));
+
+const globalConfigSharedShape = {
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
@@ -532,11 +581,23 @@ export const globalConfigSchema = z.object({
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
-  agentRuntimes: agentRuntimesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
+};
+
+export const persistedGlobalConfigV2Schema = z.object({
+  version: z.literal(2),
+  ...globalConfigSharedShape,
+  agentRuntimes: persistedAgentRuntimesV2Schema,
+});
+export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
+
+export const globalConfigSchema = z.object({
+  version: z.literal(3),
+  ...globalConfigSharedShape,
+  agentRuntimes: agentRuntimesSchema,
 });
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
 export type GlobalConfig = ParsedGlobalConfig;

@@ -1,6 +1,6 @@
 import type { ToolExecutableSourceCategory } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
-import type { HostDependencyError, HostValidationError } from "../effect/host-errors";
+import { Context, Effect } from "effect";
+import { HostDependencyError, type HostValidationError } from "../effect/host-errors";
 
 export const TOOL_DISCOVERY_IDS = [
   "bun",
@@ -27,9 +27,41 @@ export type ResolvedTool = {
 };
 
 export type ToolDiscoveryPort = {
+  discoverTool?(toolId: ToolDiscoveryId): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
   resolveTool(toolId: ToolDiscoveryId): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
   resolveToolPath(toolId: ToolDiscoveryId): Effect.Effect<string, ToolDiscoveryError>;
+  validateToolPath?(
+    toolId: ToolDiscoveryId,
+    executablePath: string,
+  ): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
 };
+
+export const discoverToolFresh = (port: ToolDiscoveryPort, toolId: ToolDiscoveryId) =>
+  port.discoverTool
+    ? port.discoverTool(toolId)
+    : Effect.fail(
+        new HostDependencyError({
+          dependency: toolId,
+          operation: "toolDiscovery.discoverToolFresh",
+          message: `Fresh discovery is not configured for ${toolId}.`,
+        }),
+      );
+
+export const validateExactToolPath = (
+  port: ToolDiscoveryPort,
+  toolId: ToolDiscoveryId,
+  executablePath: string,
+) =>
+  port.validateToolPath
+    ? port.validateToolPath(toolId, executablePath)
+    : Effect.fail(
+        new HostDependencyError({
+          dependency: toolId,
+          operation: "toolDiscovery.validateExactToolPath",
+          message: `Exact-path validation is not configured for ${toolId}: ${executablePath}`,
+          details: { executablePath },
+        }),
+      );
 
 export class ToolDiscoveryPortTag extends Context.Tag("@openducktor/host/ToolDiscoveryPort")<
   ToolDiscoveryPortTag,

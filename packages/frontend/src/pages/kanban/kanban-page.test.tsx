@@ -280,6 +280,9 @@ const createWorkspaceBranchStateValue = (): WorkspaceBranchStateContextValue => 
 
 const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
   hasWorkspaces: true,
+  isLoadingWorkspaces: false,
+  workspaceLoadError: null,
+  retryWorkspaces: async () => {},
 });
 
 const createAgentOperationsValue = (): AgentOperationsContextValue => ({

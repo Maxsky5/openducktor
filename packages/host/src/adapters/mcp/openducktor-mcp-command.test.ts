@@ -145,6 +145,12 @@ describe("resolveOpenDucktorMcpCommand", () => {
             },
           }),
           toolDiscovery: {
+            discoverTool: (toolId) =>
+              Effect.succeed({
+                displayLabel: "Test tool",
+                path: `/resolved/${toolId}`,
+                sourceCategory: "provided_path",
+              }),
             resolveTool: (toolId) =>
               Effect.succeed({
                 displayLabel: "Test tool",
@@ -152,6 +158,12 @@ describe("resolveOpenDucktorMcpCommand", () => {
                 sourceCategory: "provided_path",
               }),
             resolveToolPath: (toolId) => Effect.succeed(`/resolved/${toolId}`),
+            validateToolPath: (toolId, executablePath) =>
+              Effect.succeed({
+                displayLabel: `Saved ${toolId}`,
+                path: executablePath,
+                sourceCategory: "provided_path",
+              }),
           },
         }),
       ),
@@ -231,6 +243,13 @@ describe("resolveOpenDucktorMcpCommand", () => {
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createSourceRuntimeDistribution(root),
           toolDiscovery: {
+            discoverTool: () =>
+              Effect.fail(
+                new HostValidationError({
+                  field: "OPENDUCKTOR_BUN_PATH",
+                  message: "Configured bun override is invalid.",
+                }),
+              ),
             resolveTool: () =>
               Effect.fail(
                 new HostValidationError({
@@ -239,6 +258,13 @@ describe("resolveOpenDucktorMcpCommand", () => {
                 }),
               ),
             resolveToolPath: () =>
+              Effect.fail(
+                new HostValidationError({
+                  field: "OPENDUCKTOR_BUN_PATH",
+                  message: "Configured bun override is invalid.",
+                }),
+              ),
+            validateToolPath: () =>
               Effect.fail(
                 new HostValidationError({
                   field: "OPENDUCKTOR_BUN_PATH",

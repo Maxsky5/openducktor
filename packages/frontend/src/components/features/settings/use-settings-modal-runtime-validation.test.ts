@@ -13,9 +13,9 @@ const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     autopilot: createDefaultAutopilotSettings(),
     agentRuntimes: {
-      opencode: { enabled: true },
+      opencode: { enabled: true, executablePath: "/bin/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-      claude: { enabled: false },
+      claude: { enabled: false, executablePath: "" },
     },
     workspaces: {
       repo: {
@@ -71,12 +71,40 @@ describe("settings runtime availability validation", () => {
     expect(validation.errorsByWorkspaceId).toEqual({});
   });
 
+  test("reports an enabled runtime whose saved executable path is invalid", () => {
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft: createSnapshot(),
+      runtimeExecutableResults: [
+        {
+          kind: "opencode",
+          path: "/missing/opencode",
+          ok: false,
+          version: null,
+          error: "Executable does not exist: /missing/opencode",
+        },
+        {
+          kind: "codex",
+          path: "",
+          ok: false,
+          version: null,
+          error: "Executable path is empty.",
+        },
+      ],
+    });
+
+    expect(validation.runtimeExecutableErrors).toEqual([
+      "Executable does not exist: /missing/opencode",
+    ]);
+    expect(validation.totalErrorCount).toBe(3);
+  });
+
   test("reports configured disabled runtimes without substituting another runtime", () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes = {
-      opencode: { enabled: false },
+      opencode: { enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-      claude: { enabled: false },
+      claude: { enabled: false, executablePath: "" },
     };
     const repoConfig = snapshotDraft.workspaces.repo;
     if (!repoConfig) {

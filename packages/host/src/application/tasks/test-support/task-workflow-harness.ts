@@ -329,7 +329,7 @@ const createBuildSettingsConfig = (
     readConfig() {
       return Effect.succeed(
         globalConfigSchema.parse({
-          version: 2,
+          version: 3,
           workspaces: {
             repo: {
               workspaceId: "repo",

@@ -1,6 +1,7 @@
 import type {
   RepoConfig,
   RuntimeDescriptor,
+  RuntimeExecutableCheckResult,
   RuntimeKind,
   SettingsSnapshot,
 } from "@openducktor/contracts";
@@ -9,12 +10,14 @@ import { getAvailableRuntimeDefinitions, runtimeLabelFor } from "@/lib/agent-run
 import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {
+  runtimeExecutableErrors?: string[];
   errorsByWorkspaceId: Record<string, string[]>;
   errorCountByWorkspaceId: Record<string, number>;
   totalErrorCount: number;
 };
 
 const EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE: RuntimeAvailabilityValidationState = {
+  runtimeExecutableErrors: [],
   errorsByWorkspaceId: {},
   errorCountByWorkspaceId: {},
   totalErrorCount: 0,
@@ -71,9 +74,11 @@ const buildRepoRuntimeAvailabilityErrors = ({
 export const buildRuntimeAvailabilityValidationState = ({
   runtimeDefinitions,
   snapshotDraft,
+  runtimeExecutableResults,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot;
+  runtimeExecutableResults?: RuntimeExecutableCheckResult[];
 }): RuntimeAvailabilityValidationState => {
   if (runtimeDefinitions.length === 0) {
     return EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE;
@@ -83,7 +88,17 @@ export const buildRuntimeAvailabilityValidationState = ({
     runtimeDefinitions,
     agentRuntimes: snapshotDraft.agentRuntimes,
   });
-  let totalErrorCount = 0;
+  const runtimeExecutableErrors = runtimeExecutableResults
+    ? runtimeDefinitions.flatMap((definition) => {
+        if (!snapshotDraft.agentRuntimes[definition.kind].enabled) return [];
+        const result = runtimeExecutableResults.find(
+          (candidate) => candidate.kind === definition.kind,
+        );
+        if (result?.ok) return [];
+        return [result?.error ?? `${definition.label} needs a valid executable path.`];
+      })
+    : [];
+  let totalErrorCount = runtimeExecutableErrors.length;
   const errorsByWorkspaceId: Record<string, string[]> = {};
   const errorCountByWorkspaceId: Record<string, number> = {};
 
@@ -102,6 +117,7 @@ export const buildRuntimeAvailabilityValidationState = ({
   }
 
   return {
+    runtimeExecutableErrors,
     errorsByWorkspaceId,
     errorCountByWorkspaceId,
     totalErrorCount,
@@ -111,9 +127,11 @@ export const buildRuntimeAvailabilityValidationState = ({
 export const useSettingsModalRuntimeValidation = ({
   runtimeDefinitions,
   snapshotDraft,
+  runtimeExecutableResults,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot | null;
+  runtimeExecutableResults?: RuntimeExecutableCheckResult[];
 }): RuntimeAvailabilityValidationState => {
   return useMemo(() => {
     if (!snapshotDraft) {
@@ -122,6 +140,7 @@ export const useSettingsModalRuntimeValidation = ({
     return buildRuntimeAvailabilityValidationState({
       runtimeDefinitions,
       snapshotDraft,
+      ...(runtimeExecutableResults ? { runtimeExecutableResults } : {}),
     });
-  }, [runtimeDefinitions, snapshotDraft]);
+  }, [runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
 };

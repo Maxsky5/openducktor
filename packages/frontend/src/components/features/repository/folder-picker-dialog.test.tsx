@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DirectoryListing } from "@openducktor/contracts";
+import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -20,8 +20,11 @@ const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryList
   ...overrides,
 });
 
+type ListDirectoryInput = string | FilesystemListDirectoryInput | undefined;
+const pathFromInput = (input: ListDirectoryInput): string | undefined =>
+  typeof input === "string" ? input : input?.path;
 const filesystemListDirectoryMock = mock(
-  async (_path?: string): Promise<DirectoryListing> => createListing(),
+  async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
 
 describe("FolderPickerDialog", () => {
@@ -33,12 +36,15 @@ describe("FolderPickerDialog", () => {
     confirmLabel: string;
     initialPath?: string;
     requireGitRepo?: boolean;
+    selectionMode?: "directory" | "file";
     onConfirm: (path: string) => Promise<void>;
   }) => ReactNode;
 
   beforeEach(async () => {
     filesystemListDirectoryMock.mockReset();
-    filesystemListDirectoryMock.mockImplementation(async (_path?: string) => createListing());
+    filesystemListDirectoryMock.mockImplementation(async (_input?: ListDirectoryInput) =>
+      createListing(),
+    );
 
     mock.module("@/state/operations/host", () => ({
       host: {
@@ -65,6 +71,7 @@ describe("FolderPickerDialog", () => {
     props?: Partial<{
       onConfirm: (path: string) => Promise<void>;
       initialPath: string;
+      selectionMode: "directory" | "file";
     }>,
   ) => {
     return render(
@@ -76,6 +83,7 @@ describe("FolderPickerDialog", () => {
           description="Browse the filesystem"
           confirmLabel="Select Folder"
           onConfirm={props?.onConfirm ?? (async () => {})}
+          selectionMode={props?.selectionMode ?? "directory"}
           {...(props?.initialPath ? { initialPath: props.initialPath } : {})}
         />
       </QueryProvider>,
@@ -83,7 +91,8 @@ describe("FolderPickerDialog", () => {
   };
 
   test("loads directories, filters entries, and navigates into a child directory", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/Users/dev/apps") {
         return createListing({
           currentPath: "/Users/dev/apps",
@@ -143,10 +152,38 @@ describe("FolderPickerDialog", () => {
     }
   });
 
+  test("selects a file and requests file entries only in file mode", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      expect(typeof input === "object" ? input.includeFiles : false).toBe(true);
+      return createListing({
+        entries: [
+          {
+            name: "codex",
+            path: "/Users/dev/codex",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("supports parent and home navigation, manual path loading, and current-path confirmation", async () => {
     const onConfirm = mock(async (_path: string) => {});
 
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       switch (path) {
         case "/Users/dev/projects":
           return createListing({
@@ -223,7 +260,8 @@ describe("FolderPickerDialog", () => {
   });
 
   test("disables confirmation until the current folder is a git repository when required", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/Users/dev/repo-one") {
         return createListing({
           currentPath: "/Users/dev/repo-one",
@@ -285,7 +323,8 @@ describe("FolderPickerDialog", () => {
   });
 
   test("shows actionable errors for invalid manual paths and disables confirmation until a new path resolves", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/missing") {
         throw new Error("Directory does not exist: /missing");
       }

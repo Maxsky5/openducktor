@@ -12,6 +12,7 @@ import {
   resolveCodexEffectivePolicy,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +25,10 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
+import { host } from "@/state/operations/host";
+import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
@@ -132,6 +136,7 @@ const sortRuntimeDefinitionsForSettings = (
 
 const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig => ({
   enabled: config.enabled,
+  executablePath: config.executablePath,
   defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY, ...config.defaults },
   roleOverrides: config.roleOverrides ?? {},
 });
@@ -732,9 +737,33 @@ export function AgentRuntimesSection({
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
+  const [isCheckingExecutables, setIsCheckingExecutables] = useState(false);
+  const executablePaths = runtimeExecutablePaths(agentRuntimes);
+  const executableQuery = useQuery(runtimeExecutablesQueryOptions(executablePaths));
   const selectedDefinition =
     sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
     sortedRuntimeDefinitions[0];
+
+  const checkAgain = async (): Promise<void> => {
+    setIsCheckingExecutables(true);
+    try {
+      const discovered = await host.runtimeExecutablesCheck({ mode: "discover" });
+      const rowsByKind = new Map(discovered.runtimes.map((row) => [row.kind, row]));
+      onUpdateAgentRuntimes((current) => ({
+        ...current,
+        opencode: {
+          ...current.opencode,
+          executablePath: rowsByKind.get("opencode")?.path ?? "",
+        },
+        codex: { ...current.codex, executablePath: rowsByKind.get("codex")?.path ?? "" },
+        claude: { ...current.claude, executablePath: rowsByKind.get("claude")?.path ?? "" },
+      }));
+    } catch (error) {
+      toast.error("Failed to check runtime executables", { description: errorMessage(error) });
+    } finally {
+      setIsCheckingExecutables(false);
+    }
+  };
 
   return (
     <div className="grid gap-4 p-4">
@@ -745,6 +774,16 @@ export function AgentRuntimesSection({
           sessions can use them.
         </p>
       </div>
+
+      <RuntimeExecutablePanel
+        runtimes={agentRuntimes}
+        definitions={sortedRuntimeDefinitions}
+        results={executableQuery.data?.runtimes ?? []}
+        disabled={disabled}
+        isChecking={isCheckingExecutables || executableQuery.isFetching}
+        onChange={(next) => onUpdateAgentRuntimes(() => next)}
+        onCheckAgain={() => void checkAgain()}
+      />
 
       {selectedDefinition ? (
         <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[14rem_minmax(0,1fr)]">

@@ -4,10 +4,8 @@ import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sess
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/opencode-live-session-adapter";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
-import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-discovery-file";
 import {
   createMcpHostBridgeServer,
-  type McpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
 } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
@@ -33,23 +31,14 @@ import {
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
-import type { TaskAssetReadService } from "../../application/task-assets/task-asset-read-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
-import type {
-  TaskEventPublicationReporter,
-  TaskSyncLoopHandle,
-} from "../../application/tasks/sync/task-sync-service";
+import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
-import {
-  createTerminalService,
-  type TerminalService,
-} from "../../application/terminals/terminal-service";
+import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
-import type { HostEventBusPort } from "../../events/host-event-bus";
-import type { TaskEventStreamPort } from "../../events/task-event-stream";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
@@ -73,47 +62,30 @@ import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/wo
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import {
   createEffectHostCommandRouter,
-  type EffectHostCommandRouter,
   type HostCommandRouter,
   toPromiseHostCommandRouter,
 } from "../../interface/router/host-command-router";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
   createStopTerminalsStep,
-  type HostLifecycleLogger,
   runShutdownSteps,
   writeHostLifecycleLog,
 } from "../host-lifecycle";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
-import {
-  type CreateNodeHostDefaultPortsInput,
-  createNodeHostDefaultPorts,
-} from "./node-host-default-ports";
+import type {
+  CreateNodeHostCommandRouterInput,
+  EffectNodeHostCommandRouter,
+} from "./node-host-command-router-types";
+import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
+import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
-export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
-  clientVersion?: string;
-  eventBus?: HostEventBusPort;
-  lifecycleLogger?: HostLifecycleLogger;
-  mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
-  mcpHostBridge?: McpHostBridgeServer;
-  onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
-  taskEventPublicationReporter: TaskEventPublicationReporter;
-  runtimeRegistry?: RuntimeRegistryPort;
-  taskStore?: TaskStorePort;
-};
-export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
-  readonly taskAssetReadService: TaskAssetReadService;
-  readonly taskEventStream: TaskEventStreamPort;
-  readonly terminalService: TerminalService;
-};
+export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 
 export const createNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
@@ -192,6 +164,7 @@ export const createNodeEffectHostCommandRouter = (
     onBackgroundFailure,
     processEnv,
     runtimeDistribution,
+    settingsConfig,
     systemCommands,
     toolDiscovery,
     workingDirectoryDependencies: claudeWorkingDirectoryDependencies,
@@ -218,6 +191,7 @@ export const createNodeEffectHostCommandRouter = (
     claude: claudeRuntime.workspaceStarter,
     codex: createCodexWorkspaceRuntimeStarter({
       toolDiscovery,
+      settingsConfig,
       codexAppServer: effectiveCodexTransportRegistry,
       liveSessionLifecycle: agentSessionLiveStateService,
       prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
@@ -243,6 +217,7 @@ export const createNodeEffectHostCommandRouter = (
     }),
     opencode: createOpenCodeWorkspaceRuntimeStarter({
       toolDiscovery,
+      settingsConfig,
       processEnv,
       runtimeDistribution,
       liveSessionLifecycle: agentSessionLiveStateService,
@@ -481,6 +456,11 @@ export const createNodeEffectHostCommandRouter = (
       ...createOpenInToolsCommandHandlers(openInToolsService),
       ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
       ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
+      ...createNodeRuntimeExecutableCommandHandlers({
+        runtimeDefinitionsService,
+        runtimeHealth,
+        toolDiscovery,
+      }),
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
       ...createSystemPlatformCommandHandlers(),

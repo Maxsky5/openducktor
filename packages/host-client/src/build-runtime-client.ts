@@ -13,11 +13,15 @@ import {
   type RepoRuntimeHealthCheck,
   type RuntimeCheck,
   type RuntimeDescriptor,
+  type RuntimeExecutableCheck,
+  type RuntimeExecutableCheckInput,
   type RuntimeInstanceSummary,
   type RuntimeKind,
   repoRuntimeHealthCheckSchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
+  runtimeExecutableCheckInputSchema,
+  runtimeExecutableCheckSchema,
   runtimeInstanceSummarySchema,
   type SystemCheck,
   systemCheckSchema,
@@ -177,6 +181,15 @@ const runtimeList = async (
 const runtimeDefinitionsList = async (invokeFn: InvokeFn): Promise<RuntimeDescriptor[]> => {
   const payload = await invokeFn("runtime_definitions_list", {});
   return parseArray(runtimeDescriptorSchema, payload, "runtime_definitions_list");
+};
+
+const runtimeExecutablesCheck = async (
+  invokeFn: InvokeFn,
+  input: RuntimeExecutableCheckInput,
+): Promise<RuntimeExecutableCheck> => {
+  const parsedInput = runtimeExecutableCheckInputSchema.parse(input);
+  const payload = await invokeFn("runtime_executables_check", parsedInput);
+  return runtimeExecutableCheckSchema.parse(payload);
 };
 
 const taskWorktreeGet = async (
@@ -553,6 +566,12 @@ export class HostAgentClient {
 
   async runtimeDefinitionsList(): Promise<RuntimeDescriptor[]> {
     return runtimeDefinitionsList(this.invokeFn);
+  }
+
+  async runtimeExecutablesCheck(
+    input: RuntimeExecutableCheckInput,
+  ): Promise<RuntimeExecutableCheck> {
+    return runtimeExecutablesCheck(this.invokeFn, input);
   }
 
   async taskWorktreeGet(repoPath: string, taskId: string): Promise<TaskWorktreeSummary | null> {

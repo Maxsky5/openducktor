@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -311,11 +312,18 @@ describe("createClaudeAgentSdkService", () => {
           },
         }),
         sessionStore,
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
         toolDiscovery: {
           resolveTool: () => {
             throw new Error("unused");
           },
           resolveToolPath: () => Effect.succeed("/usr/local/bin/claude"),
+          validateToolPath: (_toolId, executablePath) =>
+            Effect.succeed({
+              displayLabel: "Claude",
+              path: executablePath,
+              sourceCategory: "provided_path",
+            }),
         },
       },
       { loadDetachedSessionContextUsage },
@@ -544,6 +552,7 @@ describe("createClaudeAgentSdkService", () => {
           executablePath: process.execPath,
         },
       }),
+      settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
       sessionStore,
       toolDiscovery: {
         resolveTool: () => Effect.die("unused"),
@@ -556,6 +565,13 @@ describe("createClaudeAgentSdkService", () => {
                 }),
               )
             : Effect.succeed(process.execPath),
+        validateToolPath: () =>
+          Effect.fail(
+            new HostDependencyError({
+              dependency: "claude",
+              message: "claude unavailable",
+            }),
+          ),
       },
     });
 

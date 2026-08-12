@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ResolvedTool, ToolDiscoveryId } from "../../ports/tool-discovery-port";
+import { discoverToolFresh, validateExactToolPath } from "../../ports/tool-discovery-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 import { createToolDiscoveryAdapter, type ToolDiscoveryPathOptions } from "./tool-discovery";
 
@@ -476,5 +477,45 @@ describe("discoverToolPath", () => {
 
     await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe("/path/bun");
     expect(resolveCalls).toBe(1);
+  });
+
+  test("reruns automatic discovery only through the explicit fresh method", async () => {
+    let resolveCalls = 0;
+    const systemCommands = createSystemCommands({ available: ["codex"] });
+    const originalResolve = systemCommands.resolveCommandPath;
+    systemCommands.resolveCommandPath = (command, options) => {
+      resolveCalls += 1;
+      return originalResolve(command, options);
+    };
+    const adapter = createToolDiscoveryAdapter({ env: {}, systemCommands });
+
+    await Effect.runPromise(adapter.resolveTool("codex"));
+    await Effect.runPromise(adapter.resolveTool("codex"));
+    await Effect.runPromise(discoverToolFresh(adapter, "codex"));
+
+    expect(resolveCalls).toBe(2);
+  });
+
+  test("validates only the supplied executable path and never falls back", async () => {
+    await withTempDir(async (root) => {
+      const executable = join(root, "custom-codex");
+      await writeExecutable(executable);
+      const adapter = createToolDiscoveryAdapter({
+        env: {},
+        options: { platform: "linux" },
+        systemCommands: createSystemCommandRunner({ env: { PATH: root }, platform: "linux" }),
+      });
+
+      await expect(
+        Effect.runPromise(validateExactToolPath(adapter, "codex", executable)),
+      ).resolves.toEqual({
+        displayLabel: "Saved path",
+        path: executable,
+        sourceCategory: "provided_path",
+      });
+      await expect(
+        Effect.runPromise(validateExactToolPath(adapter, "codex", join(root, "missing-codex"))),
+      ).rejects.toThrow(`Saved Codex path points to a missing or non-executable file`);
+    });
   });
 });

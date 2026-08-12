@@ -28,19 +28,24 @@ export const makeBuiltInRuntimeDefinitions = (): RuntimeDescriptor[] => [
 ];
 
 export const makeBuiltInRuntimeDiagnostics = (
-  opencode: RuntimeHealth & { kind: "opencode" },
+  opencode: Omit<RuntimeHealth, "executablePath"> & {
+    kind: "opencode";
+    executablePath?: string | null;
+  },
 ): RuntimeCheck["runtimes"] => [
-  structuredClone(opencode),
+  { executablePath: null, ...structuredClone(opencode) },
   {
     kind: "codex",
     enabled: false,
     ok: false,
+    executablePath: null,
     version: null,
   },
   {
     kind: "claude",
     enabled: false,
     ok: false,
+    executablePath: null,
     version: null,
   },
 ];

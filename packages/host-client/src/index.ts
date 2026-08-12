@@ -102,6 +102,7 @@ const TERMINAL_METHODS = [
 const AGENT_METHODS = [
   "systemCheck",
   "runtimeCheck",
+  "runtimeExecutablesCheck",
   "taskStoreCheck",
   "runtimeDefinitionsList",
   "runtimeList",

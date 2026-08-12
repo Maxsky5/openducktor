@@ -128,6 +128,31 @@ describe("createFilesystemService", () => {
       ["zeta", false],
     ]);
   });
+  test("includes files only when the caller requests them", async () => {
+    const filesystem = createFakeFilesystem({
+      canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
+      stats: {
+        "/workspace": true,
+        "/workspace/bin": true,
+        "/workspace/codex": false,
+      },
+      entries: {
+        "/workspace": [
+          { name: "codex", path: "/workspace/codex" },
+          { name: "bin", path: "/workspace/bin" },
+        ],
+      },
+    });
+
+    const listing = await Effect.runPromise(
+      createService(filesystem).listDirectory({ path: "/workspace", includeFiles: true }),
+    );
+
+    expect(listing.entries).toEqual([
+      { name: "bin", path: "/workspace/bin", isDirectory: true, isGitRepo: false },
+      { name: "codex", path: "/workspace/codex", isDirectory: false, isGitRepo: false },
+    ]);
+  });
   test("uses the home directory when path is omitted", async () => {
     const filesystem = createFakeFilesystem({
       canonical: { "/home/dev": "/home/dev" },

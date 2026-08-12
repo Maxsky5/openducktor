@@ -1,28 +1,22 @@
+import {
+  type FilesystemListDirectoryInput,
+  filesystemListDirectoryInputSchema,
+} from "@openducktor/contracts";
 import type { FilesystemService } from "../../application/filesystem/filesystem-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 
-type FilesystemListDirectoryArgs = {
-  path?: unknown;
-};
-
 const parseFilesystemListDirectoryArgs = (
   args: Record<string, unknown> | undefined,
-): { path?: string } => {
-  const { path } = (args ?? {}) as FilesystemListDirectoryArgs;
-  if (path === undefined) {
-    return {};
-  }
-
-  if (typeof path !== "string") {
+): FilesystemListDirectoryInput => {
+  const parsed = filesystemListDirectoryInputSchema.safeParse(args ?? {});
+  if (!parsed.success) {
     throw new HostValidationError({
-      message: "filesystem_list_directory expects optional string argument 'path'.",
-      field: "path",
-      details: { value: path },
+      message: "filesystem_list_directory received invalid arguments.",
+      details: parsed.error.flatten(),
     });
   }
-
-  return { path };
+  return parsed.data;
 };
 
 export const createFilesystemCommandHandlers = (

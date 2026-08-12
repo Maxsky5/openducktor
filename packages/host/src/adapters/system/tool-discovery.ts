@@ -85,6 +85,18 @@ const invalidProvidedToolPathError = (
     details,
   });
 
+const invalidSavedToolPathError = (
+  descriptor: ToolDiscoveryDescriptor,
+  toolId: ToolDiscoveryId,
+  message: string,
+  details?: Record<string, unknown>,
+) =>
+  new HostValidationError({
+    field: `agentRuntimes.${toolId}.executablePath`,
+    message: `Saved ${descriptor.displayName} path ${message}`,
+    details,
+  });
+
 const resolveExplicitToolPathSource = ({
   context,
   detailKey,
@@ -352,9 +364,26 @@ export const createToolDiscoveryAdapter = ({
   };
 
   return {
+    discoverTool(toolId) {
+      return discoverToolPath(toolId, systemCommands, env, options);
+    },
     resolveTool,
     resolveToolPath(toolId) {
       return resolveTool(toolId).pipe(Effect.map((resolvedTool) => resolvedTool.path));
+    },
+    validateToolPath(toolId, executablePath) {
+      const descriptor = TOOL_DISCOVERY_DESCRIPTORS[toolId];
+      return resolveExplicitToolPathSource({
+        context: createToolDiscoveryContext(options),
+        detailKey: "executablePath",
+        displayLabel: "Saved path",
+        env,
+        invalidError: (message, details) =>
+          invalidSavedToolPathError(descriptor, toolId, message, details),
+        rawPath: executablePath,
+        sourceCategory: "provided_path",
+        systemCommands,
+      });
     },
   };
 };

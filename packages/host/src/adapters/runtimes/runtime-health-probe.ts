@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 import { validateClaudeAgentSdkStartupDependencies } from "../claude/claude-agent-sdk-dependencies";
 import type { HostRuntimeDistribution } from "./runtime-distribution";
 
@@ -12,24 +12,30 @@ const OPENCODE_VERSION_ENV = {
 };
 const OPENCODE_VERSION_TIMEOUT_MS = 10_000;
 
-const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): RuntimeHealth => ({
+const runtimeHealthForMissingCommand = (
+  kind: RuntimeKind,
+  executablePath: string,
+  detail: string,
+): RuntimeHealth => ({
   kind,
   enabled: true,
   ok: false,
+  executablePath,
   version: null,
   error: detail,
 });
 
-type RuntimeHealthProbe = () => Effect.Effect<RuntimeHealth>;
+type RuntimeHealthProbe = (executablePath: string) => Effect.Effect<RuntimeHealth>;
 type RuntimeHealthProbesByKind = Record<RuntimeKind, RuntimeHealthProbe>;
 
 const createOpenCodeRuntimeHealthProbe =
   (systemCommands: SystemCommandPort, toolDiscovery: ToolDiscoveryPort): RuntimeHealthProbe =>
-  () =>
+  (executablePath) =>
     Effect.gen(function* () {
       const health = yield* Effect.either(
         Effect.gen(function* () {
-          const binary = yield* toolDiscovery.resolveToolPath("opencode");
+          const binary = (yield* validateExactToolPath(toolDiscovery, "opencode", executablePath))
+            .path;
           const version = yield* systemCommands.versionCommand(binary, ["--version"], {
             env: OPENCODE_VERSION_ENV,
             timeoutMs: OPENCODE_VERSION_TIMEOUT_MS,
@@ -38,7 +44,8 @@ const createOpenCodeRuntimeHealthProbe =
             kind: "opencode",
             enabled: true,
             ok: version !== null,
-            version: version === null ? null : `${version} (${binary})`,
+            executablePath: binary,
+            version,
             error: version === null ? `Failed reading opencode --version from ${binary}` : null,
           } satisfies RuntimeHealth;
         }),
@@ -46,16 +53,17 @@ const createOpenCodeRuntimeHealthProbe =
       if (health._tag === "Right") {
         return health.right;
       }
-      return runtimeHealthForMissingCommand("opencode", errorMessage(health.left));
+      return runtimeHealthForMissingCommand("opencode", executablePath, errorMessage(health.left));
     });
 
 const createCodexRuntimeHealthProbe =
   (systemCommands: SystemCommandPort, toolDiscovery: ToolDiscoveryPort): RuntimeHealthProbe =>
-  () =>
+  (executablePath) =>
     Effect.gen(function* () {
       const health = yield* Effect.either(
         Effect.gen(function* () {
-          const binary = yield* toolDiscovery.resolveToolPath("codex");
+          const binary = (yield* validateExactToolPath(toolDiscovery, "codex", executablePath))
+            .path;
           const version = yield* systemCommands.versionCommand(binary, ["--version"], {
             timeoutMs: 2_000,
           });
@@ -63,7 +71,8 @@ const createCodexRuntimeHealthProbe =
             kind: "codex",
             enabled: true,
             ok: version !== null,
-            version: version === null ? null : `${version} (${binary})`,
+            executablePath: binary,
+            version,
             error: version === null ? `Failed reading codex --version from ${binary}` : null,
           } satisfies RuntimeHealth;
         }),
@@ -71,24 +80,26 @@ const createCodexRuntimeHealthProbe =
       if (health._tag === "Right") {
         return health.right;
       }
-      return runtimeHealthForMissingCommand("codex", errorMessage(health.left));
+      return runtimeHealthForMissingCommand("codex", executablePath, errorMessage(health.left));
     });
 
 const createClaudeRuntimeHealthProbe =
   (systemCommands: SystemCommandPort, toolDiscovery: ToolDiscoveryPort): RuntimeHealthProbe =>
-  () =>
+  (executablePath) =>
     Effect.gen(function* () {
       const health = yield* Effect.either(
         Effect.gen(function* () {
           const dependencies = yield* validateClaudeAgentSdkStartupDependencies({
             systemCommands,
             toolDiscovery,
+            executablePath,
           });
           return {
             kind: "claude",
             enabled: true,
             ok: true,
-            version: `${dependencies.version} (${dependencies.executablePath})`,
+            executablePath: dependencies.executablePath,
+            version: dependencies.version,
             error: null,
           } satisfies RuntimeHealth;
         }),
@@ -96,7 +107,7 @@ const createClaudeRuntimeHealthProbe =
       if (health._tag === "Right") {
         return health.right;
       }
-      return runtimeHealthForMissingCommand("claude", errorMessage(health.left));
+      return runtimeHealthForMissingCommand("claude", executablePath, errorMessage(health.left));
     });
 
 const createRuntimeHealthProbes = (
@@ -116,8 +127,8 @@ export const createRuntimeHealthProbe = (
 ): RuntimeHealthPort => {
   const probes = createRuntimeHealthProbes(systemCommands, toolDiscovery);
   return {
-    getRuntimeHealth(kind) {
-      return probes[kind]();
+    getRuntimeHealth(kind, executablePath) {
+      return probes[kind](executablePath);
     },
   };
 };

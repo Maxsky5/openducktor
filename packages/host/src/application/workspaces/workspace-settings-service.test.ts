@@ -31,7 +31,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   agentDefaults: {},
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
-  version: 2,
+  version: 3,
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -49,13 +49,14 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     ],
   },
   agentRuntimes: {
-    opencode: { enabled: true },
+    opencode: { enabled: true, executablePath: "/bin/opencode" },
     codex: {
       enabled: false,
+      executablePath: "/bin/codex",
       defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
       roleOverrides: {},
     },
-    claude: { enabled: false },
+    claude: { enabled: false, executablePath: "/bin/claude" },
   },
   workspaces: {},
   workspaceOrder: [],
@@ -144,8 +145,9 @@ describe("createWorkspaceSettingsService", () => {
     const service = createWorkspaceSettingsService(createFakeSettingsConfig());
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     expect(snapshot.theme).toBe("light");
-    expect(snapshot.agentRuntimes?.opencode?.enabled).toBe(true);
+    expect(snapshot.agentRuntimes?.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
+    expect(snapshot.agentRuntimes?.codex?.executablePath).toBe("");
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
@@ -156,8 +158,8 @@ describe("createWorkspaceSettingsService", () => {
       createFakeSettingsConfig({
         config: globalConfig({
           agentRuntimes: {
-            opencode: { enabled: true },
-            codex: { enabled: true },
+            opencode: { enabled: true, executablePath: "/bin/opencode" },
+            codex: { enabled: true, executablePath: "/bin/codex" },
           },
         } as unknown as Partial<GlobalConfig>),
       }),
@@ -167,6 +169,7 @@ describe("createWorkspaceSettingsService", () => {
 
     expect(snapshot.agentRuntimes.codex).toEqual({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: DEFAULT_CODEX_RUNTIME_POLICY,
       roleOverrides: {},
     });
@@ -382,6 +385,7 @@ describe("createWorkspaceSettingsService", () => {
           ...snapshot.agentRuntimes,
           codex: {
             enabled: true,
+            executablePath: "/custom/codex",
             defaults: {
               sandboxMode: "danger-full-access",
               approvalPolicy: "never",
@@ -418,7 +422,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.repoPath).toBe("/canonical/repo");
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
-      version: 2,
+      version: 3,
       activeWorkspace: "repo",
       theme: "light",
       workspaceOrder: ["repo"],
@@ -430,6 +434,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(settingsConfig.writtenConfigs[0]?.agentRuntimes?.codex).toEqual({
       enabled: true,
+      executablePath: "/custom/codex",
       defaults: {
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
@@ -528,6 +533,7 @@ describe("createWorkspaceSettingsService", () => {
             ...snapshot.agentRuntimes,
             codex: {
               enabled: true,
+              executablePath: "/bin/codex",
               defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
               roleOverrides: { build: { sandboxMode: "read-only" } },
             },

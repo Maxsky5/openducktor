@@ -57,6 +57,8 @@ export function useWorkspaceOperations({
 
   const {
     workspaces,
+    isLoadingWorkspaces,
+    workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,
     addWorkspace,
@@ -87,6 +89,8 @@ export function useWorkspaceOperations({
 
   return {
     workspaces,
+    isLoadingWorkspaces,
+    workspaceLoadError,
     branches,
     activeBranch,
     isSwitchingWorkspace,

@@ -1,11 +1,10 @@
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoStoreHealth,
-  type RuntimeCheck,
-  type RuntimeHealth,
-  type SystemCheck,
-  type TaskStoreCheck,
-  type ToolExecutableProvenance,
+import type {
+  RepoStoreHealth,
+  RuntimeCheck,
+  RuntimeHealth,
+  SystemCheck,
+  TaskStoreCheck,
+  ToolExecutableProvenance,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
@@ -28,6 +27,7 @@ import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-
 
 type CachedRuntimeCheck = {
   checkedAt: number;
+  configSignature: string;
   value: RuntimeCheck;
 };
 export type SystemDiagnosticsService = {
@@ -101,8 +101,12 @@ const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck =
     taskStoreError,
   };
 };
-const enabledForRuntime = (config: LoadedGlobalConfig, kind: string): boolean =>
-  config.agentRuntimes[kind]?.enabled ?? DEFAULT_AGENT_RUNTIMES[kind]?.enabled ?? false;
+const runtimeConfigSignature = (config: LoadedGlobalConfig): string =>
+  JSON.stringify(
+    Object.entries(config.agentRuntimes)
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([kind, runtime]) => [kind, runtime.enabled, runtime.executablePath]),
+  );
 type ToolAvailability = ToolExecutableProvenance;
 type ToolVersionAvailability = {
   error: string | null;
@@ -169,7 +173,7 @@ export const createSystemDiagnosticsService = ({
   repoStoreDiagnostics: RepoStoreDiagnostics;
 }): SystemDiagnosticsService => {
   let cachedRuntimeCheck: CachedRuntimeCheck | null = null;
-  const probeRuntimeCheck = () =>
+  const probeRuntimeCheck = (config: LoadedGlobalConfig) =>
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
       const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
@@ -187,13 +191,16 @@ export const createSystemDiagnosticsService = ({
         ghOk && ghTool.path !== null
           ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
           : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
-      const config = yield* loadGlobalConfig(settingsConfig);
       const runtimes: RuntimeHealth[] = [];
       for (const definition of runtimeDefinitionsService.listRuntimeDefinitions()) {
-        const health = yield* runtimeHealth.getRuntimeHealth(definition.kind);
+        const runtimeConfig = config.agentRuntimes[definition.kind];
+        const health = yield* runtimeHealth.getRuntimeHealth(
+          definition.kind,
+          runtimeConfig.executablePath,
+        );
         runtimes.push({
           ...health,
-          enabled: enabledForRuntime(config, definition.kind),
+          enabled: runtimeConfig.enabled,
         });
       }
       const errors = [gitError].filter((error): error is string => error !== null);
@@ -215,17 +222,23 @@ export const createSystemDiagnosticsService = ({
   const runtimeCheck = (forceRefresh?: boolean) =>
     Effect.gen(function* () {
       const force = forceRefresh ?? false;
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const configSignature = runtimeConfigSignature(config);
       if (!force && cachedRuntimeCheck) {
         const now = yield* Clock.currentTimeMillis;
-        if (now - cachedRuntimeCheck.checkedAt <= RUNTIME_CHECK_CACHE_TTL_MS) {
+        if (
+          cachedRuntimeCheck.configSignature === configSignature &&
+          now - cachedRuntimeCheck.checkedAt <= RUNTIME_CHECK_CACHE_TTL_MS
+        ) {
           return cachedRuntimeCheck.value;
         }
         cachedRuntimeCheck = null;
       }
-      const check = yield* probeRuntimeCheck();
+      const check = yield* probeRuntimeCheck(config);
       const checkedAt = yield* Clock.currentTimeMillis;
       cachedRuntimeCheck = {
         checkedAt,
+        configSignature,
         value: check,
       };
       return check;
