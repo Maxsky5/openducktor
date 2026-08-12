@@ -1816,15 +1816,9 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       catalogDeferred.resolve(CATALOG);
     });
-    await harness.waitFor((state) => state.selection?.modelId === "claude-sonnet");
+    await harness.waitFor((state) => !state.isCatalogLoading, 1_000);
 
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-      variant: "default",
-      profileId: "build-agent",
-    });
+    expect(harness.getLatest().selection).toBeNull();
 
     await harness.unmount();
   });

@@ -29,7 +29,7 @@ export const executeFreshStart = async ({
 }: FreshStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
-  const selectedModelRuntimeKind = readFreshSessionRuntimeKind(ctx.role, selectedModel);
+  const selectedModelRuntimeKind = readFreshSessionRuntimeKind(selectedModel);
   const selectedModelWithRuntime = {
     ...selectedModel,
     runtimeKind: selectedModelRuntimeKind,

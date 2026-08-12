@@ -3,6 +3,10 @@ import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import { catalogModelOptionValue } from "@/components/features/agents";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  resolveModelSelectionForProfileChange,
+  resolveModelSelectionForVariantChange,
+} from "./model-selection-state";
 import { reportModelUpdateError } from "./model-update-error";
 
 const findSelectedCatalogModel = (
@@ -61,24 +65,19 @@ export const useModelSelectionActions = ({
       if (loadedSessionIdentity && selectedModel?.liveSessionUpdates?.profile === false) {
         return;
       }
-      const baseSelection =
-        selectedModelSelection ??
-        (() => {
-          const firstModel = selectionCatalog?.models[0];
-          if (!firstModel || !effectiveRuntimeKind) {
-            return null;
-          }
-          return {
-            runtimeKind: effectiveRuntimeKind,
-            providerId: firstModel.providerId,
-            modelId: firstModel.modelId,
-            ...(firstModel.variants[0] ? { variant: firstModel.variants[0] } : {}),
-          } satisfies AgentModelSelection;
-        })();
-      if (!baseSelection) {
+      if (!effectiveRuntimeKind) {
         return;
       }
-      applySelection({ ...baseSelection, profileId });
+      const selection = resolveModelSelectionForProfileChange({
+        catalog: selectionCatalog,
+        currentSelection: selectedModelSelection,
+        profileId,
+        runtimeKind: effectiveRuntimeKind,
+      });
+      if (!selection) {
+        return;
+      }
+      applySelection(selection);
     },
     [
       applySelection,
@@ -134,7 +133,13 @@ export const useModelSelectionActions = ({
       if (!selectedModelSelection) {
         return;
       }
-      applySelection({ ...selectedModelSelection, variant });
+      applySelection(
+        resolveModelSelectionForVariantChange({
+          catalog: selectionCatalog,
+          currentSelection: selectedModelSelection,
+          variant,
+        }),
+      );
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection, selectionCatalog],
   );

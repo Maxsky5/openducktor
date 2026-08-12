@@ -68,6 +68,25 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
+  test("does not clear a loaded session when no profile selection can be resolved", async () => {
+    const updateAgentSessionModel = mock(async () => {});
+    const harness = createHarness(
+      createBaseProps({
+        selectedModelSelection: null,
+        selectionCatalog: null,
+        updateAgentSessionModel,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectAgentProfile("planner");
+    });
+
+    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
   test("blocks live variant changes when model metadata disallows them", async () => {
     const updateAgentSessionModel = mock(async () => {});
     const harness = createHarness(createBaseProps({ updateAgentSessionModel }));

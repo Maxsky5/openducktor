@@ -502,12 +502,12 @@ describe("useKanbanSessionStartFlow", () => {
       startPromise = state.onPullRequestGenerate("TASK-1");
     });
 
-    await harness.waitFor((state) => state.sessionStartModal != null);
+    await harness.waitFor((state) => state.sessionStartModal != null, 1_000);
     const selectedSourceSessionValue =
       harness.getLatest().sessionStartModal?.selectedSourceSessionValue ?? null;
 
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectAgent("builder");
+      state.sessionStartModal?.onSelectRuntimeProfile("builder");
       state.sessionStartModal?.onSelectModel("openai/gpt-5");
     });
 
@@ -527,6 +527,54 @@ describe("useKanbanSessionStartFlow", () => {
         taskId: "TASK-1",
         role: "build",
         startMode: "reuse",
+        sourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/builder-session-2",
+        },
+      }),
+    );
+
+    await harness.unmount();
+  });
+
+  test("pull request generation starts from the selected builder session in fork mode", async () => {
+    const startAgentSession = mock(async () => sessionIdentity("builder-session-fork"));
+    const args = createBaseArgs();
+    args.runSessionStartWorkflow = createRunSessionStartWorkflow({ startAgentSession });
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+
+    let startPromise: Promise<string | undefined> | undefined;
+    await harness.run((state) => {
+      startPromise = state.onPullRequestGenerate("TASK-1");
+    });
+    await harness.waitFor((state) => state.sessionStartModal != null);
+
+    await harness.run((state) => {
+      state.sessionStartModal?.onSelectStartMode("fork");
+    });
+    await harness.waitFor((state) => state.sessionStartModal?.selectedStartMode === "fork", 1_000);
+
+    const modal = harness.getLatest().sessionStartModal;
+    const selectedSourceSessionValue = modal?.selectedSourceSessionValue ?? null;
+    await harness.run(async (state) => {
+      await state.sessionStartModal?.onConfirm({
+        runInBackground: false,
+        startMode: "fork",
+        sourceSessionOptionValue: selectedSourceSessionValue,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await startPromise).toBe("builder-session-fork");
+    expect(startAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "TASK-1",
+        role: "build",
+        startMode: "fork",
         sourceSession: {
           externalSessionId: "builder-session-2",
           runtimeKind: "opencode",

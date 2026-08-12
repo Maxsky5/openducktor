@@ -64,7 +64,7 @@ type UseSessionStartModalStateResult = {
   supportsVariants: boolean;
   catalogError: string | null;
   isCatalogLoading: boolean;
-  agentOptions: ComboboxOption[];
+  runtimeProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
@@ -81,7 +81,7 @@ type UseSessionStartModalStateResult = {
   handleSelectSourceSessionValue: (sourceSessionValue: string) => void;
   handleSelectTargetBranch: (branch: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
-  handleSelectAgent: (profileId: string) => void;
+  handleSelectRuntimeProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectVariant: (variant: string) => void;
 };
@@ -101,6 +101,10 @@ export function useSessionStartModalState({
   const [selectedStartModeForRuntime, setSelectedStartModeForRuntime] =
     useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
+  const activeRoleDefaultSelection = useMemo(
+    () => (activeRole ? roleDefaultSelectionFor(repoSettings, activeRole) : null),
+    [activeRole, repoSettings],
+  );
   const {
     catalog,
     catalogError,
@@ -140,15 +144,15 @@ export function useSessionStartModalState({
     resolvedSelection,
     resetSelection,
     initializeSelection,
-    handleSelectAgent,
+    handleSelectRuntimeProfile,
     handleSelectModel,
     handleSelectRuntime: handleSelectionRuntimeChange,
     handleSelectVariant,
   } = useSessionStartModalSelectionState({
-    activeRole,
     catalog,
+    defaultSelection: activeRoleDefaultSelection,
     intentSelectedModel: intent?.selectedModel ?? null,
-    repoSettings,
+    isSelectionActive: activeRole !== null,
     selection,
     selectedRuntimeKind,
     selectedStartMode,
@@ -196,7 +200,11 @@ export function useSessionStartModalState({
         ),
       );
       if (initialStartMode === "fresh") {
-        initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
+        initializeSelection(
+          roleDefaultSelectionFor(repoSettings, nextIntent.role),
+          initialRuntimeKind,
+          nextIntent.selectedModel ?? null,
+        );
       }
     },
     [
@@ -250,22 +258,22 @@ export function useSessionStartModalState({
     );
   }, [catalog, visibleSelection]);
 
-  const agentOptions = useMemo<ComboboxOption[]>(() => {
+  const runtimeProfileOptions = useMemo<ComboboxOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);
     if (options.length > 0) {
       return options;
     }
 
-    const fallbackAgent = visibleSelection?.profileId;
-    if (!fallbackAgent) {
+    const fallbackProfileId = visibleSelection?.profileId;
+    if (!fallbackProfileId) {
       return [];
     }
-    const accentColor = resolveAgentAccentColor(fallbackAgent);
+    const accentColor = resolveAgentAccentColor(fallbackProfileId);
     return [
       {
-        value: fallbackAgent,
-        label: fallbackAgent,
-        description: "Current default agent",
+        value: fallbackProfileId,
+        label: fallbackProfileId,
+        description: "Current default runtime profile",
         ...(accentColor ? { accentColor } : {}),
       },
     ];
@@ -358,7 +366,7 @@ export function useSessionStartModalState({
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ?? false,
     catalogError,
     isCatalogLoading,
-    agentOptions,
+    runtimeProfileOptions,
     modelOptions,
     modelGroups,
     variantOptions,
@@ -375,7 +383,7 @@ export function useSessionStartModalState({
     handleSelectSourceSessionValue,
     handleSelectTargetBranch,
     handleSelectRuntime,
-    handleSelectAgent,
+    handleSelectRuntimeProfile,
     handleSelectModel,
     handleSelectVariant,
   };

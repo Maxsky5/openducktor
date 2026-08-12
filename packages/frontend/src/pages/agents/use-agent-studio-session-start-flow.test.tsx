@@ -296,14 +296,14 @@ const waitForSessionStartModal = async (
 
 const confirmSessionStartModal = async ({
   harness,
-  agent,
+  profileId,
   modelId,
   variant,
   startMode = "fresh",
   sourceExternalSessionId = null,
 }: {
   harness: ReturnType<typeof createHookHarness>;
-  agent: string;
+  profileId: string;
   modelId: string;
   variant: string;
   startMode?: "fresh" | "reuse" | "fork";
@@ -313,7 +313,7 @@ const confirmSessionStartModal = async ({
 
   if (startMode !== "reuse") {
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectAgent(agent);
+      state.sessionStartModal?.onSelectRuntimeProfile(profileId);
     });
     await harness.run((state) => {
       state.sessionStartModal?.onSelectModel(modelId);
@@ -346,7 +346,7 @@ const confirmSessionStartModal = async ({
 
     const selection = modal.selectedModelSelection;
     return (
-      selection?.profileId === agent &&
+      selection?.profileId === profileId &&
       selection.modelId === modelId.split("/")[1] &&
       (selection.variant ?? "") === variant
     );
@@ -450,7 +450,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "spec",
+      profileId: "spec",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -494,7 +494,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "spec",
+      profileId: "spec",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -535,7 +535,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(harness.getLatest().isStarting).toBe(false);
     await confirmSessionStartModal({
       harness,
-      agent: "planner",
+      profileId: "planner",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -588,7 +588,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "planner",
+      profileId: "planner",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -670,7 +670,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "planner",
+      profileId: "planner",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -904,7 +904,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "planner",
+      profileId: "planner",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -948,7 +948,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "planner",
+      profileId: "planner",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -1051,7 +1051,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "builder",
+      profileId: "builder",
       modelId: "openai/gpt-5",
       variant: "default",
     });
@@ -1137,7 +1137,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "builder",
+      profileId: "builder",
       modelId: "openai/gpt-5",
       variant: "default",
       startMode: "reuse",
@@ -1234,7 +1234,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
     await confirmSessionStartModal({
       harness,
-      agent: "builder",
+      profileId: "builder",
       modelId: "openai/gpt-5",
       variant: "default",
       startMode: "reuse",

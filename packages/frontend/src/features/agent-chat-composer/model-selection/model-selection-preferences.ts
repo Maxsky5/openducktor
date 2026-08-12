@@ -1,98 +1,44 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
-} from "@/features/session-start";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { RepoSettingsInput } from "@/types/state-slices";
+  resolvePreferredModelSelection,
+} from "./model-selection-state";
 
-export const toRoleDefaultModelSelection = (
-  roleDefault: RepoSettingsInput["agentDefaults"][AgentRole] | null | undefined,
-  repoDefaultRuntimeKind?: RepoSettingsInput["defaultRuntimeKind"] | null,
-): AgentModelSelection | null => {
-  if (!roleDefault?.providerId || !roleDefault.modelId) {
-    return null;
-  }
-  const runtimeKind = roleDefault.runtimeKind ?? repoDefaultRuntimeKind;
+const availableRuntimeKindFor = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeKind: RuntimeKind | null | undefined,
+): RuntimeKind | null => {
   if (!runtimeKind) {
     return null;
   }
-  return {
-    runtimeKind,
-    providerId: roleDefault.providerId,
-    modelId: roleDefault.modelId,
-    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
-  };
-};
-
-export const resolveAvailableRoleDefaultModelSelection = ({
-  repoSettings,
-  role,
-  runtimeDefinitions,
-}: {
-  repoSettings: RepoSettingsInput | null;
-  role: AgentRole;
-  runtimeDefinitions: RuntimeDescriptor[];
-}): AgentModelSelection | null => {
-  const selection = toRoleDefaultModelSelection(
-    repoSettings?.agentDefaults[role],
-    repoSettings?.defaultRuntimeKind,
-  );
-  if (!selection) {
-    return null;
-  }
-  const runtimeKind = selection.runtimeKind;
-  if (!runtimeKind) {
-    return null;
-  }
-  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? selection : null;
+  return findRuntimeDefinition(runtimeDefinitions, runtimeKind) ? runtimeKind : null;
 };
 
 export const resolveChatComposerSelectedRuntimeKind = ({
   selectedSessionModel,
   draftSelection,
-  roleDefaultSelection,
-  repoDefaultRuntimeKind,
+  defaultSelection,
+  defaultRuntimeKind,
   runtimeDefinitions,
 }: {
   selectedSessionModel: AgentModelSelection | null;
   draftSelection: AgentModelSelection | null;
-  roleDefaultSelection: AgentModelSelection | null;
-  repoDefaultRuntimeKind: RuntimeKind | null | undefined;
+  defaultSelection: AgentModelSelection | null;
+  defaultRuntimeKind: RuntimeKind | null | undefined;
   runtimeDefinitions: RuntimeDescriptor[];
 }): RuntimeKind | null => {
-  const availableRepoDefaultRuntimeKind =
-    repoDefaultRuntimeKind && findRuntimeDefinition(runtimeDefinitions, repoDefaultRuntimeKind)
-      ? repoDefaultRuntimeKind
-      : null;
   return (
     selectedSessionModel?.runtimeKind ??
-    draftSelection?.runtimeKind ??
-    roleDefaultSelection?.runtimeKind ??
-    availableRepoDefaultRuntimeKind ??
+    availableRuntimeKindFor(runtimeDefinitions, draftSelection?.runtimeKind) ??
+    availableRuntimeKindFor(runtimeDefinitions, defaultSelection?.runtimeKind) ??
+    availableRuntimeKindFor(runtimeDefinitions, defaultRuntimeKind) ??
     null
-  );
-};
-
-export const resolvePreferredModelSelection = ({
-  catalog,
-  preferredSelection,
-  fallbackSelection,
-}: {
-  catalog: AgentModelCatalog | null;
-  preferredSelection: AgentModelSelection | null;
-  fallbackSelection: AgentModelSelection | null;
-}): AgentModelSelection | null => {
-  const preferredBase =
-    preferredSelection ?? fallbackSelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
-  return (
-    coerceVisibleSelectionToCatalog(catalog, preferredBase) ??
-    pickDefaultVisibleSelectionForCatalog(catalog)
   );
 };
 
@@ -115,7 +61,6 @@ export type ChatComposerModelSelectionSource =
       kind: "new_session";
       composerCatalog: AgentModelCatalog | null;
       draftSelection: AgentModelSelection | null;
-      isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
     }
   | {
       kind: "session";
@@ -128,10 +73,10 @@ export type ChatComposerModelSelectionSource =
 
 export const resolveChatComposerModelSelections = ({
   source,
-  roleDefaultSelection,
+  defaultSelection,
 }: {
   source: ChatComposerModelSelectionSource;
-  roleDefaultSelection: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
 }): ChatComposerModelSelections => {
   if (source.kind === "session") {
     const selectionCatalog = source.modelCatalog;
@@ -139,7 +84,7 @@ export const resolveChatComposerModelSelections = ({
     const selectedSessionSelection = resolveLoadedSessionSelection({
       selectionCatalog,
       selectedSessionModel: source.selectedSessionModel,
-      roleDefaultSelection,
+      defaultSelection,
       sessionRuntimeKind: source.sessionRuntimeKind,
     });
 
@@ -149,7 +94,7 @@ export const resolveChatComposerModelSelections = ({
       selectionForNewSession:
         selectedSessionSelection.selectedModelSelection ??
         fallbackCatalogSelection ??
-        roleDefaultSelection,
+        defaultSelection,
       sessionModelRepairCommand: resolveSessionModelRepairCommand({
         sessionIdentity: source.sessionIdentity,
         repairSelection: selectedSessionSelection.repairSelection,
@@ -158,20 +103,19 @@ export const resolveChatComposerModelSelections = ({
     };
   }
 
-  const roleDefaultSelectionForComposer = resolveNewSessionRoleDefaultSelection({
-    composerCatalog: source.composerCatalog,
-    roleDefaultSelection,
-    isAwaitingRepoSettingsForWorkspaceRepoPath: source.isAwaitingRepoSettingsForWorkspaceRepoPath,
-  });
   const selectionCatalog = source.composerCatalog;
-  const fallbackCatalogSelection = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
+  const selectionForNewSession = selectionCatalog
+    ? resolvePreferredModelSelection({
+        catalog: selectionCatalog,
+        fallbackSelection: defaultSelection,
+        preferredSelection: source.draftSelection,
+      })
+    : source.draftSelection;
 
   return {
     selectionCatalog,
-    selectedModelSelection:
-      source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
-    selectionForNewSession:
-      source.draftSelection ?? roleDefaultSelectionForComposer ?? fallbackCatalogSelection,
+    selectedModelSelection: selectionForNewSession,
+    selectionForNewSession,
     sessionModelRepairCommand: null,
     isSelectedSessionModelSendable: true,
   };
@@ -200,21 +144,6 @@ export const resolveSessionModelRepairCommand = ({
     session: sessionIdentity,
     selection: repairSelection,
   };
-};
-
-const resolveNewSessionRoleDefaultSelection = ({
-  composerCatalog,
-  roleDefaultSelection,
-  isAwaitingRepoSettingsForWorkspaceRepoPath,
-}: {
-  composerCatalog: AgentModelCatalog | null;
-  roleDefaultSelection: AgentModelSelection | null;
-  isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
-}): AgentModelSelection | null => {
-  if (!composerCatalog) {
-    return isAwaitingRepoSettingsForWorkspaceRepoPath ? null : roleDefaultSelection;
-  }
-  return coerceVisibleSelectionToCatalog(composerCatalog, roleDefaultSelection);
 };
 
 type LoadedSessionSelection = {
@@ -288,12 +217,12 @@ const coerceLiveSessionRepairSelection = (
 const resolveLoadedSessionSelection = ({
   selectionCatalog,
   selectedSessionModel,
-  roleDefaultSelection,
+  defaultSelection,
   sessionRuntimeKind,
 }: {
   selectionCatalog: AgentModelCatalog | null;
   selectedSessionModel: AgentModelSelection | null;
-  roleDefaultSelection: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
   sessionRuntimeKind: RuntimeKind;
 }): LoadedSessionSelection => {
   if (!selectedSessionModel) {
@@ -317,9 +246,9 @@ const resolveLoadedSessionSelection = ({
     selection: selectedSessionModel,
     sessionRuntimeKind,
   });
-  const fallbackRoleDefaultSelection = coerceSessionSelectionToCatalog({
+  const fallbackDefaultSelection = coerceSessionSelectionToCatalog({
     selectionCatalog,
-    selection: roleDefaultSelection,
+    selection: defaultSelection,
     sessionRuntimeKind,
   });
   const fallbackCatalogSelection = pickSessionCatalogDefaultSelection(
@@ -339,7 +268,7 @@ const resolveLoadedSessionSelection = ({
 
   const selectedModelSelection =
     coerceLiveSessionRepairSelection(selectionCatalog, normalizedSessionSelection) ??
-    coerceLiveSessionRepairSelection(selectionCatalog, fallbackRoleDefaultSelection) ??
+    coerceLiveSessionRepairSelection(selectionCatalog, fallbackDefaultSelection) ??
     coerceLiveSessionRepairSelection(selectionCatalog, fallbackCatalogSelection);
 
   if (!selectedModelSelection) {

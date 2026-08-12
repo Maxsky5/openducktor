@@ -38,7 +38,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   supportsVariants: true,
   selectionCatalogError: null,
   isSelectionCatalogLoading: false,
-  agentOptions: [{ value: "builder", label: "Builder" }],
+  runtimeProfileOptions: [{ value: "builder", label: "Builder" }],
   modelOptions: [{ value: "openai/gpt-5.4", label: "GPT-5.4" }],
   modelGroups: [],
   variantOptions: [{ value: "default", label: "Default" }],
@@ -49,7 +49,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   onSelectStartMode: noop,
   onSelectSourceSessionValue: noop,
   onSelectRuntime: noop,
-  onSelectAgent: noop,
+  onSelectRuntimeProfile: noop,
   onSelectModel: noop,
   onSelectVariant: noop,
   allowRunInBackground: true,
@@ -132,12 +132,12 @@ describe("SessionStartModal", () => {
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
 
     const sourceCombobox = getFieldButton("session-start-source-field");
-    const agentCombobox = getFieldButton("session-start-agent-field");
+    const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
     const modelCombobox = getFieldButton("session-start-model-field");
     const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
-    expect(agentCombobox.hasAttribute("disabled")).toBe(true);
+    expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(true);
     expect(modelCombobox.hasAttribute("disabled")).toBe(true);
     expect(variantCombobox.hasAttribute("disabled")).toBe(true);
 
@@ -171,6 +171,31 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("disables fresh-session selection and confirm while the catalog loads", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({ isSelectionCatalogLoading: true, onConfirm }),
+      }),
+    );
+
+    expect(screen.getByTestId("session-start-runtime-combobox").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(getFieldButton("session-start-model-field").hasAttribute("disabled")).toBe(true);
+    expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
+
+    const confirmButton = screen.getByRole("button", { name: /start session/i });
+    expect(confirmButton.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(confirmButton);
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
   test("shows reuse helper text even when catalog is loading", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
@@ -186,9 +211,12 @@ describe("SessionStartModal", () => {
     );
 
     expect(
-      screen.getByText("Reuse mode keeps the previous session agent/model/variant."),
+      screen.getByText(
+        "Reuse mode keeps the previous session runtime profile, model, and variant.",
+      ),
     ).toBeTruthy();
-    expect(screen.queryByText("Loading agents for the selected runtime.")).toBeNull();
+    expect(screen.getByText("Runtime profile")).toBeTruthy();
+    expect(screen.queryByText("Loading profiles for the selected runtime.")).toBeNull();
 
     unmount();
   });
@@ -215,7 +243,7 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
-  test("hides agent selector when the runtime manages profiles", () => {
+  test("hides the runtime profile selector when the runtime manages profiles", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
@@ -225,12 +253,12 @@ describe("SessionStartModal", () => {
             modelId: "gpt-5.4",
             variant: "default",
           },
-          agentOptions: [],
+          runtimeProfileOptions: [],
         }),
       }),
     );
 
-    expect(screen.queryByTestId("session-start-agent-field")).toBeNull();
+    expect(screen.queryByTestId("session-start-runtime-profile-field")).toBeNull();
     expect(screen.getByTestId("session-start-model-field")).toBeTruthy();
 
     unmount();
@@ -257,12 +285,12 @@ describe("SessionStartModal", () => {
     expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
 
     const sourceCombobox = getFieldButton("session-start-source-field");
-    const agentCombobox = getFieldButton("session-start-agent-field");
+    const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
     const modelCombobox = getFieldButton("session-start-model-field");
     const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
-    expect(agentCombobox.hasAttribute("disabled")).toBe(false);
+    expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(false);
     expect(modelCombobox.hasAttribute("disabled")).toBe(false);
     expect(variantCombobox.hasAttribute("disabled")).toBe(false);
 
