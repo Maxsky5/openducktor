@@ -120,15 +120,17 @@ const rejectForbiddenWorkspaceIdInput = (
     WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
     hasOwnWorkspaceIdInput(input)
   ) {
+    const message =
+      "workspaceId is fixed by the startup workspace and is not allowed in tool input.";
     throw new OdtToolError({
       code: "ODT_WORKSPACE_SCOPE_VIOLATION",
-      message: `Invalid arguments for tool ${toolName}: workspaceId is not allowed in workflow-scoped tool calls.`,
+      message: `Invalid arguments for tool ${toolName}: ${message}`,
       details: { toolName },
       issues: [
         {
           path: ["workspaceId"],
           code: "forbidden_workspace_id",
-          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          message,
         },
       ],
     });

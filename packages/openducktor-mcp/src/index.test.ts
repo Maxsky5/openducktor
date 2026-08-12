@@ -383,7 +383,8 @@ describe("MCP server tool results", () => {
         {
           path: ["workspaceId"],
           code: "forbidden_workspace_id",
-          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          message:
+            "workspaceId is fixed by the startup workspace and is not allowed in tool input.",
         },
       ]);
       expect(error.details).toEqual({ toolName: "odt_read_task" });

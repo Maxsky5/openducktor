@@ -63,17 +63,29 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       title: "Repository session",
       permission: expect.arrayContaining([
         { permission: "openducktor_*", pattern: "*", action: "deny" },
-        { permission: "odt_read_task", pattern: "*", action: "allow" },
-        { permission: "odt_create_task", pattern: "*", action: "allow" },
-        { permission: "odt_search_tasks", pattern: "*", action: "allow" },
+        { permission: "odt_read_task", pattern: "*", action: "ask" },
+        { permission: "odt_create_task", pattern: "*", action: "ask" },
+        { permission: "odt_search_tasks", pattern: "*", action: "ask" },
         { permission: "task", pattern: "*", action: "allow" },
       ]),
     });
     expect(mock.session.promptAsyncCalls[0]).toMatchObject({ directory: "/repo" });
     expect(mock.session.updateCalls).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sessionID: "repository-fork", title: "Repository session" }),
-        expect.objectContaining({ sessionID: "repository-resume", title: "Repository session" }),
+        expect.objectContaining({
+          sessionID: "repository-fork",
+          title: "Repository session",
+          permission: expect.arrayContaining([
+            { permission: "odt_create_task", pattern: "*", action: "ask" },
+          ]),
+        }),
+        expect.objectContaining({
+          sessionID: "repository-resume",
+          title: "Repository session",
+          permission: expect.arrayContaining([
+            { permission: "odt_create_task", pattern: "*", action: "ask" },
+          ]),
+        }),
       ]),
     );
     const promptTools = (

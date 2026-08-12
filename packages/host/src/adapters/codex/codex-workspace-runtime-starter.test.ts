@@ -393,6 +393,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           "mcp_servers.openducktor.default_tools_approval_mode='prompt'",
           "--config",
           "mcp_servers.openducktor.enabled=true",
+          "--config",
+          "mcp_servers.openducktor.required=true",
         ]),
       );
       expect(capture.args).not.toContain("mcp_servers.openducktor.env.ODT_WORKSPACE_ID='repo'");
