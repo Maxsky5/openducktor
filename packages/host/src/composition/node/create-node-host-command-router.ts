@@ -224,14 +224,13 @@ export const createNodeEffectHostCommandRouter = (
         liveSessionLifecycle: agentSessionLiveStateService,
         codexAppServer: effectiveCodexAppServer,
         onBackgroundFailure,
-        resolveRuntimePolicy: (scope) => {
-          const role = scope.kind === "workflow" ? scope.role : null;
-          return loadGlobalConfig(settingsConfig).pipe(
-            Effect.map(({ agentRuntimes }) =>
-              resolveCodexEffectivePolicy(agentRuntimes.codex, role),
-            ),
-          );
-        },
+        resolveRuntimePolicy: (scope) =>
+          loadGlobalConfig(settingsConfig).pipe(
+            Effect.map(({ agentRuntimes }) => {
+              const role = scope.kind === "workflow" ? scope.role : null;
+              return resolveCodexEffectivePolicy(agentRuntimes.codex, role);
+            }),
+          ),
       }),
       processEnv,
       runtimeDistribution,
