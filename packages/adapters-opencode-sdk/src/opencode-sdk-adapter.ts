@@ -74,7 +74,10 @@ import {
   applyRuntimeContextToSession,
   assertRuntimeContextCompatibleWithSession,
 } from "./opencode-session-binding";
-import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
+import {
+  type OpencodeSessionPolicy,
+  resolveOpencodeSessionPolicy,
+} from "./opencode-session-policy";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -113,6 +116,20 @@ import {
 
 const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
+};
+
+const ensureRepositoryMcpConnected = async (input: {
+  client: SessionRecord["client"];
+  policy: OpencodeSessionPolicy;
+  workingDirectory: string;
+}): Promise<void> => {
+  if (input.policy.toolSelection.kind !== "repository") {
+    return;
+  }
+  await ensureTrustedOdtMcpServerConnected({
+    client: input.client,
+    workingDirectory: input.workingDirectory,
+  });
 };
 
 const assertOpenCodeRuntimePolicyBinding = (
@@ -177,6 +194,11 @@ export class OpencodeSdkAdapter
     );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
+    await ensureRepositoryMcpConnected({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const created = await client.session.create({
       directory: input.workingDirectory,
       title: policy.title,
@@ -219,6 +241,11 @@ export class OpencodeSdkAdapter
         );
       }
       assertRuntimeContextCompatibleWithSession(existing, input, "resume session");
+      await ensureRepositoryMcpConnected({
+        client: existing.client,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
       await applyRepositorySessionPolicy({
         client: existing.client,
         externalSessionId: input.externalSessionId,
@@ -231,6 +258,11 @@ export class OpencodeSdkAdapter
 
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session");
     const client = this.createClient(runtimeClientInput);
+    await ensureRepositoryMcpConnected({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
@@ -270,14 +302,20 @@ export class OpencodeSdkAdapter
     if (existing) {
       assertRuntimeContextCompatibleWithSession(existing, input, "ensure session state");
       if (input.sessionScope) {
+        const policy = resolveOpencodeSessionPolicy(
+          input.sessionScope,
+          this.getRuntimeDefinition(),
+          "ensure OpenCode session state",
+        );
+        await ensureRepositoryMcpConnected({
+          client: existing.client,
+          policy,
+          workingDirectory: input.workingDirectory,
+        });
         await applyRepositorySessionPolicy({
           client: existing.client,
           externalSessionId: input.externalSessionId,
-          policy: resolveOpencodeSessionPolicy(
-            input.sessionScope,
-            this.getRuntimeDefinition(),
-            "ensure OpenCode session state",
-          ),
+          policy,
           workingDirectory: input.workingDirectory,
         });
       }
@@ -287,20 +325,30 @@ export class OpencodeSdkAdapter
 
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "ensure session state");
     const client = this.createClient(runtimeClientInput);
+    const policy = input.sessionScope
+      ? resolveOpencodeSessionPolicy(
+          input.sessionScope,
+          this.getRuntimeDefinition(),
+          "ensure OpenCode session state",
+        )
+      : null;
+    if (policy) {
+      await ensureRepositoryMcpConnected({
+        client,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    }
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
     });
     const detailData = unwrapData(detail, "get session");
-    if (input.sessionScope) {
+    if (policy) {
       await applyRepositorySessionPolicy({
         client,
         externalSessionId: input.externalSessionId,
-        policy: resolveOpencodeSessionPolicy(
-          input.sessionScope,
-          this.getRuntimeDefinition(),
-          "ensure OpenCode session state",
-        ),
+        policy,
         workingDirectory: input.workingDirectory,
       });
     }
@@ -377,6 +425,11 @@ export class OpencodeSdkAdapter
     );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
+    await ensureRepositoryMcpConnected({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
@@ -518,6 +571,16 @@ export class OpencodeSdkAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
+    const policy = resolveOpencodeSessionPolicy(
+      input.sessionScope,
+      this.getRuntimeDefinition(),
+      "load OpenCode session history",
+    );
+    await ensureRepositoryMcpConnected({
+      client: this.createClient(runtimeClientInput),
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const matchingSessions = [...this.sessions.values()].filter(
       (session) =>
         session.externalSessionId === input.externalSessionId &&
@@ -833,6 +896,11 @@ export class OpencodeSdkAdapter
       `resolve tools for session ${session.externalSessionId}`,
     );
     if (policy.toolSelection.kind === "repository") {
+      await ensureRepositoryMcpConnected({
+        client: session.client,
+        policy,
+        workingDirectory: session.input.workingDirectory,
+      });
       return resolveRepositoryToolSelection(this.getRuntimeDefinition());
     }
 

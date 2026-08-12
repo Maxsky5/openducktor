@@ -1,3 +1,4 @@
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -28,21 +29,32 @@ import type {
   CodexSessionState,
 } from "./types";
 
-type OdtWorkflowToolDecision =
+type TrustedOdtToolDecision =
   | { kind: "unmanaged" }
   | { kind: "allow" }
   | { kind: "reject"; reason: string };
 
-const decideOdtWorkflowTool = (
+const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
+
+const decideTrustedOdtTool = (
   session: CodexSessionState,
   serverName: unknown,
   toolName: string | undefined,
-): OdtWorkflowToolDecision => {
+): TrustedOdtToolDecision => {
   if (serverName !== "openducktor") {
     return { kind: "unmanaged" };
   }
 
   const sessionAssociation = session.summary.sessionAssociation;
+  if (sessionAssociation.kind === "repository") {
+    if (toolName && ODT_MCP_TOOL_NAME_SET.has(toolName)) {
+      return { kind: "unmanaged" };
+    }
+    return {
+      kind: "reject",
+      reason: "the trusted OpenDucktor MCP request did not identify a supported tool",
+    };
+  }
   if (sessionAssociation.kind !== "workflow") {
     return {
       kind: "reject",
@@ -225,7 +237,7 @@ export const handleCodexServerRequest = async (
       throw new Error("Codex MCP elicitation request is missing an id.");
     }
 
-    const workflowToolDecision = decideOdtWorkflowTool(
+    const workflowToolDecision = decideTrustedOdtTool(
       routeContext.policySession,
       mcpElicitationApproval.metadata?.serverName,
       mcpElicitationApproval.tool?.name,

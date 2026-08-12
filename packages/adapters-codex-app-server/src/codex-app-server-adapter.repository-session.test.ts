@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexUserMessageInput,
@@ -45,6 +47,11 @@ const expectedThreadPolicy = {
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
   sandbox: "workspace-write",
+};
+
+const repositoryThreadConfig = {
+  "mcp_servers.openducktor.enabled": true,
+  "mcp_servers.openducktor.enabled_tools": [...ODT_MCP_TOOL_NAMES],
 };
 
 describe("CodexAppServerAdapter repository sessions", () => {
@@ -129,7 +136,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       expect(call.params).toMatchObject({
         cwd: "/repo",
         ...expectedThreadPolicy,
-        config: { "mcp_servers.openducktor.enabled": false },
+        config: repositoryThreadConfig,
       });
     }
   });
@@ -187,7 +194,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   });
 
   test("allows an explicit workflow role change only when forking", async () => {
-    const { adapter } = createHarness();
+    const { adapter, transports } = createHarness();
     const started = await adapter.startSession({
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -212,6 +219,15 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).resolves.toMatchObject({
       title: "BUILD task-1",
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    expect(
+      transports.get("runtime-live")?.calls.findLast((call) => call.method === "thread/fork")
+        ?.params,
+    ).toMatchObject({
+      config: {
+        "mcp_servers.openducktor.enabled": true,
+        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+      },
     });
   });
 
@@ -313,7 +329,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).rejects.toThrow("name failed");
     expect(localSessions(resumedAdapter).has("thread-resume")).toBe(true);
     expect(resumedTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
-      expect.objectContaining({ config: { "mcp_servers.openducktor.enabled": false } }),
+      expect.objectContaining({ config: repositoryThreadConfig }),
     );
 
     const restoredTransport = new NameFailingTransport("runtime-live", false);
@@ -330,7 +346,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).rejects.toThrow("name failed");
     expect(localSessions(restoredAdapter).has("thread-history")).toBe(true);
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
-      expect.objectContaining({ config: { "mcp_servers.openducktor.enabled": false } }),
+      expect.objectContaining({ config: repositoryThreadConfig }),
     );
   });
 

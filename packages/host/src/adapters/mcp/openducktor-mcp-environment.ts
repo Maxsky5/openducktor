@@ -1,4 +1,4 @@
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 
 export const OPENDUCKTOR_MCP_ENV_VAR_NAMES = [
@@ -43,5 +43,5 @@ export const buildOpenDucktorMcpBridgeEnvironment = (
   ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl", runtimeName),
   ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken", runtimeName),
   ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-  ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
+  ODT_ALLOWED_TOOLS: ODT_MCP_TOOL_NAMES.join(","),
 });

@@ -432,7 +432,7 @@ describe("handleCodexServerRequest", () => {
     expect(events).toEqual([]);
   });
 
-  test("rejects OpenDucktor workflow MCP approvals for repository sessions", async () => {
+  test("routes known OpenDucktor MCP tools through user approval for repository sessions", async () => {
     const respondServerRequest = mock(async () => {});
     const pendingInput = new CodexPendingInputState();
     const events: unknown[] = [];
@@ -446,25 +446,56 @@ describe("handleCodexServerRequest", () => {
         mcpToolApprovalRequest({
           id: 35,
           serverName: "openducktor",
-          toolName: "odt_read_task",
+          toolName: "odt_create_task",
+          threadId: "thread-repository",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(true);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 35)).toMatchObject({
+      kind: "approval",
+      entry: {
+        runtimeId: "runtime-live",
+        threadId: "thread-repository",
+        request: { tool: { name: "odt_create_task" } },
+      },
+    });
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+      }),
+    );
+  });
+
+  test("rejects unknown trusted OpenDucktor tool identities for repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 39,
+          serverName: "openducktor",
+          toolName: "odt_unknown",
           threadId: "thread-repository",
         }),
         new Set(),
       ),
     ).resolves.toBe(false);
 
-    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 35)).toBeUndefined();
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 39)).toBeUndefined();
     expect(respondServerRequest).toHaveBeenCalledWith(
       "runtime-live",
-      35,
+      39,
       expect.objectContaining({ action: "decline" }),
       undefined,
-    );
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "session_error",
-        message: expect.stringContaining("repository session context cannot use workflow tools"),
-      }),
     );
   });
 

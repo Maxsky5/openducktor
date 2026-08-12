@@ -33,7 +33,10 @@ const buildScopePermissionRules = (input: {
     }
   }
 
-  for (const entry of resolveOpencodeBaseToolPolicy(runtimeDescriptor)) {
+  for (const entry of resolveOpencodeBaseToolPolicy({
+    runtimeDescriptor,
+    enableOdtTools: role === null,
+  })) {
     rules.push({
       permission: entry.toolId,
       pattern: "*",

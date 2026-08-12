@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -25,6 +26,10 @@ const expectedThreadPolicy = {
   approvalsReviewer: "user",
   sandbox: "workspace-write",
 };
+const workflowThreadConfig = (role: AgentRole) => ({
+  "mcp_servers.openducktor.enabled": true,
+  "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY[role]],
+});
 const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
@@ -114,6 +119,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       method: "thread/start",
       params: {
         ...expectedThreadPolicy,
+        config: workflowThreadConfig("build"),
         cwd: "/repo",
         developerInstructions: "Use the repo rules.",
         historyMode: "paginated",
@@ -204,6 +210,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     ]);
     expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
       ...expectedThreadPolicy,
+      config: workflowThreadConfig("planner"),
       threadId: "thread-9",
       cwd: "/repo",
       developerInstructions: "Carry forward the plan.",
@@ -213,6 +220,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
     expect(transports.get("runtime-live")?.calls[2]?.params).toEqual({
       ...expectedThreadPolicy,
+      config: workflowThreadConfig("qa"),
       threadId: "thread-7",
       cwd: "/repo",
       developerInstructions: "Review the fork.",
@@ -323,6 +331,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandbox: "workspace-write",
+      config: workflowThreadConfig("build"),
       cwd: "/repo",
       developerInstructions: "Use the repo rules.",
       historyMode: "paginated",
@@ -780,6 +789,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       method: "thread/start",
       params: {
         ...expectedThreadPolicy,
+        config: workflowThreadConfig("build"),
         cwd: "/repo/worktree-task-1",
         developerInstructions: "Use the repo rules.",
         historyMode: "paginated",

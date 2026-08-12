@@ -33,10 +33,10 @@ export const resolveRepositoryToolSelection = (
   runtimeDescriptor: RuntimeDescriptor,
 ): Record<string, boolean> =>
   Object.fromEntries(
-    resolveOpencodeBaseToolPolicy(runtimeDescriptor).map(({ toolId, enabled }) => [
-      toolId,
-      enabled,
-    ]),
+    resolveOpencodeBaseToolPolicy({
+      runtimeDescriptor,
+      enableOdtTools: true,
+    }).map(({ toolId, enabled }) => [toolId, enabled]),
   );
 
 type McpApi = {

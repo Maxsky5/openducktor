@@ -14,9 +14,11 @@ export type OpencodeToolPolicyEntry = {
 export const OPENCODE_SUBAGENT_TOOL_NAME = "task";
 export const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
 
-export const resolveOpencodeBaseToolPolicy = (
-  runtimeDescriptor: RuntimeDescriptor,
-): OpencodeToolPolicyEntry[] => {
+export const resolveOpencodeBaseToolPolicy = (input: {
+  runtimeDescriptor: RuntimeDescriptor;
+  enableOdtTools: boolean;
+}): OpencodeToolPolicyEntry[] => {
+  const { enableOdtTools, runtimeDescriptor } = input;
   const enabledByToolId = new Map<string, boolean>();
 
   if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
@@ -31,13 +33,13 @@ export const resolveOpencodeBaseToolPolicy = (
   }
   for (const toolName of ODT_MCP_TOOL_NAMES) {
     for (const toolId of toOpencodeExposedOdtToolIds(toolName)) {
-      enabledByToolId.set(toolId, false);
+      enabledByToolId.set(toolId, enableOdtTools);
     }
   }
   for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
-    enabledByToolId.set(toolName, false);
+    enabledByToolId.set(toolName, enableOdtTools);
     for (const alias of runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []) {
-      enabledByToolId.set(alias, false);
+      enabledByToolId.set(alias, enableOdtTools);
     }
   }
 

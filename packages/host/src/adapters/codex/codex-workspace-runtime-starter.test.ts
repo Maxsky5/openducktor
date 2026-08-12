@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -379,7 +379,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         ODT_HOST_TOKEN: "token-1",
         ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       });
-      expect(capture.env.ODT_ALLOWED_TOOLS).toContain("odt_read_task");
+      expect(capture.env.ODT_ALLOWED_TOOLS).toBe(ODT_MCP_TOOL_NAMES.join(","));
       expect(capture.initializeVersion).toBe("0.3.1-test");
       expect(capture.args).toEqual(
         expect.arrayContaining([

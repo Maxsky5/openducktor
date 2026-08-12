@@ -1,11 +1,21 @@
-import type { CodexEffectivePolicy } from "@openducktor/contracts";
-import type { AgentSessionRuntimePolicy, AgentSessionScope } from "@openducktor/core";
-import { formatAgentSessionTitle } from "@openducktor/core";
+import { type CodexEffectivePolicy, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import {
+  AGENT_ROLE_TOOL_POLICY,
+  type AgentSessionRuntimePolicy,
+  type AgentSessionScope,
+  formatAgentSessionTitle,
+} from "@openducktor/core";
 import { requireCodexRuntimePolicy } from "./codex-session-policy";
+
+type CodexSessionThreadConfig = {
+  "mcp_servers.openducktor.enabled": true;
+  "mcp_servers.openducktor.enabled_tools": string[];
+};
 
 type CodexSessionScopePolicyBase = {
   title: string;
   runtimePolicy: CodexEffectivePolicy;
+  threadConfig: CodexSessionThreadConfig;
 };
 
 export type CodexSessionScopePolicy =
@@ -16,12 +26,12 @@ export type CodexSessionScopePolicy =
   | (CodexSessionScopePolicyBase & {
       kind: "repository";
       sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
-      threadConfig: typeof REPOSITORY_THREAD_CONFIG;
     });
 
-const REPOSITORY_THREAD_CONFIG = {
-  "mcp_servers.openducktor.enabled": false,
-} as const;
+const buildThreadConfig = (enabledTools: readonly string[]): CodexSessionThreadConfig => ({
+  "mcp_servers.openducktor.enabled": true,
+  "mcp_servers.openducktor.enabled_tools": [...enabledTools],
+});
 
 export const resolveCodexSessionScopePolicy = (
   sessionScope: AgentSessionScope | null | undefined,
@@ -38,7 +48,7 @@ export const resolveCodexSessionScopePolicy = (
       sessionScope,
       title: formatAgentSessionTitle(sessionScope),
       runtimePolicy: policy,
-      threadConfig: REPOSITORY_THREAD_CONFIG,
+      threadConfig: buildThreadConfig(ODT_MCP_TOOL_NAMES),
     };
   }
   return {
@@ -46,5 +56,6 @@ export const resolveCodexSessionScopePolicy = (
     sessionScope,
     title: formatAgentSessionTitle(sessionScope),
     runtimePolicy: policy,
+    threadConfig: buildThreadConfig(AGENT_ROLE_TOOL_POLICY[sessionScope.role]),
   };
 };

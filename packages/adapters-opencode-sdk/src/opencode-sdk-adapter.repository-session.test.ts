@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ODT_MCP_TOOL_NAMES, toOpencodeExposedOdtToolIds } from "@openducktor/contracts";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { makeMockClient, OpencodeSdkAdapter, sessionRef, sessionRuntimeRef } from "./test-support";
 
@@ -6,7 +7,7 @@ const repositoryScope = { kind: "repository" } as const;
 const runtimePolicy = { kind: "opencode" } as const;
 
 describe("OpencodeSdkAdapter repository sessions", () => {
-  test("applies repository policy across start, send, fork, resume, and history", async () => {
+  test("connects the trusted MCP and applies its full catalog across the repository lifecycle", async () => {
     const mock = makeMockClient({
       sessionId: "repository-session",
       forkSessionId: "repository-fork",
@@ -62,29 +63,58 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       title: "Repository session",
       permission: expect.arrayContaining([
         { permission: "openducktor_*", pattern: "*", action: "deny" },
-        { permission: "odt_read_task", pattern: "*", action: "deny" },
+        { permission: "odt_read_task", pattern: "*", action: "allow" },
+        { permission: "odt_create_task", pattern: "*", action: "allow" },
+        { permission: "odt_search_tasks", pattern: "*", action: "allow" },
         { permission: "task", pattern: "*", action: "allow" },
       ]),
     });
-    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
-      directory: "/repo",
-      tools: expect.objectContaining({
-        "openducktor_*": false,
-        odt_read_task: false,
-        openducktor_odt_read_task: false,
-        task: true,
-        subtask: false,
-      }),
-    });
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({ directory: "/repo" });
     expect(mock.session.updateCalls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sessionID: "repository-fork", title: "Repository session" }),
         expect.objectContaining({ sessionID: "repository-resume", title: "Repository session" }),
       ]),
     );
-    expect(mock.mcp.statusCalls).toHaveLength(0);
+    const promptTools = (
+      mock.session.promptAsyncCalls[0] as {
+        tools: Record<string, boolean>;
+      }
+    ).tools;
+    const missingToolIds = ODT_MCP_TOOL_NAMES.flatMap((toolName) =>
+      toOpencodeExposedOdtToolIds(toolName),
+    ).filter((toolId) => promptTools[toolId] !== true);
+    expect(missingToolIds).toEqual([]);
+    expect(promptTools).toMatchObject({
+      "openducktor_*": false,
+      task: true,
+      subtask: false,
+    });
+    expect(mock.mcp.statusCalls.length).toBeGreaterThanOrEqual(5);
+    expect(mock.mcp.statusCalls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ directory: "/repo" })]),
+    );
     expect(mock.mcp.connectCalls).toHaveLength(0);
     expect(mock.tool.idsCalls).toHaveLength(0);
+  });
+
+  test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
+    const mock = makeMockClient({
+      mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
+    });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+
+    await expect(
+      adapter.startSession({
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: repositoryScope,
+        runtimePolicy,
+        systemPrompt: "repository system",
+      }),
+    ).rejects.toThrow('MCP server "openducktor" stayed unavailable after reconnect');
+    expect(mock.session.createCalls).toHaveLength(0);
   });
 
   test("rejects repository and workflow scope changes for a bound session", async () => {

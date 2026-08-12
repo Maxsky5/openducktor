@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  ODT_MCP_TOOL_NAMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  toOpencodeExposedOdtToolIds,
+} from "@openducktor/contracts";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
@@ -22,7 +26,7 @@ const findFinalExactAction = (rules: PermissionRule[], permission: string): stri
 };
 
 describe("workflow-tool-permissions", () => {
-  test("denies every ODT tool family without workflow or read-only role grants for repository scope", () => {
+  test("allows the complete trusted ODT catalog for repository scope", () => {
     const rules = buildRepositoryScopedPermissionRules(OPENCODE_RUNTIME_DESCRIPTOR);
 
     expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
@@ -31,17 +35,15 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "deny",
     });
-    expect(rules).toContainEqual({ permission: "odt_read_task", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({
-      permission: "odt_build_completed",
-      pattern: "*",
-      action: "deny",
-    });
     expect(rules).toContainEqual({ permission: "task", pattern: "*", action: "allow" });
     expect(rules).not.toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
-    expect(
-      rules.every((rule) => !rule.permission.startsWith("odt_") || rule.action === "deny"),
-    ).toBe(true);
+    for (const toolName of ODT_MCP_TOOL_NAMES) {
+      for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
+        expect(findFinalExactAction(rules, permission)).toBe("allow");
+      }
+    }
+    expect(findFinalExactAction(rules, "odt_create_task")).toBe("allow");
+    expect(findFinalExactAction(rules, "odt_search_tasks")).toBe("allow");
   });
 
   test("builds runtime-provided read-only permission rules plus allow-specific odt permissions for spec role", () => {

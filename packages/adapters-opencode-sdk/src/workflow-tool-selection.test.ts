@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  ODT_MCP_TOOL_NAMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  toOpencodeExposedOdtToolIds,
+} from "@openducktor/contracts";
 import {
   resolveRepositoryToolSelection,
   resolveWorkflowToolSelection,
@@ -76,20 +80,20 @@ const makeClient = (input: {
 };
 
 describe("workflow-tool-selection", () => {
-  test("builds repository selection without an OpenCode or MCP request", () => {
+  test("builds the complete trusted ODT repository selection", () => {
     const selection = resolveRepositoryToolSelection(OPENCODE_RUNTIME_DESCRIPTOR);
 
     expect(selection["openducktor_*"]).toBe(false);
     expect(selection["functions.openducktor_*"]).toBe(false);
-    expect(selection.odt_read_task).toBe(false);
-    expect(selection.odt_build_completed).toBe(false);
-    expect(selection.openducktor_odt_read_task).toBe(false);
-    expect(selection["functions.openducktor_odt_read_task"]).toBe(false);
     expect(selection.task).toBe(true);
     expect(selection.subtask).toBe(false);
-    expect(
-      Object.entries(selection).every(([toolId, enabled]) => !toolId.includes("odt_") || !enabled),
-    ).toBe(true);
+    for (const toolName of ODT_MCP_TOOL_NAMES) {
+      for (const toolId of toOpencodeExposedOdtToolIds(toolName)) {
+        expect(selection[toolId]).toBe(true);
+      }
+    }
+    expect(selection.odt_create_task).toBe(true);
+    expect(selection.odt_search_tasks).toBe(true);
   });
 
   test("uses runtime tool aliases when available", async () => {

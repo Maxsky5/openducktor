@@ -337,7 +337,7 @@ export class CodexAppServerAdapter
     );
     const response = await client.threadStart({
       ...codexTransportPolicy(policy),
-      ...(sessionPolicy.kind === "repository" ? { config: sessionPolicy.threadConfig } : {}),
+      config: sessionPolicy.threadConfig,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
       historyMode: "paginated",
@@ -392,7 +392,7 @@ export class CodexAppServerAdapter
     );
     const response = await client.threadResume({
       ...codexTransportPolicy(policy),
-      ...(sessionPolicy.kind === "repository" ? { config: sessionPolicy.threadConfig } : {}),
+      config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
@@ -441,7 +441,7 @@ export class CodexAppServerAdapter
     );
     const response = await client.threadFork({
       ...codexTransportPolicy(policy),
-      ...(sessionPolicy.kind === "repository" ? { config: sessionPolicy.threadConfig } : {}),
+      config: sessionPolicy.threadConfig,
       threadId: input.parentExternalSessionId,
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
@@ -671,7 +671,7 @@ export class CodexAppServerAdapter
     const policy = sessionPolicy.runtimePolicy;
     const response = await client.threadResume({
       ...codexTransportPolicy(policy),
-      ...(sessionPolicy.kind === "repository" ? { config: sessionPolicy.threadConfig } : {}),
+      config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
       ...("systemPrompt" in input && input.systemPrompt
