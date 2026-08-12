@@ -48,8 +48,8 @@ const resolveVisibleSelection = ({
     return null;
   }
 
-  if (selectedStartMode === "fork" && selection && !catalog) {
-    return selection;
+  if (selectedStartMode === "fork" && selection) {
+    return coerceVisibleSelectionToCatalog(catalog, selection);
   }
 
   const normalizedCurrent = coerceVisibleSelectionToCatalog(catalog, selection);
@@ -120,6 +120,7 @@ export function useSessionStartModalSelectionState({
     (runtimeKind: RuntimeKind): void => {
       setSelection(
         resolveModelSelectionForRuntimeChange({
+          catalog,
           currentSelection: resolvedSelection,
           defaultSelection,
           selectedModel: intentSelectedModel,
@@ -127,7 +128,7 @@ export function useSessionStartModalSelectionState({
         }),
       );
     },
-    [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
+    [catalog, defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
 
   const handleSelectRuntimeProfile = useCallback(
@@ -166,6 +167,9 @@ export function useSessionStartModalSelectionState({
 
   const handleSelectVariant = useCallback(
     (variant: string): void => {
+      if (!selectedRuntimeKind) {
+        return;
+      }
       setSelection(
         resolveModelSelectionForVariantChange({
           catalog,
@@ -174,7 +178,7 @@ export function useSessionStartModalSelectionState({
         }),
       );
     },
-    [catalog, resolvedSelection, setSelection],
+    [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
   );
 
   return {

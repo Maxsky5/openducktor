@@ -103,6 +103,7 @@ describe("model-selection-state", () => {
   test("changes runtime from caller-owned inputs without a workflow role", () => {
     expect(
       resolveModelSelectionForRuntimeChange({
+        catalog: null,
         currentSelection: EXPLICIT_SELECTION,
         defaultSelection: {
           runtimeKind: "claude",
@@ -119,12 +120,39 @@ describe("model-selection-state", () => {
     });
     expect(
       resolveModelSelectionForRuntimeChange({
+        catalog: null,
         currentSelection: EXPLICIT_SELECTION,
         defaultSelection: null,
         selectedModel: null,
         runtimeKind: "claude",
       }),
     ).toBeNull();
+  });
+
+  test("validates a runtime-change default against the target catalog", () => {
+    expect(
+      resolveModelSelectionForRuntimeChange({
+        catalog: CATALOG,
+        currentSelection: {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "default",
+        },
+        defaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "retired-model",
+        },
+        selectedModel: null,
+        runtimeKind: "opencode",
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "reviewer",
+    });
   });
 
   test("changes model and normalizes the variant while preserving the runtime profile", () => {
@@ -173,6 +201,7 @@ describe("model-selection-state", () => {
       providerId: "openai",
       modelId: "o3",
       variant: "low",
+      profileId: "reviewer",
     });
   });
 
@@ -203,6 +232,14 @@ describe("model-selection-state", () => {
         runtimeKind: "opencode",
       }),
     ).toEqual(EXPLICIT_SELECTION);
+    expect(
+      resolveModelSelectionForProfileChange({
+        catalog: CATALOG,
+        currentSelection: { ...EXPLICIT_SELECTION, runtimeKind: "claude" },
+        profileId: "reviewer",
+        runtimeKind: "opencode",
+      }),
+    ).toBeNull();
   });
 
   test("normalizes a draft against a reloaded catalog and removes missing selected values", () => {

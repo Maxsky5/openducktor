@@ -171,6 +171,31 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("disables fresh-session selection and confirm while the catalog loads", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({ isSelectionCatalogLoading: true, onConfirm }),
+      }),
+    );
+
+    expect(screen.getByTestId("session-start-runtime-combobox").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(getFieldButton("session-start-model-field").hasAttribute("disabled")).toBe(true);
+    expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
+
+    const confirmButton = screen.getByRole("button", { name: /start session/i });
+    expect(confirmButton.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(confirmButton);
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
   test("shows reuse helper text even when catalog is loading", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {

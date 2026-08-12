@@ -68,14 +68,16 @@ export const useModelSelectionActions = ({
       if (!effectiveRuntimeKind) {
         return;
       }
-      applySelection(
-        resolveModelSelectionForProfileChange({
-          catalog: selectionCatalog,
-          currentSelection: selectedModelSelection,
-          profileId,
-          runtimeKind: effectiveRuntimeKind,
-        }),
-      );
+      const selection = resolveModelSelectionForProfileChange({
+        catalog: selectionCatalog,
+        currentSelection: selectedModelSelection,
+        profileId,
+        runtimeKind: effectiveRuntimeKind,
+      });
+      if (!selection) {
+        return;
+      }
+      applySelection(selection);
     },
     [
       applySelection,

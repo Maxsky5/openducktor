@@ -60,7 +60,7 @@ const REPO_SETTINGS: RepoSettingsInput = {
   },
 };
 
-describe("session-start-modal-selection", () => {
+describe("session-start selection adapter", () => {
   test("passes a workflow role default into the generic initial selection", () => {
     expect(
       resolveInitialModelSelection({
@@ -102,6 +102,7 @@ describe("session-start-modal-selection", () => {
   test("uses the workflow default after a runtime change", () => {
     expect(
       resolveModelSelectionForRuntimeChange({
+        catalog: null,
         currentSelection: null,
         defaultSelection: roleDefaultSelectionFor(REPO_SETTINGS, "spec"),
         selectedModel: null,

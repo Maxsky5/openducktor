@@ -13,4 +13,16 @@ describe("readFreshSessionRuntimeKind", () => {
       "Runtime kind is required to start a session. Select an explicit runtime before starting.",
     );
   });
+
+  test("rejects an unsupported explicit runtime", () => {
+    const selectedModel = {
+      runtimeKind: "unsupported-runtime",
+      providerId: "openai",
+      modelId: "gpt-5",
+    } as unknown as AgentModelSelection;
+
+    expect(() => readFreshSessionRuntimeKind(selectedModel)).toThrow(
+      "Unsupported runtime kind 'unsupported-runtime'.",
+    );
+  });
 });

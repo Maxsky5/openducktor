@@ -146,11 +146,13 @@ export const resolveInitialModelSelection = ({
 };
 
 export const resolveModelSelectionForRuntimeChange = ({
+  catalog,
   currentSelection,
   defaultSelection,
   selectedModel,
   runtimeKind,
 }: {
+  catalog: AgentModelCatalog | null;
   currentSelection: AgentModelSelection | null;
   defaultSelection: AgentModelSelection | null;
   selectedModel: AgentModelSelection | null;
@@ -161,7 +163,7 @@ export const resolveModelSelectionForRuntimeChange = ({
   }
 
   return resolveInitialModelSelection({
-    catalog: null,
+    catalog,
     defaultSelection,
     runtimeKind,
     selectedModel,
@@ -181,7 +183,7 @@ export const resolveModelSelectionForProfileChange = ({
 }): AgentModelSelection | null => {
   const baseSelection = currentSelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
   if (!baseSelection || baseSelection.runtimeKind !== runtimeKind) {
-    return baseSelection;
+    return null;
   }
 
   const normalizedProfileId = catalog
@@ -217,7 +219,10 @@ export const resolveModelSelectionForModelChange = ({
   }
 
   const variant = normalizeCatalogVariant(model, undefined);
-  const profileId = normalizeVisibleCatalogProfileId(catalog, currentSelection?.profileId);
+  const profileId = normalizeVisibleCatalogProfileId(
+    catalog,
+    currentSelection?.profileId ?? pickVisibleCatalogDefaultProfileId(catalog),
+  );
   return {
     runtimeKind,
     providerId: model.providerId,
