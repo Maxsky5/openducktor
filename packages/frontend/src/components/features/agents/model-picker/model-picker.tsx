@@ -10,13 +10,7 @@ import {
 } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -179,43 +173,66 @@ const RuntimeRailButton = ({
   );
 };
 
-const stopFavoriteActivationPropagation = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
-  if (event.key === "Enter" || event.key === " ") {
-    event.stopPropagation();
-  }
-};
-
 const ModelRow = ({
   item,
   selected,
   favoriteState,
   disabledReason,
+  buttonRef,
+  onNavigate,
   onSelect,
 }: {
   item: ModelPickerItem;
   selected: boolean;
   favoriteState: ModelPickerFavoriteState;
   disabledReason: string | null;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  onNavigate: (key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
   onSelect: () => void;
 }): ReactElement => {
   const favoriteLabel = item.isFavorite ? "Remove" : "Add";
   return (
-    <CommandItem
-      value={modelPickerValueKey(item.value)}
-      disabled={disabledReason !== null}
-      aria-selected={selected}
-      aria-description={disabledReason ?? undefined}
-      className={cn("min-h-12 px-3 py-2", selected && "bg-accent")}
-      onSelect={onSelect}
+    <li
+      aria-label={`${item.model.modelName} model actions`}
+      className={cn(
+        "flex min-w-0 items-center gap-1 rounded-md",
+        selected && "bg-accent text-accent-foreground",
+      )}
     >
-      <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-medium">{item.model.modelName}</span>
-        <span className="truncate text-xs text-muted-foreground">
-          {item.runtime.label} · {item.model.providerName} · {item.model.modelId}
+      <Button
+        ref={buttonRef}
+        type="button"
+        variant="ghost"
+        disabled={disabledReason !== null}
+        aria-label={`Select ${item.model.modelName} model`}
+        aria-pressed={selected}
+        aria-description={disabledReason ?? undefined}
+        className={cn(
+          "min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
+          selected && "bg-accent text-accent-foreground",
+        )}
+        onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
+          if (
+            event.key === "ArrowDown" ||
+            event.key === "ArrowUp" ||
+            event.key === "Home" ||
+            event.key === "End"
+          ) {
+            event.preventDefault();
+            onNavigate(event.key);
+          }
+        }}
+        onClick={onSelect}
+      >
+        <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
+        <span className="flex min-w-0 flex-1 flex-col items-start">
+          <span className="truncate font-medium">{item.model.modelName}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {item.runtime.label} · {item.model.providerName} · {item.model.modelId}
+          </span>
         </span>
-      </span>
-      {selected ? <Check aria-label="Selected model" /> : null}
+        {selected ? <Check aria-label="Selected model" /> : null}
+      </Button>
       <Button
         type="button"
         variant="ghost"
@@ -224,20 +241,14 @@ const ModelRow = ({
         disabled={!favoriteState.canMutate}
         aria-label={`${favoriteLabel} ${item.model.modelName} ${item.isFavorite ? "from" : "to"} favorites`}
         aria-pressed={item.isFavorite}
-        onPointerDown={(event) => event.stopPropagation()}
-        onKeyDown={stopFavoriteActivationPropagation}
-        onKeyUp={stopFavoriteActivationPropagation}
-        onClick={(event) => {
-          event.stopPropagation();
-          favoriteState.toggleFavorite(item.value);
-        }}
+        onClick={() => favoriteState.toggleFavorite(item.value)}
       >
         <Star
           aria-hidden="true"
           className={cn(item.isFavorite && "fill-current text-warning-muted")}
         />
       </Button>
-    </CommandItem>
+    </li>
   );
 };
 
@@ -259,6 +270,7 @@ export function ModelPicker({
   );
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const modelButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const lockedRuntimeKind =
     selectionPolicy.kind === "runtime_locked" ? selectionPolicy.runtimeKind : null;
   const items = useMemo(
@@ -302,6 +314,28 @@ export function ModelPicker({
   const activeRuntime = runtimes.find((runtime) => runtime.descriptor.kind === activeView) ?? null;
   const readOnlyReason = selectionPolicy.kind === "read_only" ? selectionPolicy.reason : null;
 
+  const focusModelBoundary = (fromEnd: boolean): void => {
+    const indexes = Array.from({ length: items.length }, (_, index) => index);
+    if (fromEnd) {
+      indexes.reverse();
+    }
+    const target = indexes
+      .map((index) => modelButtonRefs.current[index])
+      .find((button) => button && !button.disabled);
+    target?.focus();
+  };
+
+  const focusAdjacentModel = (currentIndex: number, direction: 1 | -1): void => {
+    for (let step = 1; step <= items.length; step += 1) {
+      const targetIndex = (currentIndex + direction * step + items.length) % items.length;
+      const target = modelButtonRefs.current[targetIndex];
+      if (target && !target.disabled) {
+        target.focus();
+        return;
+      }
+    }
+  };
+
   const handleOpenChange = (nextOpen: boolean): void => {
     if (readOnlyReason) {
       return;
@@ -344,8 +378,8 @@ export function ModelPicker({
   let listContent: ReactElement | null = null;
   if (items.length > 0) {
     listContent = (
-      <CommandGroup>
-        {items.map((item) => {
+      <ul aria-label="Models" className="space-y-1 p-1">
+        {items.map((item, index) => {
           const disabledReason = getModelDisabledReason?.(item) ?? null;
           return (
             <ModelRow
@@ -354,6 +388,20 @@ export function ModelPicker({
               selected={isSameModelPickerValue(value, item.value)}
               favoriteState={favoriteState}
               disabledReason={disabledReason}
+              buttonRef={(element) => {
+                modelButtonRefs.current[index] = element;
+              }}
+              onNavigate={(key) => {
+                if (key === "ArrowDown") {
+                  focusAdjacentModel(index, 1);
+                  return;
+                }
+                if (key === "ArrowUp") {
+                  focusAdjacentModel(index, -1);
+                  return;
+                }
+                focusModelBoundary(key === "End");
+              }}
               onSelect={() => {
                 if (disabledReason) {
                   return;
@@ -366,7 +414,7 @@ export function ModelPicker({
             />
           );
         })}
-      </CommandGroup>
+      </ul>
     );
   } else if (emptyMessage) {
     listContent = (
@@ -458,21 +506,30 @@ export function ModelPicker({
                 );
               })}
             </div>
-            <Command shouldFilter={false} className="min-w-0 rounded-none">
-              <CommandInput
-                ref={searchInputRef}
-                placeholder="Search models..."
-                value={searchQuery}
-                onValueChange={setSearchQuery}
-              />
+            <div className="min-w-0">
+              <div className="border-b border-border p-2">
+                <Input
+                  ref={searchInputRef}
+                  aria-label="Search models"
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      focusModelBoundary(event.key === "ArrowUp");
+                    }
+                  }}
+                />
+              </div>
               <FavoriteNotice state={favoriteState} />
-              <CommandList className="max-h-80">
+              <div className="max-h-80 overflow-y-auto overflow-x-hidden">
                 {visibleResources.map((runtime) => (
                   <ResourceNotice key={runtime.descriptor.kind} runtime={runtime} />
                 ))}
                 {listContent}
-              </CommandList>
-            </Command>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>

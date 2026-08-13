@@ -536,6 +536,98 @@ describe("createWorkspaceSettingsService", () => {
     expect(persisted.theme).toBe("light");
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
   });
+  test("preserves a queued favorite update when a full settings save starts first", async () => {
+    let markSettingsWriteStarted: (() => void) | undefined;
+    let releaseSettingsWrite: (() => void) | undefined;
+    const settingsWriteStarted = new Promise<void>((resolve) => {
+      markSettingsWriteStarted = resolve;
+    });
+    const settingsWriteGate = new Promise<void>((resolve) => {
+      releaseSettingsWrite = resolve;
+    });
+    const oldFavorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-4",
+    };
+    const newFavorite = {
+      runtimeKind: "codex" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ agentModelFavorites: [oldFavorite] }),
+      beforeWrite: async (nextConfig) => {
+        if (!nextConfig.general.openAgentStudioTabOnBackgroundSessionStart) {
+          markSettingsWriteStarted?.();
+          await settingsWriteGate;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    const settingsWrite = Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...staleSnapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    await settingsWriteStarted;
+    const favoriteWrite = Effect.runPromise(service.updateAgentModelFavorites([newFavorite]));
+    releaseSettingsWrite?.();
+
+    await Promise.all([settingsWrite, favoriteWrite]);
+    const persisted = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+    expect(persisted.agentModelFavorites).toEqual([newFavorite]);
+  });
+  test("preserves a completed favorite update when a stale full settings save runs second", async () => {
+    let markFavoriteWriteStarted: (() => void) | undefined;
+    let releaseFavoriteWrite: (() => void) | undefined;
+    const favoriteWriteStarted = new Promise<void>((resolve) => {
+      markFavoriteWriteStarted = resolve;
+    });
+    const favoriteWriteGate = new Promise<void>((resolve) => {
+      releaseFavoriteWrite = resolve;
+    });
+    const oldFavorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-4",
+    };
+    const newFavorite = {
+      runtimeKind: "codex" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ agentModelFavorites: [oldFavorite] }),
+      beforeWrite: async (nextConfig) => {
+        if (nextConfig.agentModelFavorites[0]?.modelId === newFavorite.modelId) {
+          markFavoriteWriteStarted?.();
+          await favoriteWriteGate;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    const favoriteWrite = Effect.runPromise(service.updateAgentModelFavorites([newFavorite]));
+    await favoriteWriteStarted;
+    const settingsWrite = Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...staleSnapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    releaseFavoriteWrite?.();
+
+    await Promise.all([favoriteWrite, settingsWrite]);
+    const persisted = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+    expect(persisted.agentModelFavorites).toEqual([newFavorite]);
+  });
   test("rejects invalid appearance snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig(),

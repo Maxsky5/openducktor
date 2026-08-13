@@ -631,6 +631,77 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("maps existing-session catalog refresh, success, and failure into picker resources", async () => {
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({
+            modelCatalog: CATALOG,
+            isLoadingModelCatalog: true,
+          }),
+        }),
+      );
+      let selectedRuntime = harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({ catalog: CATALOG, isLoading: true, error: null }),
+      );
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({ modelCatalog: ALTERNATE_CATALOG }),
+        }),
+      );
+      selectedRuntime = harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(false);
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({ catalog: ALTERNATE_CATALOG, isLoading: false, error: null }),
+      );
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({
+            modelCatalog: ALTERNATE_CATALOG,
+            catalogError: "Catalog refresh failed",
+          }),
+        }),
+      );
+      selectedRuntime = harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({
+          catalog: ALTERNATE_CATALOG,
+          isLoading: false,
+          error: "Catalog refresh failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the selected session model while selected-session runtime data loads", async () => {
     const loadCatalog = mock(async () => CATALOG);
     const harness = createHookHarness(

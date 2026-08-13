@@ -403,7 +403,7 @@ export function useAgentStudioChatComposer({
     [loadFileSearchForRepo, promptInputRuntime, queryClient, supportsFileSearch],
   );
   const isSelectionCatalogLoading = hasSessionTarget
-    ? !sessionModelCatalog && isSessionModelCatalogLoading
+    ? isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
 
   const { selectedModelEntry, agentProfileOptions, variantOptions, agentAccentColorsByProfileId } =

@@ -5,9 +5,11 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { host } from "@/state/operations/shared/host";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
@@ -307,6 +309,146 @@ describe("useSessionRuntimeData", () => {
       });
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("marks a retained selected-session catalog as loading during a background refresh", async () => {
+    let resolveSuccessfulRefresh: ((catalog: AgentModelCatalog) => void) | undefined;
+    const successfulRefresh = new Promise<AgentModelCatalog>((resolve) => {
+      resolveSuccessfulRefresh = resolve;
+    });
+    const refreshedCatalog: AgentModelCatalog = {
+      ...emptyCatalog,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT 5",
+          variants: [],
+        },
+      ],
+    };
+    const catalogRequests = [Promise.resolve(emptyCatalog), successfulRefresh];
+    const loadRuntimeCatalog = mock(() => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected model catalog request");
+      }
+      return request;
+    });
+    const readSessionTodos = mock(async () => []);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const isolatedWrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos,
+      },
+      { wrapper: isolatedWrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog === emptyCatalog);
+
+      await harness.run(() => {
+        void queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          exact: true,
+        });
+      });
+      await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2);
+      expect(
+        queryClient.isFetching({
+          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          exact: true,
+        }),
+      ).toBe(1);
+      await harness.waitFor((latest) => latest.isLoadingModelCatalog);
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          modelCatalog: emptyCatalog,
+          isLoadingModelCatalog: true,
+          catalogError: null,
+        }),
+      );
+
+      resolveSuccessfulRefresh?.(refreshedCatalog);
+      await harness.waitFor(
+        (latest) =>
+          latest.modelCatalog?.models[0]?.modelId === "gpt-5" && !latest.isLoadingModelCatalog,
+      );
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("reports a failed selected-session background refresh after loading ends", async () => {
+    let rejectRefresh: ((reason: Error) => void) | undefined;
+    const failedRefresh = new Promise<AgentModelCatalog>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    const catalogRequests = [Promise.resolve(emptyCatalog), failedRefresh];
+    const loadRuntimeCatalog = mock(() => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected model catalog request");
+      }
+      return request;
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const isolatedWrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos: mock(async () => []),
+      },
+      { wrapper: isolatedWrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog === emptyCatalog);
+      await harness.run(() => {
+        void queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          exact: true,
+        });
+      });
+      await harness.waitFor((latest) => latest.isLoadingModelCatalog);
+      expect(harness.getLatest().catalogError).toBeNull();
+
+      rejectRefresh?.(new Error("Catalog refresh failed"));
+      await harness.waitFor((latest) => latest.catalogError === "Catalog refresh failed");
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          modelCatalog: emptyCatalog,
+          isLoadingModelCatalog: false,
+          catalogError: "Catalog refresh failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
     }
   });
 

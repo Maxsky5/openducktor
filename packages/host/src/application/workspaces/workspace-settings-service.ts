@@ -331,7 +331,7 @@ const createUnserializedWorkspaceSettingsService = (
             kanban: snapshot.kanban,
             autopilot: snapshot.autopilot,
             agentRuntimes: snapshot.agentRuntimes,
-            agentModelFavorites: snapshot.agentModelFavorites,
+            agentModelFavorites: config.agentModelFavorites,
             workspaces,
             globalPromptOverrides: snapshot.globalPromptOverrides,
           }) as LoadedGlobalConfig,

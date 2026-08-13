@@ -5,7 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
@@ -174,6 +174,66 @@ describe("ModelPicker", () => {
     expect(toggleFavorite).toHaveBeenCalledWith(value);
     expect(onValueChange).toHaveBeenCalledTimes(0);
     expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+  });
+
+  test("renders model selection and favorite actions as sibling buttons", async () => {
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    const modelItem = screen.getByRole("listitem", { name: "GPT Five model actions" });
+    const selectModel = within(modelItem).getByRole("button", { name: "Select GPT Five model" });
+    const toggleFavorite = within(modelItem).getByRole("button", {
+      name: "Add GPT Five to favorites",
+    });
+
+    expect(selectModel.parentElement).toBe(toggleFavorite.parentElement);
+    expect(selectModel.contains(toggleFavorite)).toBe(false);
+    expect(screen.queryByRole("option")).toBeNull();
+  });
+
+  test("moves from search through model selection buttons with arrow keys", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    const search = screen.getByPlaceholderText("Search models...");
+    fireEvent.change(search, { target: { value: "gpt" } });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+
+    const openCodeModel = screen.getByRole("button", { name: "Select GPT Five model" });
+    expect(document.activeElement).toBe(openCodeModel);
+    fireEvent.keyDown(openCodeModel, { key: "ArrowDown" });
+
+    const codexModel = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
+    expect(document.activeElement).toBe(codexModel);
+    fireEvent.click(codexModel);
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
   });
 
   test("shows the settings read failure before an overlapping mutation failure", async () => {
