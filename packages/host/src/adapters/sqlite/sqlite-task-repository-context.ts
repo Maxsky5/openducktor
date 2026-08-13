@@ -136,6 +136,7 @@ export const createSqliteTaskRepositoryContextProvider = ({
             Effect.gen(function* () {
               const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
                 databasePath,
+                configureWal: true,
                 config: {
                   schema: taskStoreSchema,
                 },

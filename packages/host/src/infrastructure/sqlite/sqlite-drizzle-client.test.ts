@@ -49,6 +49,7 @@ test("configures WAL only when the connection owns persistent setup", async () =
     Effect.scoped(
       openSqliteDrizzleConnection({
         config: {},
+        configureWal: true,
         databasePath,
       }),
     ),

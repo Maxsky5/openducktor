@@ -47,7 +47,7 @@ export type SqliteDrizzleConnection<TSchema extends Record<string, unknown>> = {
 
 export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, unknown>> = {
   readonly config: DrizzleConfig<TSchema>;
-  readonly configureWal?: boolean;
+  readonly configureWal: boolean;
   readonly databasePath: string;
   readonly runtime?: SqliteDriverRuntime;
 };
@@ -175,7 +175,7 @@ const makeSqliteDrizzleSession = <TSchema extends Record<string, unknown>>(
 
 export const openSqliteDrizzleConnection = <TSchema extends Record<string, unknown>>({
   config,
-  configureWal = true,
+  configureWal,
   databasePath,
   runtime = currentSqliteDriverRuntime(),
 }: OpenSqliteDrizzleConnectionInput<TSchema>): Effect.Effect<
