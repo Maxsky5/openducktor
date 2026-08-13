@@ -65,7 +65,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
     workingDirectory: record.workingDirectory,
     externalSessionId: record.externalSessionId,
   },
-  sessionAssociation: { kind: "unbound" },
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "idle",
   title: "Builder",
   startedAt: record.startedAt,
@@ -457,6 +457,11 @@ describe("useRepoSessionReadModel", () => {
           externalSessionId: sessionRecord.externalSessionId,
         },
         activity: "waiting_for_permission",
+        sessionAssociation: {
+          kind: "workflow",
+          taskId: "task-1",
+          role: sessionRecord.role,
+        },
         pendingApprovals: [
           {
             requestId: `approval-${sessionRecord.externalSessionId}`,

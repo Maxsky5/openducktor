@@ -7,6 +7,7 @@ const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessio
   externalSessionId: "session-1",
   taskId: "task-1",
   runtimeKind: "codex",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   role: "build",
   status: "idle",
   runtimeStatusMessage: null,

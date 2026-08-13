@@ -210,6 +210,7 @@ describe("agent-orchestrator-public-operations", () => {
     const loadedSession: AgentSessionState = {
       externalSessionId: SESSION_IDENTITY.externalSessionId,
       taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       role: "build" as const,
       status: "idle",
       runtimeStatusMessage: null,

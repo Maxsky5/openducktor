@@ -30,6 +30,7 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
   return {
     externalSessionId,
     taskId: "task-1",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,

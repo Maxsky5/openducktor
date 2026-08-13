@@ -214,6 +214,19 @@ test("rejects missing resume scope before runtime side effects", async () => {
   expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
 });
 
+test("loads unbound session history without applying a session policy", async () => {
+  const mockClient = makeMockClient();
+  const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+
+  await expect(
+    adapter.loadSessionHistory(
+      sessionRuntimeRef("unbound-history", {
+        sessionScope: undefined,
+      }),
+    ),
+  ).resolves.toEqual([]);
+});
+
 const makeMockClient = (
   options: {
     permissionReplyResult?: {

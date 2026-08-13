@@ -10,6 +10,7 @@ import { useSelectedSessionContextLoad } from "./use-selected-session-context-lo
 const session = (externalSessionId: string): AgentSessionState => ({
   externalSessionId,
   taskId: "task-1",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   role: "build",
   runtimeKind: "codex",
   workingDirectory: "/repo/worktree",
@@ -99,7 +100,11 @@ describe("useSelectedSessionContextLoad", () => {
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       {
-        session: { ...session("child-thread"), role: null },
+        session: {
+          ...session("child-thread"),
+          sessionAssociation: { kind: "unbound" },
+          role: null,
+        },
         repoReadinessState: "ready" as const,
       },
       { wrapper },
@@ -112,6 +117,55 @@ describe("useSelectedSessionContextLoad", () => {
         externalSessionId: "child-thread",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads repository session context with repository scope", async () => {
+    const loadAgentSessionContext = mock(async () => undefined);
+    const operations: AgentOperationsContextValue = {
+      readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      loadAgentSessionHistory: async () => null,
+      loadAgentSessionContext,
+      startAgentSession: async () => {
+        throw new Error("Not configured");
+      },
+      sendAgentMessage: async () => undefined,
+      stopAgentSession: async () => undefined,
+      updateAgentSessionModel: () => undefined,
+      replyAgentApproval: async () => undefined,
+      answerAgentQuestion: async () => undefined,
+    };
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AgentOperationsContext.Provider value={operations}>
+        {children}
+      </AgentOperationsContext.Provider>
+    );
+    const harness = createHookHarness(
+      useSelectedSessionContextLoad,
+      {
+        session: {
+          ...session("repository-thread"),
+          taskId: "",
+          sessionAssociation: { kind: "repository" },
+          role: null,
+        },
+        repoReadinessState: "ready" as const,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessionContext.mock.calls.length === 1);
+      expect(loadAgentSessionContext).toHaveBeenCalledWith({
+        externalSessionId: "repository-thread",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        sessionScope: { kind: "repository" },
       });
     } finally {
       await harness.unmount();

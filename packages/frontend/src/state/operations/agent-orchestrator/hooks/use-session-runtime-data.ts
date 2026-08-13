@@ -4,11 +4,11 @@ import type {
   AgentSessionTodoItem,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import {
   agentSessionTodosQueryKeys,
   SESSION_TODOS_STALE_TIME_MS,
@@ -70,15 +70,19 @@ export const useSessionRuntimeData = ({
   const selectedExternalSessionId = selectedSessionIdentity?.externalSessionId ?? null;
   const selectedRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
   const selectedWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
-  const selectedTaskId = selectedRuntimeContext?.taskId ?? null;
-  const selectedRole = selectedRuntimeContext?.role ?? null;
+  const selectedSessionAssociation = selectedRuntimeContext?.sessionAssociation ?? null;
+  const selectedSessionAssociationKind = selectedSessionAssociation?.kind ?? null;
+  const stableSelectedSessionScope = useStableAgentSessionScope(
+    selectedSessionAssociation?.kind === "unbound" ? null : selectedSessionAssociation,
+  );
   const selectedModel = selectedRuntimeContext?.selectedModel ?? null;
   const stableSelectedSessionRuntimeContext = useMemo(() => {
     if (
       !hasSelectedRuntimeContext ||
       selectedExternalSessionId === null ||
       selectedRuntimeKind === null ||
-      selectedWorkingDirectory === null
+      selectedWorkingDirectory === null ||
+      selectedSessionAssociationKind === null
     ) {
       return null;
     }
@@ -87,17 +91,16 @@ export const useSessionRuntimeData = ({
       externalSessionId: selectedExternalSessionId,
       runtimeKind: selectedRuntimeKind,
       workingDirectory: selectedWorkingDirectory,
+      sessionAssociation: stableSelectedSessionScope ?? { kind: "unbound" as const },
       selectedModel,
-      ...(selectedTaskId !== null ? { taskId: selectedTaskId } : {}),
-      ...(selectedRole !== null ? { role: selectedRole } : {}),
     };
   }, [
     hasSelectedRuntimeContext,
     selectedExternalSessionId,
     selectedRuntimeKind,
     selectedWorkingDirectory,
-    selectedTaskId,
-    selectedRole,
+    selectedSessionAssociationKind,
+    stableSelectedSessionScope,
     selectedModel,
   ]);
   const sessionForRuntimeData =
@@ -106,16 +109,10 @@ export const useSessionRuntimeData = ({
     if (stableSelectedSessionRuntimeContext === null) {
       return null;
     }
+    const sessionAssociation = stableSelectedSessionRuntimeContext.sessionAssociation;
     return {
       runtimeKind: stableSelectedSessionRuntimeContext.runtimeKind,
-      sessionScope:
-        "taskId" in stableSelectedSessionRuntimeContext &&
-        "role" in stableSelectedSessionRuntimeContext
-          ? workflowAgentSessionScope(
-              stableSelectedSessionRuntimeContext.taskId,
-              stableSelectedSessionRuntimeContext.role,
-            )
-          : null,
+      sessionScope: sessionAssociation.kind === "unbound" ? null : sessionAssociation,
     };
   }, [stableSelectedSessionRuntimeContext]);
   const settingsSnapshotQuery = useQuery({

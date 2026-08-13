@@ -36,6 +36,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionW
     runtimeKind: "opencode",
     externalSessionId: "ext-session-1",
     taskId: "task-1",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     role: "spec",
     status: "idle",
     runtimeStatusMessage: null,

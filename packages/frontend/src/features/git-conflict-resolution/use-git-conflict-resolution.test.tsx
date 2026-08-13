@@ -16,6 +16,7 @@ const buildSession = (
     externalSessionId: `external-${externalSessionId}`,
     taskId: "task-1",
     runtimeKind: "opencode",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,

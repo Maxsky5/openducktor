@@ -6,7 +6,7 @@ import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
 
 type SessionRuntimeDataSource =
   | AgentSessionIdentity
-  | (AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] });
+  | (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel" | "sessionAssociation">);
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
@@ -75,9 +75,14 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
+  const todosRef = toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy);
   return {
     kind: "available",
     catalogRef,
-    todosRef: toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy),
+    todosRef:
+      "sessionAssociation" in selectedSessionIdentity &&
+      selectedSessionIdentity.sessionAssociation.kind !== "unbound"
+        ? { ...todosRef, sessionScope: selectedSessionIdentity.sessionAssociation }
+        : todosRef,
   };
 };

@@ -55,6 +55,34 @@ const repositoryThreadConfig = {
 };
 
 describe("CodexAppServerAdapter repository sessions", () => {
+  test("rejects repository todo reads from retained workflow sessions", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const callCount = transports.get("runtime-live")?.calls.length;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: started.externalSessionId,
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      }),
+    ).rejects.toThrow(
+      "registered workflow scope for task 'task-1' and role 'build' does not match the requested repository scope",
+    );
+    expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
+  });
+
   test("applies repository policy across start, send, fork, resume, and history", async () => {
     const sessionScope = { kind: "repository" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };

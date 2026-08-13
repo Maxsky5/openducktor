@@ -18,11 +18,11 @@ const missingContextTarget = ({
     return null;
   }
   const identity = toAgentSessionIdentity(session);
-  return session.role === null
+  return session.sessionAssociation.kind === "unbound"
     ? identity
     : {
         ...identity,
-        sessionScope: { kind: "workflow", taskId: session.taskId, role: session.role },
+        sessionScope: session.sessionAssociation,
       };
 };
 

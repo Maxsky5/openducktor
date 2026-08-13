@@ -83,6 +83,7 @@ const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
   taskId: "task-1",
   runtimeKind: "opencode",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
   role: "spec",
   status: "running",
   runtimeStatusMessage: null,

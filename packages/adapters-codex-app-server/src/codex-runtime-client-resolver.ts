@@ -55,6 +55,10 @@ export class CodexRuntimeClientResolver {
     runtimeId: string;
     client: CodexAppServerClient;
   }> {
+    if ("workingDirectory" in input) {
+      requireSessionWorkingDirectory(input.workingDirectory, action);
+    }
+
     const resolver = this.options.repoRuntimeResolver;
     if (!resolver) {
       throw new Error(
@@ -73,10 +77,6 @@ export class CodexRuntimeClientResolver {
     const runtime = await resolver.requireRepoRuntime(runtimeRef);
 
     const { runtimeId } = resolveCodexRuntimeClientInput(runtime, runtimeRef, action);
-    if ("workingDirectory" in input) {
-      requireSessionWorkingDirectory(input.workingDirectory, action);
-    }
-
     return {
       runtimeId,
       client: this.clientForRuntime(runtimeId),

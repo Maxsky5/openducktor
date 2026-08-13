@@ -571,16 +571,18 @@ export class OpencodeSdkAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
-    const policy = resolveOpencodeSessionPolicy(
-      input.sessionScope,
-      this.getRuntimeDefinition(),
-      "load OpenCode session history",
-    );
-    await ensureRepositoryMcpConnected({
-      client: this.createClient(runtimeClientInput),
-      policy,
-      workingDirectory: input.workingDirectory,
-    });
+    if (input.sessionScope) {
+      const policy = resolveOpencodeSessionPolicy(
+        input.sessionScope,
+        this.getRuntimeDefinition(),
+        "load OpenCode session history",
+      );
+      await ensureRepositoryMcpConnected({
+        client: this.createClient(runtimeClientInput),
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    }
     const matchingSessions = [...this.sessions.values()].filter(
       (session) =>
         session.externalSessionId === input.externalSessionId &&

@@ -24,7 +24,7 @@ test("reports workspace runtime failures without session identity", async () => 
   expect(transportFactory).toHaveBeenCalledTimes(0);
 });
 
-test("validates operation working directories outside runtime identity", async () => {
+test("validates operation working directories before resolving the runtime", async () => {
   const requireRepoRuntime = mock(async () => makeRuntimeSummary("runtime-live"));
   const transportFactory = mock(() => {
     throw new Error("transportFactory should not be called");
@@ -42,6 +42,6 @@ test("validates operation working directories outside runtime identity", async (
       query: "policy",
     }),
   ).rejects.toThrow("Session workingDirectory is required to search files.");
-  expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+  expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
   expect(transportFactory).toHaveBeenCalledTimes(0);
 });

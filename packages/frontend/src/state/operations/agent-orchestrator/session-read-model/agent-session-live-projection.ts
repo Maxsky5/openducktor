@@ -132,6 +132,7 @@ const applyDirectSnapshot = (
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
+      sessionAssociation: snapshot.sessionAssociation,
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -149,6 +150,7 @@ const applyDirectSnapshot = (
 
   return {
     ...current,
+    sessionAssociation: snapshot.sessionAssociation,
     title: snapshot.title,
     status: nextStatus,
     runtimeStatusMessage: nextStatus === "idle" ? null : current.runtimeStatusMessage,
@@ -170,6 +172,7 @@ const createLiveOnlySession = (
       ...identity,
       title: snapshot.title,
       taskId: parent?.taskId ?? "",
+      sessionAssociation: snapshot.sessionAssociation,
       role: null,
       status: "idle",
       runtimeStatusMessage: null,

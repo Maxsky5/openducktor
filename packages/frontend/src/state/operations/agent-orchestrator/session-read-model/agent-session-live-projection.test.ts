@@ -68,6 +68,22 @@ const identity = (externalSessionId: string): AgentSessionIdentity => ({
 });
 
 describe("agent session live projection", () => {
+  test("keeps repository association on live-only sessions", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("repository-thread", {
+          sessionAssociation: { kind: "repository" },
+        }),
+      ],
+    });
+
+    expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
+      kind: "repository",
+    });
+  });
+
   test("commits an atomic initial snapshot with activity, pending input, and retained context", () => {
     const tasks = taskSessionRecords(
       { taskId: "task-1", record: record("thread-1") },

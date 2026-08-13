@@ -47,6 +47,7 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   return {
     ...identity,
     taskId: "task-1",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,
@@ -226,9 +227,40 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         workingDirectory: "/repo",
       });
       expect(harness.getLatest().todos).toEqual([todoFixture]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reads repository todos with repository scope", async () => {
+    const readSessionTodos = mock(async () => [todoFixture]);
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState({
+          taskId: "",
+          role: null,
+          sessionAssociation: { kind: "repository" },
+        }),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+        repoReadinessState: "ready" as const,
+        loadRuntimeCatalog: async () => emptyCatalog,
+        readSessionTodos,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.todos.length === 1);
+      expect(readSessionTodos).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionScope: { kind: "repository" } }),
+      );
     } finally {
       await harness.unmount();
     }

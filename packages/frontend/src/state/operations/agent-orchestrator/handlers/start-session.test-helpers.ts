@@ -132,6 +132,7 @@ export const sessionFixture = (
 ): TestAgentSessionState => ({
   runtimeKind: "opencode",
   taskId: "task-1",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   role: "build",
   status: "idle",
   runtimeStatusMessage: null,

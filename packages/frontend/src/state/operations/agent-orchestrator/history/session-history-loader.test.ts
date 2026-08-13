@@ -301,6 +301,7 @@ describe("session history loader", () => {
   test("loads history without workflow role context", async () => {
     const sessionWithoutRole = {
       ...createSession(),
+      sessionAssociation: { kind: "unbound" as const },
       role: null,
     };
     const harness = createHistoryLoadHarness(sessionWithoutRole);
@@ -341,6 +342,40 @@ describe("session history loader", () => {
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "History can load without workflow role context.",
     ]);
+  });
+
+  test("preserves repository scope when loading repository session history", async () => {
+    const repositorySession = {
+      ...createSession(),
+      taskId: "",
+      role: null,
+      sessionAssociation: { kind: "repository" as const },
+    } as AgentSessionState & { sessionAssociation: { kind: "repository" } };
+    const harness = createHistoryLoadHarness(repositorySession);
+    const loadSessionHistory = mock(async () => []);
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      workspaceId: "workspace-1",
+      adapter: { loadSessionHistory },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      taskRef: { current: [] },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await loadAgentSessionHistory(sessionTarget);
+
+    expect(loadSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "external-1",
+      sessionScope: { kind: "repository" },
+      runtimePolicy: { kind: "opencode" },
+      limit: 600,
+    });
   });
 
   test("fails selected history loading for an unknown session", async () => {

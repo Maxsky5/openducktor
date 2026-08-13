@@ -3,7 +3,6 @@ import type {
   AgentSkillCatalog,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -117,13 +116,12 @@ export function useRuntimeTranscriptSessionHistory({
       ? liveSession
       : null;
   const inheritedSessionScope = stableTarget?.sessionScope ?? null;
-  const sessionScope = useMemo(
-    () =>
-      matchingSession?.role
-        ? workflowAgentSessionScope(matchingSession.taskId, matchingSession.role)
-        : inheritedSessionScope,
-    [inheritedSessionScope, matchingSession?.role, matchingSession?.taskId],
-  );
+  const sessionScope = useMemo(() => {
+    if (!matchingSession || matchingSession.sessionAssociation.kind === "unbound") {
+      return inheritedSessionScope;
+    }
+    return matchingSession.sessionAssociation;
+  }, [inheritedSessionScope, matchingSession]);
   const runtimeSessionRefInput = useMemo(() => {
     if (repoPath === null || stableTarget === null) {
       return null;

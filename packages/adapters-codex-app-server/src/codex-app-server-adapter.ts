@@ -611,11 +611,14 @@ export class CodexAppServerAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session todos");
+    const session = this.localSessions.get(input.externalSessionId);
+    if (session) {
+      applyRuntimeContextToSession(session, input, "load Codex session todos");
+    }
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
     if (liveTodos) {
       return liveTodos;
     }
-    const session = this.localSessions.get(input.externalSessionId);
     const { client, runtimeId } = session
       ? {
           client: this.runtimeClients.clientForRuntime(session.runtimeId),
