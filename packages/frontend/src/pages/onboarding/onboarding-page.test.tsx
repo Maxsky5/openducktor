@@ -341,6 +341,46 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("validates the exact paths returned by explicit runtime discovery", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const discoveredRuntimes: AgentRuntimes = {
+      ...runtimes,
+      opencode: { enabled: true, executablePath: "/discovered/opencode" },
+    };
+    const requests: Array<"discover" | { opencodePath: string }> = [];
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "discover") {
+        requests.push("discover");
+        return createCheck(discoveredRuntimes, true);
+      }
+      requests.push({ opencodePath: input.paths.opencode });
+      const checkedRuntimes = {
+        ...runtimes,
+        opencode: { enabled: true, executablePath: input.paths.opencode },
+      };
+      return createCheck(checkedRuntimes, true);
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      requests.length = 0;
+
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+
+      await waitFor(() =>
+        expect(requests).toEqual(["discover", { opencodePath: "/discovered/opencode" }]),
+      );
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
     const initialRuntimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },

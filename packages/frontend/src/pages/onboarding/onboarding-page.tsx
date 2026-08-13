@@ -138,10 +138,6 @@ export function OnboardingPage(): ReactElement {
               : rows.get("claude")?.ok === true,
           },
         };
-        queryClient.setQueryData(
-          runtimeExecutablesQueryOptions(runtimeExecutablePaths(nextDraft)).queryKey,
-          checked,
-        );
         setRuntimeDraft(nextDraft);
       }
     } catch (cause) {

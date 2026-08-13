@@ -380,7 +380,7 @@ export const createToolDiscoveryAdapter = ({
       const pathApi = context.platform === "win32" ? win32 : posix;
       if (normalizedPath && !pathApi.isAbsolute(resolvedPath)) {
         return Effect.fail(
-          invalidSavedToolPathError(descriptor, toolId, "must be absolute", {
+          invalidSavedToolPathError(descriptor, toolId, `"${resolvedPath}" must be absolute`, {
             executablePath: resolvedPath,
           }),
         );

@@ -535,10 +535,10 @@ describe("discoverToolPath", () => {
 
     await expect(
       Effect.runPromise(validateExactToolPath(adapter, "codex", "codex")),
-    ).rejects.toThrow("Saved Codex path must be absolute");
+    ).rejects.toThrow('Saved Codex path "codex" must be absolute');
     await expect(
       Effect.runPromise(validateExactToolPath(adapter, "codex", "bin/codex")),
-    ).rejects.toThrow("Saved Codex path must be absolute");
+    ).rejects.toThrow('Saved Codex path "bin/codex" must be absolute');
     expect(resolveCalls).toBe(0);
   });
 });
