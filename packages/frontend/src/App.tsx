@@ -68,6 +68,7 @@ export function App({ routerMode = "browser" }: AppProps): ReactElement {
               <Routes>
                 <Route element={<AppShell />}>
                   <Route path="/" element={<Navigate to="/kanban" replace />} />
+                  <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
                   <Route
                     path="/kanban"
                     element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)}

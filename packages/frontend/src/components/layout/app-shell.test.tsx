@@ -7,7 +7,8 @@ import {
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import type { ReactElement } from "react";
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -145,10 +146,17 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
 });
 
 type RenderAppShellForTestOptions = {
+  initialEntry?: string;
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
 };
+
+function CurrentRoute(): ReactElement {
+  const location = useLocation();
+
+  return <div data-testid="current-route">{location.pathname}</div>;
+}
 
 const createChecksState = (): ChecksStateContextValue => ({
   runtimeCheck: null,
@@ -208,7 +216,8 @@ const renderAppShellForTest = (
   );
 
   return render(
-    <MemoryRouter initialEntries={["/kanban"]} useTransitions>
+    <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions>
+      <CurrentRoute />
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <ActiveWorkspaceContext.Provider
@@ -263,6 +272,10 @@ const renderAppShellForTest = (
                             <Routes>
                               <Route element={<AppShell />}>
                                 <Route path="/kanban" element={<main>Kanban</main>} />
+                                <Route
+                                  path="/onboarding"
+                                  element={<Navigate to="/kanban" replace />}
+                                />
                               </Route>
                             </Routes>
                           </AgentSessionsContext.Provider>
@@ -302,13 +315,26 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("shows onboarding after an empty workspace list loads", () => {
+  test("redirects an empty workspace from kanban to onboarding", async () => {
     renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 
+    await waitFor(() =>
+      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
+    );
     expect(
       screen.getByRole("heading", { name: "Move from idea to reviewed change." }),
     ).toBeTruthy();
     expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("redirects onboarding to kanban when a workspace exists", async () => {
+    renderAppShellForTest({ initialEntry: "/onboarding" });
+
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(
+      screen.queryByRole("heading", { name: "Move from idea to reviewed change." }),
+    ).toBeNull();
   });
 
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {
