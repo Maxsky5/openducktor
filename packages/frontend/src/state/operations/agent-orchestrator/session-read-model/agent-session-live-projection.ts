@@ -129,10 +129,14 @@ const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
 ): AgentSessionState => {
+  const sessionAssociation =
+    snapshot.sessionAssociation.kind === "unbound" && current.sessionAssociation.kind !== "unbound"
+      ? current.sessionAssociation
+      : snapshot.sessionAssociation;
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
-      sessionAssociation: snapshot.sessionAssociation,
+      sessionAssociation,
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -150,7 +154,7 @@ const applyDirectSnapshot = (
 
   return {
     ...current,
-    sessionAssociation: snapshot.sessionAssociation,
+    sessionAssociation,
     title: snapshot.title,
     status: nextStatus,
     runtimeStatusMessage: nextStatus === "idle" ? null : current.runtimeStatusMessage,

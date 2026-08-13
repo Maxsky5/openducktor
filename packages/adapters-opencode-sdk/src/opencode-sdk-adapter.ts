@@ -70,8 +70,8 @@ import {
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import {
-  applyRepositorySessionPolicy,
   applyRuntimeContextToSession,
+  applySessionPolicy,
   assertRuntimeContextCompatibleWithSession,
 } from "./opencode-session-binding";
 import {
@@ -246,7 +246,7 @@ export class OpencodeSdkAdapter
         policy,
         workingDirectory: input.workingDirectory,
       });
-      await applyRepositorySessionPolicy({
+      await applySessionPolicy({
         client: existing.client,
         externalSessionId: input.externalSessionId,
         policy,
@@ -268,7 +268,7 @@ export class OpencodeSdkAdapter
       sessionID: input.externalSessionId,
     });
     const detailData = unwrapData(detail, "get session");
-    await applyRepositorySessionPolicy({
+    await applySessionPolicy({
       client,
       externalSessionId: input.externalSessionId,
       policy,
@@ -312,7 +312,7 @@ export class OpencodeSdkAdapter
           policy,
           workingDirectory: input.workingDirectory,
         });
-        await applyRepositorySessionPolicy({
+        await applySessionPolicy({
           client: existing.client,
           externalSessionId: input.externalSessionId,
           policy,
@@ -345,7 +345,7 @@ export class OpencodeSdkAdapter
     });
     const detailData = unwrapData(detail, "get session");
     if (policy) {
-      await applyRepositorySessionPolicy({
+      await applySessionPolicy({
         client,
         externalSessionId: input.externalSessionId,
         policy,
@@ -437,7 +437,7 @@ export class OpencodeSdkAdapter
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
-    await applyRepositorySessionPolicy({
+    await applySessionPolicy({
       client,
       externalSessionId,
       policy,

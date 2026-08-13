@@ -225,6 +225,16 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       title: "BUILD task-1",
       sessionAssociation: workflowAgentSessionScope("task-1", "build"),
     });
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        sessionID: "session-opencode-fork",
+        title: "BUILD task-1",
+        permission: expect.arrayContaining([
+          { permission: "odt_build_completed", pattern: "*", action: "allow" },
+          { permission: "odt_set_spec", pattern: "*", action: "deny" },
+        ]),
+      }),
+    );
   });
 
   test("propagates repository session policy update failures", async () => {
@@ -242,6 +252,35 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       }),
     ).rejects.toThrow(
       "OpenCode request failed: update repository session policy for session 'repository-resume'",
+    );
+  });
+
+  test("propagates workflow fork policy update failures", async () => {
+    const mock = makeMockClient({
+      sessionUpdateResult: { data: undefined, error: new Error("permission update rejected") },
+    });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: workflowAgentSessionScope("task-1", "spec"),
+      runtimePolicy,
+      systemPrompt: "system",
+    });
+
+    await expect(
+      adapter.forkSession({
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        runtimeKind: "opencode",
+        parentExternalSessionId: started.externalSessionId,
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+        runtimePolicy,
+        systemPrompt: "system",
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: update workflow session policy for session 'session-opencode-fork'",
     );
   });
 

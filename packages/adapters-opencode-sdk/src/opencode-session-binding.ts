@@ -6,16 +6,13 @@ import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionInput, SessionRecord } from "./types";
 
-export const applyRepositorySessionPolicy = async (input: {
+export const applySessionPolicy = async (input: {
   client: SessionRecord["client"];
   externalSessionId: string;
   policy: OpencodeSessionPolicy;
   workingDirectory: string;
 }): Promise<void> => {
-  if (input.policy.toolSelection.kind !== "repository") {
-    return;
-  }
-  const action = `update repository session policy for session '${input.externalSessionId}'`;
+  const action = `update ${input.policy.toolSelection.kind} session policy for session '${input.externalSessionId}'`;
   try {
     const updated = await input.client.session.update({
       directory: input.workingDirectory,

@@ -9,6 +9,7 @@ import {
 } from "./codex-session-lifecycle";
 import { codexTransportPolicy, requireCodexRuntimePolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
+import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexLiveSessionLocator, CodexSessionContextUsage } from "./types";
 
@@ -50,10 +51,12 @@ export class CodexContextUsageLoader {
       this.assertActive(guard);
       await this.wait(guard, this.deps.prepareRuntime(runtime.runtimeId));
       this.assertActive(guard);
-      const policy = requireCodexRuntimePolicy(
+      const sessionPolicy = resolveCodexSessionScopePolicy(
+        input.sessionScope,
         input.runtimePolicy,
         "load Codex session context usage",
       );
+      const policy = sessionPolicy.runtimePolicy;
       return await this.wait(
         guard,
         this.deps.runtimeEvents.loadSessionContextUsage(
@@ -64,6 +67,7 @@ export class CodexContextUsageLoader {
               guard,
               runtime.client.threadResume({
                 ...codexTransportPolicy(policy),
+                config: sessionPolicy.threadConfig,
                 threadId: input.externalSessionId,
                 cwd: input.workingDirectory,
                 excludeTurns: false,

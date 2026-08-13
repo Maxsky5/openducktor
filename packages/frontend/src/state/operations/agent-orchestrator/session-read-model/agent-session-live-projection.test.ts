@@ -68,6 +68,23 @@ const identity = (externalSessionId: string): AgentSessionIdentity => ({
 });
 
 describe("agent session live projection", () => {
+  test("keeps persisted workflow scope when runtime discovery is unbound", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("workflow-thread"),
+      }),
+      snapshots: [snapshot("workflow-thread")],
+    });
+
+    expect(getAgentSession(sessions, identity("workflow-thread"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
+  });
+
   test("keeps repository association on live-only sessions", () => {
     const sessions = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
@@ -81,6 +98,39 @@ describe("agent session live projection", () => {
 
     expect(getAgentSession(sessions, identity("repository-thread"))?.sessionAssociation).toEqual({
       kind: "repository",
+    });
+  });
+
+  test("keeps retained repository scope when runtime discovery becomes unbound", () => {
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("repository-thread", {
+          sessionAssociation: { kind: "repository" },
+        }),
+      ],
+    });
+    const refreshed = buildAgentSessionLiveCollection({
+      current: initial,
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [snapshot("repository-thread")],
+    });
+
+    expect(getAgentSession(refreshed, identity("repository-thread"))?.sessionAssociation).toEqual({
+      kind: "repository",
+    });
+  });
+
+  test("keeps a discovered live-only session unbound", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [snapshot("unbound-thread")],
+    });
+
+    expect(getAgentSession(sessions, identity("unbound-thread"))?.sessionAssociation).toEqual({
+      kind: "unbound",
     });
   });
 
