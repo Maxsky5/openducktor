@@ -300,6 +300,12 @@ export class OpencodeSdkAdapter
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
+      const registeredSessionRef = opencodeSessionRef(existing);
+      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+        throw new Error(
+          `Cannot ensure OpenCode session state for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+        );
+      }
       assertRuntimeContextCompatibleWithSession(existing, input, "ensure session state");
       if (input.sessionScope) {
         const policy = resolveOpencodeSessionPolicy(
@@ -437,12 +443,34 @@ export class OpencodeSdkAdapter
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
-    await applySessionPolicy({
-      client,
-      externalSessionId,
-      policy,
-      workingDirectory: input.workingDirectory,
-    });
+    try {
+      await applySessionPolicy({
+        client,
+        externalSessionId,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    } catch (policyError) {
+      try {
+        const deleted = await client.session.delete({
+          directory: input.workingDirectory,
+          sessionID: externalSessionId,
+        });
+        if (deleted.data !== true) {
+          throw toOpenCodeRequestError(
+            `delete unregistered fork '${externalSessionId}'`,
+            deleted.error,
+            deleted.response,
+          );
+        }
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [policyError, cleanupError],
+          `Failed to apply ${policy.toolSelection.kind} policy to forked OpenCode session '${externalSessionId}' and delete the unregistered fork.`,
+        );
+      }
+      throw policyError;
+    }
     const sessionInput = toSessionInput(input);
 
     return registerSession({
@@ -571,6 +599,19 @@ export class OpencodeSdkAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
+    const matchingSessions = [...this.sessions.values()].filter(
+      (session) =>
+        session.externalSessionId === input.externalSessionId &&
+        session.runtimeId === runtimeClientInput.runtimeId,
+    );
+    for (const session of matchingSessions) {
+      const registeredSessionRef = opencodeSessionRef(session);
+      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+        throw new Error(
+          `Cannot load OpenCode session history for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+        );
+      }
+    }
     if (input.sessionScope) {
       const policy = resolveOpencodeSessionPolicy(
         input.sessionScope,
@@ -583,11 +624,6 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const matchingSessions = [...this.sessions.values()].filter(
-      (session) =>
-        session.externalSessionId === input.externalSessionId &&
-        session.runtimeId === runtimeClientInput.runtimeId,
-    );
     for (const session of matchingSessions) {
       applyRuntimeContextToSession(session, input, "load session history");
     }
@@ -677,7 +713,8 @@ export class OpencodeSdkAdapter
     } catch (error) {
       throw toOpenCodeRequestError("compact session", error);
     }
-    if (!this.sessions.has(input.externalSessionId)) {
+    const existing = this.sessions.get(input.externalSessionId);
+    if (!existing?.input.sessionScope) {
       await this.ensureSessionState(input);
     }
     const session = requireSession(this.sessions, input.externalSessionId);

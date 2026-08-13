@@ -91,6 +91,7 @@ export type MockSession = {
   getCalls: unknown[];
   updateCalls: unknown[];
   forkCalls: unknown[];
+  deleteCalls: unknown[];
   updateResult: SessionUpdateMockResult;
   messagesCalls: unknown[];
   childrenCalls: unknown[];
@@ -283,6 +284,7 @@ export const makeMockClient = ({
     getCalls: [],
     updateCalls: [],
     forkCalls: [],
+    deleteCalls: [],
     updateResult: sessionUpdateResult,
     messagesCalls: [],
     childrenCalls: [],
@@ -369,6 +371,10 @@ export const makeMockClient = ({
       fork: async (input: unknown) => {
         session.forkCalls.push(input);
         return { data: { id: forkSessionId }, error: undefined };
+      },
+      delete: async (input: unknown) => {
+        session.deleteCalls.push(input);
+        return { data: true, error: undefined };
       },
       messages: async (input: unknown) => {
         session.messagesCalls.push(input);

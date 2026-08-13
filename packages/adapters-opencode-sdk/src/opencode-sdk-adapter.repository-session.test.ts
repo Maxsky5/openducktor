@@ -110,6 +110,34 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.tool.idsCalls).toHaveLength(0);
   });
 
+  test("applies repository policy before sending from a retained unbound session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+    expect(mock.session.updateCalls).toHaveLength(0);
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      parts: [{ kind: "text", text: "Inspect the repository" }],
+    });
+
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        sessionID: "session-opencode-1",
+        title: "Repository session",
+        permission: expect.arrayContaining([
+          { permission: "odt_create_task", pattern: "*", action: "ask" },
+          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
+        ]),
+      }),
+    );
+    expect(mock.session.promptAsyncCalls).toHaveLength(1);
+    unsubscribe();
+  });
+
   test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
     const mock = makeMockClient({
       mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
@@ -199,6 +227,47 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(promptCount);
   });
 
+  test("rejects stale history identity before changing a retained repository session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: repositoryScope,
+      runtimePolicy,
+      systemPrompt: "original system prompt",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const mcpStatusCallCount = mock.mcp.statusCalls.length;
+
+    await expect(
+      adapter.loadSessionHistory(
+        sessionRuntimeRef(started.externalSessionId, {
+          sessionScope: repositoryScope,
+          workingDirectory: "/repo/worktrees/stale",
+          systemPrompt: "replacement system prompt",
+          model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+        }),
+      ),
+    ).rejects.toThrow("registered session belongs");
+    expect(mock.mcp.statusCalls).toHaveLength(mcpStatusCallCount);
+    expect(mock.session.messagesCalls).toHaveLength(0);
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef(started.externalSessionId, {
+        sessionScope: repositoryScope,
+        systemPrompt: undefined,
+      }),
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+    expect(mock.session.promptAsyncCalls[0]).toMatchObject({
+      system: "original system prompt",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      variant: "medium",
+    });
+  });
+
   test("allows an explicit workflow role change when forking", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
@@ -282,6 +351,36 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     ).rejects.toThrow(
       "OpenCode request failed: update workflow session policy for session 'session-opencode-fork'",
     );
+  });
+
+  test("deletes a fork when applying its workflow policy fails", async () => {
+    const mock = makeMockClient({
+      sessionUpdateResult: { data: undefined, error: new Error("permission update rejected") },
+    });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: workflowAgentSessionScope("task-1", "spec"),
+      runtimePolicy,
+      systemPrompt: "system",
+    });
+
+    await expect(
+      adapter.forkSession({
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        runtimeKind: "opencode",
+        parentExternalSessionId: started.externalSessionId,
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+        runtimePolicy,
+        systemPrompt: "system",
+      }),
+    ).rejects.toThrow("update workflow session policy");
+    expect(mock.session.deleteCalls).toEqual([
+      { directory: "/repo", sessionID: "session-opencode-fork" },
+    ]);
   });
 
   test("keeps retained model and system prompt when a policy update fails", async () => {
