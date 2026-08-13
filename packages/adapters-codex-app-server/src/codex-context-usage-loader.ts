@@ -96,18 +96,18 @@ export class CodexContextUsageLoader {
   }
 
   async loadLive(input: CodexLiveSessionLocator): Promise<CodexSessionContextUsage | null> {
+    const session = this.retainedLiveSession(input);
+    if (session.summary.sessionAssociation.kind === "unbound") {
+      throw new Error(
+        `Cannot load Codex session context usage because session '${input.externalSessionId}' has no session context.`,
+      );
+    }
     const retained = this.deps.runtimeEvents.latestContextUsage(
       input.runtimeId,
       input.externalSessionId,
     );
     if (retained) {
       return retained;
-    }
-    const session = this.retainedLiveSession(input);
-    if (session.summary.sessionAssociation.kind === "unbound") {
-      throw new Error(
-        `Cannot load Codex session context usage because session '${input.externalSessionId}' has no session context.`,
-      );
     }
     const sessionPolicy = resolveCodexSessionScopePolicy(
       session.summary.sessionAssociation,
