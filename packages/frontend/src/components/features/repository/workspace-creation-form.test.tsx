@@ -1,0 +1,129 @@
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { useQueryClient } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { type ReactElement, useEffect } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import { WorkspaceCreationForm } from "./workspace-creation-form";
+
+const mountedViews = new Set<ReturnType<typeof render>>();
+afterEach(() => {
+  for (const view of mountedViews) view.unmount();
+  mountedViews.clear();
+});
+
+function SeedFilesystemDirectory(): ReactElement | null {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    });
+  }, [queryClient]);
+  return null;
+}
+
+const chooseRepository = async (): Promise<void> => {
+  fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+  fireEvent.click(await screen.findByRole("button", { name: /choose this folder/i }));
+  await screen.findByRole("button", { name: /^open repository$/i });
+};
+
+const renderForm = ({
+  addWorkspace,
+  onSuccess,
+  duplicate = false,
+}: {
+  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
+  onSuccess?: () => void;
+  duplicate?: boolean;
+}): void => {
+  const view = render(
+    <QueryProvider useIsolatedClient>
+      <SeedFilesystemDirectory />
+      <WorkspaceCreationForm
+        workspaces={
+          duplicate
+            ? [
+                {
+                  workspaceId: "existing",
+                  workspaceName: "Existing",
+                  repoPath: "/repo",
+                  isActive: true,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: "/worktrees",
+                  effectiveWorktreeBasePath: "/worktrees",
+                },
+              ]
+            : []
+        }
+        addWorkspace={addWorkspace}
+        {...(onSuccess ? { onSuccess } : {})}
+      />
+    </QueryProvider>,
+  );
+  mountedViews.add(view);
+};
+
+describe("WorkspaceCreationForm", () => {
+  test("blocks a repository that is already configured", async () => {
+    const addWorkspace = mock(async () => {});
+    renderForm({ addWorkspace, duplicate: true });
+
+    await chooseRepository();
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Repository is already configured as Existing.",
+    );
+    expect(
+      (screen.getByRole("button", { name: /^open repository$/i }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(addWorkspace).not.toHaveBeenCalled();
+  });
+
+  test("derives workspace fields, stays disabled while busy, and reports success", async () => {
+    const deferred = createDeferred<void>();
+    const addWorkspace = mock(async () => deferred.promise);
+    const onSuccess = mock(() => {});
+    renderForm({ addWorkspace, onSuccess });
+    await chooseRepository();
+
+    expect((screen.getByLabelText("Workspace ID") as HTMLInputElement).value).toBe("repo");
+    expect((screen.getByLabelText("Workspace name") as HTMLInputElement).value).toBe("repo");
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+
+    const busyButton = await screen.findByRole("button", { name: "Opening repository..." });
+    expect((busyButton as HTMLButtonElement).disabled).toBe(true);
+    expect(addWorkspace).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      workspaceId: "repo",
+      workspaceName: "repo",
+    });
+    deferred.resolve();
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  test("shows add failures and lets the user retry without losing the draft", async () => {
+    let attempts = 0;
+    const addWorkspace = mock(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Repository open failed");
+    });
+    const onSuccess = mock(() => {});
+    renderForm({ addWorkspace, onSuccess });
+    await chooseRepository();
+
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+    await screen.findByText("Repository open failed");
+    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(addWorkspace).toHaveBeenCalledTimes(2);
+  });
+});

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { runtimeExecutableResultForPath } from "./runtime-executable-validation";
 
 type RuntimeExecutablePanelProps = {
   runtimes: AgentRuntimes;
@@ -24,27 +25,6 @@ type RuntimeExecutablePanelProps = {
   onCheckAgain: () => void;
 };
 
-export const invalidEnabledRuntime = (
-  runtimes: AgentRuntimes,
-  results: RuntimeExecutableCheckResult[],
-): RuntimeExecutableCheckResult | null => {
-  const resultsByKind = new Map(results.map((result) => [result.kind, result]));
-  for (const kind of ["opencode", "codex", "claude"] as const) {
-    if (runtimes[kind].enabled && resultsByKind.get(kind)?.ok !== true) {
-      return (
-        resultsByKind.get(kind) ?? {
-          kind,
-          path: runtimes[kind].executablePath,
-          ok: false,
-          version: null,
-          error: `${kind} needs a valid executable path.`,
-        }
-      );
-    }
-  }
-  return null;
-};
-
 export function RuntimeExecutablePanel({
   runtimes,
   definitions,
@@ -54,7 +34,6 @@ export function RuntimeExecutablePanel({
   onChange,
   onCheckAgain,
 }: RuntimeExecutablePanelProps): ReactElement {
-  const resultsByKind = new Map(results.map((result) => [result.kind, result]));
   const [pickerRuntimeKind, setPickerRuntimeKind] = useState<RuntimeKind | null>(null);
 
   const updateRuntime = (kind: RuntimeKind, update: Partial<AgentRuntimes[RuntimeKind]>): void => {
@@ -85,7 +64,7 @@ export function RuntimeExecutablePanel({
         {definitions.map((definition) => {
           const kind = definition.kind;
           const config = runtimes[kind];
-          const result = resultsByKind.get(kind);
+          const result = runtimeExecutableResultForPath(kind, config.executablePath, results);
           const inputId = `runtime-executable-${kind}`;
           return (
             <section

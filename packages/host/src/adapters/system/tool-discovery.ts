@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { posix, win32 } from "node:path";
 import { normalizeUserPathInput } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
@@ -373,8 +374,19 @@ export const createToolDiscoveryAdapter = ({
     },
     validateToolPath(toolId, executablePath) {
       const descriptor = TOOL_DISCOVERY_DESCRIPTORS[toolId];
+      const context = createToolDiscoveryContext(options);
+      const normalizedPath = normalizeUserPathInput(executablePath);
+      const resolvedPath = resolveUserPathForContext(normalizedPath, context);
+      const pathApi = context.platform === "win32" ? win32 : posix;
+      if (normalizedPath && !pathApi.isAbsolute(resolvedPath)) {
+        return Effect.fail(
+          invalidSavedToolPathError(descriptor, toolId, "must be absolute", {
+            executablePath: resolvedPath,
+          }),
+        );
+      }
       return resolveExplicitToolPathSource({
-        context: createToolDiscoveryContext(options),
+        context,
         detailKey: "executablePath",
         displayLabel: "Saved path",
         env,

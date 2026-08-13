@@ -78,10 +78,10 @@ describe("settings runtime availability validation", () => {
       runtimeExecutableResults: [
         {
           kind: "opencode",
-          path: "/missing/opencode",
+          path: "/bin/opencode",
           ok: false,
           version: null,
-          error: "Executable does not exist: /missing/opencode",
+          error: "Executable does not exist: /bin/opencode",
         },
         {
           kind: "codex",
@@ -94,9 +94,27 @@ describe("settings runtime availability validation", () => {
     });
 
     expect(validation.runtimeExecutableErrors).toEqual([
-      "Executable does not exist: /missing/opencode",
+      "Executable does not exist: /bin/opencode",
     ]);
     expect(validation.totalErrorCount).toBe(3);
+  });
+
+  test("does not accept a valid result for a previous executable path", () => {
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft: createSnapshot(),
+      runtimeExecutableResults: [
+        {
+          kind: "opencode",
+          path: "/previous/opencode",
+          ok: true,
+          version: "1.0.0",
+          error: null,
+        },
+      ],
+    });
+
+    expect(validation.runtimeExecutableErrors).toEqual(["OpenCode needs a valid executable path."]);
   });
 
   test("reports configured disabled runtimes without substituting another runtime", () => {

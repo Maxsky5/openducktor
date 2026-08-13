@@ -1,11 +1,15 @@
-import { globalConfigSchema, type PersistedGlobalConfigV2 } from "@openducktor/contracts";
+import {
+  globalConfigSchema,
+  knownRuntimeKindValues,
+  type PersistedGlobalConfigV2,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   createDefaultGlobalConfig,
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import type { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
 export type RuntimeConfigInitializer = (
@@ -17,6 +21,20 @@ export const createRuntimeConfigInitializer =
   (legacyConfig) =>
     Effect.gen(function* () {
       const check = yield* checkService.check({ mode: "discover" });
+      const checksByKind = new Map<string, (typeof check.runtimes)[number]>(
+        check.runtimes.map((row) => [row.kind, row]),
+      );
+      for (const kind of knownRuntimeKindValues) {
+        if (!checksByKind.has(kind)) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "runtimeConfig.initialize",
+              message: `Runtime discovery did not return a result for ${kind}`,
+              details: { kind },
+            }),
+          );
+        }
+      }
       const executablePaths: Record<string, string> = {};
       for (const row of check.runtimes) {
         executablePaths[row.kind] = row.ok ? row.path : "";
@@ -27,21 +45,16 @@ export const createRuntimeConfigInitializer =
       }
 
       const config = createDefaultGlobalConfig();
-      const checksByKind = new Map<string, (typeof check.runtimes)[number]>(
-        check.runtimes.map((row) => [row.kind, row]),
-      );
       const agentRuntimes = Object.fromEntries(
         Object.entries(config.agentRuntimes).map(([kind, runtime]) => {
           const row = checksByKind.get(kind);
           return [
             kind,
-            row
-              ? {
-                  ...runtime,
-                  enabled: row.ok,
-                  executablePath: row.ok ? row.path : "",
-                }
-              : runtime,
+            {
+              ...runtime,
+              enabled: row?.ok === true,
+              executablePath: row?.ok === true ? row.path : "",
+            },
           ];
         }),
       );

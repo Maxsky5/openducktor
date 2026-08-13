@@ -61,4 +61,27 @@ describe("runtime config initializer", () => {
     expect(config.agentRuntimes.codex.enabled).toBe(true);
     expect(config.agentRuntimes.codex.executablePath).toBe("");
   });
+
+  test("fails when discovery omits a known runtime", async () => {
+    const incompleteInitializer = createRuntimeConfigInitializer({
+      check() {
+        return Effect.succeed({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/tools/opencode",
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+            { kind: "codex", path: "", ok: false, version: null, error: "missing" },
+          ],
+        });
+      },
+    });
+
+    await expect(Effect.runPromise(incompleteInitializer(null))).rejects.toThrow(
+      "Runtime discovery did not return a result for claude",
+    );
+  });
 });

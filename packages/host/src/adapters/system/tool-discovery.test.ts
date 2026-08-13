@@ -518,4 +518,27 @@ describe("discoverToolPath", () => {
       ).rejects.toThrow(`Saved Codex path points to a missing or non-executable file`);
     });
   });
+
+  test("rejects saved command names and relative paths without searching PATH", async () => {
+    let resolveCalls = 0;
+    const systemCommands = createSystemCommands({ available: ["codex"] });
+    const originalResolve = systemCommands.resolveCommandPath;
+    systemCommands.resolveCommandPath = (command, options) => {
+      resolveCalls += 1;
+      return originalResolve(command, options);
+    };
+    const adapter = createToolDiscoveryAdapter({
+      env: { PATH: "/tools" },
+      options: { platform: "linux" },
+      systemCommands,
+    });
+
+    await expect(
+      Effect.runPromise(validateExactToolPath(adapter, "codex", "codex")),
+    ).rejects.toThrow("Saved Codex path must be absolute");
+    await expect(
+      Effect.runPromise(validateExactToolPath(adapter, "codex", "bin/codex")),
+    ).rejects.toThrow("Saved Codex path must be absolute");
+    expect(resolveCalls).toBe(0);
+  });
 });

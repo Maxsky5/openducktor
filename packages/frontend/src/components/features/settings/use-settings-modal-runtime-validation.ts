@@ -7,6 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { getAvailableRuntimeDefinitions, runtimeLabelFor } from "@/lib/agent-runtime";
+import { runtimeExecutableResultForPath } from "./runtime-executable-validation";
 import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {
@@ -91,8 +92,10 @@ export const buildRuntimeAvailabilityValidationState = ({
   const runtimeExecutableErrors = runtimeExecutableResults
     ? runtimeDefinitions.flatMap((definition) => {
         if (!snapshotDraft.agentRuntimes[definition.kind].enabled) return [];
-        const result = runtimeExecutableResults.find(
-          (candidate) => candidate.kind === definition.kind,
+        const result = runtimeExecutableResultForPath(
+          definition.kind,
+          snapshotDraft.agentRuntimes[definition.kind].executablePath,
+          runtimeExecutableResults,
         );
         if (result?.ok) return [];
         return [result?.error ?? `${definition.label} needs a valid executable path.`];
