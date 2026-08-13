@@ -28,6 +28,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   reusablePromptValidationErrorCount: number;
   hasRuntimeAvailabilityErrors: boolean;
   runtimeAvailabilityErrorCount: number;
+  isRuntimeRequestPending?: boolean;
+  runtimeRequestError?: string | null;
   hasUnacknowledgedCodexDangerousSettings: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
@@ -57,6 +59,8 @@ export const useSettingsModalSaveOrchestration = ({
   reusablePromptValidationErrorCount,
   hasRuntimeAvailabilityErrors,
   runtimeAvailabilityErrorCount,
+  isRuntimeRequestPending = false,
+  runtimeRequestError = null,
   hasUnacknowledgedCodexDangerousSettings,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
@@ -124,6 +128,17 @@ export const useSettingsModalSaveOrchestration = ({
 
     if (hasReusablePromptValidationErrors) {
       const reason = buildReusablePromptValidationSaveError(reusablePromptValidationErrorCount);
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
+    if (runtimeRequestError || isRuntimeRequestPending) {
+      const reason = runtimeRequestError
+        ? `Runtime configuration check failed: ${runtimeRequestError}`
+        : "Wait for runtime configuration checks to finish before saving.";
       setSaveError(reason);
       toast.error("Cannot save settings", {
         description: reason,
@@ -205,6 +220,8 @@ export const useSettingsModalSaveOrchestration = ({
     hasPromptValidationErrors,
     hasReusablePromptValidationErrors,
     hasRuntimeAvailabilityErrors,
+    isRuntimeRequestPending,
+    runtimeRequestError,
     hasUnacknowledgedCodexDangerousSettings,
     hasRepoScriptValidationErrors,
     invalidRepoPathsWithDevServerErrors,

@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryProvider } from "@/lib/query-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
 
@@ -371,19 +372,23 @@ describe("settings modal content", () => {
     };
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "runtimes",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "runtimes",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));

@@ -53,6 +53,9 @@ export function SettingsModalContent({
     settingsError,
     snapshotDraft,
     runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    retryRuntimeDefinitions,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     promptValidationState,
@@ -137,6 +140,9 @@ export function SettingsModalContent({
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
         runtimeCheck={controller.runtimeCheck}
+        isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
+        runtimeDefinitionsError={runtimeDefinitionsError}
+        {...(retryRuntimeDefinitions ? { onRetryRuntimeDefinitions: retryRuntimeDefinitions } : {})}
         disabled={isInteractionDisabled}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}

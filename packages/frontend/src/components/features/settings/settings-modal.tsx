@@ -176,6 +176,9 @@ export function SettingsModal({
             isLoadingSettings: controller.isLoadingSettings,
             hasSnapshotDraft: Boolean(controller.snapshotDraft),
             settingsError: controller.settingsError,
+            isLoadingRuntimeConfiguration:
+              controller.isLoadingRuntimeDefinitions ||
+              controller.isLoadingRuntimeExecutables === true,
           }}
           validationSummary={{
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
@@ -189,6 +192,7 @@ export function SettingsModal({
           errors={{
             saveError: controller.saveError,
             catalogError: controller.runtimeDefinitionsError,
+            runtimeExecutablesError: controller.runtimeExecutablesError ?? null,
           }}
           location={{
             section: navigation.section,

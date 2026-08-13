@@ -7,6 +7,7 @@ import {
   createDefaultGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
+import { HostValidationError } from "../../effect/host-errors";
 import { createSettingsConfigAdapter } from "./settings-config-adapter";
 
 const withTempConfig = async (run: (configPath: string) => Promise<void>): Promise<void> => {
@@ -81,6 +82,40 @@ describe("settings config adapter initialization", () => {
         executablePath: "/tools/opencode",
       });
       expect(config?.agentRuntimes.codex.enabled).toBe(true);
+    });
+  });
+
+  test("shares initialization failures and permits a later retry", async () => {
+    await withTempConfig(async (configPath) => {
+      let calls = 0;
+      const adapter = createSettingsConfigAdapter({
+        configPath,
+        initializeConfig: () => {
+          calls += 1;
+          if (calls === 1) {
+            return Effect.sleep("10 millis").pipe(
+              Effect.zipRight(
+                Effect.fail(new HostValidationError({ message: "Runtime discovery failed" })),
+              ),
+            );
+          }
+          return Effect.succeed(createDefaultGlobalConfig());
+        },
+      });
+
+      const firstResults = await Effect.runPromise(
+        Effect.all(
+          [adapter.readConfig().pipe(Effect.either), adapter.readConfig().pipe(Effect.either)],
+          { concurrency: "unbounded" },
+        ),
+      );
+
+      expect(calls).toBe(1);
+      expect(firstResults.map((result) => result._tag)).toEqual(["Left", "Left"]);
+
+      const retried = await Effect.runPromise(adapter.readConfig());
+      expect(calls).toBe(2);
+      expect(retried?.version).toBe(3);
     });
   });
 

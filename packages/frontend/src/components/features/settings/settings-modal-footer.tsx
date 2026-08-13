@@ -7,6 +7,7 @@ type SettingsModalFooterSaveState = {
   isLoadingSettings: boolean;
   hasSnapshotDraft: boolean;
   settingsError: string | null;
+  isLoadingRuntimeConfiguration?: boolean;
 };
 
 type SettingsModalFooterValidationSummary = {
@@ -20,6 +21,7 @@ type SettingsModalFooterValidationSummary = {
 type SettingsModalFooterErrors = {
   saveError: string | null;
   catalogError: string | null;
+  runtimeExecutablesError?: string | null;
 };
 
 type SettingsModalFooterLocation = {
@@ -53,6 +55,9 @@ export function SettingsModalFooter({
     saveState.isLoadingSettings ||
     !saveState.hasSnapshotDraft ||
     Boolean(saveState.settingsError) ||
+    saveState.isLoadingRuntimeConfiguration ||
+    Boolean(errors.catalogError) ||
+    Boolean(errors.runtimeExecutablesError) ||
     hasPromptValidationErrors ||
     hasReusablePromptValidationErrors ||
     hasRuntimeAvailabilityErrors ||
@@ -114,9 +119,17 @@ export function SettingsModalFooter({
           </span>
         ) : null}
         {errors.catalogError &&
-        location.section === "repositories" &&
-        location.repositorySection === "configuration" ? (
-          <span className="text-warning-muted">Catalog unavailable.</span>
+        (location.section === "runtimes" ||
+          (location.section === "repositories" &&
+            location.repositorySection === "configuration")) ? (
+          <span className="text-destructive-muted">
+            Runtime definitions unavailable: {errors.catalogError}
+          </span>
+        ) : null}
+        {errors.runtimeExecutablesError && location.section === "runtimes" ? (
+          <span className="text-destructive-muted">
+            Runtime executable check failed: {errors.runtimeExecutablesError}
+          </span>
         ) : null}
       </div>
 

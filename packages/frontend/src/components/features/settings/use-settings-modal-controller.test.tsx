@@ -17,7 +17,9 @@ import {
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
+import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
@@ -27,7 +29,10 @@ enableReactActEnvironment();
 const createSettingsSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     autopilot: createDefaultAutopilotSettings(),
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    agentRuntimes: {
+      ...DEFAULT_AGENT_RUNTIMES,
+      opencode: { enabled: true, executablePath: "/tools/opencode" },
+    },
     workspaces: {
       repo: {
         workspaceId: "repo",
@@ -104,11 +109,27 @@ const createHookHarness = (
   options?: {
     loadRepoRuntimeCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
     requiredRepoPath?: string | null;
+    runtimeDefinitionsError?: string | null;
+    isLoadingRuntimeDefinitions?: boolean;
+    prefillExecutableCheck?: boolean;
   },
 ) => {
   const queryClient = createQueryClient();
+  const initialSnapshot = settingsSnapshotFactory();
   queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);
   queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, EMPTY_BRANCHES);
+  if (options?.prefillExecutableCheck !== false) {
+    const paths = runtimeExecutablePaths(initialSnapshot.agentRuntimes);
+    queryClient.setQueryData(runtimeExecutablesQueryOptions(paths).queryKey, {
+      runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
+        kind,
+        path: paths[kind],
+        ok: true,
+        version: "1.0.0",
+        error: null,
+      })),
+    });
+  }
 
   const workspaceState = {
     isSwitchingWorkspace: false,
@@ -149,8 +170,8 @@ const createHookHarness = (
     runtimeDefinitions,
     availableRuntimeDefinitions: runtimeDefinitions,
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    isLoadingRuntimeDefinitions: false,
-    runtimeDefinitionsError: null,
+    isLoadingRuntimeDefinitions: options?.isLoadingRuntimeDefinitions ?? false,
+    runtimeDefinitionsError: options?.runtimeDefinitionsError ?? null,
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
     loadRepoRuntimeCatalog:
       options?.loadRepoRuntimeCatalog ??
@@ -251,6 +272,55 @@ describe("useSettingsModalController", () => {
     expect(nextRefreshChecks).toHaveBeenCalledTimes(0);
 
     await harness.unmount();
+  });
+
+  test("fails closed when runtime definitions cannot load", async () => {
+    saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(true, false, {
+      runtimeDefinitionsError: "Definitions failed",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      expect(harness.getLatest().runtimeDefinitionsError).toBe("Definitions failed");
+      let didSave = true;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+      expect(didSave).toBe(false);
+      expect(harness.getLatest().saveError).toContain("Definitions failed");
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("fails closed when runtime executable validation cannot load", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => {
+      throw new Error("Executable validation failed");
+    });
+    saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
+
+      expect(harness.getLatest().runtimeExecutablesError).toBe("Executable validation failed");
+      let didSave = true;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+      expect(didSave).toBe(false);
+      expect(harness.getLatest().saveError).toContain("Executable validation failed");
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
   });
 
   test("selects the exact required repository instead of the active workspace", async () => {
@@ -563,7 +633,7 @@ describe("useSettingsModalController", () => {
         horizontalScrollbarVisibility: "hide",
       },
       reusablePrompts: [],
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+      agentRuntimes: expectedSnapshot.agentRuntimes,
     });
 
     await harness.unmount();

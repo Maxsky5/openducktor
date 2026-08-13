@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
+import { errorMessage } from "@/lib/errors";
 import {
   ChecksStateContext,
   useRequiredContext,
@@ -46,10 +47,12 @@ import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-sta
 export type SettingsModalController = {
   isLoadingSettings: boolean;
   isLoadingRuntimeDefinitions: boolean;
+  isLoadingRuntimeExecutables?: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
+  runtimeExecutablesError?: string | null;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -94,6 +97,7 @@ export type SettingsModalController = {
   setSelectedWorkspaceId: (next: string) => void;
   markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
+  retryRuntimeDefinitions?: () => Promise<RuntimeDescriptor[]>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (
@@ -169,6 +173,7 @@ export const useSettingsModalController = ({
     allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
+    refreshRuntimeDefinitions,
   } = useRuntimeAvailabilityContext();
 
   const {
@@ -227,6 +232,14 @@ export const useSettingsModalController = ({
     ),
     enabled: open && snapshotDraft !== null,
   });
+  const isLoadingRuntimeExecutables =
+    open &&
+    snapshotDraft !== null &&
+    (runtimeExecutableQuery.isPending || runtimeExecutableQuery.isFetching);
+  const runtimeExecutablesError = runtimeExecutableQuery.error
+    ? errorMessage(runtimeExecutableQuery.error)
+    : null;
+  const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
   const catalogRuntimeKinds = useMemo(
     () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
     [availableRuntimeDefinitions, selectedRepoConfig],
@@ -377,6 +390,8 @@ export const useSettingsModalController = ({
     reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
     hasRuntimeAvailabilityErrors,
     runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
+    isRuntimeRequestPending: isLoadingRuntimeDefinitions || isLoadingRuntimeExecutables,
+    runtimeRequestError,
     hasUnacknowledgedCodexDangerousSettings,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCount,
@@ -450,10 +465,12 @@ export const useSettingsModalController = ({
   return {
     isLoadingSettings,
     isLoadingRuntimeDefinitions,
+    isLoadingRuntimeExecutables,
     isLoadingCatalog,
     isSaving,
     settingsError,
     runtimeDefinitionsError,
+    runtimeExecutablesError,
     saveError,
     snapshotDraft,
     runtimeDefinitions,
@@ -498,6 +515,7 @@ export const useSettingsModalController = ({
     setSelectedWorkspaceId,
     markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
+    retryRuntimeDefinitions: refreshRuntimeDefinitions,
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,

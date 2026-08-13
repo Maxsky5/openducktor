@@ -43,6 +43,7 @@ export function OnboardingPage(): ReactElement {
   const [isSaving, setIsSaving] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
+  const saveInFlight = useRef(false);
   const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
   const editedRuntimePaths = useRef(new Set<RuntimeKind>());
   const settingsQuery = useQuery({
@@ -150,6 +151,7 @@ export function OnboardingPage(): ReactElement {
 
   const saveRuntimes = async (allowNoRuntime = false): Promise<void> => {
     if (
+      saveInFlight.current ||
       !runtimeDraft ||
       !settingsQuery.data ||
       validationQuery.isPending ||
@@ -170,6 +172,7 @@ export function OnboardingPage(): ReactElement {
       return;
     }
 
+    saveInFlight.current = true;
     setIsSaving(true);
     setStageError(null);
     try {
@@ -181,6 +184,7 @@ export function OnboardingPage(): ReactElement {
     } catch (cause) {
       setStageError(errorMessage(cause));
     } finally {
+      saveInFlight.current = false;
       setIsSaving(false);
     }
   };
@@ -244,7 +248,21 @@ export function OnboardingPage(): ReactElement {
                 <CardDescription>Enable the tools that OpenDucktor can use.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col gap-5">
-                {runtimeLoading ? (
+                {runtimeRequestError ? (
+                  <div className="flex flex-col gap-3" role="alert">
+                    <p className="text-sm text-destructive">{errorMessage(runtimeRequestError)}</p>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        void settingsQuery.refetch();
+                        void definitionsQuery.refetch();
+                        if (paths !== null) void validationQuery.refetch();
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                ) : runtimeLoading ? (
                   <div
                     className="flex flex-col gap-3"
                     role="status"
@@ -253,20 +271,6 @@ export function OnboardingPage(): ReactElement {
                     <Skeleton className="h-28 w-full" />
                     <Skeleton className="h-28 w-full" />
                     <Skeleton className="h-28 w-full" />
-                  </div>
-                ) : runtimeRequestError ? (
-                  <div className="flex flex-col gap-3" role="alert">
-                    <p className="text-sm text-destructive">{errorMessage(runtimeRequestError)}</p>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        void settingsQuery.refetch();
-                        void definitionsQuery.refetch();
-                        void validationQuery.refetch();
-                      }}
-                    >
-                      Retry
-                    </Button>
                   </div>
                 ) : (
                   <RuntimeExecutablePanel
@@ -324,7 +328,12 @@ export function OnboardingPage(): ReactElement {
         </Card>
       </div>
 
-      <Dialog open={confirmNoRuntime} onOpenChange={setConfirmNoRuntime}>
+      <Dialog
+        open={confirmNoRuntime}
+        onOpenChange={(open) => {
+          if (!isSaving) setConfirmNoRuntime(open);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Continue without an agent runtime?</DialogTitle>
@@ -334,10 +343,16 @@ export function OnboardingPage(): ReactElement {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmNoRuntime(false)}>
+            <Button
+              variant="outline"
+              disabled={isSaving}
+              onClick={() => setConfirmNoRuntime(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={() => void saveRuntimes(true)}>Continue without a runtime</Button>
+            <Button disabled={isSaving} onClick={() => void saveRuntimes(true)}>
+              {isSaving ? "Saving..." : "Continue without a runtime"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

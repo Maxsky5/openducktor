@@ -34,6 +34,9 @@ type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheck?: RuntimeCheck | null;
+  isLoadingRuntimeDefinitions?: boolean;
+  runtimeDefinitionsError?: string | null;
+  onRetryRuntimeDefinitions?: () => Promise<RuntimeDescriptor[]>;
   disabled: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
@@ -729,6 +732,9 @@ export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
   runtimeCheck = null,
+  isLoadingRuntimeDefinitions = false,
+  runtimeDefinitionsError = null,
+  onRetryRuntimeDefinitions,
   disabled,
   requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
@@ -740,6 +746,7 @@ export function AgentRuntimesSection({
   const [isCheckingExecutables, setIsCheckingExecutables] = useState(false);
   const executablePaths = runtimeExecutablePaths(agentRuntimes);
   const executableQuery = useQuery(runtimeExecutablesQueryOptions(executablePaths));
+  const executableQueryError = executableQuery.error ? errorMessage(executableQuery.error) : null;
   const selectedDefinition =
     sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
     sortedRuntimeDefinitions[0];
@@ -784,6 +791,44 @@ export function AgentRuntimesSection({
         onChange={(next) => onUpdateAgentRuntimes(() => next)}
         onCheckAgain={() => void checkAgain()}
       />
+
+      {runtimeDefinitionsError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to load runtime definitions: {runtimeDefinitionsError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isLoadingRuntimeDefinitions || !onRetryRuntimeDefinitions}
+            onClick={() => {
+              void onRetryRuntimeDefinitions?.().catch((error) => {
+                toast.error("Failed to load runtime definitions", {
+                  description: errorMessage(error),
+                });
+              });
+            }}
+          >
+            Retry runtime definitions
+          </Button>
+        </div>
+      ) : null}
+
+      {executableQueryError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to check runtime executables: {executableQueryError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || executableQuery.isFetching}
+            onClick={() => void executableQuery.refetch()}
+          >
+            Retry executable check
+          </Button>
+        </div>
+      ) : null}
 
       {selectedDefinition ? (
         <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[14rem_minmax(0,1fr)]">

@@ -59,16 +59,24 @@ const createCheck = (runtimes: AgentRuntimes, opencodeOk = false): RuntimeExecut
 const renderOnboarding = ({
   runtimes,
   saveSettingsSnapshot = mock(async () => {}),
+  prefillSettings = true,
+  prefillDefinitions = true,
 }: {
   runtimes: AgentRuntimes;
   saveSettingsSnapshot?: WorkspaceStateContextValue["saveSettingsSnapshot"];
+  prefillSettings?: boolean;
+  prefillDefinitions?: boolean;
 }): void => {
   const queryClient = createQueryClient();
-  queryClient.setQueryData(
-    settingsSnapshotQueryOptions().queryKey,
-    createSettingsSnapshotFixture({ agentRuntimes: runtimes }),
-  );
-  queryClient.setQueryData(runtimeDefinitionsQueryOptions().queryKey, runtimeDefinitions);
+  if (prefillSettings) {
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ agentRuntimes: runtimes }),
+    );
+  }
+  if (prefillDefinitions) {
+    queryClient.setQueryData(runtimeDefinitionsQueryOptions().queryKey, runtimeDefinitions);
+  }
   const workspaceState = {
     isSwitchingWorkspace: false,
     isLoadingBranches: false,
@@ -124,6 +132,95 @@ const opencodeSection = (): HTMLElement => {
 };
 
 describe("OnboardingPage runtime validation", () => {
+  test("shows and retries a settings snapshot failure before a draft exists", async () => {
+    const runtimes = DEFAULT_AGENT_RUNTIMES;
+    const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
+    let attempts = 0;
+    const original = {
+      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
+      runtimeDefinitionsList: host.runtimeDefinitionsList,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    host.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Settings snapshot failed");
+      return snapshot;
+    });
+
+    try {
+      renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await screen.findByText("Settings snapshot failed");
+      expect(screen.queryByLabelText("Loading runtime settings")).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await waitFor(() => expect(attempts).toBe(2));
+      await screen.findByRole("heading", { name: "OpenCode" });
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
+        ).toBe(false),
+      );
+    } finally {
+      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
+      host.runtimeDefinitionsList = original.runtimeDefinitionsList;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("shows and retries a runtime definition failure before a draft exists", async () => {
+    const runtimes = DEFAULT_AGENT_RUNTIMES;
+    const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
+    let attempts = 0;
+    const original = {
+      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
+      runtimeDefinitionsList: host.runtimeDefinitionsList,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    host.workspaceGetSettingsSnapshot = mock(async () => snapshot);
+    host.runtimeDefinitionsList = mock(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Runtime definitions failed");
+      return runtimeDefinitions;
+    });
+
+    try {
+      renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await screen.findByText("Runtime definitions failed");
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await waitFor(() => expect(attempts).toBe(2));
+      await screen.findByRole("heading", { name: "OpenCode" });
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
+        ).toBe(false),
+      );
+    } finally {
+      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
+      host.runtimeDefinitionsList = original.runtimeDefinitionsList;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
   test("retries a failed runtime validation request", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
@@ -294,6 +391,38 @@ describe("OnboardingPage runtime validation", () => {
       fireEvent.click(screen.getByRole("button", { name: /Back/ }));
       expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
+  test("submits the no-runtime confirmation only once while saving", async () => {
+    const runtimes = DEFAULT_AGENT_RUNTIMES;
+    const save = createDeferred<void>();
+    const saveSettingsSnapshot = mock(async () => save.promise);
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+
+    try {
+      renderOnboarding({ runtimes, saveSettingsSnapshot });
+      await enterRuntimeStage();
+      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
+
+      const confirmButton = screen.getByRole("button", { name: "Continue without a runtime" });
+      fireEvent.click(confirmButton);
+      fireEvent.click(confirmButton);
+
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+      expect(
+        (screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+        true,
+      );
+
+      await act(async () => save.resolve());
+      await screen.findByRole("heading", { name: "Open your first workspace" });
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
