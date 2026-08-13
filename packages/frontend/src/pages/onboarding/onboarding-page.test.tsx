@@ -12,7 +12,10 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { createQueryClient } from "@/lib/query-client";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
-import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
+import {
+  runtimeDefinitionsQueryOptions,
+  runtimeDiscoveryQueryOptions,
+} from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -66,7 +69,7 @@ const renderOnboarding = ({
   saveSettingsSnapshot?: WorkspaceStateContextValue["saveSettingsSnapshot"];
   prefillSettings?: boolean;
   prefillDefinitions?: boolean;
-}): void => {
+}): ReturnType<typeof createQueryClient> => {
   const queryClient = createQueryClient();
   if (prefillSettings) {
     queryClient.setQueryData(
@@ -109,6 +112,7 @@ const renderOnboarding = ({
     </QueryClientProvider>,
   );
   mountedViews.add(view);
+  return queryClient;
 };
 
 const enterRuntimeStage = async (): Promise<void> => {
@@ -294,6 +298,43 @@ describe("OnboardingPage runtime validation", () => {
       await waitFor(() => expect(screen.queryByText("Runtime discovery failed")).toBeNull());
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         false,
+      );
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
+  test("runs explicit runtime discovery through the shared Query cache", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const discovery = createDeferred<RuntimeExecutableCheck>();
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "discover") return discovery.promise;
+      return createCheck(runtimes, true);
+    });
+
+    try {
+      const queryClient = renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await waitFor(() =>
+        expect(
+          queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus,
+        ).toBe("fetching"),
+      );
+
+      await act(async () => {
+        discovery.resolve(createCheck(runtimes, true));
+      });
+      await waitFor(() =>
+        expect(queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.status).toBe(
+          "success",
+        ),
       );
     } finally {
       host.runtimeExecutablesCheck = originalCheck;

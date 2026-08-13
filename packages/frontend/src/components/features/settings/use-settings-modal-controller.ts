@@ -13,7 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
@@ -24,8 +24,11 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
-import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
+import {
+  runtimeDiscoveryQueryOptions,
+  runtimeExecutablePaths,
+  runtimeExecutablesQueryOptions,
+} from "@/state/queries/runtime";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -151,6 +154,7 @@ export const useSettingsModalController = ({
   shouldLoadCatalog,
   workspaceSelectionPolicy,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
+  const queryClient = useQueryClient();
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
   const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
   const {
@@ -237,8 +241,27 @@ export const useSettingsModalController = ({
     enabled: open && snapshotDraft !== null,
   });
   const runtimeDiscoveryInFlight = useRef(false);
+  const runtimeDiscoveryVisit = useRef(0);
   const [isCheckingRuntimeExecutables, setIsCheckingRuntimeExecutables] = useState(false);
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
+  useEffect(() => {
+    const visit = runtimeDiscoveryVisit.current + 1;
+    runtimeDiscoveryVisit.current = visit;
+    if (!open) {
+      runtimeDiscoveryInFlight.current = false;
+      setIsCheckingRuntimeExecutables(false);
+      setRuntimeDiscoveryError(null);
+      void queryClient.cancelQueries({
+        queryKey: runtimeDiscoveryQueryOptions().queryKey,
+        exact: true,
+      });
+    }
+    return () => {
+      if (runtimeDiscoveryVisit.current === visit) {
+        runtimeDiscoveryVisit.current += 1;
+      }
+    };
+  }, [open, queryClient]);
   const isLoadingRuntimeExecutables =
     open &&
     snapshotDraft !== null &&
@@ -466,10 +489,14 @@ export const useSettingsModalController = ({
       return;
     }
 
+    const visit = runtimeDiscoveryVisit.current;
     runtimeDiscoveryInFlight.current = true;
     setIsCheckingRuntimeExecutables(true);
     try {
-      const discovered = await host.runtimeExecutablesCheck({ mode: "discover" });
+      const discovered = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
+      if (runtimeDiscoveryVisit.current !== visit) {
+        return;
+      }
       const rowsByKind = new Map(discovered.runtimes.map((row) => [row.kind, row]));
       updateAgentRuntimes((current) => ({
         ...current,
@@ -488,12 +515,16 @@ export const useSettingsModalController = ({
       }));
       setRuntimeDiscoveryError(null);
     } catch (error) {
-      setRuntimeDiscoveryError(errorMessage(error));
+      if (runtimeDiscoveryVisit.current === visit) {
+        setRuntimeDiscoveryError(errorMessage(error));
+      }
     } finally {
-      runtimeDiscoveryInFlight.current = false;
-      setIsCheckingRuntimeExecutables(false);
+      if (runtimeDiscoveryVisit.current === visit) {
+        runtimeDiscoveryInFlight.current = false;
+        setIsCheckingRuntimeExecutables(false);
+      }
     }
-  }, [updateAgentRuntimes]);
+  }, [queryClient, updateAgentRuntimes]);
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
     selectedRepoPath: selectedWorkspaceRepoPath,

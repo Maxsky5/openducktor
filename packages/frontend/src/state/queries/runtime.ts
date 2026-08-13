@@ -24,6 +24,7 @@ const requireCompatibleRuntimeDefinitions = (
 export const runtimeQueryKeys = {
   all: ["runtime"] as const,
   definitions: () => [...runtimeQueryKeys.all, "definitions"] as const,
+  discovery: () => [...runtimeQueryKeys.all, "executables", "discovery"] as const,
   executables: (paths: Record<RuntimeKind, string>) =>
     [...runtimeQueryKeys.all, "executables", paths] as const,
 };
@@ -40,6 +41,14 @@ export const runtimeExecutablePaths = (runtimes: AgentRuntimes): Record<RuntimeK
   codex: runtimes.codex.executablePath,
   claude: runtimes.claude.executablePath,
 });
+
+export const runtimeDiscoveryQueryOptions = () =>
+  queryOptions({
+    queryKey: runtimeQueryKeys.discovery(),
+    queryFn: (): Promise<RuntimeExecutableCheck> =>
+      host.runtimeExecutablesCheck({ mode: "discover" }),
+    staleTime: 0,
+  });
 
 export const runtimeExecutablesQueryOptions = (paths: Record<RuntimeKind, string>) =>
   queryOptions({

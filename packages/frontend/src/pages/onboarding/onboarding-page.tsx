@@ -19,9 +19,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { host } from "@/state/operations/host";
 import {
   runtimeDefinitionsQueryOptions,
+  runtimeDiscoveryQueryOptions,
   runtimeExecutablePaths,
   runtimeExecutablesQueryOptions,
 } from "@/state/queries/runtime";
@@ -111,7 +111,7 @@ export function OnboardingPage(): ReactElement {
     setStageError(null);
     setRuntimeDiscoveryError(null);
     try {
-      const checked = await host.runtimeExecutablesCheck({ mode: "discover" });
+      const checked = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
       if (runtimeDraft) {
         const rows = new Map(checked.runtimes.map((row) => [row.kind, row]));
         const nextDraft = {
