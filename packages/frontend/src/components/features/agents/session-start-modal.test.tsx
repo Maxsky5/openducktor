@@ -74,6 +74,9 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   supportsVariants: true,
   selectionCatalogError: null,
   isSelectionCatalogLoading: false,
+  runtimeDefinitionsError: null,
+  isRuntimeDefinitionsLoading: false,
+  onRetryRuntimeDefinitions: noop,
   runtimeProfileOptions: [{ value: "builder", label: "Builder" }],
   modelOptions: [{ value: "openai/gpt-5.4", label: "GPT-5.4" }],
   modelGroups: [],
@@ -245,6 +248,52 @@ describe("SessionStartModal", () => {
       true,
     );
 
+    unmount();
+  });
+
+  test("shows runtime-definition errors with a retry and blocks session start", () => {
+    const onRetryRuntimeDefinitions = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          runtimeDefinitionsError: "Runtime definitions failed",
+          modelPickerRuntimes: [],
+          selectedModelSelection: null,
+          selectedRuntimeKind: null,
+          onRetryRuntimeDefinitions,
+        }),
+      }),
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Runtime definitions unavailable: Runtime definitions failed",
+    );
+    expect(screen.queryByText("No agent runtimes are available.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetryRuntimeDefinitions).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    unmount();
+  });
+
+  test("shows runtime-definition loading apart from an empty runtime list", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          isRuntimeDefinitionsLoading: true,
+          modelPickerRuntimes: [],
+          selectedModelSelection: null,
+          selectedRuntimeKind: null,
+        }),
+      }),
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("Loading agent runtimes...");
+    expect(screen.queryByText("No agent runtimes are available.")).toBeNull();
+    expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
     unmount();
   });
 

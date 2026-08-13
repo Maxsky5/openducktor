@@ -1,6 +1,12 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import { Check, ChevronsUpDown, LoaderCircle, Star } from "lucide-react";
-import { type ReactElement, useMemo, useRef, useState } from "react";
+import {
+  type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -159,6 +165,12 @@ const RuntimeRailButton = ({
   </Tooltip>
 );
 
+const stopFavoriteActivationPropagation = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.stopPropagation();
+  }
+};
+
 const ModelRow = ({
   item,
   selected,
@@ -199,6 +211,8 @@ const ModelRow = ({
         aria-label={`${favoriteLabel} ${item.model.modelName} ${item.isFavorite ? "from" : "to"} favorites`}
         aria-pressed={item.isFavorite}
         onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={stopFavoriteActivationPropagation}
+        onKeyUp={stopFavoriteActivationPropagation}
         onClick={(event) => {
           event.stopPropagation();
           favoriteState.toggleFavorite(item.value);
@@ -313,6 +327,39 @@ export function ModelPicker({
     return `No ${activeRuntime?.descriptor.label ?? "runtime"} models are available.`;
   })();
 
+  let listContent: ReactElement | null = null;
+  if (items.length > 0) {
+    listContent = (
+      <CommandGroup>
+        {items.map((item) => {
+          const disabledReason = getModelDisabledReason?.(item) ?? null;
+          return (
+            <ModelRow
+              key={modelPickerValueKey(item.value)}
+              item={item}
+              selected={isSameModelPickerValue(value, item.value)}
+              favoriteState={favoriteState}
+              disabledReason={disabledReason}
+              onSelect={() => {
+                if (disabledReason) {
+                  return;
+                }
+                onValueChange(item.value);
+                setSearchQuery("");
+                setOpen(false);
+                onOpenChange?.(false);
+              }}
+            />
+          );
+        })}
+      </CommandGroup>
+    );
+  } else if (emptyMessage) {
+    listContent = (
+      <div className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+    );
+  }
+
   const trigger = (
     <Button
       type="button"
@@ -409,35 +456,7 @@ export function ModelPicker({
                 {visibleResources.map((runtime) => (
                   <ResourceNotice key={runtime.descriptor.kind} runtime={runtime} />
                 ))}
-                {items.length > 0 ? (
-                  <CommandGroup>
-                    {items.map((item) => {
-                      const disabledReason = getModelDisabledReason?.(item) ?? null;
-                      return (
-                        <ModelRow
-                          key={modelPickerValueKey(item.value)}
-                          item={item}
-                          selected={isSameModelPickerValue(value, item.value)}
-                          favoriteState={favoriteState}
-                          disabledReason={disabledReason}
-                          onSelect={() => {
-                            if (disabledReason) {
-                              return;
-                            }
-                            onValueChange(item.value);
-                            setSearchQuery("");
-                            setOpen(false);
-                            onOpenChange?.(false);
-                          }}
-                        />
-                      );
-                    })}
-                  </CommandGroup>
-                ) : emptyMessage ? (
-                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    {emptyMessage}
-                  </div>
-                ) : null}
+                {listContent}
               </CommandList>
             </Command>
           </div>

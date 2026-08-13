@@ -55,6 +55,9 @@ export type SessionStartModalModel = {
   supportsVariants: boolean;
   selectionCatalogError: string | null;
   isSelectionCatalogLoading: boolean;
+  runtimeDefinitionsError: string | null;
+  isRuntimeDefinitionsLoading: boolean;
+  onRetryRuntimeDefinitions: () => void;
   runtimeProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -359,6 +362,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     supportsVariants,
     selectionCatalogError,
     isSelectionCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading,
+    onRetryRuntimeDefinitions,
     runtimeProfileOptions,
     variantOptions,
     availableStartModes,
@@ -399,6 +405,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
   const confirmDisabled =
     isStarting ||
+    isRuntimeDefinitionsLoading ||
+    runtimeDefinitionsError !== null ||
     (!isReuseMode && selectionCatalogError !== null) ||
     (!isReuseMode &&
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
@@ -433,6 +441,48 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     isReuseMode,
     isSelectionCatalogLoading,
   });
+  const runtimeModelControl = (() => {
+    if (runtimeDefinitionsError) {
+      return (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+          role="alert"
+        >
+          <span className="min-w-0 text-destructive">
+            Runtime definitions unavailable: {runtimeDefinitionsError}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeDefinitions}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    if (isRuntimeDefinitionsLoading) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading agent runtimes...
+        </div>
+      );
+    }
+    return (
+      <ModelPicker
+        runtimes={modelPickerRuntimes}
+        value={selectedPickerValue}
+        favoriteState={favoriteState}
+        selectionPolicy={
+          isReuseMode
+            ? {
+                kind: "read_only",
+                reason: "Reuse mode keeps the source session runtime and model.",
+              }
+            : { kind: "editable" }
+        }
+        placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
+        onValueChange={onSelectModelPair}
+      />
+    );
+  })();
 
   return (
     <Dialog
@@ -480,21 +530,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
 
               <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
                 <p className="text-sm font-medium text-foreground">Runtime and model</p>
-                <ModelPicker
-                  runtimes={modelPickerRuntimes}
-                  value={selectedPickerValue}
-                  favoriteState={favoriteState}
-                  selectionPolicy={
-                    isReuseMode
-                      ? {
-                          kind: "read_only",
-                          reason: "Reuse mode keeps the source session runtime and model.",
-                        }
-                      : { kind: "editable" }
-                  }
-                  placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
-                  onValueChange={onSelectModelPair}
-                />
+                {runtimeModelControl}
               </div>
 
               {supportsProfiles ? (

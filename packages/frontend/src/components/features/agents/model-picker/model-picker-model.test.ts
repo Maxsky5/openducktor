@@ -124,4 +124,23 @@ describe("model-picker-model", () => {
     expect(searchItems.map((item) => item.value)).toEqual([codexFavorite]);
     expect(favoriteItems.map((item) => item.value)).toEqual([codexFavorite]);
   });
+
+  test("does not expose retained catalog rows from a failed resource", () => {
+    const failedRuntimes = [
+      {
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        resource: { ...resource("opencode"), error: "Catalog refetch failed" },
+      },
+    ];
+
+    expect(
+      buildModelPickerItems({
+        runtimes: failedRuntimes,
+        favorites: [],
+        activeView: "opencode",
+        searchQuery: "",
+        lockedRuntimeKind: null,
+      }),
+    ).toEqual([]);
+  });
 });

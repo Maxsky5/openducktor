@@ -89,7 +89,10 @@ export const buildModelPickerItems = ({
 }): ModelPickerItem[] => {
   const favoriteKeys = new Set((favorites ?? []).map(modelPickerValueKey));
   const items = runtimes.flatMap((runtime, runtimeIndex) => {
-    if (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind) {
+    if (
+      runtime.resource.error ||
+      (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)
+    ) {
       return [];
     }
     return (runtime.resource.catalog?.models ?? []).map((model, catalogIndex) => {

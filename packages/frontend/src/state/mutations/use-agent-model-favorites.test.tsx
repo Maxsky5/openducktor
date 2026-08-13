@@ -45,6 +45,51 @@ describe("useAgentModelFavorites", () => {
     }
   });
 
+  test("blocks favorite writes while a cached settings refetch has failed", async () => {
+    const initialSnapshot = createSettingsSnapshotFixture({ agentModelFavorites: [favorite] });
+    const original = host.workspaceGetSettingsSnapshot;
+    let readShouldFail = false;
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      if (readShouldFail) {
+        throw new Error("Settings refetch failed");
+      }
+      return initialSnapshot;
+    });
+    const saveAgentModelFavorites = mock(async () => initialSnapshot);
+    const harness = createHookHarness(
+      useAgentModelFavorites,
+      { saveAgentModelFavorites },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.favorites !== null, 2000);
+      readShouldFail = true;
+      await harness.run((state) => state.retryRead());
+      await harness.waitFor((state) => state.readError !== null, 2000);
+
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          favorites: [favorite],
+          readError: "Settings refetch failed",
+          canMutate: false,
+        }),
+      );
+      await harness.run((state) => state.toggleFavorite(favorite));
+      expect(saveAgentModelFavorites).not.toHaveBeenCalled();
+
+      readShouldFail = false;
+      await harness.run((state) => state.retryRead());
+      await harness.waitFor((state) => state.readError === null, 2000);
+      await harness.run((state) => state.toggleFavorite(favorite));
+      await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 1, 2000);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
+    }
+  });
+
   test("keeps persisted favorites after a failed write and retries the same change", async () => {
     const initialSnapshot = createSettingsSnapshotFixture();
     const savedSnapshot = createSettingsSnapshotFixture({ agentModelFavorites: [favorite] });

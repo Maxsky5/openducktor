@@ -41,6 +41,7 @@ export function useAgentModelFavorites({
     },
   });
   const favorites = settingsQuery.data?.agentModelFavorites ?? null;
+  const readError = settingsQuery.error ? errorMessage(settingsQuery.error) : null;
 
   const isFavorite = useCallback(
     (favorite: AgentModelFavorite): boolean =>
@@ -50,7 +51,7 @@ export function useAgentModelFavorites({
 
   const toggleFavorite = useCallback(
     (favorite: AgentModelFavorite): void => {
-      if (favorites === null || mutation.isPending) {
+      if (favorites === null || readError !== null || mutation.isPending) {
         return;
       }
       const nextFavorites = isFavorite(favorite)
@@ -58,7 +59,7 @@ export function useAgentModelFavorites({
         : [...favorites, favorite];
       mutation.mutate(nextFavorites);
     },
-    [favorites, isFavorite, mutation],
+    [favorites, isFavorite, mutation, readError],
   );
 
   const retryRead = useCallback((): void => {
@@ -74,10 +75,10 @@ export function useAgentModelFavorites({
   return {
     favorites,
     isLoading: settingsQuery.isLoading,
-    readError: settingsQuery.error ? errorMessage(settingsQuery.error) : null,
+    readError,
     isMutationPending: mutation.isPending,
     mutationError: mutation.error ? errorMessage(mutation.error) : null,
-    canMutate: favorites !== null && !mutation.isPending,
+    canMutate: favorites !== null && readError === null && !mutation.isPending,
     isFavorite,
     toggleFavorite,
     retryRead,

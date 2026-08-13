@@ -36,10 +36,15 @@ const resource = (runtimeKind: "opencode" | "codex"): RuntimeModelCatalogResourc
   retry: async () => {},
 });
 
-const runtimes = [
-  { descriptor: OPENCODE_RUNTIME_DESCRIPTOR, resource: resource("opencode") },
-  { descriptor: CODEX_RUNTIME_DESCRIPTOR, resource: resource("codex") },
-];
+const opencodeRuntime = {
+  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+  resource: resource("opencode"),
+};
+const codexRuntime = {
+  descriptor: CODEX_RUNTIME_DESCRIPTOR,
+  resource: resource("codex"),
+};
+const runtimes = [opencodeRuntime, codexRuntime];
 
 const value: AgentModelFavorite = {
   runtimeKind: "opencode",
@@ -128,6 +133,100 @@ describe("ModelPicker", () => {
     expect(toggleFavorite).toHaveBeenCalledWith(value);
     expect(onValueChange).toHaveBeenCalledTimes(0);
     expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+  });
+
+  test.each([
+    { key: "Enter", label: "Enter" },
+    { key: " ", label: "Space" },
+  ])("keeps $label favorite activation inside the star action", async ({ key }) => {
+    const toggleFavorite = mock(() => {});
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState({ toggleFavorite })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    const search = screen.getByPlaceholderText("Search models...") as HTMLInputElement;
+    fireEvent.change(search, { target: { value: "gpt" } });
+    const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });
+    star.focus();
+    await act(async () => {
+      fireEvent.keyDown(star, { key });
+      fireEvent.keyUp(star, { key });
+      fireEvent.click(star);
+    });
+
+    expect(toggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+    expect(search.value).toBe("gpt");
+  });
+
+  test("lets Escape close the picker when the star has focus", async () => {
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });
+    star.focus();
+    await act(async () => {
+      fireEvent.keyDown(star, { key: "Escape" });
+    });
+
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
+  test.each([
+    { name: "editable", policy: { kind: "editable" } as const },
+    {
+      name: "runtime locked",
+      policy: {
+        kind: "runtime_locked",
+        runtimeKind: "opencode",
+        reason: "Start a new session to switch runtimes.",
+      } as const,
+    },
+  ])("keeps failed retained rows display-only when $name", async ({ policy }) => {
+    const failedRuntimes = [
+      {
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        resource: { ...resource("opencode"), error: "Catalog refetch failed" },
+      },
+      codexRuntime,
+    ];
+    render(
+      <ModelPicker
+        runtimes={failedRuntimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={policy}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain("Catalog refetch failed");
+    expect(screen.getAllByText("GPT Five")).toHaveLength(1);
   });
 
   test("emits the exact pair and closes after model selection", async () => {

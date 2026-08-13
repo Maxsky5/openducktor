@@ -66,6 +66,9 @@ type UseSessionStartModalStateResult = {
   supportsVariants: boolean;
   catalogError: string | null;
   isCatalogLoading: boolean;
+  runtimeDefinitionsError: string | null;
+  isRuntimeDefinitionsLoading: boolean;
+  retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   runtimeProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
@@ -96,7 +99,13 @@ export function useSessionStartModalState({
   loadCatalog,
   workspaceRepoPath,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
-  const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
+  const {
+    availableRuntimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    loadRepoRuntimeCatalog,
+    refreshRuntimeDefinitions,
+    runtimeDefinitionsError,
+  } = useRuntimeAvailabilityContext();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
@@ -404,6 +413,9 @@ export function useSessionStartModalState({
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ?? false,
     catalogError,
     isCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading: isLoadingRuntimeDefinitions,
+    retryRuntimeDefinitions: refreshRuntimeDefinitions,
     runtimeProfileOptions,
     modelOptions,
     modelGroups,

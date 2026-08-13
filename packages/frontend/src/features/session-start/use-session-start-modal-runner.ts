@@ -225,6 +225,9 @@ export function useSessionStartModalRunner({
     supportsVariants,
     catalogError,
     isCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading,
+    retryRuntimeDefinitions,
     runtimeProfileOptions,
     modelOptions,
     modelGroups,
@@ -253,6 +256,14 @@ export function useSessionStartModalRunner({
   });
 
   selectionRef.current = selection;
+
+  const handleRetryRuntimeDefinitions = useCallback((): void => {
+    void retryRuntimeDefinitions().catch((error) => {
+      toast.error("Failed to refresh runtime definitions.", {
+        description: errorMessage(error),
+      });
+    });
+  }, [retryRuntimeDefinitions]);
 
   const resolvePendingRun = useCallback(
     (value: unknown): void => {
@@ -394,6 +405,9 @@ export function useSessionStartModalRunner({
       supportsVariants,
       selectionCatalogError: catalogError,
       isSelectionCatalogLoading: isCatalogLoading,
+      runtimeDefinitionsError,
+      isRuntimeDefinitionsLoading,
+      onRetryRuntimeDefinitions: handleRetryRuntimeDefinitions,
       runtimeProfileOptions,
       modelOptions,
       modelGroups,
@@ -437,11 +451,13 @@ export function useSessionStartModalRunner({
     handleSelectModelPair,
     handleSelectTargetBranch,
     handleSelectRuntime,
+    handleRetryRuntimeDefinitions,
     handleSelectSourceSessionValue,
     handleSelectStartMode,
     handleSelectVariant,
     intent,
     isCatalogLoading,
+    isRuntimeDefinitionsLoading,
     isOpen,
     modelGroups,
     modelOptions,
@@ -449,6 +465,7 @@ export function useSessionStartModalRunner({
     favoriteState,
     resolvePendingRun,
     runtimeOptions,
+    runtimeDefinitionsError,
     selectedTargetBranch,
     selectedRuntimeKind,
     selectedSourceSessionValue,

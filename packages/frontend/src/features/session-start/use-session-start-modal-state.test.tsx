@@ -322,6 +322,34 @@ const createExistingSessionWithModel = ({
 });
 
 describe("useSessionStartModalState", () => {
+  test("keeps runtime-definition failures distinct and exposes retry", async () => {
+    const refreshRuntimeDefinitions = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const runtimeDefinitionsContextRef = {
+      current: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [],
+        availableRuntimeDefinitions: [],
+        runtimeDefinitionsError: "Runtime definitions failed",
+        refreshRuntimeDefinitions,
+      }),
+    };
+    const harness = createHookHarness(createBaseProps({ runtimeDefinitions: [] }), {
+      runtimeDefinitionsContextRef,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest()).toEqual(
+      expect.objectContaining({
+        runtimeDefinitionsError: "Runtime definitions failed",
+        isRuntimeDefinitionsLoading: false,
+      }),
+    );
+    await harness.run(async (state) => {
+      await state.retryRuntimeDefinitions();
+    });
+    expect(refreshRuntimeDefinitions).toHaveBeenCalledTimes(1);
+    await harness.unmount();
+  });
+
   test("waits for runtime readiness before loading the modal catalog", async () => {
     const loadCatalog = mock(async () => CATALOG);
     const repoRuntimeHealthContextRef = {

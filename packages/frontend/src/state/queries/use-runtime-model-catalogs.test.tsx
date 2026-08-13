@@ -109,4 +109,46 @@ describe("useRuntimeModelCatalogs", () => {
     expect(loadCatalog).toHaveBeenCalledTimes(2);
     await harness.unmount();
   });
+
+  test("removes retained catalog data from selection after a failed refetch", async () => {
+    let readShouldFail = false;
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      if (readShouldFail) {
+        throw new Error("OpenCode catalog refetch failed");
+      }
+      return catalogFor(runtimeRef.runtimeKind);
+    });
+    const harness = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: "/repo",
+        runtimeKinds: ["opencode"] as const,
+        enabledRuntimeKinds: ["opencode"] as const,
+        loadCatalog,
+      },
+      { wrapper },
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.resources[0]?.catalog !== null, 2000);
+    readShouldFail = true;
+    await harness.run(async (state) => {
+      await state.resources[0]?.retry();
+    });
+    await harness.waitFor((state) => state.resources[0]?.error !== null, 2000);
+    expect(harness.getLatest().resources[0]).toEqual(
+      expect.objectContaining({
+        catalog: null,
+        error: "OpenCode catalog refetch failed",
+      }),
+    );
+
+    readShouldFail = false;
+    await harness.run(async (state) => {
+      await state.resources[0]?.retry();
+    });
+    await harness.waitFor((state) => state.resources[0]?.error === null, 2000);
+    expect(harness.getLatest().resources[0]?.catalog).toEqual(catalogFor("opencode"));
+    await harness.unmount();
+  });
 });

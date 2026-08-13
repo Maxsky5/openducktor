@@ -54,11 +54,12 @@ export function useRuntimeModelCatalogs({
     () =>
       uniqueRuntimeKinds.map((runtimeKind, index) => {
         const query = catalogQueries[index];
+        const error = query?.error ? errorMessage(query.error) : null;
         return {
           runtimeKind,
-          catalog: query?.data ?? null,
+          catalog: error ? null : (query?.data ?? null),
           isLoading: query?.isLoading ?? false,
-          error: query?.error ? errorMessage(query.error) : null,
+          error,
           retry: async (): Promise<void> => {
             await query?.refetch();
           },
