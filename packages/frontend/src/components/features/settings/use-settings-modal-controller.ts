@@ -13,8 +13,9 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { useIsMutating } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
+import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
   ChecksStateContext,
@@ -24,6 +25,9 @@ import {
 } from "@/state/app-state-contexts";
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
+import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
+import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -64,6 +68,8 @@ export type SettingsModalController = {
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
+  catalogResources: RuntimeModelCatalogResource[];
+  favoriteState: ModelPickerFavoriteState;
   workspaces: WorkspaceRecord[];
   workspaceIds: string[];
   selectedWorkspaceId: string | null;
@@ -161,8 +167,12 @@ export const useSettingsModalController = ({
     loadSettingsSnapshot,
     detectGithubRepository,
     saveGlobalGitConfig,
+    saveAgentModelFavorites,
     saveSettingsSnapshot,
   } = workspaceState;
+  const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
+  const isAgentModelFavoritesMutationPending =
+    useIsMutating({ mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY }) > 0;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const workspaceSelectionKind = workspaceSelectionPolicy?.kind ?? "preferred";
   const workspaceSelectionRepoPath =
@@ -241,11 +251,12 @@ export const useSettingsModalController = ({
   const runtimeExecutablesError = runtimeExecutableSetup.error;
   const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
   const catalogRuntimeKinds = useMemo(
-    () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
-    [availableRuntimeDefinitions, selectedRepoConfig],
+    () => availableRuntimeDefinitions.map((runtime) => runtime.kind),
+    [availableRuntimeDefinitions],
   );
 
   const {
+    resources: catalogResources,
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
@@ -419,6 +430,8 @@ export const useSettingsModalController = ({
     onRuntimeAvailabilityError,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
+    loadSettingsSnapshot,
+    isAgentModelFavoritesMutationPending,
   });
   const draftActions = useMemo(
     () => ({
@@ -507,6 +520,8 @@ export const useSettingsModalController = ({
     getCatalogForRuntime,
     getCatalogErrorForRuntime,
     isCatalogLoadingForRuntime,
+    catalogResources,
+    favoriteState,
     workspaces,
     workspaceIds,
     selectedWorkspaceId,

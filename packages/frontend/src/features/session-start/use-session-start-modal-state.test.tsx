@@ -1046,7 +1046,54 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("fetches fresh modal catalog data instead of reusing stale shared runtime cache", async () => {
+  test("selects an exact runtime, provider, and model pair in one action", async () => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
+      return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-EXACT-PAIR",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+    await harness.waitFor((state) =>
+      state.modelPickerRuntimes.some(
+        (runtime) => runtime.descriptor.kind === "codex" && runtime.resource.catalog !== null,
+      ),
+    );
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "codex",
+        providerId: "codex",
+        modelId: "gpt-5.4-mini",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("codex");
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      variant: "low",
+    });
+
+    await harness.unmount();
+  });
+
+  test("reuses the canonical runtime catalog cache across picker surfaces", async () => {
     const queryClient = new QueryClient();
     const claudeModel = CLAUDE_CATALOG.models[0];
     if (!claudeModel) {
@@ -1092,17 +1139,11 @@ describe("useSessionStartModalState", () => {
 
     await harness.waitFor((state) => state.selection?.runtimeKind === "claude");
 
-    expect(loadCatalog).toHaveBeenCalledWith({
+    expect(loadCatalog).not.toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
     });
-    expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]);
+    expect(harness.getLatest().variantOptions).toEqual([]);
 
     await harness.unmount();
     queryClient.clear();

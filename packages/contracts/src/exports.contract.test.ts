@@ -287,6 +287,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRoleValues",
   "agentModelDefaultSchema",
   "agentModelDescriptorSchema",
+  "agentModelFavoriteSchema",
+  "agentModelFavoritesSchema",
   "agentModelSelectionSchema",
   "agentRuntimeConfigSchema",
   "agentRuntimeEnabledConfigSchema",

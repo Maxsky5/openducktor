@@ -292,6 +292,18 @@ const baseSessionStartModal: SessionStartModalModel = {
   selectedModelSelection: null,
   selectedRuntimeKind: "opencode",
   runtimeOptions: [],
+  modelPickerRuntimes: [],
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: true,
+    toggleFavorite: mock(() => {}),
+    retryRead: mock(() => {}),
+    retryMutation: mock(() => {}),
+  },
   supportsProfiles: true,
   supportsVariants: true,
   selectionCatalogError: null,
@@ -309,6 +321,7 @@ const baseSessionStartModal: SessionStartModalModel = {
   onSelectRuntime: mock(() => {}),
   onSelectRuntimeProfile: mock(() => {}),
   onSelectModel: mock(() => {}),
+  onSelectModelPair: mock(() => {}),
   onSelectVariant: mock(() => {}),
   isStarting: false,
   onOpenChange: mock(() => {}),
@@ -377,6 +390,9 @@ const workspaceStateValue = (): WorkspaceStateContextValue => ({
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => undefined,
   saveSettingsSnapshot: async () => undefined,
+  saveAgentModelFavorites: async () => {
+    throw new Error("saveAgentModelFavorites is not used in this test");
+  },
   ...workspaceState,
 });
 

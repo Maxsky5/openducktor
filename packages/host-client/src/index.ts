@@ -35,6 +35,7 @@ const WORKSPACE_METHODS = [
   "workspaceUpdateRepoHooks",
   "workspaceGetRepoConfig",
   "workspaceGetSettingsSnapshot",
+  "workspaceUpdateAgentModelFavorites",
   "workspaceUpdateGlobalGitConfig",
   "workspaceDetectGithubRepository",
   "workspaceSaveSettingsSnapshot",

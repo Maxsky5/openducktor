@@ -1,6 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { type Dispatch, type SetStateAction, useCallback, useMemo } from "react";
+import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import {
   coerceVisibleSelectionToCatalog,
   resolveInitialModelSelection,
@@ -32,6 +33,7 @@ type UseSessionStartModalSelectionStateResult = {
   handleSelectRuntimeProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
+  handleSelectPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
@@ -165,6 +167,28 @@ export function useSessionStartModalSelectionState({
     [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
   );
 
+  const handleSelectPair = useCallback(
+    (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
+      const modelKey = `${value.providerId}/${value.modelId}`;
+      const runtimeSelection = resolveModelSelectionForRuntimeChange({
+        catalog: targetCatalog,
+        currentSelection: resolvedSelection,
+        defaultSelection,
+        selectedModel: intentSelectedModel,
+        runtimeKind: value.runtimeKind,
+      });
+      setSelection(
+        resolveModelSelectionForModelChange({
+          catalog: targetCatalog,
+          currentSelection: runtimeSelection,
+          modelKey,
+          runtimeKind: value.runtimeKind,
+        }),
+      );
+    },
+    [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
+  );
+
   const handleSelectVariant = useCallback(
     (variant: string): void => {
       if (!selectedRuntimeKind) {
@@ -188,6 +212,7 @@ export function useSessionStartModalSelectionState({
     handleSelectRuntimeProfile,
     handleSelectModel,
     handleSelectRuntime,
+    handleSelectPair,
     handleSelectVariant,
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
+  agentModelFavoritesSchema,
   appearanceSettingsSchema,
   appPlatformSchema,
   CHAT_DIFF_HEIGHT_VALUES,
@@ -98,6 +99,7 @@ describe("config-schemas", () => {
       "kanban",
       "autopilot",
       "agentRuntimes",
+      "agentModelFavorites",
       "workspaces",
       "globalPromptOverrides",
     ]);
@@ -107,6 +109,48 @@ describe("config-schemas", () => {
         git: { defaultMergeMethod: "merge_commit" },
       }).success,
     ).toBe(false);
+  });
+
+  test("defaults missing agent model favorites and canonicalizes exact tuples", () => {
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const globalConfig = globalConfigSchema.parse({
+      version: 2,
+      theme: "light",
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const favorites = agentModelFavoritesSchema.parse([
+      { runtimeKind: "opencode", providerId: " openai ", modelId: " gpt-5 " },
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "opencode", providerId: "proxy", modelId: "gpt-5" },
+    ]);
+
+    expect(snapshot.agentModelFavorites).toEqual([]);
+    expect(globalConfig.agentModelFavorites).toEqual([]);
+    expect(favorites).toEqual([
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "opencode", providerId: "proxy", modelId: "gpt-5" },
+    ]);
+  });
+
+  test("rejects blank agent model favorite identifiers", () => {
+    expect(() =>
+      agentModelFavoritesSchema.parse([
+        { runtimeKind: "opencode", providerId: "   ", modelId: "gpt-5" },
+      ]),
+    ).toThrow("Favorite provider id cannot be blank.");
+    expect(() =>
+      agentModelFavoritesSchema.parse([
+        { runtimeKind: "opencode", providerId: "openai", modelId: "   " },
+      ]),
+    ).toThrow("Favorite model id cannot be blank.");
   });
 
   test("defaults dev servers to an empty array", () => {

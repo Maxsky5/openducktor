@@ -1,4 +1,5 @@
 import {
+  type AgentModelFavorite,
   type GitProviderRepository,
   type GitTargetBranch,
   type GlobalGitConfig,
@@ -174,6 +175,14 @@ const workspaceSaveSettingsSnapshot = async (
   return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
 };
 
+const workspaceUpdateAgentModelFavorites = async (
+  invokeFn: InvokeFn,
+  favorites: AgentModelFavorite[],
+): Promise<SettingsSnapshot> => {
+  const payload = await invokeFn("workspace_update_agent_model_favorites", { favorites });
+  return settingsSnapshotSchema.parse(payload);
+};
+
 const workspaceUpdateGlobalGitConfig = async (
   invokeFn: InvokeFn,
   git: GlobalGitConfig,
@@ -267,6 +276,12 @@ export class HostWorkspaceClient {
     snapshot: SettingsSnapshotSaveInput,
   ): Promise<WorkspaceRecord[]> {
     return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
+  }
+
+  async workspaceUpdateAgentModelFavorites(
+    favorites: AgentModelFavorite[],
+  ): Promise<SettingsSnapshot> {
+    return workspaceUpdateAgentModelFavorites(this.invokeFn, favorites);
   }
 
   async workspaceUpdateGlobalGitConfig(git: GlobalGitConfig): Promise<void> {

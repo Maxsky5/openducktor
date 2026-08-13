@@ -172,6 +172,7 @@ export const createSettingsSnapshotFixture = (
       rules: [],
     },
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    agentModelFavorites: [],
     workspaces: {},
     globalPromptOverrides: {},
     ...snapshotOverrides,

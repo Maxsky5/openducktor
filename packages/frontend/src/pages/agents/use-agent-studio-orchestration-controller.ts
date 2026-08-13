@@ -13,6 +13,8 @@ import type {
 } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
+import { useWorkspaceStateContext } from "@/state/app-state-contexts";
+import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
@@ -130,11 +132,16 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "agentProfileOptions"
   | "modelOptions"
   | "modelGroups"
+  | "modelPickerRuntimes"
+  | "modelPickerSelectionPolicy"
+  | "favoriteState"
   | "variantOptions"
   | "selectedSessionContextUsage"
   | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
   | "handleSelectModel"
+  | "handleSelectModelPair"
+  | "handleModelPickerOpenChange"
   | "handleSelectVariant"
 >;
 
@@ -170,6 +177,8 @@ export const buildAgentStudioPageModelsArgs = ({
   const {
     handleSelectAgentProfile,
     handleSelectModel,
+    handleSelectModelPair,
+    handleModelPickerOpenChange,
     handleSelectVariant,
     agentProfileOptions,
     agentAccentColorsByProfileId,
@@ -195,6 +204,8 @@ export const buildAgentStudioPageModelsArgs = ({
       agentAccentColorsByProfileId,
       onSelectAgent: handleSelectAgentProfile,
       onSelectModel: handleSelectModel,
+      onSelectModelPair: handleSelectModelPair,
+      onModelPickerOpenChange: handleModelPickerOpenChange,
       onSelectVariant: handleSelectVariant,
     },
     composer,
@@ -214,6 +225,8 @@ export function useAgentStudioOrchestrationController({
   composer,
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
+  const { saveAgentModelFavorites } = useWorkspaceStateContext();
+  const agentModelFavoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const {
     view,
     activeTaskTabId,
@@ -278,11 +291,16 @@ export function useAgentStudioOrchestrationController({
     agentProfileOptions,
     modelOptions,
     modelGroups,
+    modelPickerRuntimes,
+    modelPickerSelectionPolicy,
+    favoriteState,
     variantOptions,
     agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectModel,
+    handleSelectModelPair,
+    handleModelPickerOpenChange,
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
@@ -290,6 +308,7 @@ export function useAgentStudioOrchestrationController({
     role: view.role,
     reusablePrompts,
     repoSettings,
+    favoriteState: agentModelFavoriteState,
     updateAgentSessionModel,
   });
 
@@ -319,6 +338,7 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioSessionActions({
     activeWorkspaceId,
     branches,
+    favoriteState: agentModelFavoriteState,
     taskId: view.taskId,
     role: view.role,
     launchActionId: view.launchActionId,
@@ -449,11 +469,16 @@ export function useAgentStudioOrchestrationController({
       agentProfileOptions,
       modelOptions,
       modelGroups,
+      modelPickerRuntimes,
+      modelPickerSelectionPolicy,
+      favoriteState,
       variantOptions,
       selectedSessionContextUsage,
       agentAccentColorsByProfileId,
       handleSelectAgentProfile,
       handleSelectModel,
+      handleSelectModelPair,
+      handleModelPickerOpenChange,
       handleSelectVariant,
     },
     chatSettings,

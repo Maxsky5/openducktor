@@ -16,6 +16,12 @@ import type {
   AgentSubagentReference,
 } from "@openducktor/core";
 import type { MutableRefObject, RefObject } from "react";
+import type {
+  ModelPickerFavoriteState,
+  ModelPickerRuntime,
+  ModelPickerSelectionPolicy,
+  ModelPickerValue,
+} from "@/components/features/agents/model-picker";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentApprovalRequest,
@@ -170,9 +176,14 @@ export type AgentChatComposerModel = {
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ComboboxGroup[];
+  modelPickerRuntimes: ModelPickerRuntime[];
+  modelPickerSelectionPolicy: ModelPickerSelectionPolicy;
+  favoriteState: ModelPickerFavoriteState;
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
   onSelectModel: (model: string) => void;
+  onSelectModelPair: (value: ModelPickerValue) => void;
+  onModelPickerOpenChange: (open: boolean) => void;
   onSelectVariant: (variant: string) => void;
   accentColor?: string | undefined;
   contextUsage: {

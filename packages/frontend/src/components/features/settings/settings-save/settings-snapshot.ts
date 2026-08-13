@@ -24,6 +24,7 @@ export const prepareSettingsSnapshotForSave = (
     kanban: snapshot.kanban,
     autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
     agentRuntimes: snapshot.agentRuntimes,
+    agentModelFavorites: snapshot.agentModelFavorites,
     workspaces,
     globalPromptOverrides: preparePromptOverridesForSave(snapshot.globalPromptOverrides),
   };

@@ -16,6 +16,10 @@ import {
   toModelOptions,
   toPrimaryAgentOptions,
 } from "@/components/features/agents/catalog-select-options";
+import type {
+  ModelPickerRuntime,
+  ModelPickerValue,
+} from "@/components/features/agents/model-picker";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import {
@@ -57,6 +61,7 @@ type UseSessionStartModalStateResult = {
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
   runtimeOptions: ComboboxOption[];
+  modelPickerRuntimes: ModelPickerRuntime[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
   catalogError: string | null;
@@ -80,6 +85,7 @@ type UseSessionStartModalStateResult = {
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
+  handleSelectModelPair: (value: ModelPickerValue) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
@@ -104,6 +110,7 @@ export function useSessionStartModalState({
   );
   const {
     catalog,
+    catalogResources,
     catalogError,
     eligibleRuntimeDefinitions,
     isCatalogLoading,
@@ -143,6 +150,7 @@ export function useSessionStartModalState({
     initializeSelection,
     handleSelectRuntimeProfile,
     handleSelectModel,
+    handleSelectPair,
     handleSelectRuntime: handleSelectionRuntimeChange,
     handleSelectVariant,
   } = useSessionStartModalSelectionState({
@@ -232,6 +240,38 @@ export function useSessionStartModalState({
       resetSelection,
       setRequestedRuntimeKind,
     ],
+  );
+
+  const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(
+    () =>
+      eligibleRuntimeDefinitions.flatMap((descriptor) => {
+        const resource = catalogResources.find(
+          (candidate) => candidate.runtimeKind === descriptor.kind,
+        );
+        return resource ? [{ descriptor, resource }] : [];
+      }),
+    [catalogResources, eligibleRuntimeDefinitions],
+  );
+
+  const handleSelectModelPair = useCallback(
+    (value: ModelPickerValue): void => {
+      if (selectedStartMode === "reuse") {
+        return;
+      }
+      const runtime = modelPickerRuntimes.find(
+        (candidate) => candidate.descriptor.kind === value.runtimeKind,
+      );
+      const targetCatalog = runtime?.resource.catalog ?? null;
+      const hasExactModel = targetCatalog?.models.some(
+        (model) => model.providerId === value.providerId && model.modelId === value.modelId,
+      );
+      if (!targetCatalog || !hasExactModel) {
+        return;
+      }
+      setRequestedRuntimeKind(value.runtimeKind);
+      handleSelectPair(value, targetCatalog);
+    },
+    [handleSelectPair, modelPickerRuntimes, selectedStartMode, setRequestedRuntimeKind],
   );
 
   const handleSelectedStartModeChange = useCallback(
@@ -357,6 +397,7 @@ export function useSessionStartModalState({
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,
+    modelPickerRuntimes,
     supportsProfiles:
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false,
     supportsVariants:
@@ -382,6 +423,7 @@ export function useSessionStartModalState({
     handleSelectRuntime,
     handleSelectRuntimeProfile,
     handleSelectModel,
+    handleSelectModelPair,
     handleSelectVariant,
   };
 }

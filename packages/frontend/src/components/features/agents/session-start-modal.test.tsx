@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { SessionStartModalModel } from "./session-start-modal";
+import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -34,6 +34,42 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   },
   selectedRuntimeKind: "opencode",
   runtimeOptions: [{ value: "opencode", label: "OpenCode" }],
+  modelPickerRuntimes: [
+    {
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      resource: {
+        runtimeKind: "opencode",
+        catalog: {
+          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+          models: [
+            {
+              id: "openai/gpt-5.4",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5.4",
+              modelName: "GPT-5.4",
+              variants: ["default"],
+            },
+          ],
+          defaultModelsByProvider: {},
+        },
+        isLoading: false,
+        error: null,
+        retry: async () => {},
+      },
+    },
+  ],
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: true,
+    toggleFavorite: noop,
+    retryRead: noop,
+    retryMutation: noop,
+  },
   supportsProfiles: true,
   supportsVariants: true,
   selectionCatalogError: null,
@@ -51,6 +87,7 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   onSelectRuntime: noop,
   onSelectRuntimeProfile: noop,
   onSelectModel: noop,
+  onSelectModelPair: noop,
   onSelectVariant: noop,
   allowRunInBackground: true,
   isStarting: false,
@@ -68,35 +105,6 @@ const getFieldButton = (testId: string): HTMLButtonElement => {
 };
 
 describe("SessionStartModal", () => {
-  let SessionStartModal: typeof import("./session-start-modal").SessionStartModal;
-  let actualAgentRuntimeCombobox: typeof import("./agent-runtime-combobox");
-
-  const restoreSessionStartModalMocks = async (): Promise<void> => {
-    await restoreMockedModules([
-      [
-        "@/components/features/agents/agent-runtime-combobox",
-        async () => actualAgentRuntimeCombobox,
-      ],
-    ]);
-  };
-
-  beforeEach(async () => {
-    actualAgentRuntimeCombobox = await import("./agent-runtime-combobox");
-    mock.module("@/components/features/agents/agent-runtime-combobox", () => ({
-      AgentRuntimeCombobox: (props: Record<string, unknown>) =>
-        createElement("agent-runtime-combobox", {
-          ...props,
-          "data-testid": "session-start-runtime-combobox",
-        }),
-    }));
-    ({ SessionStartModal } = await import("./session-start-modal"));
-    await restoreSessionStartModalMocks();
-  });
-
-  afterEach(async () => {
-    await restoreSessionStartModalMocks();
-  });
-
   test("submits through the form action", () => {
     const onConfirm = mock(() => {});
     const { unmount } = render(
@@ -116,7 +124,7 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
-  test("disables runtime and model selectors when reusing an existing session", () => {
+  test("makes the combined picker read-only when reusing an existing session", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
@@ -128,17 +136,14 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    const runtimeCombobox = screen.getByTestId("session-start-runtime-combobox");
-    expect(runtimeCombobox.hasAttribute("disabled")).toBe(true);
-
     const sourceCombobox = getFieldButton("session-start-source-field");
     const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
-    const modelCombobox = getFieldButton("session-start-model-field");
+    const modelPicker = getFieldButton("session-start-model-picker-field");
     const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(true);
-    expect(modelCombobox.hasAttribute("disabled")).toBe(true);
+    expect(modelPicker.hasAttribute("disabled")).toBe(true);
     expect(variantCombobox.hasAttribute("disabled")).toBe(true);
 
     unmount();
@@ -175,17 +180,20 @@ describe("SessionStartModal", () => {
     const onConfirm = mock(() => {});
     const { unmount } = render(
       createElement(SessionStartModal, {
-        model: createModel({ isSelectionCatalogLoading: true, onConfirm }),
+        model: createModel({
+          isSelectionCatalogLoading: true,
+          modelPickerRuntimes: [],
+          onConfirm,
+        }),
       }),
     );
 
-    expect(screen.getByTestId("session-start-runtime-combobox").hasAttribute("disabled")).toBe(
-      true,
-    );
     expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
       true,
     );
-    expect(getFieldButton("session-start-model-field").hasAttribute("disabled")).toBe(true);
+    const modelPicker = getFieldButton("session-start-model-picker-field");
+    expect(modelPicker.hasAttribute("disabled")).toBe(false);
+    expect(modelPicker.textContent).toContain("Loading models...");
     expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
 
     const confirmButton = screen.getByRole("button", { name: /start session/i });
@@ -233,9 +241,6 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Failed to load runtime catalog: Claude auth failed",
-    );
     expect(screen.getByRole("button", { name: /start session/i }).hasAttribute("disabled")).toBe(
       true,
     );
@@ -259,7 +264,7 @@ describe("SessionStartModal", () => {
     );
 
     expect(screen.queryByTestId("session-start-runtime-profile-field")).toBeNull();
-    expect(screen.getByTestId("session-start-model-field")).toBeTruthy();
+    expect(screen.getByTestId("session-start-model-picker-field")).toBeTruthy();
 
     unmount();
   });
@@ -281,17 +286,14 @@ describe("SessionStartModal", () => {
     expect(screen.getByRole("button", { name: /fork existing/i })).toBeTruthy();
     expect(screen.getByText("Existing Session")).toBeTruthy();
 
-    const runtimeCombobox = screen.getByTestId("session-start-runtime-combobox");
-    expect(runtimeCombobox.hasAttribute("disabled")).toBe(false);
-
     const sourceCombobox = getFieldButton("session-start-source-field");
     const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
-    const modelCombobox = getFieldButton("session-start-model-field");
+    const modelPicker = getFieldButton("session-start-model-picker-field");
     const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(false);
-    expect(modelCombobox.hasAttribute("disabled")).toBe(false);
+    expect(modelPicker.hasAttribute("disabled")).toBe(false);
     expect(variantCombobox.hasAttribute("disabled")).toBe(false);
 
     unmount();

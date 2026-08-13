@@ -220,6 +220,17 @@ const createRepoConfigFixture = (): RepoConfig => ({
 const createBaseArgs = (): HookArgs => ({
   activeWorkspaceId: "workspace-1",
   workspaceRepoPath: "/repo",
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: false,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },

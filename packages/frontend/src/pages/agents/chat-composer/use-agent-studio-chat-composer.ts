@@ -1,4 +1,4 @@
-import type { RepoRuntimeRef, ReusablePrompt } from "@openducktor/contracts";
+import type { RepoRuntimeRef, ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -9,8 +9,14 @@ import type {
   AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  ModelPickerFavoriteState,
+  ModelPickerRuntime,
+  ModelPickerSelectionPolicy,
+  ModelPickerValue,
+} from "@/components/features/agents/model-picker";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
@@ -36,12 +42,8 @@ import { availableRoleDefaultSelectionFor } from "@/features/session-start/sessi
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
-  repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
-} from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
@@ -56,6 +58,7 @@ type UseAgentStudioChatComposerArgs = {
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => Promise<void> | void;
+  favoriteState: ModelPickerFavoriteState;
   loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   loadSlashCommands?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSlashCommandCatalog>;
   loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
@@ -94,21 +97,18 @@ type AgentStudioChatComposerState = {
   agentProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
   modelGroups: ReturnType<typeof resolveModelSelectionOptions>["modelGroups"];
+  modelPickerRuntimes: ModelPickerRuntime[];
+  modelPickerSelectionPolicy: ModelPickerSelectionPolicy;
+  favoriteState: ModelPickerFavoriteState;
   variantOptions: ComboboxOption[];
   agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
+  handleSelectModelPair: (value: ModelPickerValue) => void;
+  handleModelPickerOpenChange: (open: boolean) => void;
   handleSelectVariant: (variant: string) => void;
 };
-
-const skippedComposerCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
-  skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
 
 export function useAgentStudioChatComposer({
   workspaceRepoPath,
@@ -117,6 +117,7 @@ export function useAgentStudioChatComposer({
   reusablePrompts,
   repoSettings,
   updateAgentSessionModel,
+  favoriteState,
   loadCatalog,
   loadSlashCommands,
   loadSkills,
@@ -133,6 +134,7 @@ export function useAgentStudioChatComposer({
     loadRepoRuntimeFileSearch,
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
   const loadSkillsForRepo = loadSkills ?? loadRepoRuntimeSkills;
@@ -184,15 +186,6 @@ export function useAgentStudioChatComposer({
   const selectedTargetRuntimeDefinitions = hasSessionTarget
     ? allRuntimeDefinitions
     : availableRuntimeDefinitions;
-  const selectedRepoRuntimeRef = useMemo<RepoRuntimeRef | null>(() => {
-    if (!workspaceRepoPath || !selectedRuntimeKind) {
-      return null;
-    }
-    return {
-      repoPath: workspaceRepoPath,
-      runtimeKind: selectedRuntimeKind,
-    };
-  }, [selectedRuntimeKind, workspaceRepoPath]);
   const promptInputRuntimeSource = useMemo<ChatComposerPromptInputRuntimeSource>(() => {
     if (selectedSessionIdentity) {
       return { kind: "session", session: selectedSessionIdentity };
@@ -237,15 +230,96 @@ export function useAgentStudioChatComposer({
     return definition?.capabilities.optionalSurfaces.supportsProfiles ?? false;
   }, [selectedTargetRuntimeDefinitions, selectedTargetRuntimeKind]);
 
-  const composerCatalogQuery = useQuery(
-    selectedRepoRuntimeRef && !hasSessionTarget && isRepoRuntimeReady
-      ? repoRuntimeCatalogQueryOptions(selectedRepoRuntimeRef, loadCatalogForRepo)
-      : skippedComposerCatalogQueryOptions(selectedRepoRuntimeRef),
+  const modelPickerRuntimeDefinitions = useMemo<RuntimeDescriptor[]>(() => {
+    if (!hasSessionTarget) {
+      return availableRuntimeDefinitions;
+    }
+    const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
+    return allRuntimeDefinitions.filter(
+      (runtime) =>
+        runtime.kind === selectedSessionIdentity?.runtimeKind || availableKinds.has(runtime.kind),
+    );
+  }, [
+    allRuntimeDefinitions,
+    availableRuntimeDefinitions,
+    hasSessionTarget,
+    selectedSessionIdentity,
+  ]);
+  const modelPickerRuntimeKinds = useMemo(
+    () => modelPickerRuntimeDefinitions.map((runtime) => runtime.kind),
+    [modelPickerRuntimeDefinitions],
   );
-  const composerCatalog = hasSessionTarget ? null : (composerCatalogQuery.data ?? null);
+  const enabledModelPickerRuntimeKinds = useMemo(() => {
+    if (hasSessionTarget || !isRepoRuntimeReady) {
+      return [];
+    }
+    if (isModelPickerOpen) {
+      return modelPickerRuntimeKinds;
+    }
+    return selectedRuntimeKind ? [selectedRuntimeKind] : [];
+  }, [
+    hasSessionTarget,
+    isModelPickerOpen,
+    isRepoRuntimeReady,
+    modelPickerRuntimeKinds,
+    selectedRuntimeKind,
+  ]);
+  const { resources: repoModelPickerResources } = useRuntimeModelCatalogs({
+    repoPath: workspaceRepoPath,
+    runtimeKinds: modelPickerRuntimeKinds,
+    enabledRuntimeKinds: enabledModelPickerRuntimeKinds,
+    loadCatalog: loadCatalogForRepo,
+  });
+  const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(() => {
+    if (!hasSessionTarget) {
+      return modelPickerRuntimeDefinitions.flatMap((descriptor) => {
+        const resource = repoModelPickerResources.find(
+          (candidate) => candidate.runtimeKind === descriptor.kind,
+        );
+        return resource ? [{ descriptor, resource }] : [];
+      });
+    }
+    return modelPickerRuntimeDefinitions.map((descriptor) => ({
+      descriptor,
+      resource: {
+        runtimeKind: descriptor.kind,
+        catalog:
+          descriptor.kind === selectedSessionIdentity?.runtimeKind ? sessionModelCatalog : null,
+        isLoading:
+          descriptor.kind === selectedSessionIdentity?.runtimeKind && isSessionModelCatalogLoading,
+        error:
+          descriptor.kind === selectedSessionIdentity?.runtimeKind
+            ? selectedSession.runtimeData.error
+            : null,
+        retry: async () => {
+          if (!workspaceRepoPath || descriptor.kind !== selectedSessionIdentity?.runtimeKind) {
+            return;
+          }
+          await queryClient.invalidateQueries({
+            queryKey: runtimeCatalogQueryKeys.repo(workspaceRepoPath, descriptor.kind),
+            exact: true,
+          });
+        },
+      },
+    }));
+  }, [
+    hasSessionTarget,
+    isSessionModelCatalogLoading,
+    modelPickerRuntimeDefinitions,
+    queryClient,
+    repoModelPickerResources,
+    selectedSession.runtimeData.error,
+    selectedSessionIdentity,
+    sessionModelCatalog,
+    workspaceRepoPath,
+  ]);
+  const selectedComposerResource = repoModelPickerResources.find(
+    (resource) => resource.runtimeKind === selectedRuntimeKind,
+  );
+  const composerCatalog = hasSessionTarget ? null : (selectedComposerResource?.catalog ?? null);
   const isLoadingComposerCatalog = hasSessionTarget
     ? isSessionModelCatalogLoading
-    : isRepoRuntimeReady && composerCatalogQuery.isLoading;
+    : isRepoRuntimeReady && (selectedComposerResource?.isLoading ?? false);
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -358,15 +432,38 @@ export function useAgentStudioChatComposer({
     selectedModelEntry,
   });
 
-  const { handleSelectAgentProfile, handleSelectModel, handleSelectVariant } =
-    useModelSelectionActions({
-      loadedSessionIdentity,
-      updateAgentSessionModel,
-      applyDraftSelection,
-      selectedModelSelection,
-      selectionCatalog,
-      selectedRuntimeKind: selectedTargetRuntimeKind,
-    });
+  const {
+    handleSelectAgentProfile,
+    handleSelectModel,
+    handleSelectModelPair: applyModelPair,
+    handleSelectVariant,
+  } = useModelSelectionActions({
+    loadedSessionIdentity,
+    updateAgentSessionModel,
+    applyDraftSelection,
+    selectedModelSelection,
+    selectionCatalog,
+    selectedRuntimeKind: selectedTargetRuntimeKind,
+  });
+  const handleSelectModelPair = useCallback(
+    (value: ModelPickerValue): void => {
+      const targetCatalog = modelPickerRuntimes.find(
+        (runtime) => runtime.descriptor.kind === value.runtimeKind,
+      )?.resource.catalog;
+      if (!targetCatalog) {
+        return;
+      }
+      applyModelPair(value, targetCatalog);
+    },
+    [applyModelPair, modelPickerRuntimes],
+  );
+  const modelPickerSelectionPolicy: ModelPickerSelectionPolicy = selectedSessionIdentity
+    ? {
+        kind: "runtime_locked",
+        runtimeKind: selectedSessionIdentity.runtimeKind,
+        reason: "An existing session cannot change runtime.",
+      }
+    : { kind: "editable" };
 
   return {
     selectionForNewSession,
@@ -396,11 +493,16 @@ export function useAgentStudioChatComposer({
     agentProfileOptions,
     modelOptions,
     modelGroups,
+    modelPickerRuntimes,
+    modelPickerSelectionPolicy,
+    favoriteState,
     variantOptions,
     agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
     handleSelectModel,
+    handleSelectModelPair,
+    handleModelPickerOpenChange: setIsModelPickerOpen,
     handleSelectVariant,
   };
 }

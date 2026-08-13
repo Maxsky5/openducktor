@@ -193,10 +193,12 @@ export const assertRuntimeSupportsSelectedStartMode = ({
 
 export function useSessionStartModalRunner({
   branches = [],
+  favoriteState,
   repoSettings,
   workspaceRepoPath,
 }: {
   branches?: GitBranch[];
+  favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
 }): {
@@ -218,6 +220,7 @@ export function useSessionStartModalRunner({
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
     runtimeOptions,
+    modelPickerRuntimes,
     supportsProfiles,
     supportsVariants,
     catalogError,
@@ -241,6 +244,7 @@ export function useSessionStartModalRunner({
     handleSelectRuntime,
     handleSelectRuntimeProfile,
     handleSelectModel,
+    handleSelectModelPair,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
     branches,
@@ -384,6 +388,8 @@ export function useSessionStartModalRunner({
       selectedModelSelection: selection,
       selectedRuntimeKind,
       runtimeOptions,
+      modelPickerRuntimes,
+      favoriteState,
       supportsProfiles,
       supportsVariants,
       selectionCatalogError: catalogError,
@@ -405,6 +411,7 @@ export function useSessionStartModalRunner({
       onSelectRuntime: handleSelectRuntime,
       onSelectRuntimeProfile: handleSelectRuntimeProfile,
       onSelectModel: handleSelectModel,
+      onSelectModelPair: handleSelectModelPair,
       onSelectVariant: handleSelectVariant,
       allowRunInBackground: intent.source === "kanban",
       backgroundConfirmLabel: "Run in background",
@@ -427,6 +434,7 @@ export function useSessionStartModalRunner({
     existingSessionOptions,
     handleSelectRuntimeProfile,
     handleSelectModel,
+    handleSelectModelPair,
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectSourceSessionValue,
@@ -437,6 +445,8 @@ export function useSessionStartModalRunner({
     isOpen,
     modelGroups,
     modelOptions,
+    modelPickerRuntimes,
+    favoriteState,
     resolvePendingRun,
     runtimeOptions,
     selectedTargetBranch,

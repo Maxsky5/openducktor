@@ -3,6 +3,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, type RepoConfig } from "@openducktor/contract
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 
 const codexCatalog: AgentModelCatalog = {
@@ -45,11 +46,58 @@ const repoConfig: RepoConfig = {
 };
 
 describe("RepositoryAgentsSection", () => {
+  test("resolves an exact cross-runtime model pair with compatible defaults", () => {
+    expect(
+      resolveRepoAgentDefaultModelPickerSelection({
+        currentValue: {
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "high",
+          profileId: "builder",
+        },
+        currentRuntimeKind: "opencode",
+        targetCatalog: codexCatalog,
+        value: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "o3",
+        },
+      }),
+    ).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "o3",
+      variant: "low",
+      profileId: "",
+    });
+  });
+
   test("disables the agent selector instead of hiding it when runtime profiles are unsupported", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryAgentsSection, {
         selectedRepoConfig: repoConfig,
         availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        catalogResources: [
+          {
+            runtimeKind: "codex",
+            catalog: codexCatalog,
+            isLoading: false,
+            error: null,
+            retry: async () => {},
+          },
+        ],
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: true,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
         loadingState: {
           isLoadingRuntimeDefinitions: false,
           isLoadingCatalog: false,
@@ -59,7 +107,6 @@ describe("RepositoryAgentsSection", () => {
         runtimeDefinitionsError: null,
         runtimeAvailabilityErrors: ['Default agent runtime "Codex" is disabled.'],
         getCatalogForRuntime: () => codexCatalog,
-        getCatalogErrorForRuntime: () => null,
         isCatalogLoadingForRuntime: () => false,
         onUpdateSelectedRepoConfig: () => {},
         onUpdateSelectedRepoAgentDefault: () => {},

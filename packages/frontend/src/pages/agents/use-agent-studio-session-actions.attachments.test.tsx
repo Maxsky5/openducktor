@@ -148,6 +148,17 @@ const createBaseArgs = (): HookArgs => {
   return {
     activeWorkspaceId: "workspace-1",
     workspaceRepoPath: "/repo",
+    favoriteState: {
+      favorites: [],
+      isLoading: false,
+      readError: null,
+      isMutationPending: false,
+      mutationError: null,
+      canMutate: false,
+      toggleFavorite: () => {},
+      retryRead: () => {},
+      retryMutation: () => {},
+    },
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",

@@ -1,4 +1,5 @@
 import {
+  agentModelFavoritesSchema,
   globalConfigSchema,
   globalGitConfigSchema,
   repoConfigSchema,
@@ -43,6 +44,8 @@ const withSerializedConfigWrites = (
       serialize(service.saveRepoSettings(workspaceId, settings)),
     updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
     saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
+    updateAgentModelFavorites: (favorites) =>
+      serialize(service.updateAgentModelFavorites(favorites)),
     setTheme: (theme) => serialize(service.setTheme(theme)),
     updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };
@@ -328,6 +331,7 @@ const createUnserializedWorkspaceSettingsService = (
             kanban: snapshot.kanban,
             autopilot: snapshot.autopilot,
             agentRuntimes: snapshot.agentRuntimes,
+            agentModelFavorites: snapshot.agentModelFavorites,
             workspaces,
             globalPromptOverrides: snapshot.globalPromptOverrides,
           }) as LoadedGlobalConfig,
@@ -341,6 +345,41 @@ const createUnserializedWorkspaceSettingsService = (
       yield* settingsConfig.writeConfig(nextConfig);
       return yield* Effect.try({
         try: () => workspaceRecordsInEffectiveOrder(settingsConfig, nextConfig),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+    });
+  },
+  updateAgentModelFavorites(rawFavorites) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const favorites = yield* Effect.try({
+        try: () => agentModelFavoritesSchema.parse(rawFavorites),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const nextConfig = yield* Effect.try({
+        try: () =>
+          globalConfigSchema.parse({
+            ...config,
+            agentModelFavorites: favorites,
+          }) as LoadedGlobalConfig,
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      yield* settingsConfig.writeConfig(nextConfig);
+      return yield* Effect.try({
+        try: () => toSettingsSnapshot(nextConfig),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

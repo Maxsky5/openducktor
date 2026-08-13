@@ -2,9 +2,12 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
 import { catalogModelOptionValue } from "@/components/features/agents";
+import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
+  resolveModelSelectionForModelChange,
   resolveModelSelectionForProfileChange,
+  resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
 } from "./model-selection-state";
 import { reportModelUpdateError } from "./model-update-error";
@@ -43,6 +46,7 @@ export const useModelSelectionActions = ({
 }): {
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectModel: (modelKey: string) => void;
+  handleSelectModelPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
 } => {
   const effectiveRuntimeKind = loadedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
@@ -88,8 +92,49 @@ export const useModelSelectionActions = ({
     ],
   );
 
+  const handleSelectModelPair = useCallback(
+    (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
+      if (loadedSessionIdentity && loadedSessionIdentity.runtimeKind !== value.runtimeKind) {
+        return;
+      }
+      const model = targetCatalog.models.find(
+        (entry) => entry.providerId === value.providerId && entry.modelId === value.modelId,
+      );
+      if (!model) {
+        return;
+      }
+      const runtimeSelection = resolveModelSelectionForRuntimeChange({
+        catalog: targetCatalog,
+        currentSelection: selectedModelSelection,
+        defaultSelection: null,
+        selectedModel: null,
+        runtimeKind: value.runtimeKind,
+      });
+      const modelSelection = resolveModelSelectionForModelChange({
+        catalog: targetCatalog,
+        currentSelection: runtimeSelection,
+        modelKey: catalogModelOptionValue(model),
+        runtimeKind: value.runtimeKind,
+      });
+      if (!modelSelection) {
+        return;
+      }
+      const liveVariants = loadedSessionIdentity ? model.liveSessionUpdates?.variants : undefined;
+      const liveVariantSet = liveVariants ? new Set(liveVariants) : null;
+      const variants = liveVariantSet
+        ? model.variants.filter((variant) => liveVariantSet.has(variant))
+        : model.variants;
+      const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
+      applySelection({
+        ...selectionWithoutVariant,
+        ...(variants[0] ? { variant: variants[0] } : {}),
+      });
+    },
+    [applySelection, loadedSessionIdentity, selectedModelSelection],
+  );
+
   const handleSelectModel = useCallback(
-    (nextValue: string) => {
+    (nextValue: string): void => {
       if (!selectionCatalog || !effectiveRuntimeKind) {
         return;
       }
@@ -99,28 +144,16 @@ export const useModelSelectionActions = ({
       if (!model) {
         return;
       }
-      const liveVariants = loadedSessionIdentity ? model.liveSessionUpdates?.variants : undefined;
-      const liveVariantSet = liveVariants ? new Set(liveVariants) : null;
-      const variants = liveVariantSet
-        ? model.variants.filter((variant) => liveVariantSet.has(variant))
-        : model.variants;
-      applySelection({
-        runtimeKind: effectiveRuntimeKind,
-        providerId: model.providerId,
-        modelId: model.modelId,
-        ...(variants[0] ? { variant: variants[0] } : {}),
-        ...(selectedModelSelection?.profileId
-          ? { profileId: selectedModelSelection.profileId }
-          : {}),
-      });
+      handleSelectModelPair(
+        {
+          runtimeKind: effectiveRuntimeKind,
+          providerId: model.providerId,
+          modelId: model.modelId,
+        },
+        selectionCatalog,
+      );
     },
-    [
-      applySelection,
-      effectiveRuntimeKind,
-      loadedSessionIdentity,
-      selectedModelSelection?.profileId,
-      selectionCatalog,
-    ],
+    [effectiveRuntimeKind, handleSelectModelPair, selectionCatalog],
   );
 
   const handleSelectVariant = useCallback(
@@ -144,5 +177,10 @@ export const useModelSelectionActions = ({
     [applySelection, loadedSessionIdentity, selectedModelSelection, selectionCatalog],
   );
 
-  return { handleSelectAgentProfile, handleSelectModel, handleSelectVariant };
+  return {
+    handleSelectAgentProfile,
+    handleSelectModel,
+    handleSelectModelPair,
+    handleSelectVariant,
+  };
 };

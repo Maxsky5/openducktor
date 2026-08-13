@@ -346,6 +346,17 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
     role,
     reusablePrompts: [],
     repoSettings: createRepoSettings(null),
+    favoriteState: {
+      favorites: [],
+      isLoading: false,
+      readError: null,
+      isMutationPending: false,
+      mutationError: null,
+      canMutate: true,
+      toggleFavorite: () => {},
+      retryRead: () => {},
+      retryMutation: () => {},
+    },
     updateAgentSessionModel: async () => {},
     loadCatalog: async () => CATALOG,
     ...hookOverrides,
@@ -510,6 +521,75 @@ describe("useAgentStudioChatComposer", () => {
       expect(state.agentAccentColorsByProfileId).toMatchObject({
         "spec-agent": "#f59e0b",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads other runtime catalogs when the new-session picker opens and selects an exact pair", async () => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) =>
+      runtimeKind === "codex" ? CODEX_CATALOG : CATALOG,
+    );
+    const harness = createHookHarness(createBaseProps({ loadCatalog }), {
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.modelPickerRuntimes[0]?.resource.catalog !== null);
+      expect(loadCatalog).not.toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+
+      await harness.run(() => {
+        harness.getLatest().handleModelPickerOpenChange(true);
+      });
+      await harness.waitFor((state) =>
+        state.modelPickerRuntimes.some(
+          (runtime) => runtime.descriptor.kind === "codex" && runtime.resource.catalog !== null,
+        ),
+      );
+      await harness.run(() => {
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
+      });
+
+      expect(harness.getLatest().selectionForNewSession?.runtimeKind).toBe("codex");
+      expect(loadCatalog).toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows foreign runtimes as locked without loading their repo catalogs for an existing session", async () => {
+    const loadCatalog = mock(async () => CODEX_CATALOG);
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        loadCatalog,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().modelPickerSelectionPolicy).toEqual({
+        kind: "runtime_locked",
+        runtimeKind: "opencode",
+        reason: "An existing session cannot change runtime.",
+      });
+      expect(
+        harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+      ).toEqual(["opencode", "codex"]);
+      expect(loadCatalog).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

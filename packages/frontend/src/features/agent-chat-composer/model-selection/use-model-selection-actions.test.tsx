@@ -182,6 +182,72 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
+  test("blocks foreign runtime pairs for a loaded session", async () => {
+    const updateAgentSessionModel = mock(async () => {});
+    const harness = createHarness(createBaseProps({ updateAgentSessionModel }));
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+        {
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["medium"],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5" },
+        },
+      );
+    });
+
+    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
+  test("applies an exact cross-runtime pair to a new-session draft", async () => {
+    const applyDraftSelection = mock(() => {});
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: null,
+        applyDraftSelection,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+        {
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["medium"],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5" },
+        },
+      );
+    });
+
+    expect(applyDraftSelection).toHaveBeenCalledWith({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
+    });
+    await harness.unmount();
+  });
+
   test("surfaces live model update failures", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

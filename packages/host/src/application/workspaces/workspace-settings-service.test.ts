@@ -58,6 +58,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     },
     claude: { enabled: false, executablePath: "/bin/claude" },
   },
+  agentModelFavorites: [],
   workspaces: {},
   workspaceOrder: [],
   recentWorkspaces: [],
@@ -151,7 +152,40 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
+    expect(snapshot.agentModelFavorites).toEqual([]);
     expect(snapshot.workspaces).toEqual({});
+  });
+
+  test("updates only canonical agent model favorites", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        theme: "dark",
+        recentWorkspaces: ["repo"],
+        agentModelFavorites: [
+          { runtimeKind: "claude", providerId: "anthropic", modelId: "claude-opus" },
+        ],
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const snapshot = await Effect.runPromise(
+      service.updateAgentModelFavorites([
+        { runtimeKind: "opencode", providerId: " openai ", modelId: " gpt-5 " },
+        { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+      ]),
+    );
+
+    expect(snapshot.agentModelFavorites).toEqual([
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+    ]);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+    expect(settingsConfig.writtenConfigs[0]).toMatchObject({
+      theme: "dark",
+      recentWorkspaces: ["repo"],
+      agentModelFavorites: snapshot.agentModelFavorites,
+    });
   });
   test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
     const service = createWorkspaceSettingsService(

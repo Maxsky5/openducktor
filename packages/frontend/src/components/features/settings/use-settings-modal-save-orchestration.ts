@@ -26,6 +26,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
   saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  loadSettingsSnapshot: () => Promise<SettingsSnapshot>;
+  isAgentModelFavoritesMutationPending: boolean;
 };
 
 type SettingsModalSaveOrchestration = {
@@ -46,6 +48,8 @@ export const useSettingsModalSaveOrchestration = ({
   onRuntimeAvailabilityError,
   saveGlobalGitConfig,
   saveSettingsSnapshot,
+  loadSettingsSnapshot,
+  isAgentModelFavoritesMutationPending,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -124,6 +128,15 @@ export const useSettingsModalSaveOrchestration = ({
       return true;
     }
 
+    if (!saveReadyGit && isAgentModelFavoritesMutationPending) {
+      const reason = "Wait for the model favorites update to finish before saving settings.";
+      setSaveError(reason);
+      toast.error("Cannot save settings", {
+        description: reason,
+      });
+      return false;
+    }
+
     saveInFlightRef.current = true;
     setIsSaving(true);
 
@@ -131,7 +144,11 @@ export const useSettingsModalSaveOrchestration = ({
       if (saveReadyGit) {
         await saveGlobalGitConfig(saveReadyGit);
       } else {
-        const saveReadySnapshot = prepareSettingsSnapshotForSave(snapshotDraft);
+        const latestSnapshot = await loadSettingsSnapshot();
+        const saveReadySnapshot = prepareSettingsSnapshotForSave({
+          ...snapshotDraft,
+          agentModelFavorites: latestSnapshot.agentModelFavorites,
+        });
         await saveSettingsSnapshot(saveReadySnapshot);
       }
 
@@ -149,6 +166,8 @@ export const useSettingsModalSaveOrchestration = ({
     }
   }, [
     dirtySections,
+    isAgentModelFavoritesMutationPending,
+    loadSettingsSnapshot,
     loadedSnapshot,
     onRuntimeAvailabilityError,
     saveGlobalGitConfig,

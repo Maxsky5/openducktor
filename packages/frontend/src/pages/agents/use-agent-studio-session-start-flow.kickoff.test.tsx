@@ -138,6 +138,17 @@ const createHookHarness = (initialProps: HookArgs) => {
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceId: null,
   workspaceRepoPath: null,
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: false,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",

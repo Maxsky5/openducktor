@@ -65,6 +65,9 @@ describe("WorkspaceRail", () => {
       detectGithubRepository: async () => null,
       saveGlobalGitConfig: async () => {},
       saveSettingsSnapshot: async () => {},
+      saveAgentModelFavorites: async () => {
+        throw new Error("saveAgentModelFavorites is not used in this test");
+      },
       isSwitchingWorkspace: false,
     };
     selectWorkspaceMock.mockClear();

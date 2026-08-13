@@ -138,6 +138,9 @@ const createWorkspaceState = (
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => undefined,
   saveSettingsSnapshot: async () => undefined,
+  saveAgentModelFavorites: async () => {
+    throw new Error("saveAgentModelFavorites is not used in this test");
+  },
   ...overrides,
 });
 

@@ -1,0 +1,112 @@
+import { describe, expect, mock, test } from "bun:test";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RepoRuntimeRef,
+  type RuntimeKind,
+} from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
+import type { PropsWithChildren, ReactElement } from "react";
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { useRuntimeModelCatalogs } from "./use-runtime-model-catalogs";
+
+const descriptorByRuntime = {
+  opencode: OPENCODE_RUNTIME_DESCRIPTOR,
+  codex: CODEX_RUNTIME_DESCRIPTOR,
+  claude: CLAUDE_RUNTIME_DESCRIPTOR,
+};
+
+const catalogFor = (runtimeKind: RuntimeKind): AgentModelCatalog => ({
+  runtime: descriptorByRuntime[runtimeKind],
+  models: [],
+  profiles: [],
+  defaultModelsByProvider: {},
+});
+
+const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+  <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
+);
+
+describe("useRuntimeModelCatalogs", () => {
+  test("keeps each runtime loading and error state independent", async () => {
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      if (runtimeRef.runtimeKind === "codex") {
+        throw new Error("Codex catalog failed");
+      }
+      return catalogFor(runtimeRef.runtimeKind);
+    });
+    const harness = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: "/repo",
+        runtimeKinds: ["opencode", "codex"] as const,
+        enabledRuntimeKinds: ["opencode", "codex"] as const,
+        loadCatalog,
+      },
+      { wrapper },
+    );
+
+    await harness.mount();
+    await harness.waitFor(
+      (state) => state.resources.every((resource) => !resource.isLoading),
+      2000,
+    );
+
+    expect(harness.getLatest().resources).toEqual([
+      expect.objectContaining({
+        runtimeKind: "opencode",
+        catalog: catalogFor("opencode"),
+        error: null,
+      }),
+      expect.objectContaining({
+        runtimeKind: "codex",
+        catalog: null,
+        error: "Codex catalog failed",
+      }),
+    ]);
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
+    await harness.unmount();
+  });
+
+  test("loads only enabled runtimes and supports a user retry", async () => {
+    let codexAttempts = 0;
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      if (runtimeRef.runtimeKind === "codex") {
+        codexAttempts += 1;
+        if (codexAttempts === 1) {
+          throw new Error("Codex catalog failed");
+        }
+      }
+      return catalogFor(runtimeRef.runtimeKind);
+    });
+    const harness = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: "/repo",
+        runtimeKinds: ["opencode", "codex"] as const,
+        enabledRuntimeKinds: ["codex"] as const,
+        loadCatalog,
+      },
+      { wrapper },
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.resources[1]?.error !== null, 2000);
+    expect(harness.getLatest().resources[0]).toEqual(
+      expect.objectContaining({ runtimeKind: "opencode", catalog: null, isLoading: false }),
+    );
+
+    await harness.run(async (state) => {
+      await state.resources[1]?.retry();
+    });
+    await harness.waitFor((state) => state.resources[1]?.catalog !== null, 2000);
+
+    expect(harness.getLatest().resources[1]).toEqual(
+      expect.objectContaining({ runtimeKind: "codex", catalog: catalogFor("codex"), error: null }),
+    );
+    expect(loadCatalog).toHaveBeenCalledTimes(2);
+    await harness.unmount();
+  });
+});

@@ -1,12 +1,4 @@
-import {
-  Bot,
-  Brain,
-  BrainCog,
-  LoaderCircle,
-  Paperclip,
-  SendHorizontal,
-  Square,
-} from "lucide-react";
+import { Bot, BrainCog, LoaderCircle, Paperclip, SendHorizontal, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -19,6 +11,7 @@ import {
   useRef,
 } from "react";
 import { toast } from "sonner";
+import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -66,6 +59,7 @@ type AgentChatComposerFormViewProps = {
   isComposerInputDisabled: boolean;
   isSubmitting: boolean;
   selectorDisabled: boolean;
+  modelPickerDisabled: boolean;
   sendDisabled: boolean;
   onAddFiles: (files: File[]) => void;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
@@ -105,14 +99,17 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   attachmentIntakeDisabled,
   selectedModelSelection,
   agentOptions,
-  modelOptions,
-  modelGroups,
+  modelPickerRuntimes,
+  modelPickerSelectionPolicy,
+  favoriteState,
   variantOptions,
   isSelectionCatalogLoading,
   supportsProfiles,
   selectorDisabled,
+  modelPickerDisabled,
   onSelectAgent,
-  onSelectModel,
+  onSelectModelPair,
+  onModelPickerOpenChange,
   onSelectVariant,
   contextUsage,
   canStopSession,
@@ -125,14 +122,17 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
   agentOptions: AgentChatComposerModel["agentOptions"];
-  modelOptions: AgentChatComposerModel["modelOptions"];
-  modelGroups: AgentChatComposerModel["modelGroups"];
+  modelPickerRuntimes: AgentChatComposerModel["modelPickerRuntimes"];
+  modelPickerSelectionPolicy: AgentChatComposerModel["modelPickerSelectionPolicy"];
+  favoriteState: AgentChatComposerModel["favoriteState"];
   variantOptions: AgentChatComposerModel["variantOptions"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles: boolean;
   selectorDisabled: boolean;
+  modelPickerDisabled: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
-  onSelectModel: AgentChatComposerModel["onSelectModel"];
+  onSelectModelPair: AgentChatComposerModel["onSelectModelPair"];
+  onModelPickerOpenChange: AgentChatComposerModel["onModelPickerOpenChange"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
@@ -173,25 +173,28 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           </div>
         ) : null}
 
-        <div className="relative">
-          <Brain className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Combobox
-            value={
-              selectedModelSelection
-                ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
-                : ""
-            }
-            options={modelOptions}
-            groups={modelGroups}
-            matchAllSearchTerms
-            className="w-[26rem] max-w-[min(90vw,34rem)] p-0"
-            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-            searchPlaceholder="Search model..."
-            triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-            disabled={selectorDisabled}
-            onValueChange={onSelectModel}
-          />
-        </div>
+        <ModelPicker
+          runtimes={modelPickerRuntimes}
+          value={
+            selectedModelSelection?.runtimeKind
+              ? {
+                  runtimeKind: selectedModelSelection.runtimeKind,
+                  providerId: selectedModelSelection.providerId,
+                  modelId: selectedModelSelection.modelId,
+                }
+              : null
+          }
+          favoriteState={favoriteState}
+          selectionPolicy={
+            modelPickerDisabled
+              ? { kind: "read_only", reason: "Model selection is unavailable right now." }
+              : modelPickerSelectionPolicy
+          }
+          placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+          triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !px-2 text-xs text-foreground shadow-none hover:!bg-muted"
+          onValueChange={onSelectModelPair}
+          onOpenChange={onModelPickerOpenChange}
+        />
 
         {hasVariantOptions ? (
           <div className="relative">
@@ -275,6 +278,7 @@ function AgentChatComposerFormView({
   isComposerInputDisabled,
   isSubmitting,
   selectorDisabled,
+  modelPickerDisabled,
   sendDisabled,
   onAddFiles,
   onDraftChange,
@@ -305,11 +309,13 @@ function AgentChatComposerFormView({
     isSubagentsLoading,
     searchFiles,
     agentOptions,
-    modelOptions,
-    modelGroups,
+    modelPickerRuntimes,
+    modelPickerSelectionPolicy,
+    favoriteState,
     variantOptions,
     onSelectAgent,
-    onSelectModel,
+    onSelectModelPair,
+    onModelPickerOpenChange,
     onSelectVariant,
     contextUsage,
     canStopSession,
@@ -416,14 +422,17 @@ function AgentChatComposerFormView({
             attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
             agentOptions={agentOptions}
-            modelOptions={modelOptions}
-            modelGroups={modelGroups}
+            modelPickerRuntimes={modelPickerRuntimes}
+            modelPickerSelectionPolicy={modelPickerSelectionPolicy}
+            favoriteState={favoriteState}
             variantOptions={variantOptions}
             isSelectionCatalogLoading={isSelectionCatalogLoading}
             supportsProfiles={supportsProfiles ?? true}
             selectorDisabled={selectorDisabled}
+            modelPickerDisabled={modelPickerDisabled}
             onSelectAgent={onSelectAgent}
-            onSelectModel={onSelectModel}
+            onSelectModelPair={onSelectModelPair}
+            onModelPickerOpenChange={onModelPickerOpenChange}
             onSelectVariant={onSelectVariant}
             contextUsage={contextUsage}
             canStopSession={canStopSession}
@@ -700,6 +709,7 @@ export function AgentChatComposer({
 
   const selectorDisabled =
     isSelectionCatalogLoading || isSubmitting || !isInteractionEnabled || isReadOnly;
+  const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,
@@ -785,6 +795,7 @@ export function AgentChatComposer({
       isComposerInputDisabled={isComposerInputDisabled}
       isSubmitting={isSubmitting}
       selectorDisabled={selectorDisabled}
+      modelPickerDisabled={modelPickerDisabled}
       sendDisabled={sendDisabled}
       onAddFiles={handleAddFiles}
       onDraftChange={handleDraftChange}

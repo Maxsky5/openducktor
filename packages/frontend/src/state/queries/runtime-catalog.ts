@@ -86,6 +86,7 @@ export const repoRuntimeCatalogQueryOptions = (
         runtimeKind: runtimeRef.runtimeKind,
       }),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+    retry: false,
   });
 
 export const sessionStartRuntimeCatalogQueryOptions = (

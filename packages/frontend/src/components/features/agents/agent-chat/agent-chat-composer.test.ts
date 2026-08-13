@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "./agent-chat-composer";
@@ -49,9 +50,48 @@ const buildModel = () => ({
       options: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
     },
   ],
+  modelPickerRuntimes: [
+    {
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      resource: {
+        runtimeKind: "opencode" as const,
+        catalog: {
+          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+          models: [
+            {
+              id: "openai/gpt-5.3-codex",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5.3-codex",
+              modelName: "GPT-5.3 Codex",
+              variants: ["high"],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+        },
+        isLoading: false,
+        error: null,
+        retry: async () => {},
+      },
+    },
+  ],
+  modelPickerSelectionPolicy: { kind: "editable" as const },
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: true,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
   variantOptions: [{ value: "high", label: "high" }],
   onSelectAgent: () => {},
   onSelectModel: () => {},
+  onSelectModelPair: () => {},
+  onModelPickerOpenChange: () => {},
   onSelectVariant: () => {},
   accentColor: "#d97706",
   contextUsage: {
@@ -74,7 +114,7 @@ const buildCodexModelSelectionWithoutProfile = () => {
 };
 
 describe("AgentChatComposer", () => {
-  test("renders input, selectors, and send action", () => {
+  test("renders the runtime-aware model picker and send controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: buildModel(),
@@ -84,6 +124,8 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain("22.5%");
+    expect(html).toContain("Select model, OpenCode, GPT-5.3 Codex");
+    expect(html).toContain('viewBox="0 0 512 512"');
     expect(html).toContain("lucide-brain-cog");
     expect(html).toContain("high");
   });

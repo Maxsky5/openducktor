@@ -158,6 +158,7 @@ const createHookHarness = (
     detectGithubRepository: async () => null,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
+    saveAgentModelFavorites: async () => loadSettingsSnapshot(),
   } satisfies React.ComponentProps<typeof WorkspaceStateContext.Provider>["value"];
 
   const checksState = {
