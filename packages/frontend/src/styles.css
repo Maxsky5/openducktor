@@ -525,6 +525,25 @@ pre {
   animation: rise-in 0.3s ease-out;
 }
 
+@keyframes onboarding-stage-enter {
+  from {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.onboarding-stage-enter {
+  animation: onboarding-stage-enter 160ms ease-out;
+}
+
+.electron-platform-darwin .onboarding-shell {
+  padding-top: var(--electron-titlebar-height);
+}
+
 .markdown-body pre code {
   border-radius: 0;
   border: none;
@@ -684,6 +703,7 @@ pre {
 
 @media (prefers-reduced-motion: reduce) {
   .agent-chat-row-motion,
+  .onboarding-stage-enter,
   .agent-studio-task-status-running-dot::before,
   .agent-studio-task-status-running-dot::after,
   .odt-border-ray-segment {

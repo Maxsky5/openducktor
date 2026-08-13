@@ -4,7 +4,7 @@ import type {
   RuntimeExecutableCheckResult,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { FolderOpen, RefreshCw } from "lucide-react";
+import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,67 @@ type RuntimeExecutablePanelProps = {
   onChange: (next: AgentRuntimes) => void;
   onCheckAgain: () => void;
 };
+
+const RUNTIME_MONOGRAMS: Record<RuntimeKind, string> = {
+  opencode: "OC",
+  codex: "CX",
+  claude: "CL",
+};
+
+type RuntimeStatusProps = {
+  result: RuntimeExecutableCheckResult | undefined;
+  isChecking: boolean;
+  showInvalidState: boolean;
+  enabled: boolean;
+};
+
+function RuntimeStatusBadge({
+  result,
+  isChecking,
+  showInvalidState,
+  enabled,
+}: RuntimeStatusProps): ReactElement {
+  if (isChecking) return <Badge variant="outline">Checking</Badge>;
+  if (result?.ok === true) return <Badge variant="success">Available</Badge>;
+  if (showInvalidState && enabled) return <Badge variant="danger">Needs attention</Badge>;
+  return <Badge variant="outline">Not found</Badge>;
+}
+
+function RuntimeStatusMessage({
+  result,
+  isChecking,
+  showInvalidState,
+  enabled,
+}: RuntimeStatusProps): ReactElement {
+  if (isChecking) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+        Validating saved executable path...
+      </span>
+    );
+  }
+  if (result?.ok === true) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <CircleCheck className="size-3.5 text-success-muted" aria-hidden="true" />
+        {result.version ?? "Executable is ready"} at {result.path}
+      </span>
+    );
+  }
+  if (showInvalidState && result?.ok === false) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <CircleAlert
+          className={cn("size-3.5", enabled ? "text-destructive" : "text-muted-foreground")}
+          aria-hidden="true"
+        />
+        {result.error}
+      </span>
+    );
+  }
+  return <span>Enter or choose an executable path.</span>;
+}
 
 export function RuntimeExecutablePanel({
   runtimes,
@@ -65,21 +126,35 @@ export function RuntimeExecutablePanel({
           const kind = definition.kind;
           const config = runtimes[kind];
           const result = runtimeExecutableResultForPath(kind, config.executablePath, results);
+          const hasInvalidResult = result?.ok === false;
+          const showInvalidState = !isChecking && hasInvalidResult;
+          const inputInvalid = config.enabled && showInvalidState;
           const inputId = `runtime-executable-${kind}`;
           return (
             <section
               key={kind}
-              className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4"
+              className={cn(
+                "flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors duration-150 motion-reduce:transition-none",
+                inputInvalid ? "border-destructive-border" : "border-border",
+              )}
               aria-labelledby={`${inputId}-title`}
             >
               <div className="flex items-center justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-2">
-                  <h3 id={`${inputId}-title`} className="truncate font-semibold text-foreground">
-                    {definition.label}
-                  </h3>
-                  <Badge variant={result?.ok ? "secondary" : "outline"}>
-                    {result?.ok ? "Available" : "Unavailable"}
-                  </Badge>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold uppercase text-foreground">
+                    {RUNTIME_MONOGRAMS[kind]}
+                  </span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h3 id={`${inputId}-title`} className="truncate font-semibold text-foreground">
+                      {definition.label}
+                    </h3>
+                    <RuntimeStatusBadge
+                      result={result}
+                      isChecking={isChecking}
+                      showInvalidState={showInvalidState}
+                      enabled={config.enabled}
+                    />
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Label htmlFor={`${inputId}-enabled`}>Enabled</Label>
@@ -92,14 +167,16 @@ export function RuntimeExecutablePanel({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor={inputId}>Executable path</Label>
-                <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:pl-12">
+                <Label htmlFor={inputId} className="sr-only">
+                  Executable path
+                </Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     id={inputId}
                     value={config.executablePath}
                     disabled={disabled}
-                    aria-invalid={config.enabled && result?.ok !== true}
+                    aria-invalid={inputInvalid}
                     aria-describedby={`${inputId}-status`}
                     placeholder={`Path to ${definition.label}`}
                     onChange={(event) =>
@@ -120,13 +197,16 @@ export function RuntimeExecutablePanel({
                   id={`${inputId}-status`}
                   className={cn(
                     "text-sm",
-                    result?.ok ? "text-muted-foreground" : "text-destructive",
+                    inputInvalid ? "text-destructive" : "text-muted-foreground",
                   )}
                   aria-live="polite"
                 >
-                  {result?.ok
-                    ? `${result.version ?? "Executable is ready"} at ${result.path}`
-                    : (result?.error ?? "Enter a path, then check it.")}
+                  <RuntimeStatusMessage
+                    result={result}
+                    isChecking={isChecking}
+                    showInvalidState={showInvalidState}
+                    enabled={config.enabled}
+                  />
                 </p>
               </div>
             </section>

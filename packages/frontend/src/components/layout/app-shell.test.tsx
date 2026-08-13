@@ -305,7 +305,9 @@ describe("AppShell", () => {
   test("shows onboarding after an empty workspace list loads", () => {
     renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 
-    expect(screen.getByRole("heading", { name: "Welcome to OpenDucktor" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Move from idea to reviewed change." }),
+    ).toBeTruthy();
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 

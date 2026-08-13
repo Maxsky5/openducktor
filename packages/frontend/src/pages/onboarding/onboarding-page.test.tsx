@@ -136,6 +136,48 @@ const opencodeSection = (): HTMLElement => {
 };
 
 describe("OnboardingPage runtime validation", () => {
+  test("keeps runtime cards neutral while exact paths are being checked", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: {
+        ...DEFAULT_AGENT_RUNTIMES.codex,
+        enabled: true,
+        executablePath: "/valid/codex",
+      },
+      claude: {
+        ...DEFAULT_AGENT_RUNTIMES.claude,
+        enabled: true,
+        executablePath: "/valid/claude",
+      },
+    };
+    const validation = createDeferred<RuntimeExecutableCheck>();
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => validation.promise);
+
+    try {
+      renderOnboarding({ runtimes });
+      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+
+      await screen.findByRole("heading", { name: "Configure agent runtimes" });
+      expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
+      expect(screen.queryByText("Unavailable")).toBeNull();
+      expect(screen.queryByText("Enter a path, then check it.")).toBeNull();
+      expect(screen.getAllByText("Validating saved executable path...")).toHaveLength(
+        runtimeDefinitions.length,
+      );
+      for (const input of screen.getAllByRole("textbox", { name: "Executable path" })) {
+        expect(input.getAttribute("aria-invalid")).toBe("false");
+      }
+
+      await act(async () => {
+        validation.resolve(createCheck(runtimes, true));
+      });
+      await within(opencodeSection()).findByText("Available");
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("shows and retries a settings snapshot failure before a draft exists", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
