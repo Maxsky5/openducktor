@@ -44,6 +44,7 @@ export type FilesystemPort = {
     maxBytes: number,
   ): Effect.Effect<FilesystemFileSnapshot, FilesystemFileOperationError>;
   replaceFileBytes(input: {
+    canonicalRootPath: string;
     path: string;
     expectedRevision: string;
     bytes: Uint8Array;

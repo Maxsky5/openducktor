@@ -16,6 +16,7 @@ type UseAgentStudioSelectionStateArgs = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
+  requestContextTransition: (applyTransition: () => void, cancelTransition?: () => void) => void;
 };
 
 type SelectionStateSnapshot = {
@@ -35,6 +36,7 @@ export function useAgentStudioSelectionState({
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
+  requestContextTransition,
 }: UseAgentStudioSelectionStateArgs): AgentStudioSelectionStateModel {
   const routeSelection = useMemo(
     () =>
@@ -62,40 +64,50 @@ export function useAgentStudioSelectionState({
     selection: routeSelection,
   }));
 
-  const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(snapshot.selection);
-  const hasRouteChangedOutsideLocalSelection =
-    snapshot.routeQueryKey !== routeSelectionQueryKey &&
-    snapshotSelectionQueryKey !== routeSelectionQueryKey;
-  const selection = hasRouteChangedOutsideLocalSelection ? routeSelection : snapshot.selection;
+  const selection = snapshot.selection;
 
   useLayoutEffect(() => {
-    setSnapshot((current) => {
-      const currentSelectionQueryKey = agentStudioSelectionQueryKey(current.selection);
-      if (current.routeQueryKey === routeSelectionQueryKey) {
-        return current;
-      }
-      if (currentSelectionQueryKey === routeSelectionQueryKey) {
-        return {
-          routeQueryKey: routeSelectionQueryKey,
-          selection: current.selection,
-        };
-      }
-      return {
+    if (snapshot.routeQueryKey === routeSelectionQueryKey) {
+      return;
+    }
+    const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(snapshot.selection);
+    if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
+      setSnapshot({
         routeQueryKey: routeSelectionQueryKey,
-        selection: routeSelection,
-      };
-    });
-  }, [routeSelection, routeSelectionQueryKey]);
+        selection: snapshot.selection,
+      });
+      return;
+    }
+    requestContextTransition(
+      () => {
+        setSnapshot({
+          routeQueryKey: routeSelectionQueryKey,
+          selection: routeSelection,
+        });
+      },
+      () => {
+        scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(snapshot.selection));
+      },
+    );
+  }, [
+    requestContextTransition,
+    routeSelection,
+    routeSelectionQueryKey,
+    scheduleQueryUpdate,
+    snapshot,
+  ]);
 
   const selectAgentStudioSelection = useCallback<SelectAgentStudioSelection>(
     (nextSelection) => {
-      setSnapshot({
-        routeQueryKey: routeSelectionQueryKey,
-        selection: nextSelection,
+      requestContextTransition(() => {
+        setSnapshot({
+          routeQueryKey: routeSelectionQueryKey,
+          selection: nextSelection,
+        });
+        scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
-      scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
     },
-    [routeSelectionQueryKey, scheduleQueryUpdate],
+    [requestContextTransition, routeSelectionQueryKey, scheduleQueryUpdate],
   );
 
   return {

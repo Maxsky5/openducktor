@@ -76,7 +76,7 @@ describe("task execution file preview state", () => {
     ).toBe(saving);
   });
 
-  test("guards context-driven clear while dirty or saving", () => {
+  test("holds a context transition while dirty and defers it while saving", () => {
     const opened = requestTaskExecutionFilePreviewIntent(createTaskExecutionFilePreviewState(), {
       type: "select",
       file: firstFile,
@@ -85,7 +85,7 @@ describe("task execution file preview state", () => {
       isDirty: true,
       isSaving: false,
     });
-    const pending = clearTaskExecutionFilePreviewState(dirty);
+    const pending = requestTaskExecutionFilePreviewIntent(dirty, { type: "leave_context" });
     const saving = reportTaskExecutionFilePreviewEditState(dirty, {
       isDirty: true,
       isSaving: true,
@@ -94,7 +94,12 @@ describe("task execution file preview state", () => {
     expect(pending).toMatchObject({
       selectedFile: firstFile,
       isDirty: true,
-      pendingIntent: { type: "close" },
+      pendingIntent: { type: "leave_context" },
+    });
+    expect(requestTaskExecutionFilePreviewIntent(saving, { type: "leave_context" })).toMatchObject({
+      selectedFile: firstFile,
+      isSaving: true,
+      pendingIntent: { type: "leave_context" },
     });
     expect(clearTaskExecutionFilePreviewState(saving)).toBe(saving);
   });

@@ -29,6 +29,7 @@ const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   scheduleQueryUpdate: () => {},
+  requestContextTransition: (applyTransition) => applyTransition(),
   ...overrides,
 });
 
@@ -36,6 +37,96 @@ const createHookHarness = (initialProps: HookProps) =>
   createSharedHookHarness(useAgentStudioSelectionState, initialProps);
 
 describe("useAgentStudioSelectionState", () => {
+  test("does not publish a local task change before the preview guard applies it", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    let applyTransition: (() => void) | null = null;
+    const requestContextTransition = mock((apply: () => void) => {
+      applyTransition = apply;
+    });
+    const harness = createHookHarness(baseProps({ scheduleQueryUpdate, requestContextTransition }));
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.selectAgentStudioSelection(toAgentStudioTaskSelection("task-2"));
+    });
+
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+    await harness.run(() => applyTransition?.());
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-2"));
+    expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      task: "task-2",
+      session: undefined,
+      agent: undefined,
+    });
+
+    await harness.unmount();
+  });
+
+  test("keeps the current selection during external route navigation until confirmation", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    let applyTransition: (() => void) | null = null;
+    const requestContextTransition = mock((apply: () => void) => {
+      applyTransition = apply;
+    });
+    const harness = createHookHarness(baseProps({ scheduleQueryUpdate, requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(
+      baseProps({
+        taskIdParam: "task-3",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "qa",
+        scheduleQueryUpdate,
+        requestContextTransition,
+      }),
+    );
+
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    await harness.run(() => applyTransition?.());
+    expect(harness.getLatest().selection).toEqual({
+      taskId: "task-3",
+      sessionExternalId: null,
+      sessionIdentity: null,
+      role: "qa",
+      hasExplicitRoleSelection: true,
+      keepSessionless: false,
+    });
+
+    await harness.unmount();
+  });
+
+  test("restores the current route when external navigation is cancelled", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    let cancelTransition: (() => void) | null = null;
+    const requestContextTransition = mock((_apply: () => void, cancel?: () => void) => {
+      cancelTransition = cancel ?? null;
+    });
+    const harness = createHookHarness(baseProps({ scheduleQueryUpdate, requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(
+      baseProps({
+        taskIdParam: "task-3",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "qa",
+        scheduleQueryUpdate,
+        requestContextTransition,
+      }),
+    );
+
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    await harness.run(() => cancelTransition?.());
+    expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      task: "task-1",
+      session: undefined,
+      agent: undefined,
+    });
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+
+    await harness.unmount();
+  });
+
   test("publishes selected session state immediately and mirrors it to the query", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const harness = createHookHarness(baseProps({ scheduleQueryUpdate }));

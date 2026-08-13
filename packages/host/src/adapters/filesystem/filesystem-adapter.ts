@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
 import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -70,6 +69,44 @@ const writeAllBytes = async (
   }
 };
 
+const isContainedPath = (rootPath: string, targetPath: string): boolean => {
+  const relativePath = path.relative(rootPath, targetPath);
+  const leavesRoot = relativePath === ".." || relativePath.startsWith(`..${path.sep}`);
+  return relativePath === "" || (!leavesRoot && !path.isAbsolute(relativePath));
+};
+
+const unavailableFile = (inputPath: string, message: string): FilesystemFileOperationError =>
+  new FilesystemFileOperationError({
+    code: "unavailable_file",
+    operation: "replace",
+    path: inputPath,
+    message,
+  });
+
+const verifyOpenFileContainment = async (
+  file: Awaited<ReturnType<typeof open>>,
+  canonicalRootPath: string,
+  inputPath: string,
+): Promise<void> => {
+  const currentCanonicalRoot = await realpath(canonicalRootPath);
+  if (path.relative(currentCanonicalRoot, path.resolve(canonicalRootPath)) !== "") {
+    throw unavailableFile(inputPath, "The workspace root changed after the file was loaded.");
+  }
+  if (!isContainedPath(currentCanonicalRoot, path.resolve(inputPath))) {
+    throw unavailableFile(inputPath, "The selected path is outside the workspace root.");
+  }
+
+  const canonicalTarget = await realpath(inputPath);
+  if (!isContainedPath(currentCanonicalRoot, canonicalTarget)) {
+    throw unavailableFile(inputPath, "The selected file moved outside the workspace root.");
+  }
+
+  const [openedMetadata, targetMetadata] = await Promise.all([file.stat(), stat(canonicalTarget)]);
+  if (openedMetadata.dev !== targetMetadata.dev || openedMetadata.ino !== targetMetadata.ino) {
+    throw unavailableFile(inputPath, "The selected path changed while the file was opened.");
+  }
+};
+
 export const createFilesystemAdapter = (): FilesystemPort => ({
   homeDirectory() {
     const home = homedir();
@@ -129,11 +166,18 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       catch: (cause) => fileOperationError(cause, "read_snapshot", inputPath),
     });
   },
-  replaceFileBytes({ path: inputPath, expectedRevision, bytes, maxCurrentBytes }) {
+  replaceFileBytes({
+    canonicalRootPath,
+    path: inputPath,
+    expectedRevision,
+    bytes,
+    maxCurrentBytes,
+  }) {
     return Effect.tryPromise({
       try: async () => {
-        const file = await open(inputPath, constants.O_RDWR | constants.O_NOFOLLOW);
+        const file = await open(inputPath, "r+");
         try {
+          await verifyOpenFileContainment(file, canonicalRootPath, inputPath);
           const current = await snapshotOpenFile(file, maxCurrentBytes + 1);
           if (!current.isFile) {
             throw new FilesystemFileOperationError({

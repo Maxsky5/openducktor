@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -14,7 +25,7 @@ const createTempFile = async (contents: Uint8Array): Promise<string> => {
   tempDirectories.push(directory);
   const filePath = path.join(directory, "file.txt");
   await writeFile(filePath, contents);
-  return filePath;
+  return realpath(filePath);
 };
 
 afterEach(async () => {
@@ -33,6 +44,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     const saved = await Effect.runPromise(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: original.revision,
         bytes: encoder.encode("short"),
@@ -54,6 +66,7 @@ describe("createFilesystemAdapter file snapshots", () => {
     const first = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
     const empty = await Effect.runPromise(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: first.revision,
         bytes: new Uint8Array(),
@@ -62,6 +75,7 @@ describe("createFilesystemAdapter file snapshots", () => {
     );
     await Effect.runPromise(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: empty.revision,
         bytes: encoder.encode("a longer replacement"),
@@ -77,6 +91,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     const exit = await Effect.runPromiseExit(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: "sha256:stale",
         bytes: encoder.encode("draft"),
@@ -103,6 +118,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     const exit = await Effect.runPromiseExit(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: original.revision,
         bytes: encoder.encode("draft"),
@@ -131,6 +147,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     const exit = await Effect.runPromiseExit(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: original.revision,
         bytes: encoder.encode("draft"),
@@ -143,6 +160,36 @@ describe("createFilesystemAdapter file snapshots", () => {
     expect(await readFile(movedPath, "utf8")).toBe("same contents");
   });
 
+  test("rejects a parent-directory pivot to the original file outside the workspace", async () => {
+    const rootDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-root-"));
+    const outsideDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-outside-"));
+    tempDirectories.push(rootDirectory, outsideDirectory);
+    const rootPath = await realpath(rootDirectory);
+    const outsideRoot = await realpath(outsideDirectory);
+    const parentPath = path.join(rootPath, "nested");
+    const movedParentPath = path.join(outsideRoot, "nested");
+    const filePath = path.join(parentPath, "file.txt");
+    await mkdir(parentPath);
+    await writeFile(filePath, "same contents");
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    await rename(parentPath, movedParentPath);
+    await symlink(movedParentPath, parentPath);
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        canonicalRootPath: rootPath,
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(await readFile(path.join(movedParentPath, "file.txt"), "utf8")).toBe("same contents");
+  });
+
   test("rejects an oversized current file without changing it", async () => {
     const bytes = new Uint8Array(17).fill(0x61);
     const filePath = await createTempFile(bytes);
@@ -150,6 +197,7 @@ describe("createFilesystemAdapter file snapshots", () => {
 
     const exit = await Effect.runPromiseExit(
       filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
         path: filePath,
         expectedRevision: "not-used",
         bytes: encoder.encode("draft"),
@@ -166,12 +214,14 @@ describe("createFilesystemAdapter file snapshots", () => {
   });
 
   test("reports a missing target as unavailable", async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-"));
-    tempDirectories.push(directory);
+    const tempDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-"));
+    tempDirectories.push(tempDirectory);
+    const directory = await realpath(tempDirectory);
     const filesystem = createFilesystemAdapter();
 
     const exit = await Effect.runPromiseExit(
       filesystem.replaceFileBytes({
+        canonicalRootPath: directory,
         path: path.join(directory, "missing.txt"),
         expectedRevision: "revision",
         bytes: encoder.encode("draft"),

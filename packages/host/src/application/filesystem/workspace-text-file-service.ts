@@ -302,6 +302,7 @@ export const createWorkspaceTextFileService = (
 
       const saved = yield* filesystem
         .replaceFileBytes({
+          canonicalRootPath: canonicalRoot,
           path: canonicalPath,
           expectedRevision: input.revision,
           bytes,

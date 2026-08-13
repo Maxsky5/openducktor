@@ -2,6 +2,7 @@ import type { TaskExecutionSelectedFile } from "@/components/features/agents";
 
 export type TaskExecutionFilePreviewIntent =
   | { type: "close" }
+  | { type: "leave_context" }
   | { type: "select"; file: TaskExecutionSelectedFile };
 
 export type TaskExecutionFilePreviewState = {
@@ -33,7 +34,7 @@ const applyPreviewIntent = (
   state: TaskExecutionFilePreviewState,
   intent: TaskExecutionFilePreviewIntent,
 ): TaskExecutionFilePreviewState => {
-  if (intent.type === "close") {
+  if (intent.type === "close" || intent.type === "leave_context") {
     if (state.selectedFile === null) return state;
     return {
       ...state,
@@ -62,7 +63,10 @@ export const requestTaskExecutionFilePreviewIntent = (
   state: TaskExecutionFilePreviewState,
   intent: TaskExecutionFilePreviewIntent,
 ): TaskExecutionFilePreviewState => {
-  if (state.isSaving || state.pendingIntent !== null) return state;
+  if (state.pendingIntent !== null) return state;
+  if (state.isSaving) {
+    return intent.type === "leave_context" ? { ...state, pendingIntent: intent } : state;
+  }
   if (state.isDirty) return { ...state, pendingIntent: intent };
   return applyPreviewIntent(state, intent);
 };

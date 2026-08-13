@@ -27,7 +27,7 @@ import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
-import { useTaskExecutionFilePreviewController } from "./use-task-execution-file-preview-controller";
+import type { UseTaskExecutionFilePreviewControllerResult } from "./use-task-execution-file-preview-controller";
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 
@@ -57,6 +57,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   githubIntegrationEnabled: boolean;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
+  taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
   hasActiveGitConflict: boolean;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
@@ -208,6 +209,7 @@ export function useAgentStudioOrchestrationController({
   githubIntegrationEnabled,
   workspaceRepoPath,
   selection,
+  taskExecutionFilePreview,
   hasActiveGitConflict,
   composer,
   actions,
@@ -474,19 +476,8 @@ export function useAgentStudioOrchestrationController({
     hasGithubIntegration: githubIntegrationEnabled,
     hasLinkedGithubPullRequest: view.selectedTask?.pullRequest?.providerId === "github",
   });
-  const selectedSessionIdentity = selectedSession.identity;
-  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
-  const selectedSessionExternalId = selectedSessionIdentity?.externalSessionId ?? null;
-  const taskExecutionFileRootKey = selectedSessionIdentity
-    ? (selectedSessionWorkingDirectory ?? "__missing_session_working_directory__")
-    : (workspaceRepoPath ?? "__missing_workspace_repo_path__");
-  const taskExecutionFileContextKey = [
-    view.taskId ?? "__missing_task__",
-    selectedSessionExternalId ?? "__no_selected_session__",
-    taskExecutionFileRootKey,
-  ].join("\0");
   const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
-    useTaskExecutionFilePreviewController({ contextKey: taskExecutionFileContextKey });
+    taskExecutionFilePreview;
 
   return {
     repoSettings,

@@ -5,6 +5,10 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
+import {
+  type UseTaskExecutionFilePreviewControllerResult,
+  useTaskExecutionFilePreviewController,
+} from "../use-task-execution-file-preview-controller";
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 
@@ -24,6 +28,7 @@ export type AgentsPageRouteSessionModel = {
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
+  taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
 };
 
 export function useAgentsPageRouteSessionModel({
@@ -64,14 +69,18 @@ export function useAgentsPageRouteSessionModel({
     [updateQuery],
   );
 
-  const { selection: selectionState, selectAgentStudioSelection } = useAgentStudioSelectionState({
-    isRepoNavigationBoundaryPending,
-    taskIdParam,
-    sessionExternalIdParam,
-    hasExplicitRoleParam,
-    roleFromQuery,
-    scheduleQueryUpdate,
-  });
+  const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
+  const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
+    useAgentStudioSelectionState({
+      isRepoNavigationBoundaryPending,
+      taskIdParam,
+      sessionExternalIdParam,
+      hasExplicitRoleParam,
+      roleFromQuery,
+      scheduleQueryUpdate,
+      requestContextTransition: taskExecutionFilePreview.requestContextTransition,
+    });
+  const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -104,5 +113,6 @@ export function useAgentsPageRouteSessionModel({
     scheduleQueryUpdate,
     selection,
     selectAgentStudioSelection,
+    taskExecutionFilePreview,
   };
 }

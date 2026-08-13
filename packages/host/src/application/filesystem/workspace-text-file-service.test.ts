@@ -184,6 +184,57 @@ describe("createWorkspaceTextFileService", () => {
     }
   });
 
+  test("rejects a parent-directory pivot to the original file at the commit point", async () => {
+    const rootPath = await createRoot();
+    const outsideRoot = await createRoot();
+    const parentPath = path.join(rootPath, "nested");
+    const movedParentPath = path.join(outsideRoot, "nested");
+    const filePath = path.join(parentPath, "file.txt");
+    await mkdir(parentPath);
+    await writeFile(filePath, "same contents");
+    const filesystem = createFilesystemAdapter();
+    const service = createWorkspaceTextFileService(
+      {
+        ...filesystem,
+        replaceFileBytes: (input) =>
+          Effect.gen(function* () {
+            yield* Effect.tryPromise({
+              try: async () => {
+                await rename(parentPath, movedParentPath);
+                await symlink(movedParentPath, parentPath);
+              },
+              catch: (cause) =>
+                new FilesystemFileOperationError({
+                  code: "io_failure",
+                  operation: "replace",
+                  path: filePath,
+                  message: "Failed to prepare the parent pivot fixture.",
+                  cause,
+                }),
+            });
+            return yield* filesystem.replaceFileBytes(input);
+          }),
+      },
+      createGitPort(["nested/file.txt"]),
+    );
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "nested/file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    const failure = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "nested/file.txt",
+        contents: "draft",
+        revision: loaded.revision,
+      }),
+    );
+
+    expect(failure.code).toBe("unavailable_file");
+    expect(await readFile(path.join(movedParentPath, "file.txt"), "utf8")).toBe("same contents");
+  });
+
   test("rejects oversized or binary draft contents without changing the file", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");
