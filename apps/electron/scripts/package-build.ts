@@ -131,7 +131,7 @@ export const resolveElectronBuilderArgs = ({
     args.push(
       `-c.extraMetadata.version=${releaseMetadata.releaseVersion}`,
       `-c.extraMetadata.shortVersion=${releaseMetadata.desktopVersion}`,
-      `-c.extraMetadata.shortVersionWindows=${releaseMetadata.desktopVersion}`,
+      `-c.extraMetadata.shortVersionWindows=${releaseMetadata.desktopVersion}.0`,
       `-c.mac.bundleShortVersion=${releaseMetadata.desktopVersion}`,
       `-c.mac.bundleVersion=${releaseMetadata.desktopVersion}`,
     );
