@@ -140,4 +140,7 @@ export type OpenDucktorElectronApi = {
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
+  editorClipboard: {
+    readText(type?: string): string;
+  };
 };

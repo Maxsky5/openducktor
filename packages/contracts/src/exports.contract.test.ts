@@ -259,6 +259,10 @@ import type {
   WorkspaceFileTreeEntry,
   WorkspaceRecord,
   WorkspaceTextFileReadResult,
+  WorkspaceTextFileWriteFailure,
+  WorkspaceTextFileWriteFailureCode,
+  WorkspaceTextFileWriteInput,
+  WorkspaceTextFileWriteResult,
 } from "./index";
 import * as contracts from "./index";
 
@@ -779,6 +783,10 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceNameSchema",
   "workspaceRecordSchema",
   "workspaceTextFileReadResultSchema",
+  "workspaceTextFileWriteFailureCodeSchema",
+  "workspaceTextFileWriteFailureSchema",
+  "workspaceTextFileWriteInputSchema",
+  "workspaceTextFileWriteResultSchema",
 ] as const;
 
 type ExportedTypeContract = {
@@ -1041,6 +1049,10 @@ type ExportedTypeContract = {
   WorkspaceFileTreeEntry: WorkspaceFileTreeEntry;
   WorkspaceRecord: WorkspaceRecord;
   WorkspaceTextFileReadResult: WorkspaceTextFileReadResult;
+  WorkspaceTextFileWriteFailure: WorkspaceTextFileWriteFailure;
+  WorkspaceTextFileWriteFailureCode: WorkspaceTextFileWriteFailureCode;
+  WorkspaceTextFileWriteInput: WorkspaceTextFileWriteInput;
+  WorkspaceTextFileWriteResult: WorkspaceTextFileWriteResult;
 };
 
 describe("contracts exports contract", () => {

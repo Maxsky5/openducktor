@@ -4,7 +4,7 @@ import type {
   GitTargetBranch,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -21,6 +21,10 @@ import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-s
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
+import {
+  createTaskExecutionFilePreviewState,
+  taskExecutionFilePreviewReducer,
+} from "./task-execution-file-preview-state";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -78,42 +82,6 @@ type UseAgentStudioOrchestrationControllerResult = {
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: TaskExecutionSelectedFile) => void;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
-};
-
-export type TaskExecutionFilePreviewState = {
-  selectedFile: TaskExecutionSelectedFile | null;
-  previewSessionKey: number;
-  preservePreviousSnapshot: boolean;
-};
-
-export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewState => ({
-  selectedFile: null,
-  previewSessionKey: 0,
-  preservePreviousSnapshot: false,
-});
-
-export const selectTaskExecutionFilePreviewState = (
-  state: TaskExecutionFilePreviewState,
-  selectedFile: TaskExecutionSelectedFile,
-): TaskExecutionFilePreviewState => ({
-  selectedFile,
-  previewSessionKey:
-    state.selectedFile === null ? state.previewSessionKey + 1 : state.previewSessionKey,
-  preservePreviousSnapshot: state.selectedFile !== null,
-});
-
-export const clearTaskExecutionFilePreviewState = (
-  state: TaskExecutionFilePreviewState,
-): TaskExecutionFilePreviewState => {
-  if (state.selectedFile === null) {
-    return state;
-  }
-
-  return {
-    selectedFile: null,
-    previewSessionKey: state.previewSessionKey + 1,
-    preservePreviousSnapshot: false,
-  };
 };
 
 type AgentStudioPageModelsViewContext = Pick<
@@ -259,7 +227,9 @@ export function useAgentStudioOrchestrationController({
     handleReorderTab,
   } = selection;
   const selectedSession = view.selectedSession;
-  const [taskExecutionFilePreviewState, setTaskExecutionFilePreviewState] = useState(
+  const [taskExecutionFilePreviewState, dispatchTaskExecutionFilePreview] = useReducer(
+    taskExecutionFilePreviewReducer,
+    undefined,
     createTaskExecutionFilePreviewState,
   );
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
@@ -529,13 +499,25 @@ export function useAgentStudioOrchestrationController({
       return;
     }
     previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
-    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
+    dispatchTaskExecutionFilePreview({ type: "clear" });
   }, [taskExecutionFileContextKey]);
   const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
-    setTaskExecutionFilePreviewState((state) => selectTaskExecutionFilePreviewState(state, file));
+    dispatchTaskExecutionFilePreview({ type: "request", intent: { type: "select", file } });
   }, []);
   const closeTaskExecutionSelectedFilePreview = useCallback(() => {
-    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
+    dispatchTaskExecutionFilePreview({ type: "request", intent: { type: "close" } });
+  }, []);
+  const reportTaskExecutionSelectedFilePreviewEditState = useCallback(
+    (editState: { isDirty: boolean; isSaving: boolean }) => {
+      dispatchTaskExecutionFilePreview({ type: "report_edit_state", ...editState });
+    },
+    [],
+  );
+  const keepEditingTaskExecutionSelectedFilePreview = useCallback(() => {
+    dispatchTaskExecutionFilePreview({ type: "keep_editing" });
+  }, []);
+  const discardTaskExecutionSelectedFilePreviewDraft = useCallback(() => {
+    dispatchTaskExecutionFilePreview({ type: "discard" });
   }, []);
   const taskExecutionSelectedFile = taskExecutionFilePreviewState.selectedFile;
   const taskExecutionFilePreviewSessionKey = taskExecutionFilePreviewState.previewSessionKey;
@@ -544,13 +526,21 @@ export function useAgentStudioOrchestrationController({
       selectedFile: taskExecutionSelectedFile,
       previewSessionKey: taskExecutionFilePreviewSessionKey,
       preservePreviousSnapshot: taskExecutionFilePreviewState.preservePreviousSnapshot,
+      hasPendingDiscard: taskExecutionFilePreviewState.pendingIntent !== null,
       onClose: closeTaskExecutionSelectedFilePreview,
+      onEditStateChange: reportTaskExecutionSelectedFilePreviewEditState,
+      onKeepEditing: keepEditingTaskExecutionSelectedFilePreview,
+      onDiscard: discardTaskExecutionSelectedFilePreviewDraft,
     }),
     [
       closeTaskExecutionSelectedFilePreview,
       taskExecutionFilePreviewState.preservePreviousSnapshot,
+      taskExecutionFilePreviewState.pendingIntent,
       taskExecutionFilePreviewSessionKey,
       taskExecutionSelectedFile,
+      discardTaskExecutionSelectedFilePreviewDraft,
+      keepEditingTaskExecutionSelectedFilePreview,
+      reportTaskExecutionSelectedFilePreviewEditState,
     ],
   );
 

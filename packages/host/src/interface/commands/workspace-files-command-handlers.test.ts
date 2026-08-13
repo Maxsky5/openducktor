@@ -21,8 +21,10 @@ describe("createWorkspaceFilesCommandHandlers", () => {
           contents: "ok",
           size: 2,
           mtimeMs: null,
+          revision: "revision-1",
         });
       },
+      writeTextFile: () => Effect.die("not used"),
     };
     const router = createEffectHostCommandRouter({
       handlers: createWorkspaceFilesCommandHandlers(service),
@@ -52,8 +54,10 @@ describe("createWorkspaceFilesCommandHandlers", () => {
           contents: "ok",
           size: 2,
           mtimeMs: null,
+          revision: "revision-1",
         });
       },
+      writeTextFile: () => Effect.die("not used"),
     };
     const router = createEffectHostCommandRouter({
       handlers: createWorkspaceFilesCommandHandlers(service),
@@ -67,5 +71,76 @@ describe("createWorkspaceFilesCommandHandlers", () => {
     );
 
     expect(receivedRelativePaths).toEqual([" padded.ts "]);
+  });
+
+  test("routes a strict text file write input and returns the authoritative result", async () => {
+    const received: unknown[] = [];
+    const service: WorkspaceFilesService = {
+      listTree: () => Effect.die("not used"),
+      readTextFile: () => Effect.die("not used"),
+      writeTextFile: (input) => {
+        received.push(input);
+        const parsed = input as {
+          rootPath: string;
+          relativePath: string;
+          contents: string;
+          revision: string;
+        };
+        return Effect.succeed({
+          kind: "text",
+          rootPath: parsed.rootPath,
+          relativePath: parsed.relativePath,
+          contents: parsed.contents,
+          size: parsed.contents.length,
+          mtimeMs: 2,
+          revision: "revision-2",
+        });
+      },
+    };
+    const router = createEffectHostCommandRouter({
+      handlers: createWorkspaceFilesCommandHandlers(service),
+    });
+
+    const result = await Effect.runPromise(
+      router.invoke("filesystem_write_text_file", {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "saved",
+        revision: "revision-1",
+      }),
+    );
+
+    expect(received).toEqual([
+      {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "saved",
+        revision: "revision-1",
+      },
+    ]);
+    expect(result).toMatchObject({ contents: "saved", revision: "revision-2" });
+  });
+
+  test("rejects invalid write inputs with a structured write error", async () => {
+    const service: WorkspaceFilesService = {
+      listTree: () => Effect.die("not used"),
+      readTextFile: () => Effect.die("not used"),
+      writeTextFile: () => Effect.die("must not be called"),
+    };
+    const router = createEffectHostCommandRouter({
+      handlers: createWorkspaceFilesCommandHandlers(service),
+    });
+
+    const exit = await Effect.runPromiseExit(
+      router.invoke("filesystem_write_text_file", {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "saved",
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(String(exit)).toContain("WorkspaceTextFileWriteError");
+    expect(String(exit)).toContain("invalid_input");
   });
 });

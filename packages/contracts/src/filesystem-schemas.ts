@@ -50,6 +50,7 @@ export const workspaceTextFileReadResultSchema = z.discriminatedUnion("kind", [
     contents: z.string(),
     size: z.number().nonnegative(),
     mtimeMs: z.number().nonnegative().nullable(),
+    revision: z.string().min(1),
   }),
   z.object({
     kind: z.literal("unsupported"),
@@ -62,3 +63,39 @@ export const workspaceTextFileReadResultSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type WorkspaceTextFileReadResult = z.infer<typeof workspaceTextFileReadResultSchema>;
+
+export const workspaceTextFileWriteInputSchema = z
+  .object({
+    rootPath: z.string().min(1),
+    relativePath: z.string().min(1),
+    contents: z.string(),
+    revision: z.string().min(1),
+  })
+  .strict();
+export type WorkspaceTextFileWriteInput = z.infer<typeof workspaceTextFileWriteInputSchema>;
+
+export const workspaceTextFileWriteResultSchema = workspaceTextFileReadResultSchema.options[0];
+export type WorkspaceTextFileWriteResult = z.infer<typeof workspaceTextFileWriteResultSchema>;
+
+export const workspaceTextFileWriteFailureCodeSchema = z.enum([
+  "invalid_input",
+  "path_escape",
+  "unavailable_file",
+  "unsupported_file",
+  "stale_revision",
+  "permission_denied",
+  "io_failure",
+]);
+export type WorkspaceTextFileWriteFailureCode = z.infer<
+  typeof workspaceTextFileWriteFailureCodeSchema
+>;
+
+export const workspaceTextFileWriteFailureSchema = z
+  .object({
+    code: workspaceTextFileWriteFailureCodeSchema,
+    message: z.string().min(1),
+    rootPath: z.string().min(1),
+    relativePath: z.string().min(1),
+  })
+  .strict();
+export type WorkspaceTextFileWriteFailure = z.infer<typeof workspaceTextFileWriteFailureSchema>;

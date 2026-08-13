@@ -159,6 +159,43 @@ describe("HostClient", () => {
     expect(listing.entries[0]?.isGitRepo).toBe(true);
   });
 
+  test("writes text files through the shared host command and parses the result", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "filesystem_write_text_file") {
+        return {
+          kind: "text",
+          rootPath: "/repo",
+          relativePath: "file.txt",
+          contents: "saved",
+          size: 5,
+          mtimeMs: 2,
+          revision: "revision-2",
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.filesystemWriteTextFile({
+      rootPath: "/repo",
+      relativePath: "file.txt",
+      contents: "saved",
+      revision: "revision-1",
+    });
+
+    expect(calls).toEqual([
+      {
+        command: "filesystem_write_text_file",
+        args: {
+          rootPath: "/repo",
+          relativePath: "file.txt",
+          contents: "saved",
+          revision: "revision-1",
+        },
+      },
+    ]);
+    expect(result.revision).toBe("revision-2");
+  });
+
   test("parses structured repo store diagnostics from taskStoreCheck", async () => {
     const { client } = createClient((command) => {
       if (command === "task_store_check") {
@@ -215,6 +252,7 @@ describe("HostClient", () => {
     // would make this facade-surface assertion tautological.
     const expectedMethods = [
       "filesystemListDirectory",
+      "filesystemWriteTextFile",
       "workspaceList",
       "workspaceAdd",
       "workspaceSelect",

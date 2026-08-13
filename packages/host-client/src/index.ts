@@ -47,6 +47,7 @@ const FILESYSTEM_METHODS = [
   "filesystemListDirectory",
   "filesystemListTree",
   "filesystemReadTextFile",
+  "filesystemWriteTextFile",
 ] as const satisfies readonly MethodName<HostFilesystemClient>[];
 
 const PULL_REQUEST_REVIEW_METHODS = [

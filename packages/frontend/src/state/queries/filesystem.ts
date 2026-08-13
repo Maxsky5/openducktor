@@ -2,13 +2,18 @@ import type {
   DirectoryListing,
   WorkspaceFileTree,
   WorkspaceTextFileReadResult,
+  WorkspaceTextFileWriteInput,
+  WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { mutationOptions, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { host } from "@/state/operations/host";
 
 type FilesystemQueryHost = Pick<
   typeof host,
-  "filesystemListDirectory" | "filesystemListTree" | "filesystemReadTextFile"
+  | "filesystemListDirectory"
+  | "filesystemListTree"
+  | "filesystemReadTextFile"
+  | "filesystemWriteTextFile"
 >;
 
 const DIRECTORY_LISTING_STALE_TIME_MS = 1_000;
@@ -75,4 +80,22 @@ export const workspaceTextFileQueryOptions = (
     queryFn: (): Promise<WorkspaceTextFileReadResult> =>
       hostClient.filesystemReadTextFile({ rootPath, relativePath }),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
+  });
+
+export const workspaceTextFileWriteMutationOptions = (
+  queryClient: QueryClient,
+  hostClient: FilesystemQueryHost = host,
+) =>
+  mutationOptions({
+    mutationFn: (input: WorkspaceTextFileWriteInput): Promise<WorkspaceTextFileWriteResult> =>
+      hostClient.filesystemWriteTextFile(input),
+    onSuccess: async (result) => {
+      queryClient.setQueryData(
+        filesystemQueryKeys.textFile(result.rootPath, result.relativePath),
+        result,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: filesystemQueryKeys.treeRoot(result.rootPath),
+      });
+    },
   });

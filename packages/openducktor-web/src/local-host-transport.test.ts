@@ -289,6 +289,46 @@ describe("createLocalHostClient", () => {
       code: "unsupported_runtime",
     });
   });
+
+  test("preserves workspace write failures through the local web transport", async () => {
+    const { createLocalHostClient } = await loadLocalHostTransport();
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/session")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "The file changed after it was loaded.",
+          failure: {
+            kind: "workspace_text_file_write",
+            workspaceTextFileWriteFailure: {
+              code: "stale_revision",
+              message: "The file changed after it was loaded.",
+              rootPath: "/repo",
+              relativePath: "src/file.ts",
+            },
+          },
+        }),
+        { status: 500 },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(
+      createLocalHostClient().filesystemWriteTextFile({
+        rootPath: "/repo",
+        relativePath: "src/file.ts",
+        contents: "draft",
+        revision: "sha256:old",
+      }),
+    ).rejects.toMatchObject({
+      name: "HostInvokeError",
+      failure: {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: { code: "stale_revision" },
+      },
+    });
+  });
 });
 
 describe("local host SSE subscriptions", () => {

@@ -1,5 +1,6 @@
 import { Effect, Exit } from "effect";
 import type { FilesystemListDirectoryError } from "../../application/filesystem/filesystem-service";
+import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import type { TerminalServiceError } from "../../application/terminals/terminal-service-error";
 import type { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type { HostError } from "../../effect/host-errors";
@@ -25,7 +26,8 @@ export type HostCommandHandlerError =
   | HostError
   | TaskAssetError
   | TaskPolicyError
-  | TerminalServiceError;
+  | TerminalServiceError
+  | WorkspaceTextFileWriteError;
 
 export type HostCommandHandler = (
   args: HostCommandArgs,
@@ -58,6 +60,9 @@ const toHostCommandHandlerError = (
     return cause;
   }
   if (cause instanceof TaskAssetError) {
+    return cause;
+  }
+  if (cause instanceof WorkspaceTextFileWriteError) {
     return cause;
   }
   return new HostOperationError({

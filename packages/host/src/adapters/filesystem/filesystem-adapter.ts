@@ -1,10 +1,73 @@
+import { createHash } from "node:crypto";
 import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
-import type { FilesystemDirectoryEntry, FilesystemPort } from "../../ports/filesystem-port";
+import {
+  type FilesystemDirectoryEntry,
+  FilesystemFileOperationError,
+  type FilesystemFileSnapshot,
+  type FilesystemPort,
+} from "../../ports/filesystem-port";
 import { readBoundedFileBytes } from "./bounded-file-read";
+
+const revisionForBytes = (bytes: Uint8Array): string =>
+  `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+
+const nodeErrorCode = (cause: unknown): string | null =>
+  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+    ? cause.code
+    : null;
+
+const fileOperationError = (
+  cause: unknown,
+  operation: "read_snapshot" | "replace",
+  inputPath: string,
+): FilesystemFileOperationError => {
+  const code = nodeErrorCode(cause);
+  const operationCode =
+    code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR"
+      ? "unavailable_file"
+      : code === "EACCES" || code === "EPERM"
+        ? "permission_denied"
+        : "io_failure";
+  return new FilesystemFileOperationError({
+    code: operationCode,
+    operation,
+    path: inputPath,
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
+};
+
+const snapshotOpenFile = async (
+  file: Awaited<ReturnType<typeof open>>,
+  maxBytes: number,
+): Promise<FilesystemFileSnapshot> => {
+  const [bytes, metadata] = await Promise.all([readBoundedFileBytes(file, maxBytes), file.stat()]);
+  return {
+    bytes,
+    isFile: metadata.isFile(),
+    size: Math.max(metadata.size, bytes.byteLength),
+    mtimeMs: Number.isFinite(metadata.mtimeMs) ? metadata.mtimeMs : null,
+    revision: revisionForBytes(bytes),
+  };
+};
+
+const writeAllBytes = async (
+  file: Awaited<ReturnType<typeof open>>,
+  bytes: Uint8Array,
+): Promise<void> => {
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const { bytesWritten } = await file.write(bytes, offset, bytes.byteLength - offset, offset);
+    if (bytesWritten === 0) {
+      throw new Error("The filesystem wrote zero bytes before the file was complete.");
+    }
+    offset += bytesWritten;
+  }
+};
 
 export const createFilesystemAdapter = (): FilesystemPort => ({
   homeDirectory() {
@@ -50,6 +113,64 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
           path: inputPath,
           maxBytes,
         }),
+    });
+  },
+  readFileSnapshot(inputPath, maxBytes) {
+    return Effect.tryPromise({
+      try: async () => {
+        const file = await open(inputPath, "r");
+        try {
+          return await snapshotOpenFile(file, maxBytes);
+        } finally {
+          await file.close();
+        }
+      },
+      catch: (cause) => fileOperationError(cause, "read_snapshot", inputPath),
+    });
+  },
+  replaceFileBytes({ path: inputPath, expectedRevision, bytes, maxCurrentBytes }) {
+    return Effect.tryPromise({
+      try: async () => {
+        const file = await open(inputPath, "r+");
+        try {
+          const current = await snapshotOpenFile(file, maxCurrentBytes + 1);
+          if (!current.isFile) {
+            throw new FilesystemFileOperationError({
+              code: "unavailable_file",
+              operation: "replace",
+              path: inputPath,
+              message: "The selected path is not a file.",
+            });
+          }
+          if (current.bytes.byteLength > maxCurrentBytes) {
+            throw new FilesystemFileOperationError({
+              code: "too_large",
+              operation: "replace",
+              path: inputPath,
+              message: `The current file is larger than ${maxCurrentBytes} bytes.`,
+            });
+          }
+          if (current.revision !== expectedRevision) {
+            throw new FilesystemFileOperationError({
+              code: "stale_revision",
+              operation: "replace",
+              path: inputPath,
+              message: "The file changed after it was loaded.",
+            });
+          }
+
+          await file.truncate(0);
+          await writeAllBytes(file, bytes);
+          await file.sync();
+          return await snapshotOpenFile(file, bytes.byteLength + 1);
+        } finally {
+          await file.close();
+        }
+      },
+      catch: (cause) =>
+        cause instanceof FilesystemFileOperationError
+          ? cause
+          : fileOperationError(cause, "replace", inputPath),
     });
   },
   stat(inputPath, options) {

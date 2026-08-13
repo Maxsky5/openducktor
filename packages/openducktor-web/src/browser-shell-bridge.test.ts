@@ -137,6 +137,7 @@ describe("browser shell bridge", () => {
   test("reports the web runner version and external update policy", async () => {
     const bridge = createBrowserShellBridge();
 
+    expect(bridge.editorClipboard).toBeUndefined();
     expect(await bridge.appUpdates.getState()).toEqual({
       status: "disabled",
       currentVersion: packageJson.version,

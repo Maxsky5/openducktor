@@ -1,0 +1,152 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { Effect } from "effect";
+import { FilesystemFileOperationError } from "../../ports/filesystem-port";
+import { createFilesystemAdapter } from "./filesystem-adapter";
+
+const tempDirectories: string[] = [];
+const encoder = new TextEncoder();
+
+const createTempFile = async (contents: Uint8Array): Promise<string> => {
+  const directory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-"));
+  tempDirectories.push(directory);
+  const filePath = path.join(directory, "file.txt");
+  await writeFile(filePath, contents);
+  return filePath;
+};
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
+  );
+});
+
+describe("createFilesystemAdapter file snapshots", () => {
+  test("replaces exact bytes on the existing file and preserves its mode", async () => {
+    const filePath = await createTempFile(encoder.encode("longer original"));
+    await chmod(filePath, 0o640);
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    const originalMetadata = await stat(filePath);
+
+    const saved = await Effect.runPromise(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("short"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(await readFile(filePath, "utf8")).toBe("short");
+    expect(saved.bytes).toEqual(encoder.encode("short"));
+    expect(saved.revision).not.toBe(original.revision);
+    const savedMetadata = await stat(filePath);
+    expect(savedMetadata.mode & 0o777).toBe(0o640);
+    expect(savedMetadata.ino).toBe(originalMetadata.ino);
+  });
+
+  test("supports empty and longer replacements", async () => {
+    const filePath = await createTempFile(encoder.encode("a"));
+    const filesystem = createFilesystemAdapter();
+    const first = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    const empty = await Effect.runPromise(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: first.revision,
+        bytes: new Uint8Array(),
+        maxCurrentBytes: 1024,
+      }),
+    );
+    await Effect.runPromise(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: empty.revision,
+        bytes: encoder.encode("a longer replacement"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+    expect(await readFile(filePath, "utf8")).toBe("a longer replacement");
+  });
+
+  test("rejects a stale revision without changing the file", async () => {
+    const filePath = await createTempFile(encoder.encode("current"));
+    const filesystem = createFilesystemAdapter();
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: "sha256:stale",
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      expect(failure).toBeInstanceOf(FilesystemFileOperationError);
+      expect(failure).toMatchObject({ code: "stale_revision" });
+    }
+    expect(await readFile(filePath, "utf8")).toBe("current");
+  });
+
+  test("rejects an oversized current file without changing it", async () => {
+    const bytes = new Uint8Array(17).fill(0x61);
+    const filePath = await createTempFile(bytes);
+    const filesystem = createFilesystemAdapter();
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: "not-used",
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 16,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      expect(failure).toMatchObject({ code: "too_large" });
+    }
+    expect(new Uint8Array(await readFile(filePath))).toEqual(bytes);
+  });
+
+  test("reports a missing target as unavailable", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-"));
+    tempDirectories.push(directory);
+    const filesystem = createFilesystemAdapter();
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        path: path.join(directory, "missing.txt"),
+        expectedRevision: "revision",
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      expect(failure).toMatchObject({ code: "unavailable_file" });
+    }
+  });
+
+  test("reports a directory target as unavailable", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-"));
+    tempDirectories.push(directory);
+    const filesystem = createFilesystemAdapter();
+
+    const exit = await Effect.runPromiseExit(filesystem.readFileSnapshot(directory, 1024));
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      expect(failure).toMatchObject({ code: "unavailable_file" });
+    }
+  });
+});

@@ -19,6 +19,7 @@ import {
 } from "@openducktor/host";
 import { Deferred, Effect, TestClock, TestContext } from "effect";
 import WebSocket from "ws";
+import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { createWebLogger, type WebLogger } from "./logger";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
@@ -534,6 +535,54 @@ describe("TypeScript web host backend", () => {
           code: "unsupported_runtime",
           message: "Interactive terminals are unavailable in this runtime.",
           workingDir: "/repo/worktree",
+        },
+      },
+    });
+  });
+
+  test("preserves workspace write failures in invoke error responses", async () => {
+    const hostCommandRouter = createTestHostCommandRouter(() =>
+      Effect.fail(
+        new WorkspaceTextFileWriteError({
+          message: "The file changed after it was loaded.",
+          failure: {
+            code: "stale_revision",
+            message: "The file changed after it was loaded.",
+            rootPath: "/repo",
+            relativePath: "src/file.ts",
+          },
+        }),
+      ),
+    );
+
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/filesystem_write_text_file", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({
+          rootPath: "/repo",
+          relativePath: "src/file.ts",
+          contents: "draft",
+          revision: "sha256:old",
+        }),
+      }),
+      { hostCommandRouter },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "The file changed after it was loaded.",
+      message: "The file changed after it was loaded.",
+      failure: {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: {
+          code: "stale_revision",
+          message: "The file changed after it was loaded.",
+          rootPath: "/repo",
+          relativePath: "src/file.ts",
         },
       },
     });

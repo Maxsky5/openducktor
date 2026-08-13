@@ -3,8 +3,11 @@ import {
   directoryListingSchema,
   type WorkspaceFileTree,
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileWriteInput,
+  type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
   workspaceTextFileReadResultSchema,
+  workspaceTextFileWriteResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
@@ -45,6 +48,14 @@ const filesystemReadTextFile = async (
   return workspaceTextFileReadResultSchema.parse(payload);
 };
 
+const filesystemWriteTextFile = async (
+  invokeFn: InvokeFn,
+  input: WorkspaceTextFileWriteInput,
+): Promise<WorkspaceTextFileWriteResult> => {
+  const payload = await invokeFn("filesystem_write_text_file", input);
+  return workspaceTextFileWriteResultSchema.parse(payload);
+};
+
 export class HostFilesystemClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
@@ -61,5 +72,11 @@ export class HostFilesystemClient {
     relativePath: string;
   }): Promise<WorkspaceTextFileReadResult> {
     return filesystemReadTextFile(this.invokeFn, input);
+  }
+
+  async filesystemWriteTextFile(
+    input: WorkspaceTextFileWriteInput,
+  ): Promise<WorkspaceTextFileWriteResult> {
+    return filesystemWriteTextFile(this.invokeFn, input);
   }
 }

@@ -5,9 +5,10 @@ import {
   type FileContents,
   getFiletypeFromFileName,
 } from "@pierre/diffs";
-import { CodeView, useWorkerPool } from "@pierre/diffs/react";
+import { Editor, type EditorOptions } from "@pierre/diffs/edit";
+import { CodeView, EditProvider, useWorkerPool } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
-import { FileCode2, X } from "lucide-react";
+import { FileCode2, LoaderCircle, X } from "lucide-react";
 import {
   type CSSProperties,
   memo,
@@ -22,15 +23,29 @@ import {
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
 
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;
   previewSessionKey: number;
   preservePreviousSnapshot: boolean;
+  hasPendingDiscard: boolean;
   onClose: () => void;
+  onEditStateChange(editState: { isDirty: boolean; isSaving: boolean }): void;
+  onKeepEditing: () => void;
+  onDiscard: () => void;
 };
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
@@ -79,20 +94,16 @@ type CommittedFilePreviewSnapshot = {
   snapshot: FilePreviewSnapshot;
 };
 
-const getContentMetrics = (value: string): { contentHash: string; numberColumnWidth: string } => {
-  let hash = 0x811c9dc5;
+const getContentMetrics = (value: string): { numberColumnWidth: string } => {
   let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
     const characterCode = value.charCodeAt(index);
-    hash ^= characterCode;
-    hash = Math.imul(hash, 0x01000193);
     if (characterCode === 10) {
       lineCount += 1;
     }
   }
   const numberColumnWidth = String(lineCount).length + CODE_VIEW_NUMBER_COLUMN_PADDING;
   return {
-    contentHash: (hash >>> 0).toString(36),
     numberColumnWidth: `${numberColumnWidth}ch`,
   };
 };
@@ -117,7 +128,7 @@ const createFilePreviewSnapshot = (
         name: selectedFile.relativePath,
         contents: result.contents,
         lang: language,
-        cacheKey: `${id}:${result.size}:${metrics.contentHash}`,
+        cacheKey: `${id}:${result.revision}`,
       },
       numberColumnWidth: metrics.numberColumnWidth,
     },
@@ -181,7 +192,16 @@ const resultBelongsToSelectedFile = (
 };
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
-  model: { selectedFile, previewSessionKey, preservePreviousSnapshot, onClose },
+  model: {
+    selectedFile,
+    previewSessionKey,
+    preservePreviousSnapshot,
+    hasPendingDiscard,
+    onClose,
+    onEditStateChange,
+    onKeepEditing,
+    onDiscard,
+  },
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
 }): ReactElement | null {
@@ -214,10 +234,27 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const isCurrentSnapshotReady =
     currentSnapshot !== null && (currentSnapshot.codeViewFile === null || isCurrentHighlightReady);
   const readyCurrentSnapshot = isCurrentSnapshotReady ? currentSnapshot : null;
+  const readyTextResult =
+    readyCurrentSnapshot?.result.kind === "text" ? readyCurrentSnapshot.result : null;
+  const editor = useTaskExecutionFileEditor({
+    selectedFile,
+    readyResult: readyTextResult,
+    onEditStateChange,
+  });
   const retainedSnapshot =
     committedSnapshot?.sessionKey === previewSessionKey ? committedSnapshot.snapshot : null;
+  const currentEditorSnapshot = useMemo(() => {
+    if (
+      !selectedFile ||
+      !editor.session ||
+      editor.session.id !== `${selectedFile.rootPath}:${selectedFile.relativePath}`
+    ) {
+      return readyCurrentSnapshot;
+    }
+    return createFilePreviewSnapshot(selectedFile, editor.session.baseline);
+  }, [editor.session, readyCurrentSnapshot, selectedFile]);
   const visibleSnapshot =
-    readyCurrentSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
+    currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
@@ -263,14 +300,28 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       return [];
     }
 
+    const isCurrentEditableItem =
+      editor.session?.id === codeViewFileId &&
+      readyCurrentSnapshot?.codeViewFile?.id === codeViewFileId &&
+      !isSwitchingFiles;
     return [
       {
         id: codeViewFileId,
         type: "file",
         file: visibleSnapshot.codeViewFile.file,
+        edit: isCurrentEditableItem,
+        version: isCurrentEditableItem ? (editor.session?.version ?? 0) : 0,
       },
     ];
-  }, [codeViewFileId, visibleSnapshot]);
+  }, [codeViewFileId, editor.session, isSwitchingFiles, readyCurrentSnapshot, visibleSnapshot]);
+  const createEditor = useCallback(
+    (options: EditorOptions<undefined>) => new Editor<undefined>(options),
+    [],
+  );
+  const editorOptions = useMemo<EditorOptions<undefined>>(() => {
+    const clipboard = getShellBridge().editorClipboard;
+    return clipboard ? { clipboard } : {};
+  }, []);
   const closePreview = useEffectEvent(onClose);
 
   useLayoutEffect(() => {
@@ -298,17 +349,23 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       return undefined;
     }
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) {
+    const handlePreviewShortcut = (event: KeyboardEvent) => {
+      const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
+      if (isSave && editor.session) {
+        event.preventDefault();
+        void editor.save();
+        return;
+      }
+      if (event.key !== "Escape" || event.defaultPrevented || hasPendingDiscard) {
         return;
       }
       event.preventDefault();
       closePreview();
     };
 
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [selectedFile]);
+    window.addEventListener("keydown", handlePreviewShortcut);
+    return () => window.removeEventListener("keydown", handlePreviewShortcut);
+  }, [editor.save, editor.session, hasPendingDiscard, selectedFile]);
 
   if (!selectedFile) {
     return null;
@@ -323,13 +380,17 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
   } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
-      <CodeView
-        key={codeViewRenderKey}
-        className={CODE_VIEW_CLASS_NAME}
-        style={codeViewRootStyle}
-        items={codeViewItems}
-        options={codeViewOptions}
-      />
+      <EditProvider createEditor={createEditor}>
+        <CodeView
+          key={codeViewRenderKey}
+          className={CODE_VIEW_CLASS_NAME}
+          style={codeViewRootStyle}
+          items={codeViewItems}
+          options={codeViewOptions}
+          editorOptions={editorOptions}
+          onItemEditChange={editor.onItemEditChange}
+        />
+      </EditProvider>
     );
   } else {
     body = <FilePreviewState message="No file selected." />;
@@ -345,6 +406,25 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         {isSwitchingFiles ? (
           <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
         ) : null}
+        {editor.session && !isSwitchingFiles ? (
+          <>
+            <div className="shrink-0 text-xs text-muted-foreground" role="status">
+              {editor.isSaving ? "Saving..." : editor.isDirty ? "Unsaved" : "Saved"}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!editor.isDirty || editor.isSaving}
+              onClick={() => void editor.save()}
+            >
+              {editor.isSaving ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : null}
+              Save
+            </Button>
+          </>
+        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -356,7 +436,33 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
           <X className="size-3.5" />
         </Button>
       </div>
+      {editor.saveError ? (
+        <div
+          className="shrink-0 border-b border-border px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {editor.saveError}
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
+      <Dialog open={hasPendingDiscard} onOpenChange={(open) => !open && onKeepEditing()}>
+        <DialogContent closeButton={null}>
+          <DialogHeader>
+            <DialogTitle>Discard unsaved changes?</DialogTitle>
+            <DialogDescription>
+              This file has unsaved changes. Keep editing or discard the draft to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onKeepEditing}>
+              Keep editing
+            </Button>
+            <Button type="button" variant="destructive" onClick={onDiscard}>
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 });

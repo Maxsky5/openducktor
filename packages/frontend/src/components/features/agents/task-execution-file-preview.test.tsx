@@ -23,8 +23,20 @@ type PreviewComponent =
 
 let TaskExecutionSelectedFilePreview: PreviewComponent;
 let readTextFileMock: ReturnType<typeof mock>;
+let writeTextFileMock: ReturnType<typeof mock>;
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
+let latestCodeViewProps: {
+  editorOptions?: unknown;
+  items: Array<{
+    edit?: boolean;
+    file: { cacheKey?: string; contents: string; name: string };
+    id: string;
+    version?: number;
+  }>;
+  onItemEditChange?: (item: unknown, file: unknown) => void;
+} | null = null;
+const editProviderFactories: unknown[] = [];
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
 let highlightCompletionMode: "auto" | "manual" = "auto";
@@ -88,6 +100,7 @@ const textFileResult = (
   contents,
   size: contents.length,
   mtimeMs: 1_760_000_000_000,
+  revision: `revision:${contents}`,
 });
 
 function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
@@ -97,19 +110,19 @@ function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
 }
 
 const renderPreview = (
-  model: Omit<
-    TaskExecutionSelectedFilePreviewModel,
-    "previewSessionKey" | "preservePreviousSnapshot"
-  > & {
-    previewSessionKey?: number;
-    preservePreviousSnapshot?: boolean;
-  },
+  model: Pick<TaskExecutionSelectedFilePreviewModel, "selectedFile" | "onClose"> &
+    Partial<Omit<TaskExecutionSelectedFilePreviewModel, "selectedFile" | "onClose">>,
   theme: "light" | "dark" = "light",
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
-    previewSessionKey: 0,
-    preservePreviousSnapshot: false,
-    ...model,
+    selectedFile: model.selectedFile,
+    onClose: model.onClose,
+    previewSessionKey: model.previewSessionKey ?? 0,
+    preservePreviousSnapshot: model.preservePreviousSnapshot ?? false,
+    hasPendingDiscard: model.hasPendingDiscard ?? false,
+    onEditStateChange: model.onEditStateChange ?? (() => {}),
+    onKeepEditing: model.onKeepEditing ?? (() => {}),
+    onDiscard: model.onDiscard ?? (() => {}),
   };
   previewTheme = theme;
 
@@ -123,6 +136,8 @@ const renderPreview = (
 beforeEach(async () => {
   codeViewMountCount = 0;
   codeViewUnmountCount = 0;
+  latestCodeViewProps = null;
+  editProviderFactories.length = 0;
   secondFileReadMode = "pending";
   previewTheme = "light";
   highlightCompletionMode = "auto";
@@ -142,10 +157,27 @@ beforeEach(async () => {
     }
     return Promise.resolve(textFileResult(firstFile, "const first = true;"));
   });
+  writeTextFileMock = mock(
+    async (input: {
+      rootPath: string;
+      relativePath: string;
+      contents: string;
+      revision: string;
+    }) => ({
+      kind: "text" as const,
+      rootPath: input.rootPath,
+      relativePath: input.relativePath,
+      contents: input.contents,
+      size: input.contents.length,
+      mtimeMs: 1_760_000_000_001,
+      revision: `${input.revision}:saved`,
+    }),
+  );
 
   mock.module("@/state/operations/host", () => ({
     host: {
       filesystemReadTextFile: readTextFileMock,
+      filesystemWriteTextFile: writeTextFileMock,
     },
   }));
 
@@ -159,7 +191,12 @@ beforeEach(async () => {
 
   mock.module("@pierre/diffs/react", () => ({
     useWorkerPool: () => previewWorkerPool,
-    CodeView: ({ items }: { items: Array<{ file: { contents: string } }> }): ReactElement => {
+    EditProvider: ({ children, createEditor }: PropsWithChildren<{ createEditor: unknown }>) => {
+      editProviderFactories.push(createEditor);
+      return children;
+    },
+    CodeView: (props: NonNullable<typeof latestCodeViewProps>): ReactElement => {
+      latestCodeViewProps = props;
       useEffect(() => {
         codeViewMountCount += 1;
         return () => {
@@ -169,7 +206,7 @@ beforeEach(async () => {
       return createElement(
         "pre",
         { "data-testid": "mock-code-view" },
-        items[0]?.file.contents ?? "",
+        props.items[0]?.file.contents ?? "",
       );
     },
   }));
@@ -252,6 +289,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByText("const first = true;")).toBeTruthy();
     expect(screen.getByText("Loading...")).toBeTruthy();
     expect(screen.queryByText("Loading file...")).toBeNull();
+    expect(latestCodeViewProps?.items[0]?.edit).toBe(false);
   });
 
   test("does not reuse a closed preview snapshot when reopening another file", async () => {
@@ -324,5 +362,285 @@ describe("TaskExecutionSelectedFilePreview", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not close when an editor surface already handled Escape", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    event.preventDefault();
+
+    window.dispatchEvent(event);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test("keeps unsupported files read-only and shows the host message", async () => {
+    readTextFileMock.mockImplementationOnce(async () => ({
+      kind: "unsupported",
+      rootPath: "/repo",
+      relativePath: "src/first.ts",
+      reason: "binary",
+      message: "Binary files cannot be previewed as text.",
+      size: 3,
+      mtimeMs: 1,
+    }));
+    const onClose = mock(() => {});
+
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("Binary files cannot be previewed as text.");
+    expect(latestCodeViewProps).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  test("keeps failed reads out of the editor", async () => {
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Unable to read file 'src/first.ts'.");
+    });
+    const onClose = mock(() => {});
+
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("Unable to read file 'src/first.ts'.");
+    expect(latestCodeViewProps).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  test("opens in edit mode and saves the exact draft without remounting the editor", async () => {
+    const onClose = mock(() => {});
+    const onEditStateChange = mock(() => {});
+
+    render(renderPreview({ selectedFile: firstFile, onClose, onEditStateChange }));
+
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const firstItem = latestCodeViewProps?.items[0];
+    expect(firstItem?.version).toBe(0);
+    expect(firstItem?.file.cacheKey).toBe(
+      `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
+    );
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(firstItem, {
+        ...firstItem?.file,
+        contents: "const first = false;\n",
+      });
+    });
+    await screen.findByText("Unsaved");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+    expect(writeTextFileMock).toHaveBeenCalledWith({
+      rootPath: "/repo",
+      relativePath: "src/first.ts",
+      contents: "const first = false;\n",
+      revision: "revision:const first = true;",
+    });
+    await screen.findByText("Saved");
+    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 1 });
+    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toContain(":saved");
+    expect(codeViewMountCount).toBe(1);
+    expect(onEditStateChange).toHaveBeenCalledWith({ isDirty: false, isSaving: false });
+  });
+
+  test("uses the saved revision for a second edit and Cmd/Ctrl+S", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+
+    const editAndSave = async (contents: string) => {
+      const expectedWriteCount = writeTextFileMock.mock.calls.length + 1;
+      const item = latestCodeViewProps?.items[0];
+      act(() => {
+        latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
+      });
+      await screen.findByText("Unsaved");
+      fireEvent.keyDown(window, { key: "s", code: "KeyS", ctrlKey: true });
+      await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(expectedWriteCount));
+      await screen.findByText("Saved");
+    };
+
+    await editAndSave("first save");
+    await editAndSave("second save");
+
+    expect(writeTextFileMock).toHaveBeenCalledTimes(2);
+    expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
+      contents: "second save",
+      revision: "revision:const first = true;:saved",
+    });
+  });
+
+  test("keeps a failed draft dirty and shows the save error", async () => {
+    writeTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Permission denied while saving this file.");
+    });
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert").textContent).toContain("Permission denied");
+    expect(screen.getByText("Unsaved")).toBeTruthy();
+    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 0 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
+    await screen.findByText("Saved");
+    expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({ contents: "draft" });
+  });
+
+  test("clears dirty state when the draft returns to the saved baseline", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "changed" });
+    });
+    await screen.findByText("Unsaved");
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, {
+        ...item?.file,
+        contents: "const first = true;",
+      });
+    });
+
+    await screen.findByText("Saved");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
+    expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+
+  test("suppresses duplicate Save input while one write is pending", async () => {
+    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
+    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
+      resolveWrite = resolve;
+    });
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
+    });
+    const saveButton = await screen.findByRole("button", { name: "Save" });
+
+    fireEvent.click(saveButton);
+    fireEvent.keyDown(window, { key: "s", metaKey: true });
+
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+    await screen.findByText("Saving...");
+    await act(async () => {
+      resolveWrite({
+        kind: "text",
+        rootPath: "/repo",
+        relativePath: "src/first.ts",
+        contents: "draft",
+        size: 5,
+        mtimeMs: 1_760_000_000_001,
+        revision: "revision-2",
+      });
+      await pendingWrite;
+    });
+    await screen.findByText("Saved");
+  });
+
+  test("keeps text entered during Save dirty against the returned revision", async () => {
+    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
+    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
+      resolveWrite = resolve;
+    });
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "first draft" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "newer draft" });
+    });
+    await act(async () => {
+      resolveWrite({
+        kind: "text",
+        rootPath: "/repo",
+        relativePath: "src/first.ts",
+        contents: "first draft",
+        size: 11,
+        mtimeMs: 1_760_000_000_001,
+        revision: "revision-2",
+      });
+      await pendingWrite;
+    });
+
+    await screen.findByText("Unsaved");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
+    await screen.findByText("Saved");
+    expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
+      contents: "newer draft",
+      revision: "revision-2",
+    });
+  });
+
+  test("keeps the provider factory, editor options, and CodeView session stable across theme changes", async () => {
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose }, "light"));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const factory = editProviderFactories.at(-1);
+    const options = latestCodeViewProps?.editorOptions;
+
+    view.rerender(renderPreview({ selectedFile: firstFile, onClose }, "dark"));
+    await waitFor(() => expect(editProviderFactories.length).toBeGreaterThan(1));
+
+    expect(editProviderFactories.at(-1)).toBe(factory);
+    expect(latestCodeViewProps?.editorOptions).toBe(options);
+    expect(latestCodeViewProps?.items[0]?.edit).toBe(true);
+    expect(codeViewMountCount).toBe(1);
+  });
+
+  test("renders the discard guard and routes both decisions", async () => {
+    const onClose = mock(() => {});
+    const onKeepEditing = mock(() => {});
+    const onDiscard = mock(() => {});
+    render(
+      renderPreview({
+        selectedFile: firstFile,
+        onClose,
+        hasPendingDiscard: true,
+        onKeepEditing,
+        onDiscard,
+      }),
+    );
+
+    await screen.findByRole("dialog");
+    await screen.findByText("const first = true;");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(onKeepEditing).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 });

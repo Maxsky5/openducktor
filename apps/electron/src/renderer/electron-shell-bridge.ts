@@ -100,6 +100,7 @@ export const createElectronShellBridge = (): ShellBridge => {
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
     resolveTaskAssetSrc: async (context) => createElectronTaskAssetUrl(context),
+    editorClipboard: electronApi.editorClipboard,
     terminals: {
       connect: async (onFrame, onStateChange) => {
         const clientId = globalThis.crypto.randomUUID();

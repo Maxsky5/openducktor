@@ -33,6 +33,7 @@ export const HOST_COMMAND_NAMES = [
   "filesystem_list_directory",
   "filesystem_list_tree",
   "filesystem_read_text_file",
+  "filesystem_write_text_file",
   "git_abort_conflict",
   "git_canonicalize_path",
   "git_commit_all",

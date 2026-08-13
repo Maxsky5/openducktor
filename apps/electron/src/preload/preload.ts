@@ -26,7 +26,7 @@ import {
 import { createElectronHostInvoke } from "./electron-host-invoke";
 import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
-const { contextBridge, ipcRenderer } = electron;
+const { clipboard, contextBridge, ipcRenderer } = electron;
 const invokeHost = createElectronHostInvoke(ipcRenderer);
 const taskStream = createElectronTaskStreamApi(ipcRenderer);
 
@@ -118,6 +118,11 @@ const electronApi: OpenDucktorElectronApi = {
   },
   terminals,
   taskStream,
+  editorClipboard: {
+    readText(type) {
+      return type ? clipboard.read(type) : clipboard.readText();
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("openducktorElectron", electronApi);

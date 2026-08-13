@@ -80,6 +80,8 @@ const createFakeFilesystem = ({
     }),
   exists: (path) => Effect.succeed(existingPaths.has(path)),
   readFileBytes: () => Effect.succeed(new Uint8Array()),
+  readFileSnapshot: () => Effect.die("not used"),
+  replaceFileBytes: () => Effect.die("not used"),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
   parent: (path) => {
     const parent = path.split("/").slice(0, -1).join("/");
