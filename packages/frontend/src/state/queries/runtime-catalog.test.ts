@@ -15,7 +15,6 @@ import {
   repoRuntimeSkillsQueryOptions,
   repoRuntimeSlashCommandsQueryOptions,
   runtimeCatalogQueryKeys,
-  sessionStartRuntimeCatalogQueryOptions,
 } from "./runtime-catalog";
 
 const repoRuntimeRefFixture: RepoRuntimeRef = {
@@ -85,24 +84,6 @@ describe("runtime catalog queries", () => {
     ]);
     expect(catalog).toBe(slashCommandCatalogFixture);
     expect(loadSlashCommands).toHaveBeenCalledWith(workingDirectoryRefFixture);
-  });
-
-  test("uses a fresh session-start runtime catalog query key", async () => {
-    const queryClient = new QueryClient();
-    const loadCatalog = mock(async () => modelCatalogFixture);
-
-    const catalog = await queryClient.fetchQuery(
-      sessionStartRuntimeCatalogQueryOptions(repoRuntimeRefFixture, loadCatalog),
-    );
-
-    expect(runtimeCatalogQueryKeys.repoSessionStart("/repo/", "opencode")).toEqual([
-      "runtime-catalog",
-      "session-start",
-      "/repo",
-      "opencode",
-    ]);
-    expect(catalog).toBe(modelCatalogFixture);
-    expect(loadCatalog).toHaveBeenCalledWith(repoRuntimeRefFixture);
   });
 
   test("loads skills only for a concrete runtime working-directory ref", async () => {

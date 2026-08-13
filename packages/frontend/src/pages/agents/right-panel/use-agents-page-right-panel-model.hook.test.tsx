@@ -170,7 +170,10 @@ const createSelectedSession = (
     modelCatalog: null,
     todos: [],
     isLoadingModelCatalog: false,
-    error: null,
+    catalogError: null,
+    todosError: null,
+    runtimePolicyError: null,
+    contextError: null,
   },
   runtimeReadiness: {
     state: "ready",

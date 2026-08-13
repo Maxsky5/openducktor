@@ -545,7 +545,11 @@ describe("useSessionStartModalState", () => {
     expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
     await harness.run(() => {
-      harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      });
     });
 
     expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
@@ -612,7 +616,6 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
     expect(harness.getLatest().selection).toBeNull();
-    expect(harness.getLatest().modelOptions).toEqual([]);
     expect(harness.getLatest().variantOptions).toEqual([]);
 
     await harness.run(() => {
@@ -673,7 +676,6 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
     expect(harness.getLatest().selection).toBeNull();
-    expect(harness.getLatest().modelOptions).toEqual([]);
     expect(harness.getLatest().variantOptions).toEqual([]);
     expect(harness.getLatest().isCatalogLoading).toBe(false);
 
@@ -1056,16 +1058,30 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().modelOptions.map((option) => option.label)).toContain("GPT-5");
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode")
+        ?.resource.catalog?.models.map((model) => model.modelName),
+    ).toContain("GPT-5");
 
     await harness.run(() => {
       harness.getLatest().handleSelectRuntime("codex");
     });
 
     await harness.waitFor((state) =>
-      state.modelOptions.some((option) => option.label === "GPT-5.4 Mini"),
+      Boolean(
+        state.modelPickerRuntimes
+          .find((runtime) => runtime.descriptor.kind === "codex")
+          ?.resource.catalog?.models.some((model) => model.modelName === "GPT-5.4 Mini"),
+      ),
     );
-    expect(harness.getLatest().modelOptions.map((option) => option.label)).not.toContain("GPT-5");
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "codex")
+        ?.resource.catalog?.models.map((model) => model.modelName),
+    ).not.toContain("GPT-5");
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "codex",

@@ -21,7 +21,6 @@ const onCreateTab = () => {};
 const onCloseTab = () => {};
 const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
-const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
 const createBaseArgs = (): BuildArgs => {
   const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
@@ -84,7 +83,10 @@ const createBaseArgs = (): BuildArgs => {
           modelCatalog: null,
           todos: [],
           isLoadingModelCatalog: false,
-          error: null,
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: null,
+          contextError: null,
         },
         runtimeReadiness: {
           state: "ready",
@@ -138,8 +140,6 @@ const createBaseArgs = (): BuildArgs => {
       isSubagentsLoading: false,
       searchFiles: async () => [],
       agentProfileOptions: [],
-      modelOptions: [],
-      modelGroups: [],
       modelPickerRuntimes: [],
       modelPickerSelectionPolicy: { kind: "editable" },
       favoriteState: {
@@ -155,7 +155,6 @@ const createBaseArgs = (): BuildArgs => {
       },
       variantOptions: [],
       handleSelectAgentProfile,
-      handleSelectModel,
       handleSelectModelPair: () => {},
       handleModelPickerOpenChange: () => {},
       handleSelectVariant,
@@ -204,7 +203,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
     expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
-    expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings).toEqual(baseArgs.chatSettings);
     expect(mapped.composer.draftScope).toEqual({

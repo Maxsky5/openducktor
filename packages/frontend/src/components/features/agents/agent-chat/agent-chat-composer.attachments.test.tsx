@@ -24,7 +24,6 @@ type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "rem
 const SHARED_CALLBACKS = {
   onSend: async () => true,
   onSelectAgent: () => {},
-  onSelectModel: () => {},
   onSelectVariant: () => {},
   onStopSession: () => {},
   onComposerEditorInput: () => {},
@@ -69,13 +68,6 @@ const buildModel = () => ({
   isSubagentsLoading: false,
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
-  modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
-  modelGroups: [
-    {
-      label: "OpenAI",
-      options: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
-    },
-  ],
   modelPickerRuntimes: [],
   modelPickerSelectionPolicy: { kind: "editable" as const },
   favoriteState: {
@@ -91,7 +83,6 @@ const buildModel = () => ({
   },
   variantOptions: [{ value: "high", label: "high" }],
   onSelectAgent: SHARED_CALLBACKS.onSelectAgent,
-  onSelectModel: SHARED_CALLBACKS.onSelectModel,
   onSelectModelPair: () => {},
   onModelPickerOpenChange: () => {},
   onSelectVariant: SHARED_CALLBACKS.onSelectVariant,

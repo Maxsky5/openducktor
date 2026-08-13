@@ -135,6 +135,38 @@ describe("ModelPicker", () => {
     expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
   });
 
+  test("shows the settings read failure before an overlapping mutation failure", async () => {
+    const retryRead = mock(() => {});
+    const retryMutation = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState({
+          readError: "Settings refetch failed",
+          mutationError: "Favorite write failed",
+          canMutate: false,
+          retryRead,
+          retryMutation,
+        })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Favorites unavailable: Settings refetch failed",
+    );
+    expect(screen.queryByText("Favorite write failed")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retryRead).toHaveBeenCalledTimes(1);
+    expect(retryMutation).not.toHaveBeenCalled();
+  });
+
   test.each([
     { key: "Enter", label: "Enter" },
     { key: " ", label: "Space" },

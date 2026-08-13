@@ -166,11 +166,7 @@ export const useSessionRuntimeData = ({
     const catalogQueryError =
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
-    const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const error =
-      runtimeDataRefs.kind === "unavailable"
-        ? runtimeDataRefs.error
-        : (runtimePolicyError ?? runtimeDataQueryError);
+    const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const canShowModelCatalogLoading =
@@ -182,7 +178,10 @@ export const useSessionRuntimeData = ({
       modelCatalog: resolvedCatalog,
       todos: resolvedTodos,
       isLoadingModelCatalog,
-      error,
+      catalogError: catalogQueryError,
+      todosError: todosQueryError,
+      runtimePolicyError,
+      contextError,
     };
   }, [
     catalogQuery.data,

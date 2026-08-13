@@ -56,7 +56,10 @@ const createSessionRuntimeData = (
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
-  error: null,
+  catalogError: null,
+  todosError: null,
+  runtimePolicyError: null,
+  contextError: null,
   ...overrides,
 });
 

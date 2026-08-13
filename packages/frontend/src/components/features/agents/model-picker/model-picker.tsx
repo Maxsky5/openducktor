@@ -102,20 +102,20 @@ const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElem
 };
 
 const FavoriteNotice = ({ state }: { state: ModelPickerFavoriteState }): ReactElement | null => {
-  if (state.mutationError) {
+  if (state.readError) {
     return (
       <div
         className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-sm"
         role="alert"
       >
-        <span className="min-w-0 text-destructive">{state.mutationError}</span>
-        <Button type="button" variant="outline" size="xs" onClick={state.retryMutation}>
+        <span className="min-w-0 text-destructive">Favorites unavailable: {state.readError}</span>
+        <Button type="button" variant="outline" size="xs" onClick={state.retryRead}>
           Retry
         </Button>
       </div>
     );
   }
-  if (!state.readError) {
+  if (!state.mutationError) {
     return null;
   }
   return (
@@ -123,8 +123,8 @@ const FavoriteNotice = ({ state }: { state: ModelPickerFavoriteState }): ReactEl
       className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-sm"
       role="alert"
     >
-      <span className="min-w-0 text-destructive">Favorites unavailable: {state.readError}</span>
-      <Button type="button" variant="outline" size="xs" onClick={state.retryRead}>
+      <span className="min-w-0 text-destructive">{state.mutationError}</span>
+      <Button type="button" variant="outline" size="xs" onClick={state.retryMutation}>
         Retry
       </Button>
     </div>

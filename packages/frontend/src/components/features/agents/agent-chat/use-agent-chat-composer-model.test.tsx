@@ -52,8 +52,6 @@ const buildComposerConfig = (
   isSubagentsLoading: false,
   searchFiles: async () => [],
   agentOptions: [],
-  modelOptions: [],
-  modelGroups: [],
   modelPickerRuntimes: [],
   modelPickerSelectionPolicy: { kind: "editable" },
   favoriteState: {
@@ -69,7 +67,6 @@ const buildComposerConfig = (
   },
   variantOptions: [],
   onSelectAgent: () => {},
-  onSelectModel: () => {},
   onSelectModelPair: () => {},
   onModelPickerOpenChange: () => {},
   onSelectVariant: () => {},

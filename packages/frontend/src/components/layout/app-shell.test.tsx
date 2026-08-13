@@ -276,6 +276,10 @@ function AppShellTestEnvironment({
                       agentRuntimes: settingsSnapshot.agentRuntimes,
                       isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
                       runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
+                      isLoadingRuntimeSettings: false,
+                      runtimeSettingsError: null,
+                      hasRuntimeSettingsSnapshot: true,
+                      refreshRuntimeSettings: async () => {},
                       refreshRuntimeDefinitions: async () => [],
                       loadRepoRuntimeCatalog: async () => {
                         throw new Error("loadRepoRuntimeCatalog is not used in this test");

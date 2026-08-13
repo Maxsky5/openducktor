@@ -204,6 +204,10 @@ const createRuntimeDefinitionsContextValue = () => {
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Test runtime catalog loader was not configured.");

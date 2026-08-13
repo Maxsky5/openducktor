@@ -169,6 +169,10 @@ export const createRuntimeDefinitionsContextValue = (
     runtimeDefinitionsError: overrides.runtimeDefinitionsError ?? null,
     refreshRuntimeDefinitions:
       overrides.refreshRuntimeDefinitions ?? (async () => createDefaultRuntimeDefinitions()),
+    isLoadingRuntimeSettings: overrides.isLoadingRuntimeSettings ?? false,
+    runtimeSettingsError: overrides.runtimeSettingsError ?? null,
+    hasRuntimeSettingsSnapshot: overrides.hasRuntimeSettingsSnapshot ?? true,
+    refreshRuntimeSettings: overrides.refreshRuntimeSettings ?? (async () => {}),
     loadRepoRuntimeCatalog:
       overrides.loadRepoRuntimeCatalog ??
       (async () => {

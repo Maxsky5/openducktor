@@ -130,8 +130,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "isSubagentsLoading"
   | "searchFiles"
   | "agentProfileOptions"
-  | "modelOptions"
-  | "modelGroups"
   | "modelPickerRuntimes"
   | "modelPickerSelectionPolicy"
   | "favoriteState"
@@ -139,7 +137,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "selectedSessionContextUsage"
   | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
-  | "handleSelectModel"
   | "handleSelectModelPair"
   | "handleModelPickerOpenChange"
   | "handleSelectVariant"
@@ -176,7 +173,6 @@ export const buildAgentStudioPageModelsArgs = ({
   } = tabs;
   const {
     handleSelectAgentProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleModelPickerOpenChange,
     handleSelectVariant,
@@ -203,7 +199,6 @@ export const buildAgentStudioPageModelsArgs = ({
       agentOptions: agentProfileOptions,
       agentAccentColorsByProfileId,
       onSelectAgent: handleSelectAgentProfile,
-      onSelectModel: handleSelectModel,
       onSelectModelPair: handleSelectModelPair,
       onModelPickerOpenChange: handleModelPickerOpenChange,
       onSelectVariant: handleSelectVariant,
@@ -289,8 +284,6 @@ export function useAgentStudioOrchestrationController({
     isSubagentsLoading,
     searchFiles,
     agentProfileOptions,
-    modelOptions,
-    modelGroups,
     modelPickerRuntimes,
     modelPickerSelectionPolicy,
     favoriteState,
@@ -298,7 +291,6 @@ export function useAgentStudioOrchestrationController({
     agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleModelPickerOpenChange,
     handleSelectVariant,
@@ -467,8 +459,6 @@ export function useAgentStudioOrchestrationController({
       isSubagentsLoading,
       searchFiles,
       agentProfileOptions,
-      modelOptions,
-      modelGroups,
       modelPickerRuntimes,
       modelPickerSelectionPolicy,
       favoriteState,
@@ -476,7 +466,6 @@ export function useAgentStudioOrchestrationController({
       selectedSessionContextUsage,
       agentAccentColorsByProfileId,
       handleSelectAgentProfile,
-      handleSelectModel,
       handleSelectModelPair,
       handleModelPickerOpenChange,
       handleSelectVariant,

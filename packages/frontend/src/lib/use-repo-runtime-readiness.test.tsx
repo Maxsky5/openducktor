@@ -32,6 +32,10 @@ const createRuntimeDefinitionsValue = (
   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
+  isLoadingRuntimeSettings: false,
+  runtimeSettingsError: null,
+  hasRuntimeSettingsSnapshot: true,
+  refreshRuntimeSettings: async () => {},
   refreshRuntimeDefinitions: async () => runtimeDefinitions,
   loadRepoRuntimeCatalog: async () => ({
     runtime: runtimeDefinitions[0] ?? OPENCODE_RUNTIME_DESCRIPTOR,

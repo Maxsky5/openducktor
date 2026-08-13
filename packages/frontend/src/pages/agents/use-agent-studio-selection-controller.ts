@@ -232,7 +232,7 @@ export function useAgentStudioSelectionController({
         ...selectedSessionView.selectedSession,
         runtimeData: {
           ...selectedSessionView.selectedSession.runtimeData,
-          error: contextLoadError,
+          contextError: contextLoadError,
         },
       },
     };

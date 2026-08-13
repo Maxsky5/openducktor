@@ -95,8 +95,6 @@ type AgentStudioChatComposerState = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ReturnType<typeof resolveModelSelectionOptions>["modelGroups"];
   modelPickerRuntimes: ModelPickerRuntime[];
   modelPickerSelectionPolicy: ModelPickerSelectionPolicy;
   favoriteState: ModelPickerFavoriteState;
@@ -104,7 +102,6 @@ type AgentStudioChatComposerState = {
   agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
   handleSelectAgentProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
   handleSelectModelPair: (value: ModelPickerValue) => void;
   handleModelPickerOpenChange: (open: boolean) => void;
   handleSelectVariant: (variant: string) => void;
@@ -289,7 +286,7 @@ export function useAgentStudioChatComposer({
           descriptor.kind === selectedSessionIdentity?.runtimeKind && isSessionModelCatalogLoading,
         error:
           descriptor.kind === selectedSessionIdentity?.runtimeKind
-            ? selectedSession.runtimeData.error
+            ? selectedSession.runtimeData.catalogError
             : null,
         retry: async () => {
           if (!workspaceRepoPath || descriptor.kind !== selectedSessionIdentity?.runtimeKind) {
@@ -308,7 +305,7 @@ export function useAgentStudioChatComposer({
     modelPickerRuntimeDefinitions,
     queryClient,
     repoModelPickerResources,
-    selectedSession.runtimeData.error,
+    selectedSession.runtimeData.catalogError,
     selectedSessionIdentity,
     sessionModelCatalog,
     workspaceRepoPath,
@@ -409,22 +406,16 @@ export function useAgentStudioChatComposer({
     ? !sessionModelCatalog && isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
 
-  const {
-    selectedModelEntry,
-    agentProfileOptions,
-    modelOptions,
-    modelGroups,
-    variantOptions,
-    agentAccentColorsByProfileId,
-  } = useMemo(
-    () =>
-      resolveModelSelectionOptions({
-        liveSession: hasSessionTarget,
-        selectionCatalog,
-        selectedModelSelection,
-      }),
-    [hasSessionTarget, selectedModelSelection, selectionCatalog],
-  );
+  const { selectedModelEntry, agentProfileOptions, variantOptions, agentAccentColorsByProfileId } =
+    useMemo(
+      () =>
+        resolveModelSelectionOptions({
+          liveSession: hasSessionTarget,
+          selectionCatalog,
+          selectedModelSelection,
+        }),
+      [hasSessionTarget, selectedModelSelection, selectionCatalog],
+    );
 
   const selectedSessionContextUsage = useSelectedSessionContextUsage({
     selectedSession: loadedSession,
@@ -434,7 +425,6 @@ export function useAgentStudioChatComposer({
 
   const {
     handleSelectAgentProfile,
-    handleSelectModel,
     handleSelectModelPair: applyModelPair,
     handleSelectVariant,
   } = useModelSelectionActions({
@@ -491,8 +481,6 @@ export function useAgentStudioChatComposer({
     isSubagentsLoading,
     searchFiles,
     agentProfileOptions,
-    modelOptions,
-    modelGroups,
     modelPickerRuntimes,
     modelPickerSelectionPolicy,
     favoriteState,
@@ -500,7 +488,6 @@ export function useAgentStudioChatComposer({
     agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleModelPickerOpenChange: setIsModelPickerOpen,
     handleSelectVariant,

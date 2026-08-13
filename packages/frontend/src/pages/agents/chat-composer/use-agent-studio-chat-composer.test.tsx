@@ -58,7 +58,10 @@ const createSessionRuntimeData = (
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
-  error: null,
+  catalogError: null,
+  todosError: null,
+  runtimePolicyError: null,
+  contextError: null,
   ...overrides,
 });
 
@@ -253,6 +256,10 @@ const createHookHarness = (
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Test runtime catalog loader was not configured.");
@@ -590,6 +597,35 @@ describe("useAgentStudioChatComposer", () => {
         harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
       ).toEqual(["opencode", "codex"]);
       expect(loadCatalog).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps existing-session catalog rows when an unrelated runtime-data read fails", async () => {
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: CATALOG,
+          todosError: "Session todos unavailable",
+        }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      const selectedRuntime = harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+
+      expect(selectedRuntime?.resource.catalog).toBe(CATALOG);
+      expect(selectedRuntime?.resource.error).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -1312,12 +1348,20 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("openai/gpt-5");
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
@@ -1367,7 +1411,11 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
 
       expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
@@ -1649,7 +1697,11 @@ describe("useAgentStudioChatComposer", () => {
       );
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 

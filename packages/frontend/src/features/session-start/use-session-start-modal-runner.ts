@@ -228,9 +228,11 @@ export function useSessionStartModalRunner({
     runtimeDefinitionsError,
     isRuntimeDefinitionsLoading,
     retryRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading,
+    hasRuntimeSettingsSnapshot,
+    retryRuntimeSettings,
     runtimeProfileOptions,
-    modelOptions,
-    modelGroups,
     variantOptions,
     availableStartModes,
     selectedStartMode,
@@ -246,7 +248,6 @@ export function useSessionStartModalRunner({
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectRuntimeProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
@@ -264,6 +265,14 @@ export function useSessionStartModalRunner({
       });
     });
   }, [retryRuntimeDefinitions]);
+
+  const handleRetryRuntimeSettings = useCallback((): void => {
+    void retryRuntimeSettings().catch((error) => {
+      toast.error("Failed to refresh runtime settings.", {
+        description: errorMessage(error),
+      });
+    });
+  }, [retryRuntimeSettings]);
 
   const resolvePendingRun = useCallback(
     (value: unknown): void => {
@@ -408,9 +417,11 @@ export function useSessionStartModalRunner({
       runtimeDefinitionsError,
       isRuntimeDefinitionsLoading,
       onRetryRuntimeDefinitions: handleRetryRuntimeDefinitions,
+      runtimeSettingsError,
+      isRuntimeSettingsLoading,
+      hasRuntimeSettingsSnapshot,
+      onRetryRuntimeSettings: handleRetryRuntimeSettings,
       runtimeProfileOptions,
-      modelOptions,
-      modelGroups,
       variantOptions,
       availableStartModes,
       selectedStartMode,
@@ -424,7 +435,6 @@ export function useSessionStartModalRunner({
       onSelectTargetBranch: handleSelectTargetBranch,
       onSelectRuntime: handleSelectRuntime,
       onSelectRuntimeProfile: handleSelectRuntimeProfile,
-      onSelectModel: handleSelectModel,
       onSelectModelPair: handleSelectModelPair,
       onSelectVariant: handleSelectVariant,
       allowRunInBackground: intent.source === "kanban",
@@ -447,25 +457,26 @@ export function useSessionStartModalRunner({
     confirmModal,
     existingSessionOptions,
     handleSelectRuntimeProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleRetryRuntimeDefinitions,
+    handleRetryRuntimeSettings,
     handleSelectSourceSessionValue,
     handleSelectStartMode,
     handleSelectVariant,
     intent,
     isCatalogLoading,
     isRuntimeDefinitionsLoading,
+    isRuntimeSettingsLoading,
     isOpen,
-    modelGroups,
-    modelOptions,
     modelPickerRuntimes,
     favoriteState,
     resolvePendingRun,
     runtimeOptions,
     runtimeDefinitionsError,
+    runtimeSettingsError,
+    hasRuntimeSettingsSnapshot,
     selectedTargetBranch,
     selectedRuntimeKind,
     selectedSourceSessionValue,

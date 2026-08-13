@@ -92,13 +92,6 @@ const buildModel = () => ({
     isSubagentsLoading: false,
     searchFiles: async () => [],
     agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
-    modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
-    modelGroups: [
-      {
-        label: "OpenAI",
-        options: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
-      },
-    ],
     modelPickerRuntimes: [],
     modelPickerSelectionPolicy: { kind: "editable" as const },
     favoriteState: {
@@ -114,7 +107,6 @@ const buildModel = () => ({
     },
     variantOptions: [{ value: "high", label: "high" }],
     onSelectAgent: () => {},
-    onSelectModel: () => {},
     onSelectModelPair: () => {},
     onModelPickerOpenChange: () => {},
     onSelectVariant: () => {},

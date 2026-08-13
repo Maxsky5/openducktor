@@ -22,7 +22,7 @@ import type {
   ModelPickerSelectionPolicy,
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -174,14 +174,11 @@ export type AgentChatComposerModel = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   modelPickerRuntimes: ModelPickerRuntime[];
   modelPickerSelectionPolicy: ModelPickerSelectionPolicy;
   favoriteState: ModelPickerFavoriteState;
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModel: (model: string) => void;
   onSelectModelPair: (value: ModelPickerValue) => void;
   onModelPickerOpenChange: (open: boolean) => void;
   onSelectVariant: (variant: string) => void;

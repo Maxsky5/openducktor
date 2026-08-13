@@ -128,7 +128,14 @@ describe("useModelSelectionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectModel("claude/claude-opus-4-6");
+      state.handleSelectModelPair(
+        {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-opus-4-6",
+        },
+        claudeCatalog,
+      );
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
@@ -169,7 +176,14 @@ describe("useModelSelectionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectModel("claude/claude-sonnet-4-6");
+      state.handleSelectModelPair(
+        {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-sonnet-4-6",
+        },
+        selectionCatalog,
+      );
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {

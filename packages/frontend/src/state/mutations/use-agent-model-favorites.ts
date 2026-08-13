@@ -9,6 +9,11 @@ type UseAgentModelFavoritesArgs = {
   saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 };
 
+type FavoriteMutationIntent = {
+  favorite: AgentModelFavorite;
+  shouldBeFavorite: boolean;
+};
+
 export type AgentModelFavoritesState = {
   favorites: AgentModelFavorite[] | null;
   isLoading: boolean;
@@ -27,6 +32,14 @@ const isSameFavorite = (left: AgentModelFavorite, right: AgentModelFavorite): bo
   left.providerId === right.providerId &&
   left.modelId === right.modelId;
 
+const applyFavoriteMutationIntent = (
+  favorites: AgentModelFavorite[],
+  intent: FavoriteMutationIntent,
+): AgentModelFavorite[] => {
+  const withoutTarget = favorites.filter((favorite) => !isSameFavorite(favorite, intent.favorite));
+  return intent.shouldBeFavorite ? [...withoutTarget, intent.favorite] : withoutTarget;
+};
+
 export function useAgentModelFavorites({
   saveAgentModelFavorites,
 }: UseAgentModelFavoritesArgs): AgentModelFavoritesState {
@@ -35,7 +48,15 @@ export function useAgentModelFavorites({
   const settingsQuery = useQuery(settingsOptions);
   const mutation = useMutation({
     mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY,
-    mutationFn: saveAgentModelFavorites,
+    mutationFn: async (intent: FavoriteMutationIntent) => {
+      const currentSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsOptions.queryKey);
+      if (!currentSnapshot) {
+        throw new Error("Cannot update model favorites before settings are available.");
+      }
+      return saveAgentModelFavorites(
+        applyFavoriteMutationIntent(currentSnapshot.agentModelFavorites, intent),
+      );
+    },
     onSuccess: (snapshot) => {
       queryClient.setQueryData(settingsOptions.queryKey, snapshot);
     },
@@ -54,10 +75,10 @@ export function useAgentModelFavorites({
       if (favorites === null || readError !== null || mutation.isPending) {
         return;
       }
-      const nextFavorites = isFavorite(favorite)
-        ? favorites.filter((entry) => !isSameFavorite(entry, favorite))
-        : [...favorites, favorite];
-      mutation.mutate(nextFavorites);
+      mutation.mutate({
+        favorite,
+        shouldBeFavorite: !isFavorite(favorite),
+      });
     },
     [favorites, isFavorite, mutation, readError],
   );
@@ -67,10 +88,10 @@ export function useAgentModelFavorites({
   }, [settingsQuery]);
 
   const retryMutation = useCallback((): void => {
-    if (mutation.variables && !mutation.isPending) {
+    if (favorites !== null && readError === null && mutation.variables && !mutation.isPending) {
       mutation.mutate(mutation.variables);
     }
-  }, [mutation]);
+  }, [favorites, mutation, readError]);
 
   return {
     favorites,

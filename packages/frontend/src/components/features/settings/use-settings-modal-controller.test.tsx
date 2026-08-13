@@ -176,6 +176,10 @@ const createHookHarness = (
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: options?.isLoadingRuntimeDefinitions ?? false,
     runtimeDefinitionsError: options?.runtimeDefinitionsError ?? null,
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
     loadRepoRuntimeCatalog:
       options?.loadRepoRuntimeCatalog ??

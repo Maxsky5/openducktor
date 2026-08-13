@@ -31,7 +31,6 @@ type UseSessionStartModalSelectionStateResult = {
     selectedModel: AgentModelSelection | null,
   ) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
@@ -150,23 +149,6 @@ export function useSessionStartModalSelectionState({
     [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
   );
 
-  const handleSelectModel = useCallback(
-    (modelKey: string): void => {
-      if (!selectedRuntimeKind) {
-        return;
-      }
-      setSelection(
-        resolveModelSelectionForModelChange({
-          catalog,
-          currentSelection: resolvedSelection,
-          modelKey,
-          runtimeKind: selectedRuntimeKind,
-        }),
-      );
-    },
-    [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
-  );
-
   const handleSelectPair = useCallback(
     (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
       const modelKey = `${value.providerId}/${value.modelId}`;
@@ -210,7 +192,6 @@ export function useSessionStartModalSelectionState({
     resetSelection,
     initializeSelection,
     handleSelectRuntimeProfile,
-    handleSelectModel,
     handleSelectRuntime,
     handleSelectPair,
     handleSelectVariant,

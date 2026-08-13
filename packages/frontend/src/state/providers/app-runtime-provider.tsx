@@ -59,7 +59,8 @@ export function AppRuntimeProvider({
   const {
     data: settingsSnapshot,
     error: settingsSnapshotError,
-    isPending: isLoadingSettingsSnapshot,
+    isFetching: isLoadingRuntimeSettings,
+    refetch: refetchRuntimeSettings,
   } = useQuery(settingsSnapshotQueryOptions());
 
   const activeWorkspaceValue = useMemo<ActiveWorkspaceContextValue>(
@@ -70,11 +71,8 @@ export function AppRuntimeProvider({
     [activeWorkspace],
   );
 
-  const runtimeDefinitionsError = error
-    ? errorMessage(error)
-    : settingsSnapshotError
-      ? `Failed to load runtime settings: ${errorMessage(settingsSnapshotError)}`
-      : null;
+  const runtimeDefinitionsError = error ? errorMessage(error) : null;
+  const runtimeSettingsError = settingsSnapshotError ? errorMessage(settingsSnapshotError) : null;
   const agentRuntimes = settingsSnapshot?.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
   const hasSettingsSnapshot = settingsSnapshot !== undefined;
   const availableRuntimeDefinitions = useMemo(
@@ -90,7 +88,7 @@ export function AppRuntimeProvider({
       runtimeDefinitions,
       availableRuntimeDefinitions,
       agentRuntimes,
-      isLoadingRuntimeDefinitions: isLoadingRuntimeDefinitions || isLoadingSettingsSnapshot,
+      isLoadingRuntimeDefinitions,
       runtimeDefinitionsError,
       refreshRuntimeDefinitions: async (): Promise<RuntimeDescriptor[]> => {
         await queryClient.invalidateQueries({
@@ -101,6 +99,15 @@ export function AppRuntimeProvider({
           throw refreshResult.error;
         }
         return refreshResult.data ?? [];
+      },
+      isLoadingRuntimeSettings,
+      runtimeSettingsError,
+      hasRuntimeSettingsSnapshot: hasSettingsSnapshot,
+      refreshRuntimeSettings: async (): Promise<void> => {
+        const refreshResult = await refetchRuntimeSettings();
+        if (refreshResult.error) {
+          throw refreshResult.error;
+        }
       },
       loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands,
@@ -117,11 +124,14 @@ export function AppRuntimeProvider({
       loadRepoRuntimeSkills,
       loadRepoRuntimeSubagents,
       isLoadingRuntimeDefinitions,
-      isLoadingSettingsSnapshot,
+      isLoadingRuntimeSettings,
+      hasSettingsSnapshot,
       queryClient,
       refetch,
+      refetchRuntimeSettings,
       runtimeDefinitions,
       runtimeDefinitionsError,
+      runtimeSettingsError,
     ],
   );
 

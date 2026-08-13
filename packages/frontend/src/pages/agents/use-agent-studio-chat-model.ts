@@ -13,7 +13,7 @@ import { resolveAgentChatRuntimePresentation } from "@/components/features/agent
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { withClaudeSkillMentions } from "@/components/features/agents/agent-chat/claude-skill-mentions";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
@@ -71,14 +71,11 @@ export type AgentStudioChatModelSelectionContext = {
   isSubagentsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   modelPickerRuntimes: AgentChatModel["composer"]["modelPickerRuntimes"];
   modelPickerSelectionPolicy: AgentChatModel["composer"]["modelPickerSelectionPolicy"];
   favoriteState: AgentChatModel["composer"]["favoriteState"];
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModel: (model: string) => void;
   onSelectModelPair: AgentChatModel["composer"]["onSelectModelPair"];
   onModelPickerOpenChange: AgentChatModel["composer"]["onModelPickerOpenChange"];
   onSelectVariant: (variant: string) => void;
@@ -389,14 +386,11 @@ export function useAgentStudioChatModel({
       isSubagentsLoading: modelSelection.isSubagentsLoading,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
-      modelOptions: modelSelection.modelOptions,
-      modelGroups: modelSelection.modelGroups,
       modelPickerRuntimes: modelSelection.modelPickerRuntimes,
       modelPickerSelectionPolicy: modelSelection.modelPickerSelectionPolicy,
       favoriteState: modelSelection.favoriteState,
       variantOptions: modelSelection.variantOptions,
       onSelectAgent: modelSelection.onSelectAgent,
-      onSelectModel: modelSelection.onSelectModel,
       onSelectModelPair: modelSelection.onSelectModelPair,
       onModelPickerOpenChange: modelSelection.onModelPickerOpenChange,
       onSelectVariant: modelSelection.onSelectVariant,
@@ -409,13 +403,10 @@ export function useAgentStudioChatModel({
       modelSelection.isSlashCommandsLoading,
       modelSelection.isSkillsLoading,
       modelSelection.isSubagentsLoading,
-      modelSelection.modelGroups,
-      modelSelection.modelOptions,
       modelSelection.modelPickerRuntimes,
       modelSelection.modelPickerSelectionPolicy,
       modelSelection.favoriteState,
       modelSelection.onSelectAgent,
-      modelSelection.onSelectModel,
       modelSelection.onSelectModelPair,
       modelSelection.onModelPickerOpenChange,
       modelSelection.onSelectVariant,
@@ -461,7 +452,12 @@ export function useAgentStudioChatModel({
     modelCatalog: selectedSessionRuntimeData.modelCatalog,
     transcript,
     chatSettings,
-    sessionAuxiliaryError: selectedSessionAuxiliaryError ?? selectedSessionRuntimeData.error,
+    sessionAuxiliaryError:
+      selectedSessionAuxiliaryError ??
+      selectedSessionRuntimeData.contextError ??
+      selectedSessionRuntimeData.runtimePolicyError ??
+      selectedSessionRuntimeData.todosError ??
+      selectedSessionRuntimeData.catalogError,
     interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
     emptyState: surfaceState.emptyState,

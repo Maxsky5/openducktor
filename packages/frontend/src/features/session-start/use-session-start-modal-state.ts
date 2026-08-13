@@ -11,17 +11,13 @@ import type {
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
-import {
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents/catalog-select-options";
+import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
 import type {
   ModelPickerRuntime,
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
@@ -69,9 +65,11 @@ type UseSessionStartModalStateResult = {
   runtimeDefinitionsError: string | null;
   isRuntimeDefinitionsLoading: boolean;
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  runtimeSettingsError: string | null;
+  isRuntimeSettingsLoading: boolean;
+  hasRuntimeSettingsSnapshot: boolean;
+  retryRuntimeSettings: () => Promise<void>;
   runtimeProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
@@ -87,7 +85,6 @@ type UseSessionStartModalStateResult = {
   handleSelectTargetBranch: (branch: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
   handleSelectModelPair: (value: ModelPickerValue) => void;
   handleSelectVariant: (variant: string) => void;
 };
@@ -101,10 +98,14 @@ export function useSessionStartModalState({
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
   const {
     availableRuntimeDefinitions,
+    hasRuntimeSettingsSnapshot,
     isLoadingRuntimeDefinitions,
+    isLoadingRuntimeSettings,
     loadRepoRuntimeCatalog,
     refreshRuntimeDefinitions,
+    refreshRuntimeSettings,
     runtimeDefinitionsError,
+    runtimeSettingsError,
   } = useRuntimeAvailabilityContext();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
@@ -158,7 +159,6 @@ export function useSessionStartModalState({
     resetSelection,
     initializeSelection,
     handleSelectRuntimeProfile,
-    handleSelectModel,
     handleSelectPair,
     handleSelectRuntime: handleSelectionRuntimeChange,
     handleSelectVariant,
@@ -325,29 +325,6 @@ export function useSessionStartModalState({
     ];
   }, [catalog, visibleSelection?.profileId]);
 
-  const modelOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toModelOptions(catalog);
-    if (options.length > 0) {
-      return options;
-    }
-
-    if (!visibleSelection?.providerId || !visibleSelection.modelId) {
-      return [];
-    }
-
-    return [
-      {
-        value: `${visibleSelection.providerId}/${visibleSelection.modelId}`,
-        label: visibleSelection.modelId,
-        description: `${visibleSelection.providerId} (saved default model)`,
-      },
-    ];
-  }, [catalog, visibleSelection]);
-
-  const modelGroups = useMemo<ComboboxGroup[]>(() => {
-    return toModelGroupsByProvider(catalog);
-  }, [catalog]);
-
   const variantOptions = useMemo<ComboboxOption[]>(() => {
     if (selectedModelEntry) {
       return selectedModelEntry.variants.map((variant) => ({
@@ -416,9 +393,11 @@ export function useSessionStartModalState({
     runtimeDefinitionsError,
     isRuntimeDefinitionsLoading: isLoadingRuntimeDefinitions,
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading: isLoadingRuntimeSettings,
+    hasRuntimeSettingsSnapshot,
+    retryRuntimeSettings: refreshRuntimeSettings,
     runtimeProfileOptions,
-    modelOptions,
-    modelGroups,
     variantOptions,
     availableStartModes: orderedStartModes,
     selectedStartMode,
@@ -434,7 +413,6 @@ export function useSessionStartModalState({
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectRuntimeProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleSelectVariant,
   };

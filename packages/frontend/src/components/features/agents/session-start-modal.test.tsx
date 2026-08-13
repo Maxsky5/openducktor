@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { host } from "@/state/operations/host";
+import { AppRuntimeProvider } from "@/state/providers/app-runtime-provider";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
 
 const reactActEnvironment = globalThis as {
@@ -77,9 +82,11 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   runtimeDefinitionsError: null,
   isRuntimeDefinitionsLoading: false,
   onRetryRuntimeDefinitions: noop,
+  runtimeSettingsError: null,
+  isRuntimeSettingsLoading: false,
+  hasRuntimeSettingsSnapshot: true,
+  onRetryRuntimeSettings: noop,
   runtimeProfileOptions: [{ value: "builder", label: "Builder" }],
-  modelOptions: [{ value: "openai/gpt-5.4", label: "GPT-5.4" }],
-  modelGroups: [],
   variantOptions: [{ value: "default", label: "Default" }],
   availableStartModes: ["fresh"],
   selectedStartMode: "fresh",
@@ -89,7 +96,6 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   onSelectSourceSessionValue: noop,
   onSelectRuntime: noop,
   onSelectRuntimeProfile: noop,
-  onSelectModel: noop,
   onSelectModelPair: noop,
   onSelectVariant: noop,
   allowRunInBackground: true,
@@ -98,6 +104,30 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   onConfirm: noop,
   ...overrides,
 });
+
+const ProviderBackedSessionStartModal = () => {
+  const runtimeState = useRuntimeDefinitionsContext();
+  return (
+    <SessionStartModal
+      model={createModel({
+        selectedModelSelection: {
+          runtimeKind: "opencode",
+          profileId: "builder",
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          variant: "default",
+        },
+        runtimeDefinitionsError: runtimeState.runtimeDefinitionsError,
+        isRuntimeDefinitionsLoading: runtimeState.isLoadingRuntimeDefinitions,
+        onRetryRuntimeDefinitions: () => void runtimeState.refreshRuntimeDefinitions(),
+        runtimeSettingsError: runtimeState.runtimeSettingsError,
+        isRuntimeSettingsLoading: runtimeState.isLoadingRuntimeSettings,
+        hasRuntimeSettingsSnapshot: runtimeState.hasRuntimeSettingsSnapshot,
+        onRetryRuntimeSettings: () => void runtimeState.refreshRuntimeSettings(),
+      })}
+    />
+  );
+};
 
 const getFieldButton = (testId: string): HTMLButtonElement => {
   const button = screen.getByTestId(testId).querySelector("button");
@@ -238,7 +268,6 @@ describe("SessionStartModal", () => {
         model: createModel({
           selectionCatalogError: "Claude auth failed",
           selectedModelSelection: null,
-          modelOptions: [],
           variantOptions: [],
         }),
       }),
@@ -295,6 +324,58 @@ describe("SessionStartModal", () => {
       true,
     );
     unmount();
+  });
+
+  test("retries a settings-only startup failure through the settings query", async () => {
+    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+    let settingsAttempts = 0;
+    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      settingsAttempts += 1;
+      if (settingsAttempts === 1) {
+        throw new Error("Settings unavailable");
+      }
+      return createSettingsSnapshotFixture();
+    }) as never;
+
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <AppRuntimeProvider
+          loadRepoRuntimeCatalog={async () => {
+            throw new Error("catalog loader not configured");
+          }}
+          loadRepoRuntimeSlashCommands={async () => ({ commands: [] })}
+          loadRepoRuntimeSkills={async () => ({ skills: [] })}
+          loadRepoRuntimeSubagents={async () => ({ subagents: [] })}
+          loadRepoRuntimeFileSearch={async () => []}
+        >
+          <ProviderBackedSessionStartModal />
+        </AppRuntimeProvider>
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => {
+        expect(screen.getByRole("alert").textContent).toContain(
+          "Runtime settings unavailable: Settings unavailable",
+        );
+      });
+      expect(screen.queryByText(/Runtime definitions unavailable/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "Select model, OpenCode, GPT-5.4" }),
+        ).toBeTruthy();
+      });
+      expect(settingsAttempts).toBe(2);
+      expect(host.runtimeDefinitionsList).toHaveBeenCalledTimes(1);
+    } finally {
+      unmount();
+      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    }
   });
 
   test("hides the runtime profile selector when the runtime manages profiles", () => {

@@ -45,7 +45,6 @@ export const useModelSelectionActions = ({
   selectedRuntimeKind: RuntimeKind | null;
 }): {
   handleSelectAgentProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
   handleSelectModelPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
 } => {
@@ -133,29 +132,6 @@ export const useModelSelectionActions = ({
     [applySelection, loadedSessionIdentity, selectedModelSelection],
   );
 
-  const handleSelectModel = useCallback(
-    (nextValue: string): void => {
-      if (!selectionCatalog || !effectiveRuntimeKind) {
-        return;
-      }
-      const model = selectionCatalog.models.find(
-        (entry) => catalogModelOptionValue(entry) === nextValue,
-      );
-      if (!model) {
-        return;
-      }
-      handleSelectModelPair(
-        {
-          runtimeKind: effectiveRuntimeKind,
-          providerId: model.providerId,
-          modelId: model.modelId,
-        },
-        selectionCatalog,
-      );
-    },
-    [effectiveRuntimeKind, handleSelectModelPair, selectionCatalog],
-  );
-
   const handleSelectVariant = useCallback(
     (variant: string) => {
       const selectedModel = findSelectedCatalogModel(selectionCatalog, selectedModelSelection);
@@ -179,7 +155,6 @@ export const useModelSelectionActions = ({
 
   return {
     handleSelectAgentProfile,
-    handleSelectModel,
     handleSelectModelPair,
     handleSelectVariant,
   };

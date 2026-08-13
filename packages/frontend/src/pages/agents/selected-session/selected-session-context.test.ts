@@ -80,7 +80,10 @@ const createInput = (
         modelCatalog: null,
         todos: [],
         isLoadingModelCatalog: false,
-        error: null,
+        catalogError: null,
+        todosError: null,
+        runtimePolicyError: null,
+        contextError: null,
       },
       runtimeReadiness: selectedSessionOverrides.runtimeReadiness ?? {
         state: "ready",
@@ -124,7 +127,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.documents.activeDocument).toBeNull();
-    expect(context.selectedSession.runtimeData.error).toBeNull();
+    expect(context.selectedSession.runtimeData.contextError).toBeNull();
   });
 
   test("maps active document from selected role semantics", () => {
@@ -239,7 +242,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
             modelCatalog: null,
             todos: [],
             isLoadingModelCatalog: true,
-            error: null,
+            catalogError: null,
+            todosError: null,
+            runtimePolicyError: null,
+            contextError: null,
           },
         },
       }),
@@ -259,7 +265,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
             modelCatalog: null,
             todos: [],
             isLoadingModelCatalog: false,
-            error: "session todos unavailable",
+            catalogError: null,
+            todosError: "session todos unavailable",
+            runtimePolicyError: null,
+            contextError: null,
           },
           transcriptState: createSelectedSessionTranscriptStateFixture({
             kind: "runtime_waiting",
@@ -274,7 +283,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.selectedSession.runtimeData.error).toBe("session todos unavailable");
+    expect(context.selectedSession.runtimeData.todosError).toBe("session todos unavailable");
     expect(context.selectedSession.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.selectedSession.runtimeReadiness).toMatchObject({
       state: "blocked",

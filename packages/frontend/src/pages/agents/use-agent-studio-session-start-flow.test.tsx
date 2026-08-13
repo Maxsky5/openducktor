@@ -208,6 +208,10 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                   isLoadingRuntimeDefinitions: false,
                   runtimeDefinitionsError: null,
+                  isLoadingRuntimeSettings: false,
+                  runtimeSettingsError: null,
+                  hasRuntimeSettingsSnapshot: true,
+                  refreshRuntimeSettings: async () => {},
                   refreshRuntimeDefinitions: async () => [
                     OPENCODE_RUNTIME_DESCRIPTOR,
                     CLAUDE_RUNTIME_DESCRIPTOR,
@@ -327,7 +331,12 @@ const confirmSessionStartModal = async ({
       state.sessionStartModal?.onSelectRuntimeProfile(profileId);
     });
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectModel(modelId);
+      const [providerId, selectedModelId] = modelId.split("/");
+      state.sessionStartModal?.onSelectModelPair({
+        runtimeKind: state.sessionStartModal.selectedRuntimeKind ?? "opencode",
+        providerId: providerId ?? "",
+        modelId: selectedModelId ?? "",
+      });
     });
     await harness.run((state) => {
       state.sessionStartModal?.onSelectVariant(variant);

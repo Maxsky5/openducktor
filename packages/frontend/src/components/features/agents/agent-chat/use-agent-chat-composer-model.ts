@@ -4,7 +4,7 @@ import type {
   AgentModelSelection,
 } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useMemo } from "react";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
@@ -71,14 +71,11 @@ export type AgentChatComposerConfig = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   modelPickerRuntimes: AgentChatComposerModel["modelPickerRuntimes"];
   modelPickerSelectionPolicy: AgentChatComposerModel["modelPickerSelectionPolicy"];
   favoriteState: AgentChatComposerModel["favoriteState"];
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModel: (model: string) => void;
   onSelectModelPair: AgentChatComposerModel["onSelectModelPair"];
   onModelPickerOpenChange: AgentChatComposerModel["onModelPickerOpenChange"];
   onSelectVariant: (variant: string) => void;
@@ -169,14 +166,11 @@ export function useAgentChatComposerModel({
       isSubagentsLoading: composer.isSubagentsLoading,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
-      modelOptions: composer.modelOptions,
-      modelGroups: composer.modelGroups,
       modelPickerRuntimes: composer.modelPickerRuntimes,
       modelPickerSelectionPolicy: composer.modelPickerSelectionPolicy,
       favoriteState: composer.favoriteState,
       variantOptions: composer.variantOptions,
       onSelectAgent: composer.onSelectAgent,
-      onSelectModel: composer.onSelectModel,
       onSelectModelPair: composer.onSelectModelPair,
       onModelPickerOpenChange: composer.onModelPickerOpenChange,
       onSelectVariant: composer.onSelectVariant,

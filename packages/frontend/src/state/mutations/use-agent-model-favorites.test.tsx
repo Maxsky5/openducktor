@@ -17,6 +17,12 @@ const favorite: AgentModelFavorite = {
   modelId: "gpt-5",
 };
 
+const concurrentFavorite: AgentModelFavorite = {
+  runtimeKind: "codex",
+  providerId: "openai",
+  modelId: "gpt-5.6-sol",
+};
+
 describe("useAgentModelFavorites", () => {
   test("does not turn a settings read failure into an empty favorites list", async () => {
     const original = host.workspaceGetSettingsSnapshot;
@@ -123,6 +129,66 @@ describe("useAgentModelFavorites", () => {
       await harness.run((state) => state.retryMutation());
       await harness.waitFor((state) => state.favorites?.length === 1, 2000);
       expect(harness.getLatest().favorites).toEqual([favorite]);
+      expect(saveAgentModelFavorites).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
+    }
+  });
+
+  test("blocks a failed mutation retry until settings recover and preserves revalidated favorites", async () => {
+    const initialSnapshot = createSettingsSnapshotFixture();
+    const revalidatedSnapshot = createSettingsSnapshotFixture({
+      agentModelFavorites: [concurrentFavorite],
+    });
+    const savedSnapshot = createSettingsSnapshotFixture({
+      agentModelFavorites: [concurrentFavorite, favorite],
+    });
+    const original = host.workspaceGetSettingsSnapshot;
+    let settingsRead: "initial" | "failed" | "revalidated" = "initial";
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      if (settingsRead === "failed") {
+        throw new Error("Settings refetch failed");
+      }
+      return settingsRead === "revalidated" ? revalidatedSnapshot : initialSnapshot;
+    });
+    let saveAttempts = 0;
+    const saveAgentModelFavorites = mock(
+      async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+        saveAttempts += 1;
+        if (saveAttempts === 1) {
+          throw new Error("Favorite write failed");
+        }
+        expect(favorites).toEqual([concurrentFavorite, favorite]);
+        return savedSnapshot;
+      },
+    );
+    const harness = createHookHarness(
+      useAgentModelFavorites,
+      { saveAgentModelFavorites },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.favorites !== null, 2000);
+      await harness.run((state) => state.toggleFavorite(favorite));
+      await harness.waitFor((state) => state.mutationError !== null, 2000);
+
+      settingsRead = "failed";
+      await harness.run((state) => state.retryRead());
+      await harness.waitFor((state) => state.readError !== null, 2000);
+      await harness.run((state) => state.retryMutation());
+      expect(saveAgentModelFavorites).toHaveBeenCalledTimes(1);
+
+      settingsRead = "revalidated";
+      await harness.run((state) => state.retryRead());
+      await harness.waitFor((state) => state.readError === null, 2000);
+      expect(harness.getLatest().favorites).toEqual([concurrentFavorite]);
+
+      await harness.run((state) => state.retryMutation());
+      await harness.waitFor((state) => state.favorites?.length === 2, 2000);
+      expect(harness.getLatest().favorites).toEqual([concurrentFavorite, favorite]);
       expect(saveAgentModelFavorites).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();

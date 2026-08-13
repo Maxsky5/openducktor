@@ -1,8 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { host } from "@/state/operations/shared/host";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
@@ -108,7 +113,10 @@ describe("useSessionRuntimeData", () => {
         modelCatalog: null,
         todos: [],
         isLoadingModelCatalog: false,
-        error: null,
+        catalogError: null,
+        todosError: null,
+        runtimePolicyError: null,
+        contextError: null,
       });
     } finally {
       await harness.unmount();
@@ -138,7 +146,14 @@ describe("useSessionRuntimeData", () => {
 
       expect(readSessionTodos).not.toHaveBeenCalled();
       expect(harness.getLatest().todos).toEqual([]);
-      expect(harness.getLatest().error).toBeNull();
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: null,
+          contextError: null,
+        }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -173,7 +188,10 @@ describe("useSessionRuntimeData", () => {
         modelCatalog: null,
         todos: [],
         isLoadingModelCatalog: false,
-        error: null,
+        catalogError: null,
+        todosError: null,
+        runtimePolicyError: null,
+        contextError: null,
       });
     } finally {
       await harness.unmount();
@@ -208,7 +226,14 @@ describe("useSessionRuntimeData", () => {
       expect(harness.getLatest().modelCatalog).toEqual(emptyCatalog);
       expect(harness.getLatest().todos).toEqual([todoFixture]);
       expect(harness.getLatest().isLoadingModelCatalog).toBe(false);
-      expect(harness.getLatest().error).toBeNull();
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: null,
+          contextError: null,
+        }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -275,10 +300,98 @@ describe("useSessionRuntimeData", () => {
         modelCatalog: emptyCatalog,
         todos: [todoFixture],
         isLoadingModelCatalog: false,
-        error: null,
+        catalogError: null,
+        todosError: null,
+        runtimePolicyError: null,
+        contextError: null,
       });
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("keeps a valid model catalog when the session todos read fails", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => {
+      throw new Error("Session todos unavailable");
+    });
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (latest) => latest.modelCatalog !== null && latest.todosError !== null,
+        2000,
+      );
+
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          modelCatalog: emptyCatalog,
+          catalogError: null,
+          todosError: "Session todos unavailable",
+          runtimePolicyError: null,
+          contextError: null,
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a valid Codex model catalog when runtime policy settings fail", async () => {
+    const original = host.workspaceGetSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = mock(async () => {
+      throw new Error("Runtime policy settings unavailable");
+    });
+    const codexCatalog: AgentModelCatalog = {
+      ...emptyCatalog,
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+    };
+    const loadRuntimeCatalog = mock(async () => codexCatalog);
+    const readSessionTodos = mock(async () => []);
+    const harness = createHookHarness(
+      useSessionRuntimeData,
+      {
+        repoPath: "/repo",
+        selectedSessionIdentity: sessionState({ runtimeKind: "codex" }),
+        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (latest) => latest.modelCatalog !== null && latest.runtimePolicyError !== null,
+        2000,
+      );
+
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          modelCatalog: codexCatalog,
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: "Runtime policy settings unavailable",
+          contextError: null,
+        }),
+      );
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
@@ -334,7 +447,7 @@ describe("useSessionRuntimeData", () => {
 
       expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(readSessionTodos).not.toHaveBeenCalled();
-      expect(harness.getLatest().error).toBe(
+      expect(harness.getLatest().contextError).toBe(
         "Repository path is required to read selected session runtime data.",
       );
     } finally {

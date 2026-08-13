@@ -156,6 +156,10 @@ const createHookHarness = (initialProps: HookArgs) => {
                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                   isLoadingRuntimeDefinitions: false,
                   runtimeDefinitionsError: null,
+                  isLoadingRuntimeSettings: false,
+                  runtimeSettingsError: null,
+                  hasRuntimeSettingsSnapshot: true,
+                  refreshRuntimeSettings: async () => {},
                   refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
                   loadRepoRuntimeCatalog: async () => createModalCatalog(),
                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
@@ -519,7 +523,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.run((state) => {
       state.sessionStartModal?.onSelectRuntimeProfile("builder");
-      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
     });
 
     await harness.run(async (state) => {

@@ -1,17 +1,10 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import {
-  resolveAgentAccentColor,
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents";
+import { resolveAgentAccentColor, toPrimaryAgentOptions } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
 
 type ModelSelectionOptions = {
   selectedModelEntry: AgentModelCatalog["models"][number] | null;
   agentProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ReturnType<typeof toModelGroupsByProvider>;
   variantOptions: ComboboxOption[];
   agentAccentColorsByProfileId: Record<string, string>;
 };
@@ -49,26 +42,6 @@ const toAgentProfileOptionsWithSelectedFallback = (
         label: fallbackAgent,
         description: "Current session profile",
         ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : {}),
-      },
-    ];
-  }
-  return [];
-};
-
-const toModelOptionsWithSelectedFallback = (
-  selectionCatalog: AgentModelCatalog | null,
-  selectedModelSelection: AgentModelSelection | null,
-): ComboboxOption[] => {
-  const options = toModelOptions(selectionCatalog);
-  if (options.length > 0) {
-    return options;
-  }
-  if (selectedModelSelection?.providerId && selectedModelSelection.modelId) {
-    return [
-      {
-        value: `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`,
-        label: selectedModelSelection.modelId,
-        description: `${selectedModelSelection.providerId} (current session model)`,
       },
     ];
   }
@@ -148,8 +121,6 @@ export const resolveModelSelectionOptions = ({
       selectionCatalog,
       selectedModelSelection,
     ),
-    modelOptions: toModelOptionsWithSelectedFallback(selectionCatalog, selectedModelSelection),
-    modelGroups: toModelGroupsByProvider(selectionCatalog),
     variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection, liveSession),
     agentAccentColorsByProfileId: toAgentAccentColorsByProfileId(selectionCatalog),
   };

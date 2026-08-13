@@ -10,7 +10,7 @@ import {
 } from "@/components/features/agents/model-picker";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
-import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogBody,
@@ -58,9 +58,11 @@ export type SessionStartModalModel = {
   runtimeDefinitionsError: string | null;
   isRuntimeDefinitionsLoading: boolean;
   onRetryRuntimeDefinitions: () => void;
+  runtimeSettingsError: string | null;
+  isRuntimeSettingsLoading: boolean;
+  hasRuntimeSettingsSnapshot: boolean;
+  onRetryRuntimeSettings: () => void;
   runtimeProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
@@ -74,7 +76,6 @@ export type SessionStartModalModel = {
   onSelectTargetBranch?: (branch: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectRuntimeProfile: (profileId: string) => void;
-  onSelectModel: (model: string) => void;
   onSelectModelPair: (value: ModelPickerValue) => void;
   onSelectVariant: (variant: string) => void;
   allowRunInBackground?: boolean;
@@ -234,6 +235,30 @@ type ModelVariantFieldsProps = {
   onSelectVariant: (variant: string) => void;
 };
 
+const modelVariantPlaceholder = ({
+  isSelectionCatalogLoading,
+  selectedModelSelection,
+  supportsVariants,
+  variantOptions,
+}: Pick<
+  ModelVariantFieldsProps,
+  "isSelectionCatalogLoading" | "selectedModelSelection" | "supportsVariants" | "variantOptions"
+>): string => {
+  if (isSelectionCatalogLoading) {
+    return "Checking compatibility...";
+  }
+  if (!selectedModelSelection) {
+    return "Select model first";
+  }
+  if (!supportsVariants) {
+    return "Variants handled by runtime";
+  }
+  if (variantOptions.length === 0) {
+    return "This model has no variants";
+  }
+  return "Select variant";
+};
+
 function ModelVariantFields({
   isSelectionCatalogLoading,
   selectedModelSelection,
@@ -251,17 +276,12 @@ function ModelVariantFields({
       <Combobox
         value={selectedVariant}
         options={variantOptions}
-        placeholder={
-          isSelectionCatalogLoading
-            ? "Checking compatibility..."
-            : !selectedModelSelection
-              ? "Select model first"
-              : !supportsVariants
-                ? "Variants handled by runtime"
-                : variantOptions.length === 0
-                  ? "This model has no variants"
-                  : "Select variant"
-        }
+        placeholder={modelVariantPlaceholder({
+          isSelectionCatalogLoading,
+          selectedModelSelection,
+          supportsVariants,
+          variantOptions,
+        })}
         disabled={variantDisabled}
         className="w-full"
         onValueChange={onSelectVariant}
@@ -365,6 +385,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     runtimeDefinitionsError,
     isRuntimeDefinitionsLoading,
     onRetryRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading,
+    hasRuntimeSettingsSnapshot,
+    onRetryRuntimeSettings,
     runtimeProfileOptions,
     variantOptions,
     availableStartModes,
@@ -407,6 +431,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     isStarting ||
     isRuntimeDefinitionsLoading ||
     runtimeDefinitionsError !== null ||
+    (!hasRuntimeSettingsSnapshot && (isRuntimeSettingsLoading || runtimeSettingsError !== null)) ||
     (!isReuseMode && selectionCatalogError !== null) ||
     (!isReuseMode &&
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
@@ -462,6 +487,29 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Loading agent runtimes...
+        </div>
+      );
+    }
+    if (!hasRuntimeSettingsSnapshot && runtimeSettingsError) {
+      return (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+          role="alert"
+        >
+          <span className="min-w-0 text-destructive">
+            Runtime settings unavailable: {runtimeSettingsError}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeSettings}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    if (!hasRuntimeSettingsSnapshot && isRuntimeSettingsLoading) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading runtime settings...
         </div>
       );
     }
