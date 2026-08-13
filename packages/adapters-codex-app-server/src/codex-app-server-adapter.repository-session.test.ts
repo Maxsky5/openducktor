@@ -224,6 +224,97 @@ describe("CodexAppServerAdapter repository sessions", () => {
     );
   });
 
+  test("applies workflow policy before sending from a retained unbound session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    markSessionUnbound(adapter, started.externalSessionId);
+    const transport = transports.get("runtime-live");
+    if (!transport) {
+      throw new Error("Expected the runtime transport.");
+    }
+    transport.calls.length = 0;
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: started.externalSessionId,
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    const resumeIndex = transport.calls.findIndex((call) => call.method === "thread/resume");
+    const sendIndex = transport.calls.findIndex((call) => call.method === "turn/start");
+    expect(resumeIndex).toBeGreaterThanOrEqual(0);
+    expect(sendIndex).toBeGreaterThan(resumeIndex);
+    expect(transport.calls[resumeIndex]?.params).toMatchObject({
+      config: {
+        "mcp_servers.openducktor.enabled": true,
+        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+      },
+    });
+  });
+
+  test("applies workflow policy before context load binds a retained unbound session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    markSessionUnbound(adapter, started.externalSessionId);
+    const transport = transports.get("runtime-live");
+    if (!transport) {
+      throw new Error("Expected the runtime transport.");
+    }
+    transport.calls.length = 0;
+
+    await adapter.loadSessionContextUsage(codexSessionRuntimeRef(started.externalSessionId));
+
+    expect(transport.calls.find((call) => call.method === "thread/resume")?.params).toMatchObject({
+      config: {
+        "mcp_servers.openducktor.enabled": true,
+        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+      },
+    });
+  });
+
+  test("rejects stale history identity before changing a retained session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const transport = transports.get("runtime-live");
+    if (!transport) {
+      throw new Error("Expected the runtime transport.");
+    }
+    transport.calls.length = 0;
+
+    await expect(
+      adapter.loadSessionHistory({
+        ...codexSessionRuntimeRef(started.externalSessionId),
+        workingDirectory: "/other",
+      }),
+    ).rejects.toThrow("registered session belongs to repo '/repo' and working directory '/repo'");
+    expect(transport.calls).toEqual([]);
+  });
+
   test("rejects a different workflow task or role for a bound session", async () => {
     const { adapter, transports } = createHarness();
     const started = await adapter.startSession({
