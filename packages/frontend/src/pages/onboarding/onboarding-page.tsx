@@ -22,7 +22,30 @@ import {
 } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
-import { RuntimeStage, WelcomeStage, WorkspaceStage } from "./onboarding-stages";
+import {
+  RuntimeStage,
+  type RuntimeStageActivity,
+  WelcomeStage,
+  WorkspaceStage,
+} from "./onboarding-stages";
+
+function runtimeStageActivity({
+  isLoading,
+  isValidating,
+  isRediscovering,
+  isSaving,
+}: {
+  isLoading: boolean;
+  isValidating: boolean;
+  isRediscovering: boolean;
+  isSaving: boolean;
+}): RuntimeStageActivity {
+  if (isSaving) return "saving";
+  if (isRediscovering) return "rediscovering";
+  if (isLoading) return "loading";
+  if (isValidating) return "validating";
+  return "idle";
+}
 
 export function OnboardingPage(): ReactElement {
   const queryClient = useQueryClient();
@@ -35,6 +58,8 @@ export function OnboardingPage(): ReactElement {
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
   const saveInFlight = useRef(false);
+  const stageErrorRef = useRef<HTMLParagraphElement>(null);
+  const focusStageError = useRef(false);
   const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
   const editedRuntimePaths = useRef(new Set<RuntimeKind>());
   const settingsQuery = useQuery({
@@ -82,6 +107,12 @@ export function OnboardingPage(): ReactElement {
       return next === current ? currentOverride : next;
     });
   }, [settingsQuery.data, validationQuery.data]);
+
+  useEffect(() => {
+    if (!stageError || !focusStageError.current) return;
+    focusStageError.current = false;
+    stageErrorRef.current?.focus();
+  }, [stageError]);
 
   const updateDraft = (next: AgentRuntimes): void => {
     if (runtimeDraft) {
@@ -149,6 +180,7 @@ export function OnboardingPage(): ReactElement {
       return;
     const invalid = invalidEnabledRuntime(runtimeDraft, checkResults);
     if (invalid) {
+      focusStageError.current = false;
       setStageError(invalid.error ?? `${invalid.kind} needs a valid executable path.`);
       document.getElementById(`runtime-executable-${invalid.kind}`)?.focus();
       return;
@@ -171,6 +203,8 @@ export function OnboardingPage(): ReactElement {
       setConfirmNoRuntime(false);
       setStage("workspace");
     } catch (cause) {
+      setConfirmNoRuntime(false);
+      focusStageError.current = true;
       setStageError(errorMessage(cause));
     } finally {
       saveInFlight.current = false;
@@ -196,6 +230,12 @@ export function OnboardingPage(): ReactElement {
     isSaving ||
     !!runtimeRequestError ||
     runtimeDiscoveryError !== null;
+  const runtimeActivity = runtimeStageActivity({
+    isLoading: runtimeLoading,
+    isValidating: validationPending,
+    isRediscovering: isChecking,
+    isSaving,
+  });
 
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
@@ -214,9 +254,8 @@ export function OnboardingPage(): ReactElement {
           requestError={runtimeRequestError ? errorMessage(runtimeRequestError) : null}
           discoveryError={runtimeDiscoveryError}
           stageError={stageError}
-          isLoading={runtimeLoading}
-          isChecking={isChecking || validationPending}
-          isSaving={isSaving}
+          stageErrorRef={stageErrorRef}
+          activity={runtimeActivity}
           showNoRuntimeWarning={showNoRuntimeWarning}
           continueDisabled={continueDisabled}
           onChange={updateDraft}

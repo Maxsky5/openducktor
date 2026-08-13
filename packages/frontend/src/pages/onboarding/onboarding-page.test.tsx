@@ -383,6 +383,62 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("locks runtime edits and navigation while explicit discovery is pending", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const discoveredRuntimes: AgentRuntimes = {
+      ...runtimes,
+      opencode: { enabled: true, executablePath: "/discovered/opencode" },
+    };
+    const discovery = createDeferred<RuntimeExecutableCheck>();
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "discover") return discovery.promise;
+      const checkedRuntimes = {
+        ...runtimes,
+        opencode: { ...runtimes.opencode, executablePath: input.paths.opencode },
+      };
+      return createCheck(checkedRuntimes, true);
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await screen.findByRole("button", { name: "Checking..." });
+
+      const pathInput = screen.getByLabelText("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }) as HTMLInputElement;
+      const enabledSwitch = within(opencodeSection()).getByRole("switch", {
+        name: "Enabled",
+      }) as HTMLButtonElement;
+      const browseButton = within(opencodeSection()).getByRole("button", {
+        name: "Browse",
+      }) as HTMLButtonElement;
+      const backButton = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
+
+      expect(pathInput.disabled).toBe(true);
+      expect(enabledSwitch.disabled).toBe(true);
+      expect(browseButton.disabled).toBe(true);
+      expect(backButton.disabled).toBe(true);
+      pathInput.focus();
+      fireEvent.keyDown(pathInput, { key: "x" });
+      enabledSwitch.click();
+      expect(pathInput.value).toBe("/valid/opencode");
+      expect(enabledSwitch.getAttribute("aria-checked")).toBe("true");
+
+      await act(async () => discovery.resolve(createCheck(discoveredRuntimes, true)));
+      await waitFor(() => expect(pathInput.value).toBe("/discovered/opencode"));
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("validates the exact paths returned by explicit runtime discovery", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
@@ -545,9 +601,15 @@ describe("OnboardingPage runtime validation", () => {
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
       await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
       fireEvent.click(screen.getByRole("button", { name: "Continue without a runtime" }));
-      await screen.findByText("Settings write failed");
+      const saveError = await screen.findByText("Settings write failed");
       expect(screen.getByText("Configure agent runtimes")).toBeTruthy();
+      expect(
+        screen.queryByRole("dialog", { name: "Continue without an agent runtime?" }),
+      ).toBeNull();
+      expect(document.activeElement).toBe(saveError);
 
+      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
       fireEvent.click(screen.getByRole("button", { name: "Continue without a runtime" }));
       await screen.findByRole("heading", { name: "Open your first workspace" });
       fireEvent.click(screen.getByRole("button", { name: /Back/ }));

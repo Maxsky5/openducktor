@@ -4,7 +4,7 @@ import type {
   RuntimeExecutableCheckResult,
 } from "@openducktor/contracts";
 import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, Settings2 } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, RefObject } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { Badge } from "@/components/ui/badge";
@@ -97,9 +97,8 @@ type RuntimeStageProps = {
   requestError: string | null;
   discoveryError: string | null;
   stageError: string | null;
-  isLoading: boolean;
-  isChecking: boolean;
-  isSaving: boolean;
+  stageErrorRef: RefObject<HTMLParagraphElement | null>;
+  activity: RuntimeStageActivity;
   showNoRuntimeWarning: boolean;
   continueDisabled: boolean;
   onChange: (next: AgentRuntimes) => void;
@@ -109,6 +108,8 @@ type RuntimeStageProps = {
   onContinue: () => void;
 };
 
+export type RuntimeStageActivity = "idle" | "loading" | "validating" | "rediscovering" | "saving";
+
 export function RuntimeStage({
   runtimeDraft,
   definitions,
@@ -116,9 +117,8 @@ export function RuntimeStage({
   requestError,
   discoveryError,
   stageError,
-  isLoading,
-  isChecking,
-  isSaving,
+  stageErrorRef,
+  activity,
   showNoRuntimeWarning,
   continueDisabled,
   onChange,
@@ -127,6 +127,11 @@ export function RuntimeStage({
   onBack,
   onContinue,
 }: RuntimeStageProps): ReactElement {
+  const isLoading = activity === "loading";
+  const isChecking = activity === "validating" || activity === "rediscovering";
+  const isRediscovering = activity === "rediscovering";
+  const isSaving = activity === "saving";
+
   return (
     <Card className="flex max-h-[calc(100vh-15rem)] min-h-[28rem] flex-col lg:max-h-[calc(100vh-7rem)] lg:min-h-[32rem]">
       <CardHeader className="gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
@@ -186,7 +191,7 @@ export function RuntimeStage({
             runtimes={runtimeDraft}
             definitions={definitions}
             results={results}
-            disabled={isSaving}
+            disabled={isSaving || isRediscovering}
             isChecking={isChecking}
             onChange={onChange}
             onCheckAgain={onCheckAgain}
@@ -224,14 +229,19 @@ export function RuntimeStage({
         ) : null}
 
         {stageError ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p
+            ref={stageErrorRef}
+            className="text-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            role="alert"
+            tabIndex={-1}
+          >
             {stageError}
           </p>
         ) : null}
       </CardContent>
 
       <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-8">
-        <Button variant="outline" onClick={onBack} disabled={isSaving}>
+        <Button variant="outline" onClick={onBack} disabled={isSaving || isRediscovering}>
           <ArrowLeft data-icon="inline-start" />
           Back
         </Button>
