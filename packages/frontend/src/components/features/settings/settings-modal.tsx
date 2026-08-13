@@ -64,7 +64,8 @@ export function SettingsModal({
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
     workspaceSelectionPolicy,
   });
-  const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
+  const isInteractionDisabled =
+    controller.isLoadingSettings || controller.isSaving || controller.isCheckingRuntimeExecutables;
 
   const handleSectionChange = (section: SettingsSectionId): void => {
     setNavigation((current) => ({ ...current, section }));

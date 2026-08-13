@@ -5,6 +5,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoRuntimeRef,
+  type RuntimeExecutableCheck,
   type SettingsSnapshot,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -21,7 +22,7 @@ import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
@@ -317,6 +318,108 @@ describe("useSettingsModalController", () => {
       expect(didSave).toBe(false);
       expect(harness.getLatest().saveError).toContain("Executable validation failed");
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
+  test("fails closed for rediscovery failure and clears the error only after a successful retry", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    const failedRediscovery = createDeferred<RuntimeExecutableCheck>();
+    const successfulRediscovery = createDeferred<RuntimeExecutableCheck>();
+    let discoveryAttempts = 0;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "validate") {
+        return {
+          runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
+            kind,
+            path: input.paths[kind],
+            ok: true,
+            version: "1.0.0",
+            error: null,
+          })),
+        };
+      }
+      discoveryAttempts += 1;
+      return discoveryAttempts === 1 ? failedRediscovery.promise : successfulRediscovery.promise;
+    });
+    saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(true);
+    let rediscoveryRequest: Promise<void> | null = null;
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run((state) => {
+        rediscoveryRequest = state.checkRuntimeExecutablesAgain();
+      });
+      await harness.waitFor((state) => state.isLoadingRuntimeExecutables);
+
+      let didSaveWhilePending = true;
+      await harness.run(async (state) => {
+        didSaveWhilePending = await state.submit();
+      });
+      expect(didSaveWhilePending).toBe(false);
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+
+      await harness.run(() => {
+        failedRediscovery.reject(new Error("Runtime rediscovery failed"));
+      });
+      await rediscoveryRequest;
+      await harness.waitFor(
+        (state) => state.runtimeExecutablesError === "Runtime rediscovery failed",
+      );
+
+      let didSaveAfterFailure = true;
+      await harness.run(async (state) => {
+        didSaveAfterFailure = await state.submit();
+      });
+      expect(didSaveAfterFailure).toBe(false);
+      expect(harness.getLatest().saveError).toContain("Runtime rediscovery failed");
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+
+      let retryRequest: Promise<void> | null = null;
+      await harness.run((state) => {
+        retryRequest = state.checkRuntimeExecutablesAgain();
+      });
+      await harness.waitFor((state) => state.isCheckingRuntimeExecutables);
+      expect(harness.getLatest().runtimeDiscoveryError).toBe("Runtime rediscovery failed");
+
+      await harness.run(() => {
+        successfulRediscovery.resolve({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/new/opencode",
+              ok: true,
+              version: "2.0.0",
+              error: null,
+            },
+            {
+              kind: "codex",
+              path: "/new/codex",
+              ok: true,
+              version: "2.0.0",
+              error: null,
+            },
+            {
+              kind: "claude",
+              path: "/new/claude",
+              ok: true,
+              version: "2.0.0",
+              error: null,
+            },
+          ],
+        });
+      });
+      await retryRequest;
+      await harness.waitFor(
+        (state) =>
+          state.runtimeExecutablesError === null &&
+          state.snapshotDraft?.agentRuntimes.opencode.executablePath === "/new/opencode",
+      );
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();

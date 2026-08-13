@@ -55,7 +55,10 @@ export function SettingsModalContent({
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
+    runtimeDiscoveryError,
     retryRuntimeDefinitions,
+    checkRuntimeExecutablesAgain,
+    isCheckingRuntimeExecutables,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     promptValidationState,
@@ -142,7 +145,10 @@ export function SettingsModalContent({
         runtimeCheck={controller.runtimeCheck}
         isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
         runtimeDefinitionsError={runtimeDefinitionsError}
+        runtimeDiscoveryError={runtimeDiscoveryError}
         onRetryRuntimeDefinitions={retryRuntimeDefinitions}
+        onCheckAgain={checkRuntimeExecutablesAgain}
+        isCheckingExecutables={isCheckingRuntimeExecutables}
         disabled={isInteractionDisabled}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}

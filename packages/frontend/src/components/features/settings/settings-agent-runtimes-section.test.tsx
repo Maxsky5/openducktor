@@ -31,7 +31,10 @@ const render = (ui: ReactNode) => {
 const runtimeDefinitionRequestProps = {
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
+  runtimeDiscoveryError: null,
   onRetryRuntimeDefinitions: async () => [],
+  onCheckAgain: async () => {},
+  isCheckingExecutables: false,
 };
 
 const createSection = (
@@ -122,6 +125,34 @@ describe("AgentRuntimesSection", () => {
       await waitFor(() => expect(screen.queryByText(/Executable request failed/i)).toBeNull());
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
+      renderer.unmount();
+    }
+  });
+
+  test("shows explicit rediscovery failures and retries through the controller action", async () => {
+    const checkAgain = mock(async () => {});
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeDiscoveryError: "Runtime rediscovery failed",
+        onCheckAgain: checkAgain,
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect(
+        screen.getByText(/Failed to check runtime executables: Runtime rediscovery failed/i),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry runtime detection" }));
+      await waitFor(() => expect(checkAgain).toHaveBeenCalledTimes(1));
+    } finally {
       renderer.unmount();
     }
   });

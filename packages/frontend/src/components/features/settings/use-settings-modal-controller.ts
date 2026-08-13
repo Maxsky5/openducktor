@@ -14,7 +14,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
@@ -24,6 +24,7 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { host } from "@/state/operations/host";
 import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
@@ -48,11 +49,13 @@ export type SettingsModalController = {
   isLoadingSettings: boolean;
   isLoadingRuntimeDefinitions: boolean;
   isLoadingRuntimeExecutables: boolean;
+  isCheckingRuntimeExecutables: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
   runtimeExecutablesError: string | null;
+  runtimeDiscoveryError: string | null;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -98,6 +101,7 @@ export type SettingsModalController = {
   markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (
@@ -232,13 +236,19 @@ export const useSettingsModalController = ({
     ),
     enabled: open && snapshotDraft !== null,
   });
+  const runtimeDiscoveryInFlight = useRef(false);
+  const [isCheckingRuntimeExecutables, setIsCheckingRuntimeExecutables] = useState(false);
+  const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const isLoadingRuntimeExecutables =
     open &&
     snapshotDraft !== null &&
-    (runtimeExecutableQuery.isPending || runtimeExecutableQuery.isFetching);
-  const runtimeExecutablesError = runtimeExecutableQuery.error
+    (runtimeExecutableQuery.isPending ||
+      runtimeExecutableQuery.isFetching ||
+      isCheckingRuntimeExecutables);
+  const runtimeExecutableValidationError = runtimeExecutableQuery.error
     ? errorMessage(runtimeExecutableQuery.error)
     : null;
+  const runtimeExecutablesError = runtimeDiscoveryError ?? runtimeExecutableValidationError;
   const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
   const catalogRuntimeKinds = useMemo(
     () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
@@ -451,6 +461,39 @@ export const useSettingsModalController = ({
     markDirty,
     draftActions,
   });
+  const checkRuntimeExecutablesAgain = useCallback(async (): Promise<void> => {
+    if (runtimeDiscoveryInFlight.current) {
+      return;
+    }
+
+    runtimeDiscoveryInFlight.current = true;
+    setIsCheckingRuntimeExecutables(true);
+    try {
+      const discovered = await host.runtimeExecutablesCheck({ mode: "discover" });
+      const rowsByKind = new Map(discovered.runtimes.map((row) => [row.kind, row]));
+      updateAgentRuntimes((current) => ({
+        ...current,
+        opencode: {
+          ...current.opencode,
+          executablePath: rowsByKind.get("opencode")?.path ?? "",
+        },
+        codex: {
+          ...current.codex,
+          executablePath: rowsByKind.get("codex")?.path ?? "",
+        },
+        claude: {
+          ...current.claude,
+          executablePath: rowsByKind.get("claude")?.path ?? "",
+        },
+      }));
+      setRuntimeDiscoveryError(null);
+    } catch (error) {
+      setRuntimeDiscoveryError(errorMessage(error));
+    } finally {
+      runtimeDiscoveryInFlight.current = false;
+      setIsCheckingRuntimeExecutables(false);
+    }
+  }, [updateAgentRuntimes]);
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
     selectedRepoPath: selectedWorkspaceRepoPath,
@@ -466,11 +509,13 @@ export const useSettingsModalController = ({
     isLoadingSettings,
     isLoadingRuntimeDefinitions,
     isLoadingRuntimeExecutables,
+    isCheckingRuntimeExecutables,
     isLoadingCatalog,
     isSaving,
     settingsError,
     runtimeDefinitionsError,
     runtimeExecutablesError,
+    runtimeDiscoveryError,
     saveError,
     snapshotDraft,
     runtimeDefinitions,
@@ -516,6 +561,7 @@ export const useSettingsModalController = ({
     markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
+    checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,

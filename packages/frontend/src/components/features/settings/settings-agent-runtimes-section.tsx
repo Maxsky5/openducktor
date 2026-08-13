@@ -25,7 +25,6 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
-import { host } from "@/state/operations/host";
 import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
@@ -36,7 +35,10 @@ type AgentRuntimesSectionProps = {
   runtimeCheck?: RuntimeCheck | null;
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
+  runtimeDiscoveryError: string | null;
   onRetryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  onCheckAgain: () => Promise<void>;
+  isCheckingExecutables: boolean;
   disabled: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
@@ -734,7 +736,10 @@ export function AgentRuntimesSection({
   runtimeCheck = null,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
+  runtimeDiscoveryError,
   onRetryRuntimeDefinitions,
+  onCheckAgain,
+  isCheckingExecutables,
   disabled,
   requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
@@ -743,34 +748,12 @@ export function AgentRuntimesSection({
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
-  const [isCheckingExecutables, setIsCheckingExecutables] = useState(false);
   const executablePaths = runtimeExecutablePaths(agentRuntimes);
   const executableQuery = useQuery(runtimeExecutablesQueryOptions(executablePaths));
   const executableQueryError = executableQuery.error ? errorMessage(executableQuery.error) : null;
   const selectedDefinition =
     sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
     sortedRuntimeDefinitions[0];
-
-  const checkAgain = async (): Promise<void> => {
-    setIsCheckingExecutables(true);
-    try {
-      const discovered = await host.runtimeExecutablesCheck({ mode: "discover" });
-      const rowsByKind = new Map(discovered.runtimes.map((row) => [row.kind, row]));
-      onUpdateAgentRuntimes((current) => ({
-        ...current,
-        opencode: {
-          ...current.opencode,
-          executablePath: rowsByKind.get("opencode")?.path ?? "",
-        },
-        codex: { ...current.codex, executablePath: rowsByKind.get("codex")?.path ?? "" },
-        claude: { ...current.claude, executablePath: rowsByKind.get("claude")?.path ?? "" },
-      }));
-    } catch (error) {
-      toast.error("Failed to check runtime executables", { description: errorMessage(error) });
-    } finally {
-      setIsCheckingExecutables(false);
-    }
-  };
 
   return (
     <div className="grid gap-4 p-4">
@@ -789,8 +772,24 @@ export function AgentRuntimesSection({
         disabled={disabled}
         isChecking={isCheckingExecutables || executableQuery.isFetching}
         onChange={(next) => onUpdateAgentRuntimes(() => next)}
-        onCheckAgain={() => void checkAgain()}
+        onCheckAgain={() => void onCheckAgain()}
       />
+
+      {runtimeDiscoveryError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to check runtime executables: {runtimeDiscoveryError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isCheckingExecutables}
+            onClick={() => void onCheckAgain()}
+          >
+            Retry runtime detection
+          </Button>
+        </div>
+      ) : null}
 
       {runtimeDefinitionsError ? (
         <div className="flex items-center justify-between gap-3 text-sm" role="alert">
