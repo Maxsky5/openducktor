@@ -69,7 +69,7 @@ export const requestTaskExecutionFilePreviewIntent = (
 
 export const clearTaskExecutionFilePreviewState = (
   state: TaskExecutionFilePreviewState,
-): TaskExecutionFilePreviewState => applyPreviewIntent(state, { type: "close" });
+): TaskExecutionFilePreviewState => requestTaskExecutionFilePreviewIntent(state, { type: "close" });
 
 export const reportTaskExecutionFilePreviewEditState = (
   state: TaskExecutionFilePreviewState,

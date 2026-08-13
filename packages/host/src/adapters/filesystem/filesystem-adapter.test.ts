@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -91,6 +91,56 @@ describe("createFilesystemAdapter file snapshots", () => {
       expect(failure).toMatchObject({ code: "stale_revision" });
     }
     expect(await readFile(filePath, "utf8")).toBe("current");
+  });
+
+  test("rejects a same-content file replacement", async () => {
+    const filePath = await createTempFile(encoder.encode("same contents"));
+    const movedPath = `${filePath}.original`;
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    await rename(filePath, movedPath);
+    await writeFile(filePath, "same contents");
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = exit.cause._tag === "Fail" ? exit.cause.error : null;
+      expect(failure).toMatchObject({ code: "stale_revision" });
+    }
+    expect(await readFile(filePath, "utf8")).toBe("same contents");
+    expect(await readFile(movedPath, "utf8")).toBe("same contents");
+  });
+
+  test("rejects a same-content symbolic-link swap without changing either target", async () => {
+    const filePath = await createTempFile(encoder.encode("same contents"));
+    const movedPath = `${filePath}.original`;
+    const outsidePath = `${filePath}.outside`;
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    await writeFile(outsidePath, "same contents");
+    await rename(filePath, movedPath);
+    await symlink(outsidePath, filePath);
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(await readFile(outsidePath, "utf8")).toBe("same contents");
+    expect(await readFile(movedPath, "utf8")).toBe("same contents");
   });
 
   test("rejects an oversized current file without changing it", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  clearTaskExecutionFilePreviewState,
   createTaskExecutionFilePreviewState,
   discardTaskExecutionFilePreviewDraft,
   keepEditingTaskExecutionFilePreview,
@@ -73,5 +74,28 @@ describe("task execution file preview state", () => {
     expect(
       requestTaskExecutionFilePreviewIntent(saving, { type: "select", file: secondFile }),
     ).toBe(saving);
+  });
+
+  test("guards context-driven clear while dirty or saving", () => {
+    const opened = requestTaskExecutionFilePreviewIntent(createTaskExecutionFilePreviewState(), {
+      type: "select",
+      file: firstFile,
+    });
+    const dirty = reportTaskExecutionFilePreviewEditState(opened, {
+      isDirty: true,
+      isSaving: false,
+    });
+    const pending = clearTaskExecutionFilePreviewState(dirty);
+    const saving = reportTaskExecutionFilePreviewEditState(dirty, {
+      isDirty: true,
+      isSaving: true,
+    });
+
+    expect(pending).toMatchObject({
+      selectedFile: firstFile,
+      isDirty: true,
+      pendingIntent: { type: "close" },
+    });
+    expect(clearTaskExecutionFilePreviewState(saving)).toBe(saving);
   });
 });

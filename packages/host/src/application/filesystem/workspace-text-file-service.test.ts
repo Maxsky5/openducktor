@@ -122,6 +122,68 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("external");
   });
 
+  test("rejects same-content regular-file and symbolic-link swaps at the commit point", async () => {
+    for (const swapType of ["regular", "symlink"] as const) {
+      const rootPath = await createRoot();
+      const outsideRoot = await createRoot();
+      const filePath = path.join(rootPath, "file.txt");
+      const originalPath = path.join(rootPath, "original.txt");
+      const outsidePath = path.join(outsideRoot, "outside.txt");
+      await writeFile(filePath, "same contents");
+      await writeFile(outsidePath, "same contents");
+      const filesystem = createFilesystemAdapter();
+      const service = createWorkspaceTextFileService(
+        {
+          ...filesystem,
+          replaceFileBytes: (input) =>
+            Effect.gen(function* () {
+              yield* Effect.tryPromise({
+                try: async () => {
+                  await rename(filePath, originalPath);
+                  if (swapType === "regular") {
+                    await writeFile(filePath, "same contents");
+                  } else {
+                    await symlink(outsidePath, filePath);
+                  }
+                },
+                catch: (cause) =>
+                  new FilesystemFileOperationError({
+                    code: "io_failure",
+                    operation: "replace",
+                    path: filePath,
+                    message: "Failed to prepare the commit race fixture.",
+                    cause,
+                  }),
+              });
+              return yield* filesystem.replaceFileBytes(input);
+            }),
+        },
+        createGitPort(["file.txt"]),
+      );
+      const loaded = await Effect.runPromise(
+        service.readTextFile({ rootPath, relativePath: "file.txt" }),
+      );
+      if (loaded.kind !== "text") throw new Error("Expected text.");
+
+      const failure = await writeFailure(
+        service.writeTextFile({
+          rootPath,
+          relativePath: "file.txt",
+          contents: "draft",
+          revision: loaded.revision,
+        }),
+      );
+
+      expect(["stale_revision", "unavailable_file"]).toContain(failure.code);
+      expect(await readFile(originalPath, "utf8")).toBe("same contents");
+      if (swapType === "regular") {
+        expect(await readFile(filePath, "utf8")).toBe("same contents");
+      } else {
+        expect(await readFile(outsidePath, "utf8")).toBe("same contents");
+      }
+    }
+  });
+
   test("rejects oversized or binary draft contents without changing the file", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");

@@ -13,9 +13,9 @@ import {
   type CSSProperties,
   memo,
   type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
-  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useState,
@@ -179,6 +179,175 @@ function FilePreviewState({ message }: { message: string }): ReactElement {
   );
 }
 
+function FileConflictReviewDialog({
+  result,
+  onClose,
+  onAccept,
+}: {
+  result: Extract<WorkspaceTextFileReadResult, { kind: "text" }> | null;
+  onClose: () => void;
+  onAccept: () => void;
+}): ReactElement {
+  return (
+    <Dialog open={result !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Review latest file</DialogTitle>
+          <DialogDescription>
+            This file changed outside OpenDucktor. Review the latest contents below. Your draft
+            stays unchanged.
+          </DialogDescription>
+        </DialogHeader>
+        <section aria-label="Latest file contents">
+          <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted p-3 text-xs text-foreground">
+            {result?.contents}
+          </pre>
+        </section>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Keep current baseline
+          </Button>
+          <Button type="button" onClick={onAccept}>
+            Use latest as baseline
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FilePreviewHeader({
+  relativePath,
+  isSwitchingFiles,
+  status,
+  canSave,
+  isSaving,
+  onSave,
+  onClose,
+}: {
+  relativePath: string;
+  isSwitchingFiles: boolean;
+  status: "Saved" | "Unsaved" | "Saving..." | null;
+  canSave: boolean;
+  isSaving: boolean;
+  onSave: () => void;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+      <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1 truncate text-sm font-medium">{relativePath}</div>
+      {isSwitchingFiles ? (
+        <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
+      ) : null}
+      {status ? (
+        <>
+          <div className="shrink-0 text-xs text-muted-foreground" role="status">
+            {status}
+          </div>
+          <Button type="button" variant="outline" size="sm" disabled={!canSave} onClick={onSave}>
+            {isSaving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+            Save
+          </Button>
+        </>
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7 shrink-0"
+        aria-label="Close file preview"
+        onClick={onClose}
+      >
+        <X className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+const fileEditorStatus = ({
+  hasSession,
+  isSwitchingFiles,
+  isSaving,
+  isDirty,
+}: {
+  hasSession: boolean;
+  isSwitchingFiles: boolean;
+  isSaving: boolean;
+  isDirty: boolean;
+}): "Saved" | "Unsaved" | "Saving..." | null => {
+  if (!hasSession || isSwitchingFiles) return null;
+  if (isSaving) return "Saving...";
+  return isDirty ? "Unsaved" : "Saved";
+};
+
+function FileSaveErrorBanner({
+  message,
+  hasStaleConflict,
+  isReviewingConflict,
+  onReview,
+}: {
+  message: string | null;
+  hasStaleConflict: boolean;
+  isReviewingConflict: boolean;
+  onReview: () => void;
+}): ReactElement | null {
+  if (!message) return null;
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+      role="alert"
+    >
+      <span className="min-w-0 flex-1">{message}</span>
+      {hasStaleConflict ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isReviewingConflict}
+          onClick={onReview}
+        >
+          {isReviewingConflict ? (
+            <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          ) : null}
+          Review latest version
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function FileDiscardDialog({
+  open,
+  onKeepEditing,
+  onDiscard,
+}: {
+  open: boolean;
+  onKeepEditing: () => void;
+  onDiscard: () => void;
+}): ReactElement {
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onKeepEditing()}>
+      <DialogContent closeButton={null}>
+        <DialogHeader>
+          <DialogTitle>Discard unsaved changes?</DialogTitle>
+          <DialogDescription>
+            This file has unsaved changes. Keep editing or discard the draft to continue.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onKeepEditing}>
+            Keep editing
+          </Button>
+          <Button type="button" variant="destructive" onClick={onDiscard}>
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const resultBelongsToSelectedFile = (
   result: WorkspaceTextFileReadResult | undefined,
   selectedFile: TaskExecutionSelectedFile | null,
@@ -251,7 +420,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     ) {
       return readyCurrentSnapshot;
     }
-    return createFilePreviewSnapshot(selectedFile, editor.session.baseline);
+    return createFilePreviewSnapshot(selectedFile, editor.session.source);
   }, [editor.session, readyCurrentSnapshot, selectedFile]);
   const visibleSnapshot =
     currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
@@ -322,7 +491,6 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     const clipboard = getShellBridge().editorClipboard;
     return clipboard ? { clipboard } : {};
   }, []);
-  const closePreview = useEffectEvent(onClose);
 
   useLayoutEffect(() => {
     if (!selectedFile) {
@@ -344,14 +512,16 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     }
   }, [currentSnapshot, isCurrentSnapshotReady, previewSessionKey, selectedFile]);
 
-  useEffect(() => {
-    if (!selectedFile) {
-      return undefined;
-    }
-
-    const handlePreviewShortcut = (event: KeyboardEvent) => {
+  const handlePreviewShortcut = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
       const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
-      if (isSave && editor.session) {
+      if (
+        isSave &&
+        editor.session &&
+        editor.isDirty &&
+        !editor.isSaving &&
+        !editor.hasStaleConflict
+      ) {
         event.preventDefault();
         void editor.save();
         return;
@@ -360,12 +530,18 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         return;
       }
       event.preventDefault();
-      closePreview();
-    };
-
-    window.addEventListener("keydown", handlePreviewShortcut);
-    return () => window.removeEventListener("keydown", handlePreviewShortcut);
-  }, [editor.save, editor.session, hasPendingDiscard, selectedFile]);
+      onClose();
+    },
+    [
+      editor.hasStaleConflict,
+      editor.isDirty,
+      editor.isSaving,
+      editor.save,
+      editor.session,
+      hasPendingDiscard,
+      onClose,
+    ],
+  );
 
   if (!selectedFile) {
     return null;
@@ -397,72 +573,42 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-card" aria-label="Selected file preview">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-        <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1 truncate text-sm font-medium">
-          {visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
-        </div>
-        {isSwitchingFiles ? (
-          <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
-        ) : null}
-        {editor.session && !isSwitchingFiles ? (
-          <>
-            <div className="shrink-0 text-xs text-muted-foreground" role="status">
-              {editor.isSaving ? "Saving..." : editor.isDirty ? "Unsaved" : "Saved"}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!editor.isDirty || editor.isSaving}
-              onClick={() => void editor.save()}
-            >
-              {editor.isSaving ? (
-                <LoaderCircle data-icon="inline-start" className="animate-spin" />
-              ) : null}
-              Save
-            </Button>
-          </>
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          aria-label="Close file preview"
-          onClick={onClose}
-        >
-          <X className="size-3.5" />
-        </Button>
-      </div>
-      {editor.saveError ? (
-        <div
-          className="shrink-0 border-b border-border px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {editor.saveError}
-        </div>
-      ) : null}
+    <section
+      className="flex h-full min-h-0 flex-col bg-card"
+      aria-label="Selected file preview"
+      onKeyDown={handlePreviewShortcut}
+    >
+      <FilePreviewHeader
+        relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
+        isSwitchingFiles={isSwitchingFiles}
+        status={fileEditorStatus({
+          hasSession: editor.session !== null,
+          isSwitchingFiles,
+          isSaving: editor.isSaving,
+          isDirty: editor.isDirty,
+        })}
+        canSave={editor.isDirty && !editor.isSaving && !editor.hasStaleConflict}
+        isSaving={editor.isSaving}
+        onSave={() => void editor.save()}
+        onClose={onClose}
+      />
+      <FileSaveErrorBanner
+        message={editor.saveError}
+        hasStaleConflict={editor.hasStaleConflict}
+        isReviewingConflict={editor.isReviewingConflict}
+        onReview={() => void editor.reviewLatestVersion()}
+      />
       <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
-      <Dialog open={hasPendingDiscard} onOpenChange={(open) => !open && onKeepEditing()}>
-        <DialogContent closeButton={null}>
-          <DialogHeader>
-            <DialogTitle>Discard unsaved changes?</DialogTitle>
-            <DialogDescription>
-              This file has unsaved changes. Keep editing or discard the draft to continue.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onKeepEditing}>
-              Keep editing
-            </Button>
-            <Button type="button" variant="destructive" onClick={onDiscard}>
-              Discard
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <FileDiscardDialog
+        open={hasPendingDiscard}
+        onKeepEditing={onKeepEditing}
+        onDiscard={onDiscard}
+      />
+      <FileConflictReviewDialog
+        result={editor.conflictReview}
+        onClose={editor.closeConflictReview}
+        onAccept={editor.acceptLatestBaseline}
+      />
     </section>
   );
 });

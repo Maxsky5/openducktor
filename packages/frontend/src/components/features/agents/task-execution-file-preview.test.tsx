@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
+import { HostInvokeError } from "@openducktor/host-client";
 import { getFiletypeFromFileName } from "@pierre/diffs";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -51,6 +52,14 @@ const completeFileHighlight = (file: { cacheKey?: string }): void => {
   for (const subscriber of highlightCacheSubscribers) {
     subscriber();
   }
+};
+
+const runAsyncUiAction = async (action: () => void): Promise<void> => {
+  await act(async () => {
+    action();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    await Promise.resolve();
+  });
 };
 
 const previewWorkerPool = {
@@ -359,7 +368,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }));
 
     await screen.findByText("const first = true;");
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByLabelText("Selected file preview"), { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -371,9 +380,25 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
     event.preventDefault();
 
-    window.dispatchEvent(event);
+    screen.getByLabelText("Selected file preview").dispatchEvent(event);
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test("does not capture Save or Escape outside the preview", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const outsideInput = document.createElement("input");
+    document.body.append(outsideInput);
+    outsideInput.focus();
+
+    fireEvent.keyDown(outsideInput, { key: "Escape" });
+    fireEvent.keyDown(outsideInput, { key: "s", ctrlKey: true });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(writeTextFileMock).not.toHaveBeenCalled();
+    outsideInput.remove();
   });
 
   test("keeps unsupported files read-only and shows the host message", async () => {
@@ -431,7 +456,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
     });
     await screen.findByText("Unsaved");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(writeTextFileMock).toHaveBeenCalledWith({
@@ -460,7 +485,13 @@ describe("TaskExecutionSelectedFilePreview", () => {
         latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
       });
       await screen.findByText("Unsaved");
-      fireEvent.keyDown(window, { key: "s", code: "KeyS", ctrlKey: true });
+      await runAsyncUiAction(() =>
+        fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
+          key: "s",
+          code: "KeyS",
+          ctrlKey: true,
+        }),
+      );
       await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(expectedWriteCount));
       await screen.findByText("Saved");
     };
@@ -488,17 +519,67 @@ describe("TaskExecutionSelectedFilePreview", () => {
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    const firstSaveButton = await screen.findByRole("button", { name: "Save" });
+    await runAsyncUiAction(() => fireEvent.click(firstSaveButton));
 
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toContain("Permission denied");
     expect(screen.getByText("Unsaved")).toBeTruthy();
     expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 0 });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
     await screen.findByText("Saved");
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({ contents: "draft" });
+  });
+
+  test("reviews the latest file and rebases a stale draft without losing it", async () => {
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileResult(firstFile, "const first = true;"),
+    );
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileResult(firstFile, "const external = true;"),
+    );
+    writeTextFileMock.mockImplementationOnce(async () => {
+      throw new HostInvokeError("The file changed after it was loaded.", {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: {
+          code: "stale_revision",
+          message: "The file changed after it was loaded.",
+          rootPath: firstFile.rootPath,
+          relativePath: firstFile.relativePath,
+        },
+      });
+    });
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
+    });
+
+    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await screen.findByText("The file changed after it was loaded.");
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+
+    await screen.findByRole("dialog", { name: "Review latest file" });
+    expect(screen.getByLabelText("Latest file contents").textContent).toBe(
+      "const external = true;",
+    );
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+    );
+    await screen.findByText("Unsaved");
+    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
+
+    expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
+      contents: "local draft",
+      revision: "revision:const external = true;",
+    });
   });
 
   test("clears dirty state when the draft returns to the saved baseline", async () => {
@@ -541,7 +622,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const saveButton = await screen.findByRole("button", { name: "Save" });
 
     fireEvent.click(saveButton);
-    fireEvent.keyDown(window, { key: "s", metaKey: true });
+    fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
+      key: "s",
+      metaKey: true,
+    });
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     await screen.findByText("Saving...");
@@ -594,7 +678,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await screen.findByText("Unsaved");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
     await screen.findByText("Saved");
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
@@ -636,10 +720,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByRole("dialog");
     await screen.findByText("const first = true;");
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByLabelText("Selected file preview"), { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(onKeepEditing).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(onKeepEditing).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });

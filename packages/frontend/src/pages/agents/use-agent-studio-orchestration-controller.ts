@@ -4,7 +4,7 @@ import type {
   GitTargetBranch,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useMemo } from "react";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -21,16 +21,13 @@ import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-s
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
-import {
-  createTaskExecutionFilePreviewState,
-  taskExecutionFilePreviewReducer,
-} from "./task-execution-file-preview-state";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
+import { useTaskExecutionFilePreviewController } from "./use-task-execution-file-preview-controller";
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 
@@ -227,11 +224,6 @@ export function useAgentStudioOrchestrationController({
     handleReorderTab,
   } = selection;
   const selectedSession = view.selectedSession;
-  const [taskExecutionFilePreviewState, dispatchTaskExecutionFilePreview] = useReducer(
-    taskExecutionFilePreviewReducer,
-    undefined,
-    createTaskExecutionFilePreviewState,
-  );
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     scheduleQueryUpdate,
@@ -493,56 +485,8 @@ export function useAgentStudioOrchestrationController({
     selectedSessionExternalId ?? "__no_selected_session__",
     taskExecutionFileRootKey,
   ].join("\0");
-  const previousTaskExecutionFileContextKeyRef = useRef(taskExecutionFileContextKey);
-  useEffect(() => {
-    if (previousTaskExecutionFileContextKeyRef.current === taskExecutionFileContextKey) {
-      return;
-    }
-    previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
-    dispatchTaskExecutionFilePreview({ type: "clear" });
-  }, [taskExecutionFileContextKey]);
-  const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
-    dispatchTaskExecutionFilePreview({ type: "request", intent: { type: "select", file } });
-  }, []);
-  const closeTaskExecutionSelectedFilePreview = useCallback(() => {
-    dispatchTaskExecutionFilePreview({ type: "request", intent: { type: "close" } });
-  }, []);
-  const reportTaskExecutionSelectedFilePreviewEditState = useCallback(
-    (editState: { isDirty: boolean; isSaving: boolean }) => {
-      dispatchTaskExecutionFilePreview({ type: "report_edit_state", ...editState });
-    },
-    [],
-  );
-  const keepEditingTaskExecutionSelectedFilePreview = useCallback(() => {
-    dispatchTaskExecutionFilePreview({ type: "keep_editing" });
-  }, []);
-  const discardTaskExecutionSelectedFilePreviewDraft = useCallback(() => {
-    dispatchTaskExecutionFilePreview({ type: "discard" });
-  }, []);
-  const taskExecutionSelectedFile = taskExecutionFilePreviewState.selectedFile;
-  const taskExecutionFilePreviewSessionKey = taskExecutionFilePreviewState.previewSessionKey;
-  const taskExecutionSelectedFilePreviewModel = useMemo<TaskExecutionSelectedFilePreviewModel>(
-    () => ({
-      selectedFile: taskExecutionSelectedFile,
-      previewSessionKey: taskExecutionFilePreviewSessionKey,
-      preservePreviousSnapshot: taskExecutionFilePreviewState.preservePreviousSnapshot,
-      hasPendingDiscard: taskExecutionFilePreviewState.pendingIntent !== null,
-      onClose: closeTaskExecutionSelectedFilePreview,
-      onEditStateChange: reportTaskExecutionSelectedFilePreviewEditState,
-      onKeepEditing: keepEditingTaskExecutionSelectedFilePreview,
-      onDiscard: discardTaskExecutionSelectedFilePreviewDraft,
-    }),
-    [
-      closeTaskExecutionSelectedFilePreview,
-      taskExecutionFilePreviewState.preservePreviousSnapshot,
-      taskExecutionFilePreviewState.pendingIntent,
-      taskExecutionFilePreviewSessionKey,
-      taskExecutionSelectedFile,
-      discardTaskExecutionSelectedFilePreviewDraft,
-      keepEditingTaskExecutionSelectedFilePreview,
-      reportTaskExecutionSelectedFilePreviewEditState,
-    ],
-  );
+  const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
+    useTaskExecutionFilePreviewController({ contextKey: taskExecutionFileContextKey });
 
   return {
     repoSettings,

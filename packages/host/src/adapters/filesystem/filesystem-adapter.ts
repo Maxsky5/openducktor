@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { access, lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -12,8 +13,8 @@ import {
 } from "../../ports/filesystem-port";
 import { readBoundedFileBytes } from "./bounded-file-read";
 
-const revisionForBytes = (bytes: Uint8Array): string =>
-  `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number }): string =>
+  `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
 
 const nodeErrorCode = (cause: unknown): string | null =>
   typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
@@ -27,7 +28,7 @@ const fileOperationError = (
 ): FilesystemFileOperationError => {
   const code = nodeErrorCode(cause);
   const operationCode =
-    code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR"
+    code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR" || code === "ELOOP"
       ? "unavailable_file"
       : code === "EACCES" || code === "EPERM"
         ? "permission_denied"
@@ -51,7 +52,7 @@ const snapshotOpenFile = async (
     isFile: metadata.isFile(),
     size: Math.max(metadata.size, bytes.byteLength),
     mtimeMs: Number.isFinite(metadata.mtimeMs) ? metadata.mtimeMs : null,
-    revision: revisionForBytes(bytes),
+    revision: revisionForFile(bytes, metadata),
   };
 };
 
@@ -131,7 +132,7 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
   replaceFileBytes({ path: inputPath, expectedRevision, bytes, maxCurrentBytes }) {
     return Effect.tryPromise({
       try: async () => {
-        const file = await open(inputPath, "r+");
+        const file = await open(inputPath, constants.O_RDWR | constants.O_NOFOLLOW);
         try {
           const current = await snapshotOpenFile(file, maxCurrentBytes + 1);
           if (!current.isFile) {
