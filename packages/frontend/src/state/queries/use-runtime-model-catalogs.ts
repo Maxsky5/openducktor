@@ -57,11 +57,11 @@ export function useRuntimeModelCatalogs({
         if (!query) {
           throw new Error(`Missing model catalog query for runtime '${runtimeKind}'.`);
         }
-        const error = query.error ? errorMessage(query.error) : null;
+        const error = !query.isFetching && query.error ? errorMessage(query.error) : null;
         return {
           runtimeKind,
           catalog: error ? null : (query.data ?? null),
-          isLoading: query.isLoading,
+          isLoading: query.isFetching,
           error,
           retry: async (): Promise<void> => {
             await query.refetch();

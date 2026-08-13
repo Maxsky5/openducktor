@@ -48,6 +48,7 @@ export function useAgentModelFavorites({
   const settingsQuery = useQuery(settingsOptions);
   const mutation = useMutation({
     mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY,
+    scope: { id: AGENT_MODEL_FAVORITES_MUTATION_KEY[0] },
     mutationFn: async (intent: FavoriteMutationIntent) => {
       const currentSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsOptions.queryKey);
       if (!currentSnapshot) {

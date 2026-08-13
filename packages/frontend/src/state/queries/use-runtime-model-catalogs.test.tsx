@@ -10,6 +10,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeModelCatalogs } from "./use-runtime-model-catalogs";
 
 const descriptorByRuntime = {
@@ -30,6 +31,48 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
 );
 
 describe("useRuntimeModelCatalogs", () => {
+  test("marks retained catalog data as loading during a background refetch", async () => {
+    const refetch = createDeferred<AgentModelCatalog>();
+    let loadAttempt = 0;
+    const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
+      loadAttempt += 1;
+      if (loadAttempt === 2) {
+        return refetch.promise;
+      }
+      return catalogFor(runtimeRef.runtimeKind);
+    });
+    const harness = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: "/repo",
+        runtimeKinds: ["opencode"] as const,
+        enabledRuntimeKinds: ["opencode"] as const,
+        loadCatalog,
+      },
+      { wrapper },
+    );
+
+    await harness.mount();
+    await harness.waitFor((state) => state.resources[0]?.catalog !== null, 2000);
+    await harness.run((state) => {
+      void state.resources[0]?.retry();
+    });
+    await harness.waitFor((state) => state.resources[0]?.isLoading === true, 2000);
+
+    expect(harness.getLatest().resources[0]).toEqual(
+      expect.objectContaining({
+        catalog: catalogFor("opencode"),
+        isLoading: true,
+        error: null,
+      }),
+    );
+
+    refetch.resolve(catalogFor("opencode"));
+    await harness.waitFor((state) => state.resources[0]?.isLoading === false, 2000);
+    expect(harness.getLatest().resources[0]?.catalog).toEqual(catalogFor("opencode"));
+    await harness.unmount();
+  });
+
   test("keeps each runtime loading and error state independent", async () => {
     const loadCatalog = mock(async (runtimeRef: RepoRuntimeRef) => {
       if (runtimeRef.runtimeKind === "codex") {

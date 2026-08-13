@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, LoaderCircle, Star } from "lucide-react";
 import {
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -141,29 +142,42 @@ const RuntimeRailButton = ({
   active: boolean;
   disabledReason: string | null;
   onSelect: () => void;
-}): ReactElement => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className="inline-flex">
+}): ReactElement => {
+  const disabledReasonId = useId();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
         <Button
           type="button"
           size="icon"
           variant={active ? "secondary" : "ghost"}
-          className={cn("size-9", active && "ring-1 ring-ring")}
+          className={cn(
+            "size-9",
+            active && "ring-1 ring-ring",
+            disabledReason && "cursor-not-allowed opacity-50",
+          )}
           aria-label={`${runtime.descriptor.label} runtime`}
           aria-pressed={active}
-          disabled={disabledReason !== null}
-          onClick={onSelect}
+          aria-disabled={disabledReason !== null}
+          aria-describedby={disabledReason ? disabledReasonId : undefined}
+          onClick={disabledReason ? undefined : onSelect}
         >
           <AgentRuntimeIcon runtimeKind={runtime.descriptor.kind} />
         </Button>
-      </span>
-    </TooltipTrigger>
-    <TooltipContent side="right">
-      {disabledReason ? `${runtime.descriptor.label}: ${disabledReason}` : runtime.descriptor.label}
-    </TooltipContent>
-  </Tooltip>
-);
+      </TooltipTrigger>
+      {disabledReason ? (
+        <span id={disabledReasonId} className="sr-only">
+          {disabledReason}
+        </span>
+      ) : null}
+      <TooltipContent side="right">
+        {disabledReason
+          ? `${runtime.descriptor.label}: ${disabledReason}`
+          : runtime.descriptor.label}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 const stopFavoriteActivationPropagation = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
   if (event.key === "Enter" || event.key === " ") {

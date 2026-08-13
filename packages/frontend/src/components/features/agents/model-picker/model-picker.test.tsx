@@ -83,7 +83,8 @@ describe("ModelPicker", () => {
     expect(container.querySelector('svg[viewBox="0 0 512 512"]')).toBeTruthy();
   });
 
-  test("keeps foreign runtimes visible and disabled in a locked context", async () => {
+  test("keeps foreign runtimes visible, inert, and explained in a locked context", async () => {
+    const onValueChange = mock(() => {});
     render(
       <ModelPicker
         runtimes={runtimes}
@@ -94,7 +95,7 @@ describe("ModelPicker", () => {
           runtimeKind: "opencode",
           reason: "Start a new session to switch runtimes.",
         }}
-        onValueChange={() => {}}
+        onValueChange={onValueChange}
       />,
     );
 
@@ -105,9 +106,49 @@ describe("ModelPicker", () => {
     expect(screen.getByRole("button", { name: "OpenCode runtime" }).hasAttribute("disabled")).toBe(
       false,
     );
-    expect(screen.getByRole("button", { name: "Codex runtime" }).hasAttribute("disabled")).toBe(
-      true,
+    const lockedRuntime = screen.getByRole("button", {
+      name: "Codex runtime",
+      description: "Start a new session to switch runtimes.",
+    });
+    await act(async () => {
+      lockedRuntime.focus();
+    });
+    expect(document.activeElement).toBe(lockedRuntime);
+    expect(lockedRuntime.getAttribute("aria-disabled")).toBe("true");
+    await act(async () => {
+      fireEvent.keyDown(lockedRuntime, { key: "Enter" });
+      fireEvent.click(lockedRuntime);
+    });
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getAllByText("GPT Five")).toHaveLength(2);
+    expect(screen.queryByText("GPT 5 Codex")).toBeNull();
+  });
+
+  test("keeps a retained catalog display-only while a refresh is in flight", async () => {
+    const onValueChange = mock(() => {});
+    const refreshingRuntimes = [
+      {
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        resource: { ...resource("opencode"), isLoading: true },
+      },
+    ];
+    render(
+      <ModelPicker
+        runtimes={refreshingRuntimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={onValueChange}
+      />,
     );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.getByRole("status").textContent).toContain("Loading OpenCode models");
+    expect(screen.getAllByText("GPT Five")).toHaveLength(1);
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   test("toggles a favorite without selecting the row or closing the picker", async () => {

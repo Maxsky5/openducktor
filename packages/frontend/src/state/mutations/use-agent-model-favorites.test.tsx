@@ -4,7 +4,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { host } from "@/state/operations/shared/host";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useAgentModelFavorites } from "./use-agent-model-favorites";
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
@@ -23,7 +23,69 @@ const concurrentFavorite: AgentModelFavorite = {
   modelId: "gpt-5.6-sol",
 };
 
+const useTwoAgentModelFavorites = (args: {
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
+}) => ({
+  first: useAgentModelFavorites(args),
+  second: useAgentModelFavorites(args),
+});
+
 describe("useAgentModelFavorites", () => {
+  test("composes writes from separate mounted hooks against the latest saved favorites", async () => {
+    const initialSnapshot = createSettingsSnapshotFixture();
+    const firstSavedSnapshot = createSettingsSnapshotFixture({
+      agentModelFavorites: [favorite],
+    });
+    const firstWrite = createDeferred<SettingsSnapshot>();
+    const original = host.workspaceGetSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    let saveAttempt = 0;
+    const saveAgentModelFavorites = mock(
+      async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+        saveAttempt += 1;
+        if (saveAttempt === 1) {
+          return firstWrite.promise;
+        }
+        return createSettingsSnapshotFixture({ agentModelFavorites: favorites });
+      },
+    );
+    const harness = createHookHarness(
+      useTwoAgentModelFavorites,
+      { saveAgentModelFavorites },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.first.favorites !== null && state.second.favorites !== null,
+        2000,
+      );
+      await harness.run((state) => state.first.toggleFavorite(favorite));
+      await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 1, 2000);
+      await harness.run((state) => state.second.toggleFavorite(concurrentFavorite));
+
+      expect(saveAgentModelFavorites).toHaveBeenCalledTimes(1);
+
+      firstWrite.resolve(firstSavedSnapshot);
+      await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 2, 2000);
+      await harness.waitFor((state) => state.first.favorites?.length === 2, 2000);
+
+      expect(saveAgentModelFavorites.mock.calls[1]?.[0]).toEqual([favorite, concurrentFavorite]);
+      expect(harness.getLatest().first.favorites).toEqual([favorite, concurrentFavorite]);
+      expect(harness.getLatest().second.favorites).toEqual([favorite, concurrentFavorite]);
+
+      await harness.run((state) => state.first.toggleFavorite(favorite));
+      await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 3, 2000);
+      await harness.waitFor((state) => state.first.favorites?.length === 1, 2000);
+      expect(saveAgentModelFavorites.mock.calls[2]?.[0]).toEqual([concurrentFavorite]);
+      expect(harness.getLatest().second.favorites).toEqual([concurrentFavorite]);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
+    }
+  });
+
   test("does not turn a settings read failure into an empty favorites list", async () => {
     const original = host.workspaceGetSettingsSnapshot;
     host.workspaceGetSettingsSnapshot = mock(async () => {
