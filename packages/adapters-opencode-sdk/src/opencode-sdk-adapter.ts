@@ -802,7 +802,11 @@ export class OpencodeSdkAdapter
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode approval");
-    if (!this.sessions.has(input.externalSessionId)) {
+    const retainedSession = this.sessions.get(input.externalSessionId);
+    if (
+      !retainedSession ||
+      (retainedSession.summary.sessionAssociation.kind === "unbound" && input.sessionScope)
+    ) {
       await this.ensureSessionState(input);
     }
     const session = requireSession(this.sessions, input.externalSessionId);
@@ -813,7 +817,11 @@ export class OpencodeSdkAdapter
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode question");
-    if (!this.sessions.has(input.externalSessionId)) {
+    const retainedSession = this.sessions.get(input.externalSessionId);
+    if (
+      !retainedSession ||
+      (retainedSession.summary.sessionAssociation.kind === "unbound" && input.sessionScope)
+    ) {
       await this.ensureSessionState(input);
     }
     const session = requireSession(this.sessions, input.externalSessionId);

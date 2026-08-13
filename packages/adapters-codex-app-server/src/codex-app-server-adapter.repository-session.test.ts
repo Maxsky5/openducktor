@@ -43,6 +43,20 @@ const localSessions = (
   (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
     .localSessions;
 
+const markSessionUnbound = (adapter: CodexAppServerAdapter, externalSessionId: string): void => {
+  const session = (
+    adapter as unknown as {
+      localSessions: {
+        get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
+      };
+    }
+  ).localSessions.get(externalSessionId);
+  if (!session) {
+    throw new Error(`Expected retained session '${externalSessionId}'.`);
+  }
+  session.summary.sessionAssociation = { kind: "unbound" };
+};
+
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
@@ -167,6 +181,47 @@ describe("CodexAppServerAdapter repository sessions", () => {
         config: repositoryThreadConfig,
       });
     }
+  });
+
+  test("applies workflow policy before history binds a retained unbound session", async () => {
+    const { adapter, transports } = createHarness();
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    markSessionUnbound(adapter, started.externalSessionId);
+    const transport = transports.get("runtime-live");
+    expect(transport).toBeDefined();
+    if (!transport) {
+      throw new Error("Expected the runtime transport.");
+    }
+    transport.calls.length = 0;
+
+    await adapter.loadSessionHistory(
+      codexSessionRuntimeRef(started.externalSessionId, {
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    );
+
+    const resumeIndex = transport.calls.findIndex((call) => call.method === "thread/resume");
+    const historyIndex = transport.calls.findIndex((call) => call.method === "thread/turns/list");
+    expect(resumeIndex).toBeGreaterThanOrEqual(0);
+    expect(historyIndex).toBeGreaterThan(resumeIndex);
+    expect(transport.calls[resumeIndex]?.params).toEqual(
+      expect.objectContaining({
+        config: {
+          "mcp_servers.openducktor.enabled": true,
+          "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+        },
+        threadId: started.externalSessionId,
+        excludeTurns: true,
+      }),
+    );
   });
 
   test("rejects a different workflow task or role for a bound session", async () => {

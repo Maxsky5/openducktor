@@ -164,6 +164,36 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
+  test("keeps a retained session unbound when approval policy binding fails", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+    mock.session.updateResult = {
+      data: undefined,
+      error: new Error("permission update rejected"),
+    };
+    const replyInput = {
+      ...sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      requestId: "permission-1",
+      outcome: "approve_once" as const,
+    };
+
+    await expect(adapter.replyApproval(replyInput)).rejects.toThrow(
+      "update repository session policy",
+    );
+    expect(mock.permission.replyCalls).toHaveLength(0);
+
+    mock.session.updateResult = { data: { id: "session-opencode-1" }, error: undefined };
+    await adapter.replyApproval(replyInput);
+
+    expect(mock.session.updateCalls).toHaveLength(2);
+    expect(mock.permission.replyCalls).toHaveLength(1);
+    unsubscribe();
+  });
+
   test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
     const mock = makeMockClient({
       mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },

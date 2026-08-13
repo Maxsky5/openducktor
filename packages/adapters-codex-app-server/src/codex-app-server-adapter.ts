@@ -548,7 +548,11 @@ export class CodexAppServerAdapter
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session history");
-    const session = this.localSessions.get(input.externalSessionId);
+    let session = this.localSessions.get(input.externalSessionId);
+    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
+      await this.ensureSessionState(input);
+      session = this.localSessions.get(input.externalSessionId);
+    }
     if (session) {
       applyRuntimeContextToSession(session, input, "load session history");
     }
