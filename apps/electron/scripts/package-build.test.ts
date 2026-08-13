@@ -44,7 +44,7 @@ describe("build Electron release artifact", () => {
       "-c.publish.channel=beta",
       "-c.extraMetadata.version=0.4.0-beta.2",
       "-c.extraMetadata.shortVersion=0.4.0",
-      "-c.extraMetadata.shortVersionWindows=0.4.0",
+      "-c.extraMetadata.shortVersionWindows=0.4.0.0",
       "-c.mac.bundleShortVersion=0.4.0",
       "-c.mac.bundleVersion=0.4.0",
     ]);
