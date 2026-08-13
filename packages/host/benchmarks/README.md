@@ -4,7 +4,7 @@ Run `bun run benchmark:sqlite-task-store-lifecycle` from `packages/host`. The ru
 
 The benchmark compares the current per-operation connection scope with one retained connection guarded by a one-permit semaphore. It measures full task-list reads on empty, small (25 tasks), and representative (250 tasks) stores. It also measures a representative 80/20 sequential read/write mix and concurrent reads with concurrency four. Each variant warms before sampling, and read samples alternate order to limit cache bias.
 
-The gate requires at least 15% improvement at p50 and p95, at least 1 ms saved at p95, less than 5% throughput regression, and no more than one live retained handle per database path. The command exits with status 1 when either runtime fails the gate.
+The gate requires at least 15% improvement at p50 and p95, at least 1 ms saved at p95, less than 5% throughput regression, and no more than one live retained handle per database path. Gate comparisons use raw metrics; the JSON report rounds numbers to three decimal places. The command exits with status 1 when either runtime fails the gate.
 
 ## Baseline from 2026-08-13
 

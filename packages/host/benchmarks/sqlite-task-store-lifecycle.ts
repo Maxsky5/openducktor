@@ -16,6 +16,13 @@ import {
   openSqliteDrizzleConnection,
   type SqliteDrizzleConnection,
 } from "../src/infrastructure/sqlite/sqlite-drizzle-client";
+import {
+  evaluateLatencySamples,
+  evaluateThroughputRates,
+  type LatencyGateResult,
+  type LatencySummary,
+  type ThroughputResult,
+} from "./sqlite-task-store-lifecycle-gate";
 
 const PROFILE_DEFINITIONS = [
   { name: "empty", taskCount: 0, samples: 160 },
@@ -34,11 +41,6 @@ type HandleTracker = {
   opened: number;
 };
 
-type LatencySummary = {
-  p50Ms: number;
-  p95Ms: number;
-};
-
 type LifecycleResult = LatencySummary & {
   maximumLiveHandles: number;
   openedHandles: number;
@@ -46,49 +48,11 @@ type LifecycleResult = LatencySummary & {
 
 type ProfileResult = {
   current: LifecycleResult;
-  gate: {
-    p50ImprovementPercent: number;
-    p50Pass: boolean;
-    p95ImprovementPercent: number;
-    p95Pass: boolean;
-    p95SavedMs: number;
-  };
+  gate: LatencyGateResult;
   profile: (typeof PROFILE_DEFINITIONS)[number]["name"];
   retained: LifecycleResult;
   taskCount: number;
 };
-
-type ThroughputResult = {
-  concurrentRead: {
-    currentOperationsPerSecond: number;
-    retainedOperationsPerSecond: number;
-    retainedPercentChange: number;
-  };
-  mixedSequential: {
-    currentOperationsPerSecond: number;
-    retainedOperationsPerSecond: number;
-    retainedPercentChange: number;
-  };
-};
-
-const round = (value: number): number => Math.round(value * 1_000) / 1_000;
-
-const percentile = (values: readonly number[], fraction: number): number => {
-  const sorted = [...values].sort((left, right) => left - right);
-  const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1);
-  return sorted[index] ?? 0;
-};
-
-const summarizeLatency = (samples: readonly number[]): LatencySummary => ({
-  p50Ms: round(percentile(samples, 0.5)),
-  p95Ms: round(percentile(samples, 0.95)),
-});
-
-const percentChange = (baseline: number, candidate: number): number =>
-  round(((candidate - baseline) / baseline) * 100);
-
-const improvementPercent = (baseline: number, candidate: number): number =>
-  round(((baseline - candidate) / baseline) * 100);
 
 const measure = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<number, E> =>
   Effect.gen(function* () {
@@ -246,28 +210,18 @@ const benchmarkProfile = (
         }
       }
 
-      const currentLatency = summarizeLatency(currentSamples);
-      const retainedLatency = summarizeLatency(retainedSamples);
-      const p50ImprovementPercent = improvementPercent(currentLatency.p50Ms, retainedLatency.p50Ms);
-      const p95ImprovementPercent = improvementPercent(currentLatency.p95Ms, retainedLatency.p95Ms);
-      const p95SavedMs = round(currentLatency.p95Ms - retainedLatency.p95Ms);
+      const evaluation = evaluateLatencySamples(currentSamples, retainedSamples);
 
       return {
         current: {
-          ...currentLatency,
+          ...evaluation.current,
           maximumLiveHandles: currentTracker.maximum,
           openedHandles: currentTracker.opened,
         },
-        gate: {
-          p50ImprovementPercent,
-          p50Pass: p50ImprovementPercent >= 15,
-          p95ImprovementPercent,
-          p95Pass: p95ImprovementPercent >= 15 && p95SavedMs >= 1,
-          p95SavedMs,
-        },
+        gate: evaluation.gate,
         profile: definition.name,
         retained: {
-          ...retainedLatency,
+          ...evaluation.retained,
           maximumLiveHandles: retainedTracker.maximum,
           openedHandles: retainedTracker.opened,
         },
@@ -286,7 +240,9 @@ const runOperations = (
     return operations.length / ((performance.now() - startedAt) / 1_000);
   });
 
-const benchmarkThroughput = (databasePath: string): Effect.Effect<ThroughputResult, unknown> =>
+const benchmarkThroughput = (
+  databasePath: string,
+): Effect.Effect<{ pass: boolean; result: ThroughputResult }, unknown> =>
   Effect.scoped(
     Effect.gen(function* () {
       const currentTracker: HandleTracker = { active: 0, maximum: 0, opened: 0 };
@@ -330,18 +286,12 @@ const benchmarkThroughput = (databasePath: string): Effect.Effect<ThroughputResu
         );
       }
 
-      return {
-        concurrentRead: {
-          currentOperationsPerSecond: round(currentConcurrentRate),
-          retainedOperationsPerSecond: round(retainedConcurrentRate),
-          retainedPercentChange: percentChange(currentConcurrentRate, retainedConcurrentRate),
-        },
-        mixedSequential: {
-          currentOperationsPerSecond: round(currentMixedRate),
-          retainedOperationsPerSecond: round(retainedMixedRate),
-          retainedPercentChange: percentChange(currentMixedRate, retainedMixedRate),
-        },
-      };
+      return evaluateThroughputRates({
+        currentConcurrentRate,
+        currentMixedRate,
+        retainedConcurrentRate,
+        retainedMixedRate,
+      });
     }),
   );
 
@@ -364,13 +314,12 @@ const runBenchmark = Effect.gen(function* () {
     }
   }
 
-  const throughput = yield* benchmarkThroughput(representativeDatabasePath);
+  const throughputEvaluation = yield* benchmarkThroughput(representativeDatabasePath);
+  const throughput = throughputEvaluation.result;
   const latencyPass = profileResults.every(
     (profile) => profile.gate.p50Pass && profile.gate.p95Pass,
   );
-  const throughputPass =
-    throughput.mixedSequential.retainedPercentChange > -5 &&
-    throughput.concurrentRead.retainedPercentChange > -5;
+  const throughputPass = throughputEvaluation.pass;
   const handlePass = profileResults.every((profile) => profile.retained.maximumLiveHandles === 1);
 
   return {
