@@ -261,6 +261,45 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("blocks Continue until a failed runtime rediscovery succeeds", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    let discoveryAttempts = 0;
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "discover") {
+        discoveryAttempts += 1;
+        if (discoveryAttempts === 1) throw new Error("Runtime discovery failed");
+      }
+      return createCheck(runtimes, true);
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      await within(opencodeSection()).findByText("Available");
+
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await screen.findByText("Runtime discovery failed");
+
+      expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+        true,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Retry runtime detection" }));
+
+      await waitFor(() => expect(discoveryAttempts).toBe(2));
+      await waitFor(() => expect(screen.queryByText("Runtime discovery failed")).toBeNull());
+      expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
     const initialRuntimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
@@ -312,7 +351,7 @@ describe("OnboardingPage runtime validation", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
 
-      await screen.findByRole("alert");
+      expect(screen.getAllByText("OpenCode executable is invalid.").length).toBeGreaterThan(0);
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(
         screen.getByLabelText("Executable path", { selector: "#runtime-executable-opencode" }),
@@ -423,6 +462,32 @@ describe("OnboardingPage runtime validation", () => {
 
       await act(async () => save.resolve());
       await screen.findByRole("heading", { name: "Open your first workspace" });
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
+  test("keeps the no-runtime warning visible after confirmation is cancelled", async () => {
+    const runtimes = DEFAULT_AGENT_RUNTIMES;
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(
+        screen.queryByRole("dialog", { name: "Continue without an agent runtime?" }),
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          "Agent sessions will not work until you configure and enable a valid runtime in Settings.",
+        ),
+      ).toBeTruthy();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }

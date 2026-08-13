@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useEffect } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
@@ -106,6 +106,26 @@ describe("WorkspaceCreationForm", () => {
     });
     deferred.resolve();
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  test("starts one repository add when two submit events arrive before a rerender", async () => {
+    const deferred = createDeferred<void>();
+    const addWorkspace = mock(async () => deferred.promise);
+    renderForm({ addWorkspace });
+    await chooseRepository();
+    const submitButton = screen.getByRole("button", { name: /^open repository$/i });
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      submitButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(addWorkspace).toHaveBeenCalledTimes(1);
+    deferred.resolve();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^open repository$/i })).toBeTruthy(),
+    );
   });
 
   test("shows add failures and lets the user retry without losing the draft", async () => {

@@ -7,7 +7,7 @@ type SettingsModalFooterSaveState = {
   isLoadingSettings: boolean;
   hasSnapshotDraft: boolean;
   settingsError: string | null;
-  isLoadingRuntimeConfiguration?: boolean;
+  isLoadingRuntimeConfiguration: boolean;
 };
 
 type SettingsModalFooterValidationSummary = {
@@ -21,7 +21,7 @@ type SettingsModalFooterValidationSummary = {
 type SettingsModalFooterErrors = {
   saveError: string | null;
   catalogError: string | null;
-  runtimeExecutablesError?: string | null;
+  runtimeExecutablesError: string | null;
 };
 
 type SettingsModalFooterLocation = {

@@ -28,11 +28,18 @@ const render = (ui: ReactNode) => {
   };
 };
 
+const runtimeDefinitionRequestProps = {
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  onRetryRuntimeDefinitions: async () => [],
+};
+
 const createSection = (
   agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES,
   { requiresCodexDangerAcknowledgement = false } = {},
 ) =>
   createElement(AgentRuntimesSection, {
+    ...runtimeDefinitionRequestProps,
     agentRuntimes,
     runtimeDefinitions: [
       CLAUDE_RUNTIME_DESCRIPTOR,
@@ -64,6 +71,7 @@ describe("AgentRuntimesSection", () => {
     const retryRuntimeDefinitions = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [],
         runtimeDefinitionsError: "Definitions failed",
@@ -158,6 +166,7 @@ describe("AgentRuntimesSection", () => {
     });
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
         runtimeCheck: {
@@ -311,6 +320,7 @@ describe("AgentRuntimesSection", () => {
     const updates: AgentRuntimes[] = [];
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
@@ -459,6 +469,7 @@ describe("AgentRuntimesSection", () => {
     let acknowledged = false;
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
           codex: {
@@ -493,6 +504,7 @@ describe("AgentRuntimesSection", () => {
   test("selects a valid runtime tab after definitions load asynchronously", () => {
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [],
         disabled: false,
@@ -506,6 +518,7 @@ describe("AgentRuntimesSection", () => {
     try {
       renderer.rerender(
         createElement(AgentRuntimesSection, {
+          ...runtimeDefinitionRequestProps,
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
@@ -535,6 +548,7 @@ describe("AgentRuntimesSection", () => {
 
       renderer.rerender(
         createElement(AgentRuntimesSection, {
+          ...runtimeDefinitionRequestProps,
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,

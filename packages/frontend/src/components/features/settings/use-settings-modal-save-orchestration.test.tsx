@@ -50,6 +50,8 @@ const createArgs = (
   reusablePromptValidationErrorCount: 0,
   hasRuntimeAvailabilityErrors: false,
   runtimeAvailabilityErrorCount: 0,
+  isRuntimeRequestPending: false,
+  runtimeRequestError: null,
   hasUnacknowledgedCodexDangerousSettings: false,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCount: 0,

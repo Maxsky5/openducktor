@@ -34,9 +34,9 @@ type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheck?: RuntimeCheck | null;
-  isLoadingRuntimeDefinitions?: boolean;
-  runtimeDefinitionsError?: string | null;
-  onRetryRuntimeDefinitions?: () => Promise<RuntimeDescriptor[]>;
+  isLoadingRuntimeDefinitions: boolean;
+  runtimeDefinitionsError: string | null;
+  onRetryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   disabled: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
@@ -732,8 +732,8 @@ export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
   runtimeCheck = null,
-  isLoadingRuntimeDefinitions = false,
-  runtimeDefinitionsError = null,
+  isLoadingRuntimeDefinitions,
+  runtimeDefinitionsError,
   onRetryRuntimeDefinitions,
   disabled,
   requiresCodexDangerAcknowledgement,
@@ -800,9 +800,9 @@ export function AgentRuntimesSection({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || isLoadingRuntimeDefinitions || !onRetryRuntimeDefinitions}
+            disabled={disabled || isLoadingRuntimeDefinitions}
             onClick={() => {
-              void onRetryRuntimeDefinitions?.().catch((error) => {
+              void onRetryRuntimeDefinitions().catch((error) => {
                 toast.error("Failed to load runtime definitions", {
                   description: errorMessage(error),
                 });

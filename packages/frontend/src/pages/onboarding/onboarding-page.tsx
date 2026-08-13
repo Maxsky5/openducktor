@@ -42,6 +42,7 @@ export function OnboardingPage(): ReactElement {
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
   const saveInFlight = useRef(false);
   const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
@@ -108,6 +109,7 @@ export function OnboardingPage(): ReactElement {
   const checkAgain = async (): Promise<void> => {
     setIsChecking(true);
     setStageError(null);
+    setRuntimeDiscoveryError(null);
     try {
       const checked = await host.runtimeExecutablesCheck({ mode: "discover" });
       if (runtimeDraft) {
@@ -143,7 +145,7 @@ export function OnboardingPage(): ReactElement {
         setRuntimeDraft(nextDraft);
       }
     } catch (cause) {
-      setStageError(errorMessage(cause));
+      setRuntimeDiscoveryError(errorMessage(cause));
     } finally {
       setIsChecking(false);
     }
@@ -152,6 +154,8 @@ export function OnboardingPage(): ReactElement {
   const saveRuntimes = async (allowNoRuntime = false): Promise<void> => {
     if (
       saveInFlight.current ||
+      isChecking ||
+      runtimeDiscoveryError !== null ||
       !runtimeDraft ||
       !settingsQuery.data ||
       validationQuery.isPending ||
@@ -195,6 +199,11 @@ export function OnboardingPage(): ReactElement {
     paths !== null && (validationQuery.isPending || validationQuery.isFetching);
   const runtimeRequestError =
     settingsQuery.error ?? definitionsQuery.error ?? validationQuery.error;
+  const validEnabledRuntimeCount = runtimeDraft
+    ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
+    : 0;
+  const showNoRuntimeWarning =
+    validationQuery.data !== undefined && !validationPending && validEnabledRuntimeCount === 0;
 
   return (
     <main className="min-h-screen overflow-y-auto bg-background p-4 text-foreground sm:p-8">
@@ -283,6 +292,23 @@ export function OnboardingPage(): ReactElement {
                     onCheckAgain={() => void checkAgain()}
                   />
                 )}
+                {runtimeDiscoveryError ? (
+                  <div className="flex items-center justify-between gap-3" role="alert">
+                    <p className="text-sm text-destructive">{runtimeDiscoveryError}</p>
+                    <Button variant="outline" onClick={() => void checkAgain()}>
+                      Retry runtime detection
+                    </Button>
+                  </div>
+                ) : null}
+                {showNoRuntimeWarning ? (
+                  <p
+                    className="rounded-md border border-warning-border bg-warning-surface p-3 text-sm text-warning-muted"
+                    role="alert"
+                  >
+                    Agent sessions will not work until you configure and enable a valid runtime in
+                    Settings.
+                  </p>
+                ) : null}
                 {stageError ? (
                   <p className="text-sm text-destructive" role="alert">
                     {stageError}
@@ -295,7 +321,12 @@ export function OnboardingPage(): ReactElement {
                   <Button
                     onClick={() => void saveRuntimes()}
                     disabled={
-                      runtimeLoading || validationPending || isSaving || !!runtimeRequestError
+                      runtimeLoading ||
+                      validationPending ||
+                      isChecking ||
+                      isSaving ||
+                      !!runtimeRequestError ||
+                      runtimeDiscoveryError !== null
                     }
                   >
                     {isSaving ? "Saving..." : "Continue"} <ArrowRight data-icon="inline-end" />

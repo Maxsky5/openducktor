@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
-import { type ReactElement, useMemo, useReducer } from "react";
+import { type ReactElement, useMemo, useReducer, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +91,7 @@ export function WorkspaceCreationForm({
   onSuccess,
 }: WorkspaceCreationFormProps): ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const submitInFlight = useRef(false);
   const existingIds = useMemo(
     () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
     [workspaces],
@@ -120,7 +121,8 @@ export function WorkspaceCreationForm({
   };
 
   const submit = async (): Promise<void> => {
-    if (!state.repoPath || validationError) return;
+    if (submitInFlight.current || !state.repoPath || validationError) return;
+    submitInFlight.current = true;
     dispatch({ type: "submitting", value: true });
     dispatch({ type: "error", error: null });
     try {
@@ -133,6 +135,7 @@ export function WorkspaceCreationForm({
     } catch (cause) {
       dispatch({ type: "error", error: errorMessage(cause) });
     } finally {
+      submitInFlight.current = false;
       dispatch({ type: "submitting", value: false });
     }
   };

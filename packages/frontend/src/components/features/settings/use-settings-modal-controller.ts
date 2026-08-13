@@ -47,12 +47,12 @@ import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-sta
 export type SettingsModalController = {
   isLoadingSettings: boolean;
   isLoadingRuntimeDefinitions: boolean;
-  isLoadingRuntimeExecutables?: boolean;
+  isLoadingRuntimeExecutables: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
-  runtimeExecutablesError?: string | null;
+  runtimeExecutablesError: string | null;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -97,7 +97,7 @@ export type SettingsModalController = {
   setSelectedWorkspaceId: (next: string) => void;
   markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
-  retryRuntimeDefinitions?: () => Promise<RuntimeDescriptor[]>;
+  retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (

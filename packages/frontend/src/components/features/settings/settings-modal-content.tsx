@@ -142,7 +142,7 @@ export function SettingsModalContent({
         runtimeCheck={controller.runtimeCheck}
         isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
         runtimeDefinitionsError={runtimeDefinitionsError}
-        {...(retryRuntimeDefinitions ? { onRetryRuntimeDefinitions: retryRuntimeDefinitions } : {})}
+        onRetryRuntimeDefinitions={retryRuntimeDefinitions}
         disabled={isInteractionDisabled}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}

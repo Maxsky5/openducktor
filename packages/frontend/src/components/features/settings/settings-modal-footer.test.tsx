@@ -14,6 +14,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         isLoadingSettings: false,
         hasSnapshotDraft: true,
         settingsError: null,
+        isLoadingRuntimeConfiguration: false,
       },
       validationSummary: {
         promptPlaceholderErrorCount: 0,
@@ -22,7 +23,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 0,
       },
-      errors: { saveError: null, catalogError: null },
+      errors: { saveError: null, catalogError: null, runtimeExecutablesError: null },
       location: { section: "repositories", repositorySection: "configuration" },
       onCancel: () => {},
       onSave: () => {},

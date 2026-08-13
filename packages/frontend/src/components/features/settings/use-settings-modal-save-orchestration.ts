@@ -28,8 +28,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   reusablePromptValidationErrorCount: number;
   hasRuntimeAvailabilityErrors: boolean;
   runtimeAvailabilityErrorCount: number;
-  isRuntimeRequestPending?: boolean;
-  runtimeRequestError?: string | null;
+  isRuntimeRequestPending: boolean;
+  runtimeRequestError: string | null;
   hasUnacknowledgedCodexDangerousSettings: boolean;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCount: number;
@@ -59,8 +59,8 @@ export const useSettingsModalSaveOrchestration = ({
   reusablePromptValidationErrorCount,
   hasRuntimeAvailabilityErrors,
   runtimeAvailabilityErrorCount,
-  isRuntimeRequestPending = false,
-  runtimeRequestError = null,
+  isRuntimeRequestPending,
+  runtimeRequestError,
   hasUnacknowledgedCodexDangerousSettings,
   hasRepoScriptValidationErrors,
   repoScriptValidationErrorCount,
