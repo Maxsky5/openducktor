@@ -90,16 +90,6 @@ export const createSqliteTaskRepositoryContextProvider = ({
     Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
       const databasePath = yield* resolveDatabasePath({ repoPath, workspaceId });
-      yield* Effect.tryPromise({
-        try: () => mkdir(path.dirname(databasePath), { recursive: true }),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "sqliteTaskRepository.createDatabaseDirectory",
-            message: errorMessage(cause),
-            cause,
-            details: { databasePath },
-          }),
-      });
       return {
         databasePath,
         repoPath,
@@ -131,17 +121,29 @@ export const createSqliteTaskRepositoryContextProvider = ({
           return yield* restore(Deferred.await(reservation.flight));
         }
 
-        const initialize = Effect.scoped(
-          Effect.gen(function* () {
-            const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
-              databasePath,
-              config: {
-                schema: taskStoreSchema,
-              },
-            });
-            yield* ensureSchema(connection.database, connection.session, databasePath);
-          }),
-        );
+        const initialize = Effect.gen(function* () {
+          yield* Effect.tryPromise({
+            try: () => mkdir(path.dirname(databasePath), { recursive: true }),
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "sqliteTaskRepository.createDatabaseDirectory",
+                message: errorMessage(cause),
+                cause,
+                details: { databasePath },
+              }),
+          });
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
+                databasePath,
+                config: {
+                  schema: taskStoreSchema,
+                },
+              });
+              yield* ensureSchema(connection.database, connection.session, databasePath);
+            }),
+          );
+        });
         return yield* completeSchemaInitializationFlight(
           databasePath,
           reservation.flight,
@@ -155,6 +157,7 @@ export const createSqliteTaskRepositoryContextProvider = ({
       yield* initializeWorkspaceTaskStore(storage.databasePath);
       const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
         databasePath: storage.databasePath,
+        configureWal: false,
         config: {
           schema: taskStoreSchema,
         },

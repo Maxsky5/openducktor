@@ -110,6 +110,28 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
+    const database = new Database(databasePath);
+    try {
+      expect(
+        (database.query("PRAGMA journal_mode;").get() as { journal_mode: string }).journal_mode,
+      ).toBe("wal");
+    } finally {
+      database.close();
+    }
+  });
+
+  test("shares directory and schema initialization across concurrent first operations", async () => {
+    const { databasePath, repoPath, store } = await createRepositoryHarness();
+
+    const results = await Effect.runPromise(
+      Effect.all(
+        Array.from({ length: 8 }, () => store.listTasks({ repoPath })),
+        { concurrency: "unbounded" },
+      ),
+    );
+
+    expect(results).toEqual(Array.from({ length: 8 }, () => []));
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {

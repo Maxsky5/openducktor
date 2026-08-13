@@ -47,6 +47,7 @@ export type SqliteDrizzleConnection<TSchema extends Record<string, unknown>> = {
 
 export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, unknown>> = {
   readonly config: DrizzleConfig<TSchema>;
+  readonly configureWal?: boolean;
   readonly databasePath: string;
   readonly runtime?: SqliteDriverRuntime;
 };
@@ -109,11 +110,18 @@ const makeRemoteCallback =
   (query, params, method) =>
     Effect.runPromise(executeRemoteQuery(database, query, params, method));
 
-const configureDatabase = (database: SqliteDatabase): Effect.Effect<void, HostOperationError> =>
-  database.exec("PRAGMA foreign_keys = ON;").pipe(
-    Effect.zipRight(database.exec("PRAGMA journal_mode = WAL;")),
+const configureDatabase = (
+  database: SqliteDatabase,
+  configureWal: boolean,
+): Effect.Effect<void, HostOperationError> => {
+  const enableForeignKeys = database.exec("PRAGMA foreign_keys = ON;");
+  const configure = configureWal
+    ? enableForeignKeys.pipe(Effect.zipRight(database.exec("PRAGMA journal_mode = WAL;")))
+    : enableForeignKeys;
+  return configure.pipe(
     Effect.mapError((cause) => toHostOperationError(cause, "sqlite.configureDatabase")),
   );
+};
 
 const executeSqliteQuery = <A>(
   run: () => PromiseLike<A>,
@@ -167,6 +175,7 @@ const makeSqliteDrizzleSession = <TSchema extends Record<string, unknown>>(
 
 export const openSqliteDrizzleConnection = <TSchema extends Record<string, unknown>>({
   config,
+  configureWal = true,
   databasePath,
   runtime = currentSqliteDriverRuntime(),
 }: OpenSqliteDrizzleConnectionInput<TSchema>): Effect.Effect<
@@ -187,7 +196,7 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, unkno
           ),
         ),
     );
-    yield* configureDatabase(sqlite);
+    yield* configureDatabase(sqlite, configureWal);
 
     const database = drizzle(makeRemoteCallback(sqlite), config);
     return {
