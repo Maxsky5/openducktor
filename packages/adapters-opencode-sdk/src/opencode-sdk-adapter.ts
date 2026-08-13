@@ -623,6 +623,16 @@ export class OpencodeSdkAdapter
         policy,
         workingDirectory: input.workingDirectory,
       });
+      for (const session of matchingSessions) {
+        if (!session.input.sessionScope) {
+          await applySessionPolicy({
+            client: session.client,
+            externalSessionId: session.externalSessionId,
+            policy,
+            workingDirectory: session.input.workingDirectory,
+          });
+        }
+      }
     }
     for (const session of matchingSessions) {
       applyRuntimeContextToSession(session, input, "load session history");

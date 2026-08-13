@@ -138,6 +138,32 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
+  test("applies repository policy before history binds a retained unbound session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+
+    await adapter.loadSessionHistory({
+      ...sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      limit: 600,
+    });
+
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        sessionID: "session-opencode-1",
+        title: "Repository session",
+        permission: expect.arrayContaining([
+          { permission: "odt_create_task", pattern: "*", action: "ask" },
+          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
+        ]),
+      }),
+    );
+    unsubscribe();
+  });
+
   test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
     const mock = makeMockClient({
       mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
