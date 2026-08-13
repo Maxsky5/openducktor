@@ -44,7 +44,7 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
 
 const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
   const identity = sessionIdentity(overrides);
-  return {
+  const session: AgentSessionState = {
     ...identity,
     taskId: "task-1",
     sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
@@ -60,6 +60,13 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
     selectedModel: null,
     ...overrides,
   };
+  if (!overrides.sessionAssociation) {
+    session.sessionAssociation =
+      session.taskId && session.role
+        ? { kind: "workflow", taskId: session.taskId, role: session.role }
+        : { kind: "unbound" };
+  }
+  return session;
 };
 
 const wrapper = ({ children }: PropsWithChildren) =>
@@ -182,7 +189,7 @@ describe("useSessionRuntimeData", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.todos.length === 1);
+      await harness.waitFor((latest) => latest.todos.length === 1, 1_000);
       expect(harness.getLatest().todos).toEqual([todoFixture]);
 
       await harness.update({

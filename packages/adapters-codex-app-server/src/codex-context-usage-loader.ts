@@ -7,7 +7,7 @@ import {
   preserveRuntimeContextForExistingThread,
   sessionStateFromExistingThread,
 } from "./codex-session-lifecycle";
-import { codexTransportPolicy, requireCodexRuntimePolicy } from "./codex-session-policy";
+import { codexTransportPolicy } from "./codex-session-policy";
 import { codexSessionRef } from "./codex-session-ref";
 import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
@@ -104,6 +104,16 @@ export class CodexContextUsageLoader {
       return retained;
     }
     const session = this.retainedLiveSession(input);
+    if (session.summary.sessionAssociation.kind === "unbound") {
+      throw new Error(
+        `Cannot load Codex session context usage because session '${input.externalSessionId}' has no session context.`,
+      );
+    }
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      session.summary.sessionAssociation,
+      session.runtimePolicy,
+      "load Codex session context usage",
+    );
     const targetRef = {
       ...codexSessionRef(session),
       externalSessionId: input.externalSessionId,
@@ -117,10 +127,6 @@ export class CodexContextUsageLoader {
     try {
       await this.wait(guard, this.deps.prepareRuntime(input.runtimeId));
       this.assertActive(guard);
-      const policy = requireCodexRuntimePolicy(
-        session.runtimePolicy,
-        "load Codex session context usage",
-      );
       return await this.wait(
         guard,
         this.deps.runtimeEvents.loadSessionContextUsage(
@@ -130,7 +136,8 @@ export class CodexContextUsageLoader {
             await this.wait(
               guard,
               this.deps.runtimeClients.clientForRuntime(input.runtimeId).threadResume({
-                ...codexTransportPolicy(policy),
+                ...codexTransportPolicy(sessionPolicy.runtimePolicy),
+                config: sessionPolicy.threadConfig,
                 threadId: input.externalSessionId,
                 cwd: session.workingDirectory,
                 excludeTurns: false,

@@ -120,6 +120,12 @@ export const buildSession = (
     ...baseSession,
     ...overrideSessionFields,
   };
+  if (!overrideSessionFields.sessionAssociation) {
+    session.sessionAssociation =
+      session.taskId && session.role
+        ? { kind: "workflow", taskId: session.taskId, role: session.role }
+        : { kind: "unbound" };
+  }
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 

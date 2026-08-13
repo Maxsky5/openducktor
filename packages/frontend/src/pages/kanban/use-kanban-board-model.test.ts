@@ -57,6 +57,12 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     ...overrides,
     historyLoadState: overrides.historyLoadState ?? "not_requested",
   };
+  if (!overrides.sessionAssociation) {
+    session.sessionAssociation =
+      session.taskId && session.role
+        ? { kind: "workflow", taskId: session.taskId, role: session.role }
+        : { kind: "unbound" };
+  }
   return toAgentSessionSummary(session);
 };
 

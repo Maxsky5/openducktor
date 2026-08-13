@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -238,6 +239,10 @@ describe("CodexContextUsageLoader", () => {
       expect.objectContaining({
         method: "thread/resume",
         params: expect.objectContaining({
+          config: {
+            "mcp_servers.openducktor.enabled": true,
+            "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+          },
           threadId: "grandchild-thread",
           cwd: "/repo",
           excludeTurns: false,

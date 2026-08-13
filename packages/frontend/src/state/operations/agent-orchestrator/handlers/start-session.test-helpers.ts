@@ -129,22 +129,31 @@ export const sessionIdentity = (
 
 export const sessionFixture = (
   overrides: Partial<TestAgentSessionState> & { externalSessionId: string },
-): TestAgentSessionState => ({
-  runtimeKind: "opencode",
-  taskId: "task-1",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-  role: "build",
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: "2026-02-22T08:10:00.000Z",
-  workingDirectory: "/tmp/repo/worktree",
-  historyLoadState: "not_requested",
-  messages: [],
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-});
+): TestAgentSessionState => {
+  const session: TestAgentSessionState = {
+    runtimeKind: "opencode",
+    taskId: "task-1",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    role: "build",
+    status: "idle",
+    runtimeStatusMessage: null,
+    startedAt: "2026-02-22T08:10:00.000Z",
+    workingDirectory: "/tmp/repo/worktree",
+    historyLoadState: "not_requested",
+    messages: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...overrides,
+  };
+  if (!overrides.sessionAssociation) {
+    session.sessionAssociation =
+      session.taskId && session.role
+        ? { kind: "workflow", taskId: session.taskId, role: session.role }
+        : { kind: "unbound" };
+  }
+  return session;
+};
 
 const ensureRuntimeWithKind = async (
   ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>

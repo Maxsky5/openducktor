@@ -319,9 +319,10 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         runtimePolicy,
         systemPrompt: "repository system",
       }),
-    ).rejects.toThrow(
-      "OpenCode request failed: update repository session policy for session 'repository-resume'",
-    );
+    ).rejects.toMatchObject({
+      message:
+        "OpenCode request failed: update repository session policy for session 'repository-resume': permission update rejected",
+    });
   });
 
   test("propagates workflow fork policy update failures", async () => {

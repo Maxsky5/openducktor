@@ -296,10 +296,21 @@ export const createAgentSessionFixture = (
     overrideSession.externalSessionId ??
     defaultSession.externalSessionId ??
     BASE_AGENT_SESSION_FIXTURE.externalSessionId;
-  const merged: AgentSessionState = {
+  const mergedSession = {
     ...BASE_AGENT_SESSION_FIXTURE,
     ...defaultSession,
     ...overrideSession,
+  };
+  let sessionAssociation = overrideSession.sessionAssociation ?? defaultSession.sessionAssociation;
+  if (!sessionAssociation) {
+    sessionAssociation =
+      mergedSession.taskId && mergedSession.role
+        ? { kind: "workflow", taskId: mergedSession.taskId, role: mergedSession.role }
+        : { kind: "unbound" };
+  }
+  const merged: AgentSessionState = {
+    ...mergedSession,
+    sessionAssociation,
     messages: toAgentSessionFixtureMessages(
       externalSessionId,
       overrideMessages ?? defaultMessages ?? BASE_AGENT_SESSION_FIXTURE.messages,
