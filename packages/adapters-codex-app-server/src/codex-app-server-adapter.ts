@@ -120,6 +120,11 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
+type RetainedSessionPolicyPreparation = {
+  binding: Promise<CodexSessionState> | undefined;
+  session: CodexSessionState | undefined;
+};
+
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
 ): AgentSessionLivePendingApprovalRequest => ({
@@ -472,18 +477,17 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "not_system") {
       assertCodexUserMessagePartsSupported(input.parts);
     }
-    let session = this.retainedSessionForOperation(input, "send");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "send",
+      context: "send user message",
+    });
+    let session = preparation.session;
+    if (preparation.binding) {
+      session = await preparation.binding;
     }
     if (!session) {
-      await this.ensureSessionState(input);
-      session = this.localSessions.get(input.externalSessionId);
+      session = await this.requireMissingPolicyBoundSession(input, "send user message");
     }
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    }
-    applyRuntimeContextToSession(session, input, "send user message");
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
@@ -545,13 +549,11 @@ export class CodexAppServerAdapter
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session history");
-    let session = this.retainedSessionForOperation(input, "load history for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
-    }
-    if (session) {
-      applyRuntimeContextToSession(session, input, "load session history");
-    }
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "load history for",
+      context: "load session history",
+    });
+    const session = preparation.binding ? await preparation.binding : preparation.session;
     const runtime = session
       ? {
           client: this.runtimeClients.clientForRuntime(session.runtimeId),
@@ -570,12 +572,12 @@ export class CodexAppServerAdapter
     input: PolicyBoundSessionRef,
   ): Promise<CodexSessionContextUsage | null> {
     assertCodexRuntimePolicyBinding(input, "load Codex session context usage");
-    let session = this.retainedSessionForOperation(input, "load context usage for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
-    }
-    if (session) {
-      applyRuntimeContextToSession(session, input, "load session context usage");
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "load context usage for",
+      context: "load session context usage",
+    });
+    if (preparation.binding) {
+      await preparation.binding;
     }
     return this.contextUsageLoader.loadSession(input);
   }
@@ -614,13 +616,11 @@ export class CodexAppServerAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session todos");
-    let session = this.retainedSessionForOperation(input, "load todos for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
-    }
-    if (session) {
-      applyRuntimeContextToSession(session, input, "load Codex session todos");
-    }
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "load todos for",
+      context: "load Codex session todos",
+    });
+    const session = preparation.binding ? await preparation.binding : preparation.session;
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
     if (liveTodos) {
       return liveTodos;
@@ -689,6 +689,37 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
+    return session;
+  }
+
+  private prepareRetainedSessionPolicy(
+    input: PolicyBoundSessionRef,
+    actions: { context: string; lookup: string },
+  ): RetainedSessionPolicyPreparation {
+    const session = this.retainedSessionForOperation(input, actions.lookup);
+    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
+      const binding = this.bindRetainedSessionPolicy(input).then((boundSession) => {
+        applyRuntimeContextToSession(boundSession, input, actions.context);
+        return boundSession;
+      });
+      return { binding, session: undefined };
+    }
+    if (session) {
+      applyRuntimeContextToSession(session, input, actions.context);
+    }
+    return { binding: undefined, session };
+  }
+
+  private async requireMissingPolicyBoundSession(
+    input: PolicyBoundSessionRef,
+    context: string,
+  ): Promise<CodexSessionState> {
+    await this.ensureSessionState(input);
+    const session = this.localSessions.get(input.externalSessionId);
+    if (!session) {
+      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+    }
+    applyRuntimeContextToSession(session, input, context);
     return session;
   }
 
@@ -769,18 +800,17 @@ export class CodexAppServerAdapter
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex approval");
     requireCodexPendingRequestKey(input.requestId, "approval");
-    let session = this.retainedSessionForOperation(input, "reply to approval for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "reply to approval for",
+      context: "reply to approval",
+    });
+    let session = preparation.session;
+    if (preparation.binding) {
+      session = await preparation.binding;
     }
     if (!session) {
-      await this.ensureSessionState(input);
-      session = this.localSessions.get(input.externalSessionId);
+      session = await this.requireMissingPolicyBoundSession(input, "reply to approval");
     }
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    }
-    applyRuntimeContextToSession(session, input, "reply to approval");
     await this.replyLiveApproval({
       runtimeId: session.runtimeId,
       externalSessionId: input.externalSessionId,
@@ -836,18 +866,17 @@ export class CodexAppServerAdapter
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
     requireCodexPendingRequestKey(input.requestId, "question");
-    let session = this.retainedSessionForOperation(input, "reply to question for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "reply to question for",
+      context: "reply to question",
+    });
+    let session = preparation.session;
+    if (preparation.binding) {
+      session = await preparation.binding;
     }
     if (!session) {
-      await this.ensureSessionState(input);
-      session = this.localSessions.get(input.externalSessionId);
+      session = await this.requireMissingPolicyBoundSession(input, "reply to question");
     }
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    }
-    applyRuntimeContextToSession(session, input, "reply to question");
     await this.replyLiveQuestion({
       runtimeId: session.runtimeId,
       externalSessionId: input.externalSessionId,
@@ -1001,14 +1030,12 @@ export class CodexAppServerAdapter
       ? await this.prepareLiveSessionSubscription(input)
       : undefined;
 
-    let session = this.retainedSessionForOperation(input, "subscribe to events for");
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      session = await this.bindRetainedSessionPolicy(input);
-    }
+    const preparation = this.prepareRetainedSessionPolicy(input, {
+      lookup: "subscribe to events for",
+      context: "subscribe session events",
+    });
+    const session = preparation.binding ? await preparation.binding : preparation.session;
     const registeredSessionRef = session ? codexSessionRef(session) : input;
-    if (session) {
-      applyRuntimeContextToSession(session, input, "subscribe session events");
-    }
 
     const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
     for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(

@@ -5,6 +5,20 @@ import type { OpencodeSessionPolicy } from "./opencode-session-policy";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionInput, SessionRecord } from "./types";
+import { ensureTrustedOdtMcpServerConnected } from "./workflow-tool-selection";
+
+export const requireOpencodeSessionPolicyRuntime = async (input: {
+  client: SessionRecord["client"];
+  policy: OpencodeSessionPolicy;
+  workingDirectory: string;
+}): Promise<void> => {
+  if (input.policy.toolSelection.kind === "repository") {
+    await ensureTrustedOdtMcpServerConnected({
+      client: input.client,
+      workingDirectory: input.workingDirectory,
+    });
+  }
+};
 
 export const applySessionPolicy = async (input: {
   client: SessionRecord["client"];
@@ -73,4 +87,43 @@ export const applyRuntimeContextToSession = (
   if (input.systemPrompt !== undefined) {
     session.input.systemPrompt = input.systemPrompt;
   }
+};
+
+export const synchronizeOpencodeSessionPolicy = async (input: {
+  action: string;
+  policy: OpencodeSessionPolicy;
+  request: PolicyBoundSessionRef;
+  session: SessionRecord;
+}): Promise<void> => {
+  assertRuntimeContextCompatibleWithSession(input.session, input.request, input.action);
+  await requireOpencodeSessionPolicyRuntime({
+    client: input.session.client,
+    policy: input.policy,
+    workingDirectory: input.request.workingDirectory,
+  });
+  await applySessionPolicy({
+    client: input.session.client,
+    externalSessionId: input.session.externalSessionId,
+    policy: input.policy,
+    workingDirectory: input.request.workingDirectory,
+  });
+  applyRuntimeContextToSession(input.session, input.request, input.action);
+};
+
+export const adoptPreparedOpencodeSessionPolicy = async (input: {
+  action: string;
+  policy: OpencodeSessionPolicy;
+  request: PolicyBoundSessionRef;
+  session: SessionRecord;
+}): Promise<void> => {
+  assertRuntimeContextCompatibleWithSession(input.session, input.request, input.action);
+  if (!input.session.input.sessionScope) {
+    await applySessionPolicy({
+      client: input.session.client,
+      externalSessionId: input.session.externalSessionId,
+      policy: input.policy,
+      workingDirectory: input.request.workingDirectory,
+    });
+  }
+  applyRuntimeContextToSession(input.session, input.request, input.action);
 };
