@@ -26,9 +26,7 @@ import {
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import {
   runtimeDefinitionsQueryOptions,
-  runtimeExecutablePaths,
   runtimeExecutableQueryOptions,
-  runtimeExecutablesQueryOptions,
 } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -334,16 +332,6 @@ const renderAppShellForTest = (
     CODEX_RUNTIME_DESCRIPTOR,
     CLAUDE_RUNTIME_DESCRIPTOR,
   ]);
-  queryClient.setQueryData(
-    runtimeExecutablesQueryOptions(runtimeExecutablePaths(settingsSnapshot.agentRuntimes)).queryKey,
-    {
-      runtimes: [
-        { kind: "opencode", path: "", ok: false, version: null, error: "Path is empty." },
-        { kind: "codex", path: "", ok: false, version: null, error: "Path is empty." },
-        { kind: "claude", path: "", ok: false, version: null, error: "Path is empty." },
-      ],
-    },
-  );
   for (const kind of ["opencode", "codex", "claude"] as const) {
     queryClient.setQueryData(runtimeExecutableQueryOptions(kind, "").queryKey, {
       kind,

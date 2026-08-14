@@ -13,7 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
@@ -24,11 +24,8 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import {
-  runtimeDiscoveryQueryOptions,
-  runtimeExecutablePaths,
-  runtimeExecutablesQueryOptions,
-} from "@/state/queries/runtime";
+import { runtimeDiscoveryQueryOptions } from "@/state/queries/runtime";
+import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -230,14 +227,10 @@ export const useSettingsModalController = ({
         : [],
     [runtimeDefinitions, snapshotDraft],
   );
-  const runtimeExecutableQuery = useQuery({
-    ...runtimeExecutablesQueryOptions(
-      snapshotDraft
-        ? runtimeExecutablePaths(snapshotDraft.agentRuntimes)
-        : { opencode: "", codex: "", claude: "" },
-    ),
-    enabled: open && snapshotDraft !== null,
-  });
+  const runtimeExecutableValidation = useRuntimeExecutableValidation(
+    snapshotDraft?.agentRuntimes ?? null,
+    open,
+  );
   const runtimeDiscoveryInFlight = useRef(false);
   const runtimeDiscoveryVisit = useRef(0);
   const [isCheckingRuntimeExecutables, setIsCheckingRuntimeExecutables] = useState(false);
@@ -263,11 +256,9 @@ export const useSettingsModalController = ({
   const isLoadingRuntimeExecutables =
     open &&
     snapshotDraft !== null &&
-    (runtimeExecutableQuery.isPending ||
-      runtimeExecutableQuery.isFetching ||
-      isCheckingRuntimeExecutables);
-  const runtimeExecutableValidationError = runtimeExecutableQuery.error
-    ? errorMessage(runtimeExecutableQuery.error)
+    (runtimeExecutableValidation.checkingRuntimeKinds.length > 0 || isCheckingRuntimeExecutables);
+  const runtimeExecutableValidationError = runtimeExecutableValidation.error
+    ? errorMessage(runtimeExecutableValidation.error)
     : null;
   const runtimeExecutablesError = runtimeDiscoveryError ?? runtimeExecutableValidationError;
   const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
@@ -304,8 +295,8 @@ export const useSettingsModalController = ({
   const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
     runtimeDefinitions,
     snapshotDraft,
-    ...(runtimeExecutableQuery.data
-      ? { runtimeExecutableResults: runtimeExecutableQuery.data.runtimes }
+    ...(runtimeExecutableValidation.results.length > 0
+      ? { runtimeExecutableResults: runtimeExecutableValidation.results }
       : {}),
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;

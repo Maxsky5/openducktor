@@ -1,6 +1,6 @@
 import type { AgentRuntimes, RuntimeKind } from "@openducktor/contracts";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 import { invalidEnabledRuntime } from "@/components/features/settings/runtime-executable-validation";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,8 @@ import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
-  runtimeExecutableQueryOptions,
 } from "@/state/queries/runtime";
+import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
 import {
@@ -73,27 +73,10 @@ export function OnboardingPage(): ReactElement {
     enabled: true,
   });
   const runtimeDraft = runtimeDraftOverride ?? settingsQuery.data?.agentRuntimes ?? null;
-  const validationQueries = useQueries({
-    queries: RUNTIME_KINDS.map((kind) => ({
-      ...runtimeExecutableQueryOptions(kind, runtimeDraft?.[kind].executablePath ?? ""),
-      enabled: runtimeDraft !== null,
-    })),
-  });
-  const opencodeValidationResult = validationQueries[0]?.data;
-  const codexValidationResult = validationQueries[1]?.data;
-  const claudeValidationResult = validationQueries[2]?.data;
-  const checkResults = useMemo(
-    () =>
-      [opencodeValidationResult, codexValidationResult, claudeValidationResult].filter(
-        (result): result is NonNullable<typeof result> => result !== undefined,
-      ),
-    [claudeValidationResult, codexValidationResult, opencodeValidationResult],
-  );
-  const checkingRuntimeKinds = RUNTIME_KINDS.filter((_, index) => {
-    const query = validationQueries[index];
-    return query?.isPending || query?.isFetching;
-  });
-  const runtimeValidationError = validationQueries.find((query) => query?.error)?.error ?? null;
+  const runtimeValidation = useRuntimeExecutableValidation(runtimeDraft, runtimeDraft !== null);
+  const checkResults = runtimeValidation.results;
+  const checkingRuntimeKinds = runtimeValidation.checkingRuntimeKinds;
+  const runtimeValidationError = runtimeValidation.error;
 
   useEffect(() => {
     preloadKanbanPage();
@@ -261,9 +244,7 @@ export function OnboardingPage(): ReactElement {
     void settingsQuery.refetch();
     void definitionsQuery.refetch();
     if (runtimeDraft !== null) {
-      for (const query of validationQueries) {
-        if (query) void query.refetch();
-      }
+      void runtimeValidation.refetch();
     }
   };
 

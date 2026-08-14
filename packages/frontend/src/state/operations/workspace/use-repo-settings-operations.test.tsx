@@ -683,11 +683,7 @@ describe("use-repo-settings-operations", () => {
           }
         },
       );
-      const runtimeKey = runtimeQueryKeys.executables({
-        opencode: "/tools/opencode",
-        codex: "/tools/codex",
-        claude: "/tools/claude",
-      });
+      const runtimeKey = runtimeQueryKeys.executable("opencode", "/tools/opencode");
       const checksKey = checksQueryKeys.runtime();
       queryClient.setQueryData(runtimeKey, { runtimes: [] });
       queryClient.setQueryData(checksKey, { ok: true });

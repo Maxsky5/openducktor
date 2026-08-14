@@ -1,5 +1,4 @@
 import type {
-  AgentRuntimes,
   RuntimeDescriptor,
   RuntimeExecutableCheck,
   RuntimeKind,
@@ -27,8 +26,6 @@ export const runtimeQueryKeys = {
   discovery: () => [...runtimeQueryKeys.all, "executables", "discovery"] as const,
   executable: (kind: RuntimeKind, path: string) =>
     [...runtimeQueryKeys.all, "executables", "validate", kind, path] as const,
-  executables: (paths: Record<RuntimeKind, string>) =>
-    [...runtimeQueryKeys.all, "executables", paths] as const,
 };
 
 export const runtimeDefinitionsQueryOptions = () =>
@@ -37,12 +34,6 @@ export const runtimeDefinitionsQueryOptions = () =>
     queryFn: async () => requireCompatibleRuntimeDefinitions(await host.runtimeDefinitionsList()),
     staleTime: RUNTIME_DEFINITIONS_STALE_TIME_MS,
   });
-
-export const runtimeExecutablePaths = (runtimes: AgentRuntimes): Record<RuntimeKind, string> => ({
-  opencode: runtimes.opencode.executablePath,
-  codex: runtimes.codex.executablePath,
-  claude: runtimes.claude.executablePath,
-});
 
 export const runtimeDiscoveryQueryOptions = () =>
   queryOptions({
@@ -64,13 +55,5 @@ export const runtimeExecutableQueryOptions = (kind: RuntimeKind, path: string) =
       if (!result) throw new Error(`Runtime executable check did not return ${kind}.`);
       return result;
     },
-    staleTime: 30_000,
-  });
-
-export const runtimeExecutablesQueryOptions = (paths: Record<RuntimeKind, string>) =>
-  queryOptions({
-    queryKey: runtimeQueryKeys.executables(paths),
-    queryFn: (): Promise<RuntimeExecutableCheck> =>
-      host.runtimeExecutablesCheck({ mode: "validate", paths }),
     staleTime: 30_000,
   });

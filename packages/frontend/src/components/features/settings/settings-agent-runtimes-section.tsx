@@ -12,7 +12,6 @@ import {
   resolveCodexEffectivePolicy,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,7 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
-import { runtimeExecutablePaths, runtimeExecutablesQueryOptions } from "@/state/queries/runtime";
+import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 
@@ -717,9 +716,10 @@ export function AgentRuntimesSection({
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
-  const executablePaths = runtimeExecutablePaths(agentRuntimes);
-  const executableQuery = useQuery(runtimeExecutablesQueryOptions(executablePaths));
-  const executableQueryError = executableQuery.error ? errorMessage(executableQuery.error) : null;
+  const executableValidation = useRuntimeExecutableValidation(agentRuntimes, true);
+  const executableQueryError = executableValidation.error
+    ? errorMessage(executableValidation.error)
+    : null;
   const selectedDefinition =
     sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
     sortedRuntimeDefinitions[0];
@@ -780,8 +780,8 @@ export function AgentRuntimesSection({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || executableQuery.isFetching}
-            onClick={() => void executableQuery.refetch()}
+            disabled={disabled || executableValidation.checkingRuntimeKinds.length > 0}
+            onClick={() => void executableValidation.refetch()}
           >
             Retry executable check
           </Button>
@@ -861,9 +861,10 @@ export function AgentRuntimesSection({
                 <RuntimeExecutablePanel
                   runtimes={agentRuntimes}
                   definitions={[selectedDefinition]}
-                  results={executableQuery.data?.runtimes ?? []}
+                  results={executableValidation.results}
                   disabled={disabled}
-                  isChecking={isCheckingExecutables || executableQuery.isFetching}
+                  isChecking={isCheckingExecutables}
+                  checkingRuntimeKinds={executableValidation.checkingRuntimeKinds}
                   checkAgainPlacement="runtime-status"
                   onChange={(next) => onUpdateAgentRuntimes(() => next)}
                   onCheckAgain={() => void onCheckAgain()}

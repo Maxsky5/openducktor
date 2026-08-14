@@ -121,7 +121,7 @@ describe("AgentRuntimesSection", () => {
     try {
       await screen.findByText(/Failed to check runtime executables: Executable request failed/i);
       fireEvent.click(screen.getByRole("button", { name: "Retry executable check" }));
-      await waitFor(() => expect(attempts).toBe(2));
+      await waitFor(() => expect(attempts).toBe(4));
       await waitFor(() => expect(screen.queryByText(/Executable request failed/i)).toBeNull());
     } finally {
       host.runtimeExecutablesCheck = originalCheck;

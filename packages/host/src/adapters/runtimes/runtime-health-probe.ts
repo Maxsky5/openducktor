@@ -16,6 +16,11 @@ const VERSION_OPTIONS_BY_KIND = {
   codex: { timeoutMs: VERSION_TIMEOUT_MS },
   opencode: OPENCODE_VERSION_OPTIONS,
 } satisfies Record<RuntimeKind, SystemCommandRunOptions>;
+const RUNTIME_LABELS = {
+  claude: "Claude",
+  codex: "Codex",
+  opencode: "OpenCode",
+} satisfies Record<RuntimeKind, string>;
 
 const runtimeHealthFailure = (
   kind: RuntimeKind,
@@ -40,15 +45,22 @@ export const createRuntimeHealthProbe = (
       const health = yield* Effect.either(
         Effect.gen(function* () {
           const binary = (yield* validateExactToolPath(toolDiscovery, kind, executablePath)).path;
-          const [, versionResult] = yield* Effect.all(
+          const [probeResult, versionResult] = yield* Effect.all(
             [
-              executableProbes[kind].probeExecutable(binary),
+              Effect.either(executableProbes[kind].probeExecutable(binary)),
               Effect.either(
                 systemCommands.versionCommand(binary, ["--version"], VERSION_OPTIONS_BY_KIND[kind]),
               ),
             ] as const,
             { concurrency: 2 },
           );
+          if (probeResult._tag === "Left") {
+            return runtimeHealthFailure(
+              kind,
+              binary,
+              `The executable at ${binary} is not a compatible ${RUNTIME_LABELS[kind]} runtime.`,
+            );
+          }
           const version = versionResult._tag === "Right" ? versionResult.right : null;
           return {
             kind,

@@ -6,6 +6,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoRuntimeRef,
   type RuntimeExecutableCheck,
+  type RuntimeKind,
   type SettingsSnapshot,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -22,8 +23,7 @@ import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import {
   runtimeDiscoveryQueryOptions,
-  runtimeExecutablePaths,
-  runtimeExecutablesQueryOptions,
+  runtimeExecutableQueryOptions,
 } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -124,16 +124,16 @@ const createHookHarness = (
   queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);
   queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, EMPTY_BRANCHES);
   if (options?.prefillExecutableCheck !== false) {
-    const paths = runtimeExecutablePaths(initialSnapshot.agentRuntimes);
-    queryClient.setQueryData(runtimeExecutablesQueryOptions(paths).queryKey, {
-      runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
+    for (const kind of ["opencode", "codex", "claude"] as const) {
+      const path = initialSnapshot.agentRuntimes[kind].executablePath;
+      queryClient.setQueryData(runtimeExecutableQueryOptions(kind, path).queryKey, {
         kind,
-        path: paths[kind],
+        path,
         ok: true,
         version: "1.0.0",
         error: null,
-      })),
-    });
+      });
+    }
   }
 
   const workspaceState = {
@@ -327,6 +327,47 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
     } finally {
       initialValidation.resolve(validationResult);
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
+  test("checks only the runtime whose executable path changed", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    const requests: RuntimeKind[][] = [];
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "discover") {
+        return { runtimes: [] };
+      }
+      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      requests.push(kinds);
+      return {
+        runtimes: kinds.map((kind) => ({
+          kind,
+          path: input.paths[kind] ?? "",
+          ok: true,
+          version: `${kind} 1.0.0`,
+          error: null,
+        })),
+      };
+    });
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      requests.length = 0;
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((current) => ({
+          ...current,
+          opencode: { ...current.opencode, executablePath: "/tools/opencode-next" },
+        }));
+      });
+      await harness.waitFor(() => requests.length > 0);
+
+      expect(requests).toEqual([["opencode"]]);
+    } finally {
       host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }

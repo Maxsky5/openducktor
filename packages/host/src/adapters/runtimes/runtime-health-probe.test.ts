@@ -124,7 +124,35 @@ describe("createRuntimeHealthProbe", () => {
 
     expect(health.ok).toBe(false);
     expect(health.version).toBeNull();
-    expect(health.error).toContain("OpenCode health protocol failed");
+    expect(health.error).toBe(
+      `The executable at ${executablePaths.opencode} is not a compatible OpenCode runtime.`,
+    );
+  });
+
+  test("returns a short user-facing error when the selected executable fails its runtime protocol", async () => {
+    const systemCommands = createSystemCommands({ version: "codex-cli 0.147.0" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes(() =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "claudeExecutableProbe.initialize",
+            message:
+              "Claude Code process exited with code 2. stderr: \u001b[31merror: unexpected argument '--output-format' found\u001b[0m",
+          }),
+        ),
+      ),
+    );
+
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("claude", executablePaths.claude),
+    );
+
+    expect(health.error).toBe(
+      `The executable at ${executablePaths.claude} is not a compatible Claude runtime.`,
+    );
+    expect(health.error).not.toContain("\u001b");
+    expect(health.error).not.toContain("unexpected argument");
   });
 
   test("keeps a protocol-ready runtime available when version display fails", async () => {
