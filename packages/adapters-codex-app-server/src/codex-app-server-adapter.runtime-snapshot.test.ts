@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -120,6 +121,36 @@ class IdleParentThreadListTransport extends RecordingTransport {
             createdAt: 1_778_112_000,
             preview: "Idle parent session",
             status: { type: "idle" },
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
+class IdleParentWithActiveChildTransport extends RecordingTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "parent-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            preview: "Idle parent session",
+            status: { type: "idle" },
+          },
+          {
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1_778_112_020,
+            preview: "Active child session",
+            status: { type: "active", activeFlags: [] },
+            parentThreadId: "parent-thread",
           },
         ],
         nextCursor: null,
@@ -952,5 +983,29 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  test("configures a discovered workflow parent before retaining it for an active child", async () => {
+    const transport = new IdleParentWithActiveChildTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("parent-thread"),
+      () => {},
+    );
+    unsubscribe();
+
+    expect(transport.calls).toContainEqual({
+      method: "thread/resume",
+      params: expect.objectContaining({
+        threadId: "parent-thread",
+        config: {
+          "mcp_servers.openducktor.enabled": true,
+          "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+        },
+      }),
+    });
   });
 });

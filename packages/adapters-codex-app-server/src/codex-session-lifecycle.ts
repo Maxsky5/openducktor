@@ -13,7 +13,6 @@ import {
   describeAgentSessionScope,
 } from "@openducktor/core";
 import {
-  type CodexThreadSnapshot,
   codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
@@ -88,7 +87,7 @@ export const applyRuntimeContextToSession = (
     const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
     session.summary = {
       ...session.summary,
-      title: policy.title,
+      ...(policy.kind === "repository" ? { title: policy.title } : {}),
       sessionAssociation: sessionScope,
     };
   }
@@ -155,22 +154,6 @@ export const sessionStateFromExistingThread = (
   const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
   delete session.liveStatus;
   return session;
-};
-
-export const sessionStateFromThreadSnapshot = (
-  input: PolicyBoundSessionRef,
-  runtimeId: string,
-  threadSnapshot: CodexThreadSnapshot,
-): CodexSessionState => {
-  const summary = toSessionSummary({
-    externalSessionId: threadSnapshot.id,
-    workingDirectory: input.workingDirectory,
-    startedAt: threadSnapshot.startedAt,
-    title: threadSnapshot.title,
-    sessionAssociation: inputAssociation(input),
-    status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
-  });
-  return buildSessionState(input, summary, runtimeId, undefined);
 };
 
 export const preserveRuntimeContextForExistingThread = (

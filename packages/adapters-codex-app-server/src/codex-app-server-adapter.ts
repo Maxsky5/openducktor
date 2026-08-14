@@ -73,7 +73,6 @@ import {
   sessionStateFromExistingThread,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
-  sessionStateFromThreadSnapshot,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
 import {
@@ -1076,13 +1075,8 @@ export class CodexAppServerAdapter
       if (!isRoutedChild && !hasActiveRoutedChild) {
         return runtimeId;
       }
-      const session = sessionStateFromThreadSnapshot(input, runtimeId, thread);
-      this.localSessions.remember(
-        preserveRuntimeContextForExistingThread(
-          session,
-          this.localSessions.get(session.summary.externalSessionId),
-        ),
-      );
+      await this.ensureSessionState(input);
+      this.clearThreadInventory(runtimeId);
       return runtimeId;
     }
 

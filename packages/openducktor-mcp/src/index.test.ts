@@ -397,6 +397,34 @@ describe("MCP server tool results", () => {
     }
   });
 
+  test("workspaceId-forbidden mode executes against the startup workspace", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, {
+      workspaceId: "repo",
+      forbidWorkspaceIdInput: true,
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = requireContentToolResult(
+        await client.callTool({
+          name: "odt_read_task",
+          arguments: { taskId: "task-1" },
+        }),
+      );
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toContainEqual({
+        url: "/invoke/odt_read_task",
+        body: { workspaceId: "repo", taskId: "task-1" },
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
   test("host bridge HTTP failures return content tool errors", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });

@@ -4,6 +4,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
+import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
@@ -56,6 +57,17 @@ describe("workflow-tool-permissions", () => {
     });
 
     expect(findFinalExactAction(rules, "runtime_plan_alias")).toBe("ask");
+  });
+
+  test("keeps approval prompts out of every workflow role policy", () => {
+    for (const role of Object.keys(AGENT_ROLE_TOOL_POLICY) as AgentRole[]) {
+      const rules = buildRoleScopedPermissionRules({
+        role,
+        runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      });
+
+      expect(rules.filter((rule) => rule.action === "ask")).toEqual([]);
+    }
   });
 
   test("builds runtime-provided read-only permission rules plus allow-specific odt permissions for spec role", () => {

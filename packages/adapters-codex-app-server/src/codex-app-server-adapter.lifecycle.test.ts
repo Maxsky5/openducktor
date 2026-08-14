@@ -257,6 +257,36 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
   });
 
+  test("preserves a resumed workflow title when applying later session context", async () => {
+    const { adapter } = createHarness();
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Resume build.",
+      externalSessionId: "thread-custom-title",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    };
+
+    await expect(adapter.resumeSession(input)).resolves.toMatchObject({
+      title: "Live Codex session",
+    });
+    const unsubscribe = await adapter.subscribeEvents(input, () => {});
+
+    try {
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
+        expect.objectContaining({
+          title: "Live Codex session",
+          ref: expect.objectContaining({ externalSessionId: "thread-custom-title" }),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("sends user parts through turn/start on the live runtime id", async () => {
     const { adapter, transports } = createHarness();
 
