@@ -1,7 +1,7 @@
 import { CancelledError, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { gitQueryKeys, loadCurrentBranchFromQuery } from "../../queries/git";
+import { invalidateCurrentBranchQuery, loadCurrentBranchFromQuery } from "../../queries/git";
 import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
@@ -124,11 +124,7 @@ export function useWorkspaceBranchProbe({
     const probeToken = probeGate.begin();
 
     try {
-      await queryClient.invalidateQueries({
-        queryKey: gitQueryKeys.currentBranch(repoPath),
-        exact: true,
-        refetchType: "none",
-      });
+      await invalidateCurrentBranchQuery(queryClient, repoPath);
 
       const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
       let outcome: BranchProbeOutcome;

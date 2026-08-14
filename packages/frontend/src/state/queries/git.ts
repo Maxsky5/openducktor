@@ -125,6 +125,16 @@ export const loadCurrentBranchFromQuery = (
 ): Promise<GitCurrentBranch> =>
   queryClient.fetchQuery(currentBranchQueryOptions(repoPath, hostClient));
 
+export const invalidateCurrentBranchQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: gitQueryKeys.currentBranch(repoPath),
+    exact: true,
+    refetchType: "none",
+  });
+
 export const loadWorktreeStatusFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
