@@ -84,6 +84,17 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
 });
 
 describe("createSqliteTaskRepository SQLite integration", () => {
+  test("disposes retained connections when the test harness is cleaned up", async () => {
+    const { cleanup, repoPath, store } = await createRepositoryHarness();
+    await Effect.runPromise(store.listTasks({ repoPath }));
+
+    await cleanup();
+
+    await expect(Effect.runPromise(store.listTasks({ repoPath }))).rejects.toThrow(
+      "The SQLite task store is stopping and cannot accept a new operation.",
+    );
+  });
+
   test("diagnoses and initializes a workspace-scoped SQLite database with Drizzle migrations", async () => {
     const { databasePath, repoPath, store } = await createRepositoryHarness();
 
@@ -109,6 +120,28 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
+    const database = new Database(databasePath);
+    try {
+      expect(
+        (database.query("PRAGMA journal_mode;").get() as { journal_mode: string }).journal_mode,
+      ).toBe("wal");
+    } finally {
+      database.close();
+    }
+  });
+
+  test("shares directory and schema initialization across concurrent first operations", async () => {
+    const { databasePath, repoPath, store } = await createRepositoryHarness();
+
+    const results = await Effect.runPromise(
+      Effect.all(
+        Array.from({ length: 8 }, () => store.listTasks({ repoPath })),
+        { concurrency: "unbounded" },
+      ),
+    );
+
+    expect(results).toEqual(Array.from({ length: 8 }, () => []));
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
   });
 

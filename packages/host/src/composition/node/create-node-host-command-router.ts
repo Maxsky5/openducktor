@@ -16,7 +16,6 @@ import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry"
 import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
-import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
@@ -171,12 +170,13 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const { taskAssetReadService, taskAssetRecoveryService, taskAssetStagingService, taskStore } =
-    createNodeTaskAssetServices({
-      ...(configuredTaskStore ? { configuredTaskStore } : {}),
-      processEnv,
-      workspaceSettingsService,
-    });
+  const assets = createNodeTaskAssetServices({
+    ...(configuredTaskStore ? { configuredTaskStore } : {}),
+    onBackgroundFailure,
+    processEnv,
+    workspaceSettingsService,
+  });
+  const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -362,8 +362,7 @@ export const createNodeEffectHostCommandRouter = (
     initialize: () =>
       Effect.gen(function* () {
         if (!taskAssetStagingSwept) {
-          yield* taskAssetRecoveryService.startupSweep();
-          yield* taskAssetStagingService.startupSweep();
+          yield* startupSweep();
           taskAssetStagingSwept = true;
         }
         if (resolvedMcpHostBridge) {
@@ -413,6 +412,7 @@ export const createNodeEffectHostCommandRouter = (
                     ),
                   ),
               },
+              assets.taskStoreConnectionShutdownStep,
             ],
             lifecycleLogger,
           ),

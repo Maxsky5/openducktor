@@ -6,7 +6,7 @@ import {
 } from "drizzle-orm/sqlite-proxy";
 import type { SQLiteProxyTransaction } from "drizzle-orm/sqlite-proxy/session";
 import type { DrizzleConfig } from "drizzle-orm/utils";
-import { type Cause, Effect, Exit, Scope } from "effect";
+import { type Cause, Deferred, Effect, Exit, Scope } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   currentSqliteDriverRuntime,
@@ -41,12 +41,14 @@ export type SqliteDrizzleSession<TSchema extends Record<string, unknown>> = {
 };
 
 export type SqliteDrizzleConnection<TSchema extends Record<string, unknown>> = {
+  readonly close: Effect.Effect<void, HostOperationError>;
   readonly database: SqliteRemoteDatabase<TSchema>;
   readonly session: SqliteDrizzleSession<TSchema>;
 };
 
 export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, unknown>> = {
   readonly config: DrizzleConfig<TSchema>;
+  readonly configureWal: boolean;
   readonly databasePath: string;
   readonly runtime?: SqliteDriverRuntime;
 };
@@ -109,11 +111,18 @@ const makeRemoteCallback =
   (query, params, method) =>
     Effect.runPromise(executeRemoteQuery(database, query, params, method));
 
-const configureDatabase = (database: SqliteDatabase): Effect.Effect<void, HostOperationError> =>
-  database.exec("PRAGMA foreign_keys = ON;").pipe(
-    Effect.zipRight(database.exec("PRAGMA journal_mode = WAL;")),
+const configureDatabase = (
+  database: SqliteDatabase,
+  configureWal: boolean,
+): Effect.Effect<void, HostOperationError> => {
+  const enableForeignKeys = database.exec("PRAGMA foreign_keys = ON;");
+  const configure = configureWal
+    ? enableForeignKeys.pipe(Effect.zipRight(database.exec("PRAGMA journal_mode = WAL;")))
+    : enableForeignKeys;
+  return configure.pipe(
     Effect.mapError((cause) => toHostOperationError(cause, "sqlite.configureDatabase")),
   );
+};
 
 const executeSqliteQuery = <A>(
   run: () => PromiseLike<A>,
@@ -167,6 +176,7 @@ const makeSqliteDrizzleSession = <TSchema extends Record<string, unknown>>(
 
 export const openSqliteDrizzleConnection = <TSchema extends Record<string, unknown>>({
   config,
+  configureWal,
   databasePath,
   runtime = currentSqliteDriverRuntime(),
 }: OpenSqliteDrizzleConnectionInput<TSchema>): Effect.Effect<
@@ -176,21 +186,39 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, unkno
 > =>
   Effect.gen(function* () {
     const sqlite = yield* openSqliteDatabase(databasePath, runtime);
+    const closeCompletion = yield* Deferred.make<void, HostOperationError>();
+    let closeStarted = false;
+    const close = Effect.uninterruptible(
+      Effect.gen(function* () {
+        const ownsClose = yield* Effect.sync(() => {
+          if (closeStarted) return false;
+          closeStarted = true;
+          return true;
+        });
+        if (!ownsClose) {
+          return yield* Deferred.await(closeCompletion);
+        }
+        const closeExit = yield* Effect.exit(sqlite.close());
+        yield* Deferred.done(closeCompletion, closeExit);
+        if (Exit.isFailure(closeExit)) {
+          return yield* Effect.failCause(closeExit.cause);
+        }
+      }),
+    );
     const scope = yield* Effect.scope;
     yield* Scope.addFinalizer(
       scope,
-      sqlite
-        .close()
-        .pipe(
-          Effect.catchAll((cause) =>
-            Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
-          ),
+      close.pipe(
+        Effect.catchAll((cause) =>
+          Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
         ),
+      ),
     );
-    yield* configureDatabase(sqlite);
+    yield* configureDatabase(sqlite, configureWal);
 
     const database = drizzle(makeRemoteCallback(sqlite), config);
     return {
+      close,
       database,
       session: makeSqliteDrizzleSession(database),
     };

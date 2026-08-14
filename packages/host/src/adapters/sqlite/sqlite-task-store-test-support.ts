@@ -6,6 +6,10 @@ import { Effect } from "effect";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
+import {
+  createSqliteTaskRepositoryContextManager,
+  type SqliteTaskRepositoryContextProvider,
+} from "./sqlite-task-repository-context";
 
 type BunSqliteStatement = ReturnType<Database["prepare"]>;
 
@@ -38,6 +42,7 @@ const createClock = (): (() => Date) => {
 export type SqliteTaskStoreTestHarness = {
   readonly cleanup: () => Promise<void>;
   readonly configDir: string;
+  readonly contextProvider: SqliteTaskRepositoryContextProvider;
   readonly databasePath: string;
   readonly repoPath: string;
   readonly store: TaskStorePort;
@@ -56,15 +61,26 @@ export const createSqliteTaskStoreHarness = async ({
   const databasePath = Effect.runSync(
     resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
   );
-  const store = createSqliteTaskRepository({
-    now,
+  const contextManager = createSqliteTaskRepositoryContextManager({
+    processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
       resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
     resolveWorkspaceIdForRepoPath: () => Effect.succeed(workspaceId),
   });
+  const store = createSqliteTaskRepository({
+    contextProvider: contextManager.withDatabase,
+    now,
+  });
   return {
-    cleanup: () => rm(configDir, { force: true, recursive: true }),
+    cleanup: async () => {
+      try {
+        await Effect.runPromise(contextManager.dispose());
+      } finally {
+        await rm(configDir, { force: true, recursive: true });
+      }
+    },
     configDir,
+    contextProvider: contextManager.withDatabase,
     databasePath,
     repoPath,
     store,

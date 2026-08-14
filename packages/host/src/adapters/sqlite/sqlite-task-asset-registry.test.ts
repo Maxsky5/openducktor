@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createSqliteTaskAssetRegistry } from "./sqlite-task-asset-registry";
 import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 
@@ -18,9 +17,7 @@ describe("SQLite task asset registry", () => {
     const harness = await createSqliteTaskStoreHarness();
     cleanups.add(harness.cleanup);
     const registry = createSqliteTaskAssetRegistry({
-      resolveDatabasePath: ({ workspaceId }) =>
-        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      contextProvider: harness.contextProvider,
     });
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const failure = new HostOperationError({
@@ -70,9 +67,7 @@ describe("SQLite task asset registry", () => {
     const harness = await createSqliteTaskStoreHarness();
     cleanups.add(harness.cleanup);
     const registry = createSqliteTaskAssetRegistry({
-      resolveDatabasePath: ({ workspaceId }) =>
-        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      contextProvider: harness.contextProvider,
     });
     const task = await Effect.runPromise(
       harness.store.createTask({
@@ -148,9 +143,7 @@ describe("SQLite task asset registry", () => {
     const harness = await createSqliteTaskStoreHarness();
     cleanups.add(harness.cleanup);
     const registry = createSqliteTaskAssetRegistry({
-      resolveDatabasePath: ({ workspaceId }) =>
-        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      contextProvider: harness.contextProvider,
     });
     const task = await Effect.runPromise(
       harness.store.createTask({
@@ -214,9 +207,7 @@ describe("SQLite task asset registry", () => {
     const harness = await createSqliteTaskStoreHarness();
     cleanups.add(harness.cleanup);
     const registry = createSqliteTaskAssetRegistry({
-      resolveDatabasePath: ({ workspaceId }) =>
-        resolveSqliteTaskStoreDatabasePath({ configDir: harness.configDir, workspaceId }),
-      resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+      contextProvider: harness.contextProvider,
     });
     const expectedTask = await Effect.runPromise(
       harness.store.createTask({

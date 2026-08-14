@@ -1,14 +1,18 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import { Deferred, Effect, Exit } from "effect";
+import { Deferred, Effect } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
-import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
+import { HostOperationError } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
+import {
+  type OpenSqliteTaskStoreConnection,
+  openSqliteTaskStoreConnection,
+} from "./sqlite-task-store-connection";
+import {
+  createSqliteTaskStoreConnectionSlot,
+  type SqliteTaskStoreConnectionSlot,
+} from "./sqlite-task-store-connection-slot";
 import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
-import { ensureSchema } from "./sqlite-task-store-migrations";
-import { type TaskStoreSession, taskStoreSchema } from "./sqlite-task-store-schema";
+import type { TaskStoreSession } from "./sqlite-task-store-schema";
 
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
@@ -32,19 +36,25 @@ export type SqliteTaskRepositoryContextProvider = <A>(
   use: (context: SqliteTaskRepositoryContext) => Effect.Effect<A, unknown>,
 ) => Effect.Effect<A, TaskStoreError>;
 
-type CreateSqliteTaskRepositoryContextProviderInput = {
+export type SqliteTaskRepositoryContextManager = {
+  readonly dispose: () => Effect.Effect<void, HostOperationError>;
+  readonly withDatabase: SqliteTaskRepositoryContextProvider;
+};
+
+type CreateSqliteTaskRepositoryContextManagerInput = {
+  onBackgroundFailure?: (failure: HostOperationError) => Effect.Effect<void, never>;
+  openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;
   resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
 };
 
-type SqliteTaskRepositoryStorage = {
-  databasePath: string;
-  repoPath: string;
-  workspaceId: string;
+type AdmissionGate = {
+  readonly stop: () => Effect.Effect<void>;
+  readonly withLease: <A, E>(
+    use: () => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | HostOperationError>;
 };
-
-type SchemaInitializationFlight = Deferred.Deferred<void, TaskStoreError>;
 
 const resolveDefaultDatabasePath =
   (processEnv: NodeJS.ProcessEnv): ResolveSqliteTaskStorePath =>
@@ -54,128 +64,124 @@ const resolveDefaultDatabasePath =
       workspaceId,
     });
 
-export const createSqliteTaskRepositoryContextProvider = ({
+const hostIsStoppingError = () =>
+  new HostOperationError({
+    operation: "sqliteTaskRepository.acquireConnection",
+    message: "The SQLite task store is stopping and cannot accept a new operation.",
+  });
+
+const invalidAdmissionReleaseError = () =>
+  new HostOperationError({
+    operation: "sqliteTaskRepository.releaseConnection",
+    message: "The SQLite task store released an operation without an active admission lease.",
+  });
+
+const createAdmissionGate = (): AdmissionGate => {
+  let accepting = true;
+  let activeLeases = 0;
+  let shutdownWaiter: Deferred.Deferred<void> | null = null;
+
+  const acquireLease = Effect.suspend(() => {
+    if (!accepting) {
+      return Effect.fail(hostIsStoppingError());
+    }
+    activeLeases += 1;
+    return Effect.void;
+  });
+
+  const releaseLease = Effect.suspend(() => {
+    if (activeLeases === 0) {
+      return Effect.die(invalidAdmissionReleaseError());
+    }
+    activeLeases -= 1;
+    if (activeLeases > 0 || !shutdownWaiter) {
+      return Effect.void;
+    }
+    return Deferred.succeed(shutdownWaiter, undefined).pipe(Effect.asVoid);
+  });
+
+  const withLease: AdmissionGate["withLease"] = (use) =>
+    Effect.acquireUseRelease(acquireLease, use, () => releaseLease);
+
+  const stop = () =>
+    Effect.gen(function* () {
+      const candidate = yield* Deferred.make<void>();
+      const state = yield* Effect.sync(() => {
+        accepting = false;
+        shutdownWaiter ??= candidate;
+        return { drained: activeLeases === 0, waiter: shutdownWaiter };
+      });
+      if (state.drained) {
+        yield* Deferred.succeed(state.waiter, undefined);
+      }
+      yield* Deferred.await(state.waiter);
+    });
+
+  return { stop, withLease };
+};
+
+export const createSqliteTaskRepositoryContextManager = ({
+  onBackgroundFailure = (failure) => Effect.logError(failure.message),
+  openConnection = openSqliteTaskStoreConnection,
   processEnv,
   resolveDatabasePath = resolveDefaultDatabasePath(processEnv),
   resolveWorkspaceIdForRepoPath,
-}: CreateSqliteTaskRepositoryContextProviderInput): SqliteTaskRepositoryContextProvider => {
-  const initializedDatabasePaths = new Set<string>();
-  const schemaInitializationFlights = new Map<string, SchemaInitializationFlight>();
-
-  const completeSchemaInitializationFlight = (
-    databasePath: string,
-    flight: SchemaInitializationFlight,
-    initialize: Effect.Effect<void, TaskStoreError>,
-  ) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.exit(initialize);
-      if (Exit.isSuccess(exit)) {
-        initializedDatabasePaths.add(databasePath);
-      }
-      yield* Deferred.done(flight, exit);
-      if (Exit.isFailure(exit)) {
-        return yield* Effect.failCause(exit.cause);
-      }
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (schemaInitializationFlights.get(databasePath) === flight) {
-            schemaInitializationFlights.delete(databasePath);
-          }
-        }),
-      ),
-    );
+}: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
+  const admission = createAdmissionGate();
+  const slots = new Map<string, SqliteTaskStoreConnectionSlot>();
 
   const resolveStorage = (repoPath: string) =>
     Effect.gen(function* () {
       const workspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
       const databasePath = yield* resolveDatabasePath({ repoPath, workspaceId });
-      yield* Effect.tryPromise({
-        try: () => mkdir(path.dirname(databasePath), { recursive: true }),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "sqliteTaskRepository.createDatabaseDirectory",
-            message: errorMessage(cause),
-            cause,
-            details: { databasePath },
-          }),
-      });
-      return {
-        databasePath,
-        repoPath,
-        workspaceId,
-      } satisfies SqliteTaskRepositoryStorage;
+      return { databasePath, repoPath, workspaceId };
     });
 
-  const initializeWorkspaceTaskStore = (databasePath: string) =>
-    Effect.uninterruptibleMask((restore) =>
+  const getSlot = (databasePath: string) => {
+    const current = slots.get(databasePath);
+    if (current) return current;
+    const slot = createSqliteTaskStoreConnectionSlot({
+      databasePath,
+      onBackgroundFailure,
+      openConnection,
+    });
+    slots.set(databasePath, slot);
+    return slot;
+  };
+
+  const withDatabase: SqliteTaskRepositoryContextProvider = (repoPath, operation, use) =>
+    admission.withLease(() =>
       Effect.gen(function* () {
-        const newFlight = yield* Deferred.make<void, TaskStoreError>();
-        const reservation = yield* Effect.sync(() => {
-          if (initializedDatabasePaths.has(databasePath)) {
-            return { _tag: "initialized" as const };
-          }
-          const existingFlight = schemaInitializationFlights.get(databasePath);
-          if (existingFlight) {
-            return { _tag: "existing" as const, flight: existingFlight };
-          }
-          schemaInitializationFlights.set(databasePath, newFlight);
-          return { _tag: "created" as const, flight: newFlight };
-        });
-
-        if (reservation._tag === "initialized") {
-          return;
-        }
-
-        if (reservation._tag === "existing") {
-          return yield* restore(Deferred.await(reservation.flight));
-        }
-
-        const initialize = Effect.scoped(
-          Effect.gen(function* () {
-            const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
-              databasePath,
-              config: {
-                schema: taskStoreSchema,
-              },
-            });
-            yield* ensureSchema(connection.database, connection.session, databasePath);
-          }),
-        );
-        return yield* completeSchemaInitializationFlight(
-          databasePath,
-          reservation.flight,
-          initialize,
-        );
+        const storage = yield* resolveStorage(repoPath);
+        const slot = getSlot(storage.databasePath);
+        return yield* slot
+          .run((session) => use({ ...storage, session }))
+          .pipe(
+            Effect.mapError((cause) =>
+              mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
+            ),
+          );
       }),
     );
 
-  const openInitializedWorkspaceTaskStoreSession = (storage: SqliteTaskRepositoryStorage) =>
+  const dispose = () =>
     Effect.gen(function* () {
-      yield* initializeWorkspaceTaskStore(storage.databasePath);
-      const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
-        databasePath: storage.databasePath,
-        config: {
-          schema: taskStoreSchema,
-        },
-      });
-      return connection.session;
+      yield* admission.stop();
+      const results = yield* Effect.forEach(
+        Array.from(slots.values()),
+        (slot) => Effect.either(slot.shutdown()),
+        { concurrency: "unbounded" },
+      );
+      const failures = results.flatMap((result) => (result._tag === "Left" ? [result.left] : []));
+      if (failures.length > 0) {
+        return yield* new HostOperationError({
+          operation: "sqliteTaskRepository.disposeConnections",
+          message: failures.map((failure) => failure.message).join("\n"),
+          cause: failures[0],
+          details: { failures },
+        });
+      }
     });
 
-  return (repoPath, operation, use) =>
-    Effect.gen(function* () {
-      const storage = yield* resolveStorage(repoPath);
-      const program = Effect.gen(function* () {
-        const session = yield* openInitializedWorkspaceTaskStoreSession(storage);
-        return yield* use({
-          ...storage,
-          session,
-        });
-      });
-      return yield* Effect.scoped(program).pipe(
-        Effect.mapError((cause) =>
-          mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
-        ),
-      );
-    });
+  return { dispose, withDatabase };
 };
