@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
-import { FolderPickerDialog } from "./folder-picker-dialog";
+import { FolderPickerDialog, InlineFolderPicker } from "./folder-picker-dialog";
 
 const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -81,6 +81,7 @@ type WorkspaceCreationFormProps = {
   workspaces: WorkspaceRecord[];
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
+  repositoryPicker?: "dialog" | "inline";
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
 };
@@ -89,10 +90,14 @@ export function WorkspaceCreationForm({
   workspaces,
   addWorkspace,
   disabled = false,
+  repositoryPicker = "dialog",
   onSubmittingChange,
   onSuccess,
 }: WorkspaceCreationFormProps): ReactElement {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, {
+    ...initialState,
+    pickerOpen: repositoryPicker === "inline",
+  });
   const submitInFlight = useRef(false);
   const existingIds = useMemo(
     () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
@@ -146,12 +151,36 @@ export function WorkspaceCreationForm({
 
   return (
     <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4">
-      <Button type="button" size="lg" onClick={() => dispatch({ type: "picker", open: true })}>
-        <FolderOpen data-icon="inline-start" />
-        {state.repoPath ? "Choose different repository" : "Choose repository folder"}
-      </Button>
+      {repositoryPicker === "dialog" || (state.repoPath && !state.pickerOpen) ? (
+        <Button
+          type="button"
+          size={state.repoPath ? "default" : "lg"}
+          variant={state.repoPath ? "outline" : "default"}
+          className={state.repoPath ? "w-fit" : undefined}
+          onClick={() => dispatch({ type: "picker", open: true })}
+        >
+          <FolderOpen data-icon="inline-start" />
+          {state.repoPath ? "Choose different repository" : "Choose repository folder"}
+        </Button>
+      ) : null}
 
-      {state.repoPath ? (
+      {repositoryPicker === "inline" && state.pickerOpen ? (
+        <InlineFolderPicker
+          title="Repository browser"
+          description="Choose an existing Git repository on disk."
+          confirmLabel="Choose This Folder"
+          requireGitRepo
+          onConfirm={confirmRepo}
+          {...(state.repoPath
+            ? {
+                initialPath: state.repoPath,
+                onCancel: () => dispatch({ type: "picker", open: false }),
+              }
+            : {})}
+        />
+      ) : null}
+
+      {state.repoPath && !state.pickerOpen ? (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-col gap-1">
             <Label htmlFor="workspace-repo-path">Repository path</Label>
@@ -196,7 +225,7 @@ export function WorkspaceCreationForm({
         </p>
       ) : null}
 
-      {state.repoPath ? (
+      {state.repoPath && !state.pickerOpen ? (
         <Button
           type="button"
           disabled={busy || validationError !== null}
@@ -206,7 +235,7 @@ export function WorkspaceCreationForm({
         </Button>
       ) : null}
 
-      {state.pickerOpen ? (
+      {repositoryPicker === "dialog" && state.pickerOpen ? (
         <FolderPickerDialog
           open
           onOpenChange={(open) => dispatch({ type: "picker", open })}

@@ -6,6 +6,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeExecutableCheck,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -150,10 +151,39 @@ const opencodeSection = (): HTMLElement => {
 };
 
 describe("OnboardingPage runtime validation", () => {
+  test("renders a horizontal progress indicator above the current stage", () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+
+    expect(
+      screen
+        .getByRole("navigation", { name: "Onboarding progress" })
+        .getAttribute("data-orientation"),
+    ).toBe("horizontal");
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
   test("preloads the Kanban destination while the user completes onboarding", () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
 
     expect(preloadKanbanPageCalls).toBe(1);
+  });
+
+  test("resets the onboarding scroll position when the stage changes", async () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+    const onboardingShell = document.querySelector(".onboarding-shell");
+    if (!(onboardingShell instanceof HTMLElement)) {
+      throw new Error("Onboarding scroll container is missing");
+    }
+    onboardingShell.scrollTop = 320;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue to runtimes" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await screen.findByRole("heading", { name: "Configure agent runtimes" });
+
+    expect(onboardingShell.scrollTop).toBe(0);
   });
 
   test("keeps runtime cards neutral while exact paths are being checked", async () => {
@@ -300,9 +330,11 @@ describe("OnboardingPage runtime validation", () => {
       runtimeDefinitionsList: host.runtimeDefinitionsList,
       workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
-    host.runtimeExecutablesCheck = mock(async () => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("Runtime validation failed");
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "validate" && Object.hasOwn(input.paths, "opencode")) {
+        attempts += 1;
+        if (attempts === 1) throw new Error("Runtime validation failed");
+      }
       return createCheck(runtimes, true);
     });
     host.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
@@ -560,6 +592,66 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("checks only the runtime whose executable path changed", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
+      claude: { enabled: true, executablePath: "/valid/claude" },
+    };
+    const requests: RuntimeKind[][] = [];
+    const changedCheck = createDeferred<RuntimeExecutableCheck>();
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") return createCheck(runtimes, true);
+      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      requests.push(kinds);
+      if (input.paths.opencode === "/changed/opencode") return changedCheck.promise;
+      return {
+        runtimes: kinds.map((kind) => ({
+          kind,
+          path: input.paths[kind] ?? "",
+          ok: true,
+          version: `${kind} 1.0.0`,
+          error: null,
+        })),
+      };
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      requests.length = 0;
+
+      fireEvent.change(
+        screen.getByLabelText("Executable path", { selector: "#runtime-executable-opencode" }),
+        { target: { value: "/changed/opencode" } },
+      );
+
+      await within(opencodeSection()).findByText("Checking");
+      expect(requests).toEqual([["opencode"]]);
+      const codexSection = screen.getByRole("heading", { name: "Codex" }).closest("section");
+      if (!codexSection) throw new Error("Codex section is missing");
+      expect(within(codexSection).queryByText("Checking")).toBeNull();
+
+      await act(async () => {
+        changedCheck.resolve({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/changed/opencode",
+              ok: true,
+              version: "opencode 1.0.0",
+              error: null,
+            },
+          ],
+        });
+      });
+      await within(opencodeSection()).findByText(/opencode 1.0.0 at \/changed\/opencode/);
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("auto-enables a valid custom path unless the user changed the switch", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },
@@ -569,11 +661,20 @@ describe("OnboardingPage runtime validation", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
-      const draft = {
-        ...runtimes,
-        opencode: { enabled: false, executablePath: input.paths.opencode },
+      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      return {
+        runtimes: kinds.map((kind) => {
+          const path = input.paths[kind] ?? "";
+          const ok = kind === "opencode" && path.startsWith("/custom/");
+          return {
+            kind,
+            path,
+            ok,
+            version: ok ? "1.0.0" : null,
+            error: ok ? null : `${kind} executable is invalid.`,
+          };
+        }),
       };
-      return createCheck(draft, input.paths.opencode.startsWith("/custom/"));
     });
 
     try {

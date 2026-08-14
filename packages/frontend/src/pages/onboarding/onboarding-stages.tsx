@@ -2,6 +2,7 @@ import type {
   AgentRuntimes,
   RuntimeDescriptor,
   RuntimeExecutableCheckResult,
+  RuntimeKind,
 } from "@openducktor/contracts";
 import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, Settings2 } from "lucide-react";
 import { type ReactElement, type RefObject, useState } from "react";
@@ -26,25 +27,28 @@ type WelcomeStageProps = {
 
 export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
   return (
-    <Card className="flex max-h-[calc(100vh-15rem)] min-h-[28rem] flex-col overflow-hidden lg:max-h-[calc(100vh-7rem)] lg:min-h-[32rem]">
-      <CardHeader className="gap-4 px-6 pt-6 sm:px-8 sm:pt-8">
+    <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
+      <CardHeader className="gap-5 border-b border-border px-6 py-7 sm:px-9 sm:py-9">
         <Badge variant="secondary" className="w-fit">
           Welcome to OpenDucktor
         </Badge>
-        <div className="flex max-w-2xl flex-col gap-3">
-          <CardTitle className="text-3xl leading-tight sm:text-4xl">
+        <div className="flex max-w-3xl flex-col gap-3">
+          <CardTitle className="text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-5xl">
             Move from idea to reviewed change.
           </CardTitle>
-          <CardDescription className="max-w-xl text-base leading-relaxed">
+          <CardDescription className="max-w-2xl text-base leading-relaxed sm:text-lg">
             OpenDucktor keeps Spec, Plan, Build, and QA tied to one local Git repository.
           </CardDescription>
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-7 sm:px-8">
-        <div className="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+      <CardContent className="flex flex-1 flex-col gap-7 bg-muted/20 px-6 py-7 sm:px-9 sm:py-8">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
           {DELIVERY_PHASES.map((phase, index) => (
-            <div key={phase.label} className="flex min-h-28 flex-col gap-3 bg-muted p-4">
+            <div
+              key={phase.label}
+              className="flex min-h-28 flex-col justify-between gap-3 bg-card p-4 sm:p-5"
+            >
               <span className="font-mono text-xs text-muted-foreground">0{index + 1}</span>
               <div>
                 <p className="font-semibold">{phase.label}</p>
@@ -54,8 +58,8 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
           ))}
         </div>
 
-        <div className="grid shrink-0 gap-3 sm:grid-cols-2">
-          <div className="flex items-start gap-3 rounded-lg border border-border p-4">
+        <div className="grid overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-2 sm:divide-x sm:divide-border">
+          <div className="flex items-start gap-3 border-b border-border p-5 sm:border-b-0">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
               <Bot className="size-4" aria-hidden="true" />
             </span>
@@ -66,7 +70,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg border border-border p-4">
+          <div className="flex items-start gap-3 p-5">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
               <FolderGit2 className="size-4" aria-hidden="true" />
             </span>
@@ -80,7 +84,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
         </div>
       </CardContent>
 
-      <div className="flex justify-end border-t border-border bg-card px-6 py-4 sm:px-8">
+      <div className="flex justify-end border-t border-border bg-card px-6 py-4 sm:px-9">
         <Button size="lg" onClick={onContinue}>
           Continue to runtimes
           <ArrowRight data-icon="inline-end" />
@@ -99,6 +103,7 @@ type RuntimeStageProps = {
   stageError: string | null;
   stageErrorRef: RefObject<HTMLParagraphElement | null>;
   activity: RuntimeStageActivity;
+  checkingRuntimeKinds: readonly RuntimeKind[];
   showNoRuntimeWarning: boolean;
   continueDisabled: boolean;
   onChange: (next: AgentRuntimes) => void;
@@ -119,6 +124,7 @@ export function RuntimeStage({
   stageError,
   stageErrorRef,
   activity,
+  checkingRuntimeKinds,
   showNoRuntimeWarning,
   continueDisabled,
   onChange,
@@ -128,13 +134,12 @@ export function RuntimeStage({
   onContinue,
 }: RuntimeStageProps): ReactElement {
   const isLoading = activity === "loading";
-  const isChecking = activity === "validating" || activity === "rediscovering";
   const isRediscovering = activity === "rediscovering";
   const isSaving = activity === "saving";
 
   return (
-    <Card className="flex max-h-[calc(100vh-15rem)] min-h-[28rem] flex-col lg:max-h-[calc(100vh-7rem)] lg:min-h-[32rem]">
-      <CardHeader className="gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
+    <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
+      <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
         <div className="flex items-center gap-2 text-sm font-medium text-primary">
           <Settings2 className="size-4" aria-hidden="true" />
           Agent tools
@@ -146,7 +151,7 @@ export function RuntimeStage({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-5 pt-6 sm:px-8">
+      <CardContent className="flex flex-1 flex-col gap-5 bg-muted/20 px-6 py-6 sm:px-9">
         {requestError ? (
           <div
             className="flex flex-col gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -192,7 +197,8 @@ export function RuntimeStage({
             definitions={definitions}
             results={results}
             disabled={isSaving || isRediscovering}
-            isChecking={isChecking}
+            isChecking={isRediscovering}
+            checkingRuntimeKinds={checkingRuntimeKinds}
             onChange={onChange}
             onCheckAgain={onCheckAgain}
           />
@@ -240,7 +246,7 @@ export function RuntimeStage({
         ) : null}
       </CardContent>
 
-      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-8">
+      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
         <Button variant="outline" onClick={onBack} disabled={isSaving || isRediscovering}>
           <ArrowLeft data-icon="inline-start" />
           Back
@@ -268,8 +274,8 @@ export function WorkspaceStage({
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
 
   return (
-    <Card>
-      <CardHeader className="gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
+    <Card className="overflow-hidden shadow-sm">
+      <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
         <div className="flex items-center gap-2 text-sm font-medium text-primary">
           <FolderGit2 className="size-4" aria-hidden="true" />
           Repository boundary
@@ -281,21 +287,22 @@ export function WorkspaceStage({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-5 px-6 pb-6 pt-6 sm:px-8 sm:pb-8">
-        <div className="rounded-xl bg-muted p-4 sm:p-5">
+      <CardContent className="bg-muted/20 px-6 py-6 sm:px-9 sm:py-8">
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationForm
             workspaces={workspaces}
             addWorkspace={addWorkspace}
+            repositoryPicker="inline"
             onSubmittingChange={setIsCreatingWorkspace}
           />
         </div>
-        <div className="flex justify-start">
-          <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace}>
-            <ArrowLeft data-icon="inline-start" />
-            Back to runtimes
-          </Button>
-        </div>
       </CardContent>
+      <div className="flex justify-start border-t border-border bg-card px-6 py-4 sm:px-9">
+        <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace}>
+          <ArrowLeft data-icon="inline-start" />
+          Back to runtimes
+        </Button>
+      </div>
     </Card>
   );
 }

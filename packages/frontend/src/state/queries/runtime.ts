@@ -25,6 +25,8 @@ export const runtimeQueryKeys = {
   all: ["runtime"] as const,
   definitions: () => [...runtimeQueryKeys.all, "definitions"] as const,
   discovery: () => [...runtimeQueryKeys.all, "executables", "discovery"] as const,
+  executable: (kind: RuntimeKind, path: string) =>
+    [...runtimeQueryKeys.all, "executables", "validate", kind, path] as const,
   executables: (paths: Record<RuntimeKind, string>) =>
     [...runtimeQueryKeys.all, "executables", paths] as const,
 };
@@ -48,6 +50,21 @@ export const runtimeDiscoveryQueryOptions = () =>
     queryFn: (): Promise<RuntimeExecutableCheck> =>
       host.runtimeExecutablesCheck({ mode: "discover" }),
     staleTime: 0,
+  });
+
+export const runtimeExecutableQueryOptions = (kind: RuntimeKind, path: string) =>
+  queryOptions({
+    queryKey: runtimeQueryKeys.executable(kind, path),
+    queryFn: async (): Promise<RuntimeExecutableCheck["runtimes"][number]> => {
+      const checked = await host.runtimeExecutablesCheck({
+        mode: "validate",
+        paths: { [kind]: path },
+      });
+      const result = checked.runtimes.find((row) => row.kind === kind);
+      if (!result) throw new Error(`Runtime executable check did not return ${kind}.`);
+      return result;
+    },
+    staleTime: 30_000,
   });
 
 export const runtimeExecutablesQueryOptions = (paths: Record<RuntimeKind, string>) =>

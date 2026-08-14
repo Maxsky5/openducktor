@@ -1,5 +1,11 @@
 import { Check, Cpu, FolderGit2, Route } from "lucide-react";
-import type { CSSProperties, ReactElement, ReactNode } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import openducktorMarkUrl from "@/assets/openducktor-mark.svg";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -45,17 +51,24 @@ type OnboardingLayoutProps = {
 
 export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): ReactElement {
   const currentStageIndex = ONBOARDING_STAGES.findIndex((item) => item.id === stage);
+  const scrollContainerRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer?.dataset.stage === stage) scrollContainer.scrollTop = 0;
+  }, [stage]);
 
   return (
     <main
-      key={stage}
-      className="onboarding-shell h-screen min-h-0 overflow-y-auto bg-background text-foreground"
+      ref={scrollContainerRef}
+      data-stage={stage}
+      className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-[1180px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="flex items-center justify-between gap-4 pb-5 sm:pb-7">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+        <header className="flex items-center justify-between gap-4 pb-5">
           <div className="flex items-center gap-3">
             <span
-              className="block size-10 shrink-0 bg-foreground"
+              className="block size-9 shrink-0 bg-foreground"
               style={OPENDUCKTOR_MARK_MASK_STYLE}
               aria-hidden="true"
             />
@@ -67,72 +80,71 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
           <Badge variant="outline">First-time setup</Badge>
         </header>
 
-        <div className="grid flex-1 items-start gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-7">
-          <aside className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5 lg:sticky lg:top-7">
-            <div className="mb-5 hidden lg:block">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Setup route
-              </p>
-              <p className="mt-2 text-lg font-semibold leading-snug tracking-tight">
-                Prepare the tools that will work on your code.
-              </p>
-            </div>
-
-            <nav aria-label="Onboarding progress">
-              <p className="mb-3 text-xs font-medium text-muted-foreground">
-                Step {currentStageIndex + 1} of {ONBOARDING_STAGES.length}
-              </p>
-              <ol className="relative grid grid-cols-3 gap-2 before:absolute before:bottom-6 before:left-[1.15rem] before:top-6 before:hidden before:w-px before:bg-border lg:flex lg:flex-col lg:gap-2 lg:before:block">
-                {ONBOARDING_STAGES.map((item, index) => {
-                  const complete = index < currentStageIndex;
-                  const current = index === currentStageIndex;
-                  const Icon = item.icon;
-                  return (
-                    <li
-                      key={item.id}
-                      aria-current={current ? "step" : undefined}
+        <nav
+          className="rounded-xl border border-border bg-card px-3 py-3 shadow-sm sm:px-5"
+          aria-label="Onboarding progress"
+          data-orientation="horizontal"
+        >
+          <ol className="grid grid-cols-3">
+            {ONBOARDING_STAGES.map((item, index) => {
+              const complete = index < currentStageIndex;
+              const current = index === currentStageIndex;
+              const Icon = item.icon;
+              return (
+                <li
+                  key={item.id}
+                  aria-current={current ? "step" : undefined}
+                  className="relative flex min-w-0 justify-center px-1 sm:px-3"
+                >
+                  {index > 0 ? (
+                    <span
                       className={cn(
-                        "relative flex min-w-0 flex-col items-center gap-2 rounded-lg border px-1.5 py-3 text-center transition-colors duration-150 motion-reduce:transition-none sm:flex-row sm:gap-3 sm:px-3 sm:text-left",
-                        current
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent bg-transparent",
+                        "absolute right-1/2 top-5 h-px w-full",
+                        index <= currentStageIndex ? "bg-primary" : "bg-border",
+                      )}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <div className="relative flex min-w-0 flex-col items-center gap-2 bg-card px-2 text-center sm:flex-row sm:px-3 sm:text-left">
+                    <span
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors duration-150 motion-reduce:transition-none",
+                        complete && "border-foreground bg-foreground text-background",
+                        current && "border-primary bg-primary text-primary-foreground",
+                        !complete && !current && "border-input bg-card text-muted-foreground",
                       )}
                     >
+                      {complete ? (
+                        <Check className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Icon className="size-4" aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="min-w-0">
                       <span
                         className={cn(
-                          "relative flex size-7 shrink-0 items-center justify-center rounded-full border",
-                          complete && "border-foreground bg-foreground text-background",
-                          current && "border-primary bg-primary text-primary-foreground",
-                          !complete && !current && "border-input bg-card text-muted-foreground",
+                          "block text-xs font-semibold sm:text-sm",
+                          current && "text-primary",
                         )}
                       >
-                        {complete ? (
-                          <Check className="size-3.5" aria-hidden="true" />
-                        ) : (
-                          <Icon className="size-3.5" aria-hidden="true" />
-                        )}
+                        {item.label}
                       </span>
-                      <span className="min-w-0">
-                        <span className="block text-xs font-medium sm:text-sm">{item.label}</span>
-                        <span className="hidden text-xs text-muted-foreground lg:block">
-                          {item.description}
-                        </span>
+                      <span className="hidden text-xs text-muted-foreground md:block">
+                        {item.description}
                       </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </nav>
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
 
-            <div className="mt-5 hidden rounded-lg bg-muted p-3 text-xs leading-relaxed text-muted-foreground lg:block">
-              Repository data and runtime paths stay on this machine.
-            </div>
-          </aside>
-
-          <section className="min-w-0 pb-6" aria-live="polite">
-            <div className="onboarding-stage-enter motion-reduce:animate-none">{children}</div>
-          </section>
-        </div>
+        <section className="min-w-0 flex-1 pb-6 pt-5" aria-live="polite">
+          <div key={stage} className="onboarding-stage-enter motion-reduce:animate-none">
+            {children}
+          </div>
+        </section>
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronUp, File, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useReducer } from "react";
+import { type ReactElement, useEffect, useId, useMemo, useReducer } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +20,7 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { directoryListingQueryOptions } from "@/state/queries/filesystem";
 
-type FolderPickerDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+type FolderPickerCommonProps = {
   title: string;
   description: string;
   confirmLabel: string;
@@ -30,6 +28,22 @@ type FolderPickerDialogProps = {
   requireGitRepo?: boolean;
   selectionMode?: "directory" | "file";
   onConfirm: (path: string) => Promise<void> | void;
+};
+
+type FolderPickerDialogProps = FolderPickerCommonProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export type InlineFolderPickerProps = FolderPickerCommonProps & {
+  onCancel?: () => void;
+};
+
+type FolderPickerSessionProps = FolderPickerCommonProps & {
+  open: boolean;
+  presentation: "dialog" | "inline";
+  showCancel: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 type FolderPickerState = {
@@ -256,6 +270,8 @@ const getFolderPickerSessionKey = ({
 
 function FolderPickerDialogSession({
   open,
+  presentation,
+  showCancel,
   onOpenChange,
   title,
   description,
@@ -264,7 +280,8 @@ function FolderPickerDialogSession({
   requireGitRepo = false,
   selectionMode = "directory",
   onConfirm,
-}: FolderPickerDialogProps): ReactElement {
+}: FolderPickerSessionProps): ReactElement {
+  const inlineDescriptionId = useId();
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
   const {
     requestedPath,
@@ -361,6 +378,105 @@ function FolderPickerDialogSession({
       : null;
   const canDismiss = !isSubmitting;
 
+  const pickerBody = (
+    <>
+      <form
+        className="grid gap-2"
+        action={() => {
+          loadManualPath();
+        }}
+      >
+        <Label htmlFor="folder-picker-manual-path" className="sr-only">
+          Open path
+        </Label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            id="folder-picker-manual-path"
+            value={manualPath}
+            placeholder={selectionMode === "file" ? "/path/to/folder" : "/path/to/your/repo"}
+            className="font-mono"
+            disabled={isBusy}
+            onChange={(event) =>
+              dispatch({
+                type: "manualPathChanged",
+                value: event.currentTarget.value,
+              })
+            }
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={isBusy || manualPath.trim().length === 0}
+          >
+            Load path
+          </Button>
+        </div>
+      </form>
+
+      <FolderPickerDirectoryBrowser
+        confirmedListing={confirmedListing}
+        filteredEntries={filteredEntries}
+        filterText={filterText}
+        selectedFilePath={selectedFilePath}
+        status={{ isBusy, isInitialLoad, isRefreshing }}
+        onFilterTextChange={(value) => dispatch({ type: "filterTextChanged", value })}
+        onLoadDirectory={loadDirectory}
+        onSelectFile={(path) => dispatch({ type: "fileSelected", path })}
+      />
+
+      {helperMessage ? (
+        <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
+          {helperMessage}
+        </div>
+      ) : null}
+
+      {activeError ? (
+        <div
+          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted"
+          role="alert"
+        >
+          {activeError}
+        </div>
+      ) : null}
+    </>
+  );
+
+  const pickerActions = (
+    <div className="flex flex-col-reverse justify-between gap-3 border-t border-border pt-4 sm:flex-row">
+      {showCancel ? (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={isSubmitting}
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+      ) : (
+        <span aria-hidden="true" />
+      )}
+      <Button
+        type="button"
+        disabled={!isCurrentPathSelectable || isSubmitting}
+        onClick={() => void handleConfirm()}
+      >
+        {isSubmitting ? "Confirming..." : confirmLabel}
+      </Button>
+    </div>
+  );
+
+  if (presentation === "inline") {
+    return (
+      <section className="grid gap-4" aria-label={title} aria-describedby={inlineDescriptionId}>
+        <p id={inlineDescriptionId} className="sr-only">
+          {description}
+        </p>
+        {pickerBody}
+        {pickerActions}
+      </section>
+    );
+  }
+
   return (
     <Dialog
       open={open}
@@ -390,81 +506,9 @@ function FolderPickerDialogSession({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 px-1 pt-4">
-          <form
-            className="grid gap-2"
-            action={() => {
-              loadManualPath();
-            }}
-          >
-            <Label htmlFor="folder-picker-manual-path" className="sr-only">
-              Open path
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="folder-picker-manual-path"
-                value={manualPath}
-                placeholder={selectionMode === "file" ? "/path/to/folder" : "/path/to/your/repo"}
-                className="font-mono"
-                disabled={isBusy}
-                onChange={(event) =>
-                  dispatch({
-                    type: "manualPathChanged",
-                    value: event.currentTarget.value,
-                  })
-                }
-              />
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={isBusy || manualPath.trim().length === 0}
-              >
-                Load Path
-              </Button>
-            </div>
-          </form>
+        <DialogBody className="space-y-4 px-1 pt-4">{pickerBody}</DialogBody>
 
-          <FolderPickerDirectoryBrowser
-            confirmedListing={confirmedListing}
-            filteredEntries={filteredEntries}
-            filterText={filterText}
-            selectedFilePath={selectedFilePath}
-            status={{ isBusy, isInitialLoad, isRefreshing }}
-            onFilterTextChange={(value) => dispatch({ type: "filterTextChanged", value })}
-            onLoadDirectory={loadDirectory}
-            onSelectFile={(path) => dispatch({ type: "fileSelected", path })}
-          />
-
-          {helperMessage ? (
-            <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
-              {helperMessage}
-            </div>
-          ) : null}
-
-          {activeError ? (
-            <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted">
-              {activeError}
-            </div>
-          ) : null}
-        </DialogBody>
-
-        <DialogFooter className="mt-4 justify-between border-t border-border px-1 pt-5">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={isSubmitting}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={!isCurrentPathSelectable || isSubmitting}
-            onClick={() => void handleConfirm()}
-          >
-            {isSubmitting ? "Confirming…" : confirmLabel}
-          </Button>
-        </DialogFooter>
+        <DialogFooter className="mt-4 block border-t-0 px-1 pt-0">{pickerActions}</DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -474,7 +518,24 @@ export function FolderPickerDialog(props: FolderPickerDialogProps): ReactElement
   return (
     <FolderPickerDialogSession
       key={getFolderPickerSessionKey({ initialPath: props.initialPath, open: props.open })}
+      presentation="dialog"
+      showCancel
       {...props}
+    />
+  );
+}
+
+export function InlineFolderPicker({ onCancel, ...props }: InlineFolderPickerProps): ReactElement {
+  return (
+    <FolderPickerDialogSession
+      key={props.initialPath ?? "default"}
+      {...props}
+      open
+      presentation="inline"
+      showCancel={onCancel !== undefined}
+      onOpenChange={(open) => {
+        if (!open) onCancel?.();
+      }}
     />
   );
 }

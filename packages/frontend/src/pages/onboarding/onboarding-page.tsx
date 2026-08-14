@@ -1,6 +1,6 @@
 import type { AgentRuntimes, RuntimeKind } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactElement, useEffect, useRef, useState } from "react";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { invalidEnabledRuntime } from "@/components/features/settings/runtime-executable-validation";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,7 @@ import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
-  runtimeExecutablePaths,
-  runtimeExecutablesQueryOptions,
+  runtimeExecutableQueryOptions,
 } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
@@ -29,6 +28,8 @@ import {
   WelcomeStage,
   WorkspaceStage,
 } from "./onboarding-stages";
+
+const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
 
 function runtimeStageActivity({
   isLoading,
@@ -72,26 +73,40 @@ export function OnboardingPage(): ReactElement {
     enabled: true,
   });
   const runtimeDraft = runtimeDraftOverride ?? settingsQuery.data?.agentRuntimes ?? null;
-  const paths = runtimeDraft ? runtimeExecutablePaths(runtimeDraft) : null;
-  const validationQuery = useQuery({
-    ...runtimeExecutablesQueryOptions(paths ?? { opencode: "", codex: "", claude: "" }),
-    enabled: paths !== null,
+  const validationQueries = useQueries({
+    queries: RUNTIME_KINDS.map((kind) => ({
+      ...runtimeExecutableQueryOptions(kind, runtimeDraft?.[kind].executablePath ?? ""),
+      enabled: runtimeDraft !== null,
+    })),
   });
-
-  const checkResults = validationQuery.data?.runtimes ?? [];
+  const opencodeValidationResult = validationQueries[0]?.data;
+  const codexValidationResult = validationQueries[1]?.data;
+  const claudeValidationResult = validationQueries[2]?.data;
+  const checkResults = useMemo(
+    () =>
+      [opencodeValidationResult, codexValidationResult, claudeValidationResult].filter(
+        (result): result is NonNullable<typeof result> => result !== undefined,
+      ),
+    [claudeValidationResult, codexValidationResult, opencodeValidationResult],
+  );
+  const checkingRuntimeKinds = RUNTIME_KINDS.filter((_, index) => {
+    const query = validationQueries[index];
+    return query?.isPending || query?.isFetching;
+  });
+  const runtimeValidationError = validationQueries.find((query) => query?.error)?.error ?? null;
 
   useEffect(() => {
     preloadKanbanPage();
   }, []);
 
   useEffect(() => {
-    if (!validationQuery.data) return;
-    const resultsByKind = new Map(validationQuery.data.runtimes.map((row) => [row.kind, row]));
+    if (checkResults.length === 0) return;
+    const resultsByKind = new Map(checkResults.map((row) => [row.kind, row]));
     setRuntimeDraftOverride((currentOverride) => {
       const current = currentOverride ?? settingsQuery.data?.agentRuntimes;
       if (!current) return currentOverride;
       let next = current;
-      for (const kind of ["opencode", "codex", "claude"] as const) {
+      for (const kind of RUNTIME_KINDS) {
         const result = resultsByKind.get(kind);
         if (result?.ok !== true) continue;
         const normalizedPathChanged = current[kind].executablePath !== result.path;
@@ -111,7 +126,7 @@ export function OnboardingPage(): ReactElement {
       }
       return next === current ? currentOverride : next;
     });
-  }, [settingsQuery.data, validationQuery.data]);
+  }, [checkResults, settingsQuery.data]);
 
   useEffect(() => {
     if (!stageError || !focusStageError.current) return;
@@ -121,7 +136,7 @@ export function OnboardingPage(): ReactElement {
 
   const updateDraft = (next: AgentRuntimes): void => {
     if (runtimeDraft) {
-      for (const kind of ["opencode", "codex", "claude"] as const) {
+      for (const kind of RUNTIME_KINDS) {
         if (next[kind].enabled !== runtimeDraft[kind].enabled)
           explicitRuntimeChoices.current.add(kind);
         if (next[kind].executablePath !== runtimeDraft[kind].executablePath)
@@ -179,8 +194,7 @@ export function OnboardingPage(): ReactElement {
       runtimeDiscoveryError !== null ||
       !runtimeDraft ||
       !settingsQuery.data ||
-      validationQuery.isPending ||
-      validationQuery.isFetching
+      checkingRuntimeKinds.length > 0
     )
       return;
     const invalid = invalidEnabledRuntime(runtimeDraft, checkResults);
@@ -219,15 +233,16 @@ export function OnboardingPage(): ReactElement {
 
   const runtimeLoading =
     settingsQuery.isPending || definitionsQuery.isPending || runtimeDraft === null;
-  const validationPending =
-    paths !== null && (validationQuery.isPending || validationQuery.isFetching);
+  const validationPending = runtimeDraft !== null && checkingRuntimeKinds.length > 0;
   const runtimeRequestError =
-    settingsQuery.error ?? definitionsQuery.error ?? validationQuery.error;
+    settingsQuery.error ?? definitionsQuery.error ?? runtimeValidationError;
   const validEnabledRuntimeCount = runtimeDraft
     ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
     : 0;
   const showNoRuntimeWarning =
-    validationQuery.data !== undefined && !validationPending && validEnabledRuntimeCount === 0;
+    checkResults.length === RUNTIME_KINDS.length &&
+    !validationPending &&
+    validEnabledRuntimeCount === 0;
   const continueDisabled =
     runtimeLoading ||
     validationPending ||
@@ -245,7 +260,11 @@ export function OnboardingPage(): ReactElement {
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
     void definitionsQuery.refetch();
-    if (paths !== null) void validationQuery.refetch();
+    if (runtimeDraft !== null) {
+      for (const query of validationQueries) {
+        if (query) void query.refetch();
+      }
+    }
   };
 
   return (
@@ -261,6 +280,7 @@ export function OnboardingPage(): ReactElement {
           stageError={stageError}
           stageErrorRef={stageErrorRef}
           activity={runtimeActivity}
+          checkingRuntimeKinds={checkingRuntimeKinds}
           showNoRuntimeWarning={showNoRuntimeWarning}
           continueDisabled={continueDisabled}
           onChange={updateDraft}

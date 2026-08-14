@@ -27,6 +27,7 @@ import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeExecutablePaths,
+  runtimeExecutableQueryOptions,
   runtimeExecutablesQueryOptions,
 } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -343,6 +344,15 @@ const renderAppShellForTest = (
       ],
     },
   );
+  for (const kind of ["opencode", "codex", "claude"] as const) {
+    queryClient.setQueryData(runtimeExecutableQueryOptions(kind, "").queryKey, {
+      kind,
+      path: "",
+      ok: false,
+      version: null,
+      error: "Path is empty.",
+    });
+  }
   queryClient.setQueryData(filesystemQueryKeys.directory(), {
     currentPath: "/repo",
     currentPathIsGitRepo: true,
@@ -425,7 +435,6 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
-    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
@@ -464,7 +473,6 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
-    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 

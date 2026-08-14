@@ -1,10 +1,10 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
@@ -649,7 +649,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("invalidates runtime and diagnostic caches after saving runtime settings", async () => {
+  test("starts runtime and diagnostic refreshes without blocking a saved settings snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const snapshot = createSettingsSnapshot();
@@ -670,6 +670,19 @@ describe("use-repo-settings-operations", () => {
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
+      const refreshResult = createDeferred<void>();
+      const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+      const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
+        async (filters, options) => {
+          await originalInvalidateQueries(filters, options);
+          if (
+            filters?.queryKey === runtimeQueryKeys.all ||
+            filters?.queryKey === checksQueryKeys.all
+          ) {
+            await refreshResult.promise;
+          }
+        },
+      );
       const runtimeKey = runtimeQueryKeys.executables({
         opencode: "/tools/opencode",
         codex: "/tools/codex",
@@ -683,6 +696,13 @@ describe("use-repo-settings-operations", () => {
 
       expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(true);
       expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: runtimeQueryKeys.all,
+      });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: checksQueryKeys.all,
+      });
+      refreshResult.resolve();
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

@@ -21,6 +21,7 @@ type RuntimeExecutablePanelProps = {
   results: RuntimeExecutableCheckResult[];
   disabled?: boolean;
   isChecking?: boolean;
+  checkingRuntimeKinds?: readonly RuntimeKind[];
   onChange: (next: AgentRuntimes) => void;
   onCheckAgain: () => void;
 };
@@ -92,10 +93,13 @@ export function RuntimeExecutablePanel({
   results,
   disabled = false,
   isChecking = false,
+  checkingRuntimeKinds = [],
   onChange,
   onCheckAgain,
 }: RuntimeExecutablePanelProps): ReactElement {
   const [pickerRuntimeKind, setPickerRuntimeKind] = useState<RuntimeKind | null>(null);
+  const checkingRuntimeKindSet = new Set(checkingRuntimeKinds);
+  const isAnyRuntimeChecking = isChecking || checkingRuntimeKinds.length > 0;
 
   const updateRuntime = (kind: RuntimeKind, update: Partial<AgentRuntimes[RuntimeKind]>): void => {
     onChange({
@@ -113,7 +117,7 @@ export function RuntimeExecutablePanel({
         <Button
           type="button"
           variant="outline"
-          disabled={disabled || isChecking}
+          disabled={disabled || isAnyRuntimeChecking}
           onClick={onCheckAgain}
         >
           <RefreshCw data-icon="inline-start" />
@@ -126,8 +130,9 @@ export function RuntimeExecutablePanel({
           const kind = definition.kind;
           const config = runtimes[kind];
           const result = runtimeExecutableResultForPath(kind, config.executablePath, results);
+          const isRuntimeChecking = isChecking || checkingRuntimeKindSet.has(kind);
           const hasInvalidResult = result?.ok === false;
-          const showInvalidState = !isChecking && hasInvalidResult;
+          const showInvalidState = !isRuntimeChecking && hasInvalidResult;
           const inputInvalid = config.enabled && showInvalidState;
           const inputId = `runtime-executable-${kind}`;
           return (
@@ -150,7 +155,7 @@ export function RuntimeExecutablePanel({
                     </h3>
                     <RuntimeStatusBadge
                       result={result}
-                      isChecking={isChecking}
+                      isChecking={isRuntimeChecking}
                       showInvalidState={showInvalidState}
                       enabled={config.enabled}
                     />
@@ -203,7 +208,7 @@ export function RuntimeExecutablePanel({
                 >
                   <RuntimeStatusMessage
                     result={result}
-                    isChecking={isChecking}
+                    isChecking={isRuntimeChecking}
                     showInvalidState={showInvalidState}
                     enabled={config.enabled}
                   />

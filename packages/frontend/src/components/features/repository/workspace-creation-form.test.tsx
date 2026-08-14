@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
@@ -25,6 +25,29 @@ function SeedFilesystemDirectory(): ReactElement | null {
     });
   }, [queryClient]);
   return null;
+}
+
+function InlineWorkspaceCreationForm({
+  addWorkspace,
+}: {
+  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
+}): ReactElement | null {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    queryClient.setQueryData(filesystemQueryKeys.directory(), {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    });
+    setReady(true);
+  }, [queryClient]);
+  if (!ready) return null;
+  return (
+    <WorkspaceCreationForm workspaces={[]} addWorkspace={addWorkspace} repositoryPicker="inline" />
+  );
 }
 
 const chooseRepository = async (): Promise<void> => {
@@ -71,6 +94,22 @@ const renderForm = ({
 };
 
 describe("WorkspaceCreationForm", () => {
+  test("renders the shared repository picker inline without opening a dialog", async () => {
+    const addWorkspace = mock(async () => {});
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} />
+      </QueryProvider>,
+    );
+    mountedViews.add(view);
+
+    expect(await screen.findByText("/repo")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+    expect(await screen.findByRole("button", { name: /^open repository$/i })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   test("blocks a repository that is already configured", async () => {
     const addWorkspace = mock(async () => {});
     renderForm({ addWorkspace, duplicate: true });

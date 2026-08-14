@@ -179,7 +179,7 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
-      await Promise.all([
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: runtimeQueryKeys.all }),
         queryClient.invalidateQueries({ queryKey: checksQueryKeys.all }),
       ]);

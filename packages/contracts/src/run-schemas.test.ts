@@ -33,6 +33,19 @@ describe("run schemas", () => {
     ).toMatchObject({ mode: "validate" });
   });
 
+  test("accepts a focused exact-path validation input and rejects an empty request", () => {
+    expect(
+      runtimeExecutableCheckInputSchema.parse({
+        mode: "validate",
+        paths: { codex: "/bin/codex" },
+      }),
+    ).toEqual({ mode: "validate", paths: { codex: "/bin/codex" } });
+
+    expect(
+      runtimeExecutableCheckInputSchema.safeParse({ mode: "validate", paths: {} }).success,
+    ).toBe(false);
+  });
+
   test("requires one explicit path on every executable check row", () => {
     const result = runtimeExecutableCheckSchema.safeParse({
       runtimes: [{ kind: "opencode", ok: false, version: null, error: "missing" }],

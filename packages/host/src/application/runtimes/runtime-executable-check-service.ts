@@ -55,6 +55,7 @@ export const createRuntimeExecutableCheckService = ({
       const runtimes: RuntimeExecutableCheckResult[] = [];
       for (const definition of definitions) {
         const kind = definition.kind;
+        if (input.mode === "validate" && !Object.hasOwn(input.paths, kind)) continue;
         const suppliedPath = input.mode === "validate" ? (input.paths[kind] ?? "") : "";
         const resolution = yield* Effect.either(
           input.mode === "discover"

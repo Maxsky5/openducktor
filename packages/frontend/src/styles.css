@@ -527,17 +527,15 @@ pre {
 
 @keyframes onboarding-stage-enter {
   from {
-    transform: translateY(4px);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
     opacity: 1;
   }
 }
 
 .onboarding-stage-enter {
-  animation: onboarding-stage-enter 160ms ease-out;
+  animation: onboarding-stage-enter 100ms ease-out;
 }
 
 .electron-platform-darwin .onboarding-shell {

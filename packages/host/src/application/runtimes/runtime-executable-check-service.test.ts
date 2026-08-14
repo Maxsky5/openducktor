@@ -113,4 +113,20 @@ describe("runtime executable check service", () => {
       error: "Saved codex path is empty",
     });
   });
+
+  test("validates only the supplied runtime path", async () => {
+    const result = await Effect.runPromise(
+      service.check({ mode: "validate", paths: { codex: "/custom/codex" } }),
+    );
+
+    expect(result.runtimes).toEqual([
+      {
+        kind: "codex",
+        path: "/custom/codex",
+        ok: true,
+        version: "codex 1.0.0",
+        error: null,
+      },
+    ]);
+  });
 });

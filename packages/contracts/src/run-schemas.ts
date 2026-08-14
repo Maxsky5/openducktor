@@ -22,7 +22,9 @@ export const runtimeExecutableCheckInputSchema = z.discriminatedUnion("mode", [
   z
     .object({
       mode: z.literal("validate"),
-      paths: z.record(runtimeKindSchema, z.string()),
+      paths: z
+        .partialRecord(runtimeKindSchema, z.string())
+        .refine((paths) => Object.keys(paths).length > 0, "Provide at least one runtime path."),
     })
     .strict(),
 ]);
