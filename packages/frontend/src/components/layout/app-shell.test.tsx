@@ -430,6 +430,9 @@ describe("AppShell", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Back to runtimes" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
     expect(workspaceAdd).toHaveBeenCalledWith({
@@ -443,6 +446,37 @@ describe("AppShell", () => {
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
+  });
+
+  test("keeps the workspace draft in onboarding after a pending add fails", async () => {
+    const workspaceAddResult = createDeferred<WorkspaceRecord>();
+    const workspaceAdd = mock(async () => workspaceAddResult.promise);
+    renderAppShellForTest({
+      workspacePresence: { hasWorkspaces: false },
+      workspaceAdd,
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue to runtimes" }));
+    await screen.findByRole("heading", { name: "Configure agent runtimes" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
+    await screen.findByRole("heading", { name: "Open your first workspace" });
+    fireEvent.click(screen.getByRole("button", { name: "Choose repository folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+
+    const backButton = screen.getByRole("button", { name: "Back to runtimes" });
+    expect((backButton as HTMLButtonElement).disabled).toBe(true);
+
+    workspaceAddResult.reject(new Error("Repository open failed"));
+
+    await screen.findByText("Repository open failed");
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
+    expect((backButton as HTMLButtonElement).disabled).toBe(false);
   });
 
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {

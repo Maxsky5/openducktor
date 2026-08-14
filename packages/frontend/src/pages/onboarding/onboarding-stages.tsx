@@ -4,7 +4,7 @@ import type {
   RuntimeExecutableCheckResult,
 } from "@openducktor/contracts";
 import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, Settings2 } from "lucide-react";
-import type { ReactElement, RefObject } from "react";
+import { type ReactElement, type RefObject, useState } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { Badge } from "@/components/ui/badge";
@@ -265,6 +265,8 @@ export function WorkspaceStage({
   addWorkspace,
   onBack,
 }: WorkspaceStageProps): ReactElement {
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+
   return (
     <Card>
       <CardHeader className="gap-3 px-6 pt-6 sm:px-8 sm:pt-8">
@@ -281,10 +283,14 @@ export function WorkspaceStage({
 
       <CardContent className="flex flex-col gap-5 px-6 pb-6 pt-6 sm:px-8 sm:pb-8">
         <div className="rounded-xl bg-muted p-4 sm:p-5">
-          <WorkspaceCreationForm workspaces={workspaces} addWorkspace={addWorkspace} />
+          <WorkspaceCreationForm
+            workspaces={workspaces}
+            addWorkspace={addWorkspace}
+            onSubmittingChange={setIsCreatingWorkspace}
+          />
         </div>
         <div className="flex justify-start">
-          <Button variant="outline" onClick={onBack}>
+          <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace}>
             <ArrowLeft data-icon="inline-start" />
             Back to runtimes
           </Button>

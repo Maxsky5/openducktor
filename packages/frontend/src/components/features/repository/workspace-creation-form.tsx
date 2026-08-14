@@ -81,6 +81,7 @@ type WorkspaceCreationFormProps = {
   workspaces: WorkspaceRecord[];
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
+  onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
 };
 
@@ -88,6 +89,7 @@ export function WorkspaceCreationForm({
   workspaces,
   addWorkspace,
   disabled = false,
+  onSubmittingChange,
   onSuccess,
 }: WorkspaceCreationFormProps): ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -123,6 +125,7 @@ export function WorkspaceCreationForm({
   const submit = async (): Promise<void> => {
     if (submitInFlight.current || !state.repoPath || validationError) return;
     submitInFlight.current = true;
+    onSubmittingChange?.(true);
     dispatch({ type: "submitting", value: true });
     dispatch({ type: "error", error: null });
     try {
@@ -137,6 +140,7 @@ export function WorkspaceCreationForm({
     } finally {
       submitInFlight.current = false;
       dispatch({ type: "submitting", value: false });
+      onSubmittingChange?.(false);
     }
   };
 

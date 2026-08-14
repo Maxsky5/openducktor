@@ -27,11 +27,13 @@ export function OpenRepositoryModal({
 }: OpenRepositoryModalProps): ReactElement {
   const { activeWorkspace, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
     useWorkspaceState();
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const sortedRecent = useMemo(
     () => workspaces.toSorted((left, right) => Number(right.isActive) - Number(left.isActive)),
     [workspaces],
   );
+  const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace;
 
   const selectRecentWorkspace = async (workspaceId: string): Promise<void> => {
     setSelectionError(null);
@@ -47,17 +49,17 @@ export function OpenRepositoryModal({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen || canClose) onOpenChange(nextOpen);
+        if (nextOpen || (canClose && !interactionLocked)) onOpenChange(nextOpen);
       }}
     >
       <DialogContent
         className="max-w-3xl"
-        {...(canClose ? {} : { closeButton: null })}
+        {...(canClose && !interactionLocked ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
-          if (!canClose) event.preventDefault();
+          if (!canClose || interactionLocked) event.preventDefault();
         }}
         onPointerDownOutside={(event) => {
-          if (!canClose) event.preventDefault();
+          if (!canClose || interactionLocked) event.preventDefault();
         }}
       >
         <DialogHeader>
@@ -74,7 +76,8 @@ export function OpenRepositoryModal({
           <WorkspaceCreationForm
             workspaces={workspaces}
             addWorkspace={addWorkspace}
-            disabled={isSwitchingWorkspace}
+            disabled={interactionLocked}
+            onSubmittingChange={setIsCreatingWorkspace}
             onSuccess={() => onOpenChange(false)}
           />
 
@@ -92,7 +95,7 @@ export function OpenRepositoryModal({
                     type="button"
                     variant="outline"
                     className="h-auto justify-between gap-3 overflow-hidden px-3 py-2 text-left"
-                    disabled={isSwitchingWorkspace}
+                    disabled={interactionLocked}
                     onClick={() => void selectRecentWorkspace(workspace.workspaceId)}
                   >
                     <span className="truncate">{workspace.workspaceName}</span>
@@ -116,7 +119,12 @@ export function OpenRepositoryModal({
 
         {canClose ? (
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={interactionLocked}
+              onClick={() => onOpenChange(false)}
+            >
               Close
             </Button>
           </DialogFooter>
