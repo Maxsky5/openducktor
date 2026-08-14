@@ -106,9 +106,162 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
+  test("restores fresh cached branch data without loading when returning to a repository", async () => {
+    const currentBranches = new Map([
+      ["/repo-a", { name: "main", detached: false }],
+      ["/repo-b", { name: "develop", detached: false }],
+    ]);
+    const repoABranches = [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+    ];
+    const repoBranches = new Map([
+      ["/repo-a", repoABranches],
+      [
+        "/repo-b",
+        [
+          {
+            name: "develop",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+      ],
+    ]);
+    const gitGetCurrentBranch = mock(async (repoPath: string) => {
+      const current = currentBranches.get(repoPath);
+      if (!current) {
+        throw new Error(`Missing current branch fixture for ${repoPath}`);
+      }
+      return current;
+    });
+    const gitGetBranches = mock(async (repoPath: string) => {
+      const branches = repoBranches.get(repoPath);
+      if (!branches) {
+        throw new Error(`Missing branch list fixture for ${repoPath}`);
+      }
+      return branches;
+    });
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+
+    const harness = createBranchHarness({
+      activeRepo: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.updateArgs({ activeRepo: "/repo-a" });
+
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(harness.getLatest().branches).toEqual(repoABranches);
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+      expect(gitGetBranches).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps cached branch data visible during a forced refresh", async () => {
+    const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
+    const branchesDeferred =
+      createDeferred<Array<{ name: string; isCurrent: boolean; isRemote: boolean }>>();
+    const gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
+    gitGetCurrentBranch.mockImplementationOnce(async () => ({ name: "main", detached: false }));
+    gitGetCurrentBranch.mockImplementationOnce(async () => currentBranchDeferred.promise);
+    const initialBranches = [
+      {
+        name: "main",
+        isCurrent: true,
+        isRemote: false,
+      },
+    ];
+    const gitGetBranches = mock(async () => initialBranches);
+    gitGetBranches.mockImplementationOnce(async () => initialBranches);
+    gitGetBranches.mockImplementationOnce(async () => branchesDeferred.promise);
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+
+    const harness = createBranchHarness({
+      activeRepo: "/repo-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        refreshPromise = value.refreshBranches(true);
+      });
+      await harness.run(flush);
+
+      expect(harness.getLatest().activeBranch).toEqual({
+        name: "main",
+        detached: false,
+      });
+      expect(harness.getLatest().branches).toEqual(initialBranches);
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
+
+      if (!refreshPromise) {
+        throw new Error("refreshBranches promise was not captured");
+      }
+
+      const pendingRefresh = refreshPromise;
+      await harness.run(async () => {
+        currentBranchDeferred.resolve({ name: "develop", detached: false });
+        branchesDeferred.resolve([
+          {
+            name: "develop",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ]);
+        await pendingRefresh;
+        await flush();
+      });
+
+      expect(harness.getLatest().activeBranch?.name).toBe("develop");
+    } finally {
+      currentBranchDeferred.resolve({ name: "develop", detached: false });
+      branchesDeferred.resolve([]);
+      await harness.unmount();
+    }
+  });
+
   test("ignores stale refresh results after the active repository changes", async () => {
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
-    workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
+    workspaceHost.gitGetCurrentBranch = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        return currentBranchDeferred.promise;
+      }
+      return {
+        name: "develop",
+        detached: false,
+      };
+    });
     workspaceHost.gitGetBranches = mock(async () => [
       {
         name: "main",
@@ -132,17 +285,21 @@ describe("use-workspace-branch-operations", () => {
       await harness.updateArgs({
         activeRepo: "/repo-b",
       });
+      await harness.run(flush);
 
       if (!refreshPromise) {
         throw new Error("refreshBranches promise was not captured");
       }
 
-      currentBranchDeferred.resolve({
-        name: "main",
-        detached: false,
+      const pendingRefresh = refreshPromise;
+      await harness.run(async () => {
+        currentBranchDeferred.resolve({
+          name: "main",
+          detached: false,
+        });
+        await pendingRefresh;
+        await flush();
       });
-      await refreshPromise;
-      await flush();
 
       expect(harness.getLatest().activeBranch).toBeNull();
       expect(harness.getLatest().branches).toHaveLength(0);

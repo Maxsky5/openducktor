@@ -59,7 +59,7 @@ export const repoBranchesQueryOptions = (
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-const currentBranchQueryOptions = (
+export const currentBranchQueryOptions = (
   repoPath: string,
   hostClient: GitCurrentBranchQueryHost = host,
 ) =>
