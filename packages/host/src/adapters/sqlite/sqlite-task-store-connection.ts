@@ -7,51 +7,40 @@ import type { TaskStoreError } from "../../ports/task-repository-ports";
 import { ensureSchema } from "./sqlite-task-store-migrations";
 import { type TaskStoreSession, taskStoreSchema } from "./sqlite-task-store-schema";
 
-export type SqliteTaskStoreStorage = {
-  databasePath: string;
-  repoPath: string;
-  workspaceId: string;
-};
-
 export type ManagedSqliteTaskStoreConnection = {
-  close: Effect.Effect<void, HostOperationError>;
-  operationSemaphore: Effect.Semaphore;
-  scope: Scope.CloseableScope;
+  release: Effect.Effect<void, HostOperationError>;
   session: TaskStoreSession;
 };
 
 export type OpenSqliteTaskStoreConnection = (
-  storage: SqliteTaskStoreStorage,
+  databasePath: string,
 ) => Effect.Effect<ManagedSqliteTaskStoreConnection, TaskStoreError>;
 
-export const openSqliteTaskStoreConnection: OpenSqliteTaskStoreConnection = (storage) =>
+export const openSqliteTaskStoreConnection: OpenSqliteTaskStoreConnection = (databasePath) =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
-      try: () => mkdir(path.dirname(storage.databasePath), { recursive: true }),
+      try: () => mkdir(path.dirname(databasePath), { recursive: true }),
       catch: (cause) =>
         new HostOperationError({
           operation: "sqliteTaskRepository.createDatabaseDirectory",
           message: errorMessage(cause),
           cause,
-          details: { databasePath: storage.databasePath },
+          details: { databasePath },
         }),
     });
     const scope = yield* Scope.make();
     const openExit = yield* Effect.exit(
       Effect.gen(function* () {
         const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
-          databasePath: storage.databasePath,
+          databasePath,
           configureWal: true,
           config: {
             schema: taskStoreSchema,
           },
         }).pipe(Scope.extend(scope));
-        yield* ensureSchema(connection.database, connection.session, storage.databasePath);
-        const operationSemaphore = yield* Effect.makeSemaphore(1);
+        yield* ensureSchema(connection.database, connection.session, databasePath);
         return {
-          close: connection.close,
-          operationSemaphore,
-          scope,
+          release: connection.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void))),
           session: connection.session,
         } satisfies ManagedSqliteTaskStoreConnection;
       }),

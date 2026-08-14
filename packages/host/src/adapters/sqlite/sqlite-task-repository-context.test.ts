@@ -34,16 +34,16 @@ const createCloseFailureHarness = async (
     resolveDatabasePath: ({ workspaceId }) =>
       Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
     resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
-    openConnection: (storage) =>
-      openSqliteTaskStoreConnection(storage).pipe(
+    openConnection: (databasePath) =>
+      openSqliteTaskStoreConnection(databasePath).pipe(
         Effect.map((connection) => ({
           ...connection,
-          close: connection.close.pipe(
+          release: connection.release.pipe(
             Effect.zipRight(
               Effect.fail(
                 new HostOperationError({
                   operation: "test.closeSqliteTaskStoreConnection",
-                  message: `Failed to close ${storage.workspaceId}.`,
+                  message: `Failed to close ${path.basename(path.dirname(databasePath))}.`,
                 }),
               ),
             ),
@@ -93,6 +93,33 @@ test("does not open configured workspace databases before their first operation"
   } finally {
     await Effect.runPromise(manager.dispose());
   }
+});
+
+test("opens a connection using only the resolved database path", async () => {
+  const inputs: unknown[] = [];
+  const manager = createSqliteTaskRepositoryContextManager({
+    openConnection: (databasePath) => {
+      inputs.push(databasePath);
+      return Effect.fail(
+        new HostOperationError({
+          operation: "test.openSqliteTaskStoreConnection",
+          message: "Stop after observing the connection input.",
+        }),
+      );
+    },
+    processEnv: {},
+    resolveDatabasePath: () => Effect.succeed("/task-stores/alpha/database.sqlite"),
+    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
+  });
+
+  await Effect.runPromise(
+    Effect.either(
+      manager.withDatabase("/repos/alpha", "test.observe-open-input", () => Effect.void),
+    ),
+  );
+
+  expect(inputs).toEqual(["/task-stores/alpha/database.sqlite"]);
+  await Effect.runPromise(manager.dispose());
 });
 
 test("closes an idle SQLite connection after five minutes", async () => {
