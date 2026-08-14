@@ -1,6 +1,6 @@
 import { LoaderCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
 import { OpenRepositoryModal } from "@/components/features/repository/open-repository-modal";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
@@ -228,8 +228,20 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
 export const AppShell = memo(function AppShell(): ReactElement {
   const location = useLocation();
+  const navigate = useNavigate();
   const { hasWorkspaces, isLoadingWorkspaces, workspaceLoadError, retryWorkspaces } =
     useWorkspacePresence();
+  const shouldFinishOnboarding =
+    hasWorkspaces &&
+    !isLoadingWorkspaces &&
+    !workspaceLoadError &&
+    location.pathname === "/onboarding";
+
+  useEffect(() => {
+    if (shouldFinishOnboarding) {
+      navigate("/kanban", { replace: true });
+    }
+  }, [navigate, shouldFinishOnboarding]);
 
   if (isLoadingWorkspaces) {
     return (
@@ -259,12 +271,12 @@ export const AppShell = memo(function AppShell(): ReactElement {
     );
   }
 
-  if (!hasWorkspaces) {
-    if (location.pathname !== "/onboarding") {
-      return <Navigate to="/onboarding" replace />;
-    }
-
+  if (location.pathname === "/onboarding") {
     return <OnboardingPage />;
+  }
+
+  if (!hasWorkspaces) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <WorkspaceAppShell />;

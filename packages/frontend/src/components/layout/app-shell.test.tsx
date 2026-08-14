@@ -438,10 +438,18 @@ describe("AppShell", () => {
       workspaceName: "repo",
     });
 
+    const mainFrames: string[] = [];
+    const frameObserver = new MutationObserver(() => {
+      mainFrames.push(document.querySelector("main")?.textContent ?? "");
+    });
+    frameObserver.observe(document.body, { childList: true, subtree: true });
+
     workspaceAddResult.resolve(createdWorkspace);
 
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    frameObserver.disconnect();
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(mainFrames).not.toContain("");
     expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
   });
 
