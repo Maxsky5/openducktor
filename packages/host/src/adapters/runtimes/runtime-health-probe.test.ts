@@ -56,6 +56,13 @@ describe("createRuntimeHealthProbe", () => {
       resolveCommandPath(command) {
         return Effect.succeed(command === "/usr/local/bin/opencode" ? command : null);
       },
+      runCommandAllowFailure() {
+        return Effect.succeed({
+          ok: true,
+          stdout: "opencode [project]  start opencode tui",
+          stderr: "",
+        });
+      },
     };
     const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
 
@@ -75,6 +82,7 @@ describe("createRuntimeHealthProbe", () => {
 
   test("probes OpenCode version with non-interactive config and default command timeout", async () => {
     const calls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
+    const helpCalls: Array<Parameters<SystemCommandPort["runCommandAllowFailure"]>> = [];
     const systemCommands: SystemCommandPort = {
       ...missingSystemCommands,
       resolveCommandPath(command) {
@@ -84,6 +92,14 @@ describe("createRuntimeHealthProbe", () => {
         calls.push(input);
         return Effect.succeed("1.16.2");
       },
+      runCommandAllowFailure(...input) {
+        helpCalls.push(input);
+        return Effect.succeed({
+          ok: true,
+          stdout: "opencode [project]  start opencode tui",
+          stderr: "",
+        });
+      },
     };
     const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
 
@@ -92,6 +108,16 @@ describe("createRuntimeHealthProbe", () => {
     );
 
     expect(health.ok).toBe(true);
+    expect(helpCalls).toEqual([
+      [
+        "/usr/local/bin/opencode",
+        ["--help"],
+        {
+          env: { OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}' },
+          timeoutMs: 10_000,
+        },
+      ],
+    ]);
     expect(calls).toEqual([
       [
         "/usr/local/bin/opencode",
@@ -102,6 +128,30 @@ describe("createRuntimeHealthProbe", () => {
         },
       ],
     ]);
+  });
+
+  test("rejects an unrelated executable with a valid-looking OpenCode version", async () => {
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command) {
+        return Effect.succeed(command === "/usr/local/bin/edgee" ? command : null);
+      },
+      versionCommand() {
+        return Effect.succeed("0.1.7");
+      },
+      runCommandAllowFailure() {
+        return Effect.succeed({ ok: true, stdout: "Edgee CLI", stderr: "" });
+      },
+    };
+    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("opencode", "/usr/local/bin/edgee"),
+    );
+
+    expect(health.ok).toBe(false);
+    expect(health.version).toBeNull();
+    expect(health.error).toContain("OpenCode");
   });
 
   test("reports actionable missing Codex diagnostics", async () => {
@@ -116,6 +166,43 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.ok).toBe(false);
     expect(health.executablePath).toBe("/missing/codex");
     expect(health.error).toContain("Saved Codex path points to a missing or non-executable file");
+  });
+
+  test("accepts the Codex CLI version signature", async () => {
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command) {
+        return Effect.succeed(command === "/usr/local/bin/codex" ? command : null);
+      },
+      versionCommand() {
+        return Effect.succeed("codex-cli 0.147.0");
+      },
+    };
+    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+    const health = await Effect.runPromise(probe.getRuntimeHealth("codex", "/usr/local/bin/codex"));
+
+    expect(health.ok).toBe(true);
+    expect(health.version).toBe("codex-cli 0.147.0");
+  });
+
+  test("rejects an unrelated executable that answers the Codex version probe", async () => {
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command) {
+        return Effect.succeed(command === "/usr/local/bin/edgee" ? command : null);
+      },
+      versionCommand() {
+        return Effect.succeed("edgee 0.1.7");
+      },
+    };
+    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+    const health = await Effect.runPromise(probe.getRuntimeHealth("codex", "/usr/local/bin/edgee"));
+
+    expect(health.ok).toBe(false);
+    expect(health.version).toBeNull();
+    expect(health.error).toContain("Codex CLI");
   });
 
   test("probes Claude Code through tool discovery", async () => {
@@ -135,7 +222,7 @@ describe("createRuntimeHealthProbe", () => {
       },
       versionCommand(...input) {
         calls.push(input);
-        return Effect.succeed("0.3.191");
+        return Effect.succeed("2.1.232 (Claude Code)");
       },
     };
     try {
@@ -150,10 +237,40 @@ describe("createRuntimeHealthProbe", () => {
         enabled: true,
         ok: true,
         executablePath,
-        version: "0.3.191",
+        version: "2.1.232 (Claude Code)",
         error: null,
       });
       expect(calls).toEqual([[executablePath, ["--version"], { timeoutMs: 10_000 }]]);
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects an unrelated executable that answers the Claude version probe", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "openducktor-claude-health-"));
+    const executablePath = join(tempDir, "edgee");
+    const systemCommands: SystemCommandPort = {
+      ...missingSystemCommands,
+      resolveCommandPath(command, options) {
+        if (options?.searchPath) {
+          return Effect.succeed(null);
+        }
+        return Effect.succeed(command === executablePath ? executablePath : null);
+      },
+      versionCommand() {
+        return Effect.succeed("edgee 0.1.7");
+      },
+    };
+    try {
+      await writeFile(executablePath, "unrelated-binary");
+      await chmod(executablePath, 0o755);
+      const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+
+      const health = await Effect.runPromise(probe.getRuntimeHealth("claude", executablePath));
+
+      expect(health.ok).toBe(false);
+      expect(health.version).toBeNull();
+      expect(health.error).toContain("Claude Code");
     } finally {
       await rm(tempDir, { force: true, recursive: true });
     }

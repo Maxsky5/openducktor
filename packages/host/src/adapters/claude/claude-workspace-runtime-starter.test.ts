@@ -17,7 +17,9 @@ const createStartInput = () => ({
   descriptor: structuredClone(RUNTIME_DESCRIPTORS_BY_KIND.claude),
 });
 
-const createSystemCommands = (version: string | null = "0.3.191"): SystemCommandPort => ({
+const createSystemCommands = (
+  version: string | null = "2.1.232 (Claude Code)",
+): SystemCommandPort => ({
   resolveCommandPath() {
     return Effect.succeed(null);
   },
@@ -171,7 +173,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
         ...createSystemCommands(),
         versionCommand(_command, _args, options) {
           timeoutCalls.push(options?.timeoutMs);
-          return Effect.succeed(options?.timeoutMs === 10_000 ? "2.1.220" : null);
+          return Effect.succeed(options?.timeoutMs === 10_000 ? "2.1.220 (Claude Code)" : null);
         },
       },
       ...createRuntimePathDependencies(),
@@ -219,6 +221,35 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
     expect(failure).toMatchObject({
       dependency: "claude",
       message: "claude unavailable",
+    });
+    expect(runtimeIdCalls).toBe(0);
+    expect(liveSession.calls).toEqual({
+      discarded: 0,
+      forwarded: 0,
+      registered: 0,
+      released: 0,
+    });
+  });
+
+  test("rejects a non-Claude executable before allocating a runtime id", async () => {
+    let runtimeIdCalls = 0;
+    const liveSession = createLiveSessionDependencies();
+    const starter = createClaudeWorkspaceRuntimeStarter({
+      liveSessionLifecycle: liveSession.liveSessionLifecycle,
+      prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
+      runtimeId: () => {
+        runtimeIdCalls += 1;
+        return "runtime-claude";
+      },
+      systemCommands: createSystemCommands("edgee 0.1.7"),
+      ...createRuntimePathDependencies(),
+    });
+
+    const failure = await firstFailure(starter.startWorkspaceRuntime(createStartInput()));
+
+    expect(failure).toMatchObject({
+      dependency: "claude",
+      message: `Selected executable is not Claude Code: ${process.execPath}`,
     });
     expect(runtimeIdCalls).toBe(0);
     expect(liveSession.calls).toEqual({

@@ -11,6 +11,8 @@ const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
 };
 const OPENCODE_VERSION_TIMEOUT_MS = 10_000;
+const OPENCODE_HELP_SIGNATURE = "opencode [project]";
+const CODEX_VERSION_SIGNATURE = /^codex-cli(?:\s|$)/i;
 
 const runtimeHealthForMissingCommand = (
   kind: RuntimeKind,
@@ -36,6 +38,18 @@ const createOpenCodeRuntimeHealthProbe =
         Effect.gen(function* () {
           const binary = (yield* validateExactToolPath(toolDiscovery, "opencode", executablePath))
             .path;
+          const help = yield* systemCommands.runCommandAllowFailure(binary, ["--help"], {
+            env: OPENCODE_VERSION_ENV,
+            timeoutMs: OPENCODE_VERSION_TIMEOUT_MS,
+          });
+          const helpOutput = `${help.stdout}\n${help.stderr}`;
+          if (!help.ok || !helpOutput.includes(OPENCODE_HELP_SIGNATURE)) {
+            return runtimeHealthForMissingCommand(
+              "opencode",
+              binary,
+              `Selected executable is not OpenCode: ${binary}`,
+            );
+          }
           const version = yield* systemCommands.versionCommand(binary, ["--version"], {
             env: OPENCODE_VERSION_ENV,
             timeoutMs: OPENCODE_VERSION_TIMEOUT_MS,
@@ -67,6 +81,13 @@ const createCodexRuntimeHealthProbe =
           const version = yield* systemCommands.versionCommand(binary, ["--version"], {
             timeoutMs: 2_000,
           });
+          if (version !== null && !CODEX_VERSION_SIGNATURE.test(version)) {
+            return runtimeHealthForMissingCommand(
+              "codex",
+              binary,
+              `Selected executable is not Codex CLI: ${binary}`,
+            );
+          }
           return {
             kind: "codex",
             enabled: true,

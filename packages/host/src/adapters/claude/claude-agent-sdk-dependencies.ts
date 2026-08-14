@@ -62,6 +62,15 @@ export const validateClaudeAgentSdkStartupDependencies = ({
         }),
       );
     }
+    if (!version.includes("(Claude Code)")) {
+      return yield* Effect.fail(
+        new HostDependencyError({
+          dependency: "claude",
+          message: `Selected executable is not Claude Code: ${resolvedExecutablePath}`,
+          details: { executablePath: resolvedExecutablePath },
+        }),
+      );
+    }
     return {
       executablePath: resolvedExecutablePath,
       version,

@@ -12,7 +12,7 @@ import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath: () => Effect.succeed(null),
   runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
-  versionCommand: () => Effect.succeed("0.3.191"),
+  versionCommand: () => Effect.succeed("2.1.232 (Claude Code)"),
 });
 
 const createToolDiscovery = (): ToolDiscoveryPort => ({
