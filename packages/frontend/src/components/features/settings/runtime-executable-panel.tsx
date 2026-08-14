@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, useState } from "react";
+import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,15 @@ type RuntimeExecutablePanelProps = {
   onCheckAgain: () => void;
 };
 
-const RUNTIME_MONOGRAMS: Record<RuntimeKind, string> = {
-  opencode: "OC",
-  codex: "CX",
-  claude: "CL",
+const executableDirectory = (executablePath: string): string | undefined => {
+  const path = executablePath.trim();
+  if (!path) return undefined;
+
+  const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (separatorIndex < 0) return undefined;
+  if (separatorIndex === 0) return path.slice(0, 1);
+  if (separatorIndex === 2 && /^[A-Za-z]:[\\/]/.test(path)) return path.slice(0, 3);
+  return path.slice(0, separatorIndex);
 };
 
 type RuntimeStatusProps = {
@@ -100,6 +106,9 @@ export function RuntimeExecutablePanel({
   const [pickerRuntimeKind, setPickerRuntimeKind] = useState<RuntimeKind | null>(null);
   const checkingRuntimeKindSet = new Set(checkingRuntimeKinds);
   const isAnyRuntimeChecking = isChecking || checkingRuntimeKinds.length > 0;
+  const pickerInitialPath = pickerRuntimeKind
+    ? executableDirectory(runtimes[pickerRuntimeKind].executablePath)
+    : undefined;
 
   const updateRuntime = (kind: RuntimeKind, update: Partial<AgentRuntimes[RuntimeKind]>): void => {
     onChange({
@@ -146,8 +155,11 @@ export function RuntimeExecutablePanel({
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold uppercase text-foreground">
-                    {RUNTIME_MONOGRAMS[kind]}
+                  <span
+                    data-runtime-logo={kind}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground"
+                  >
+                    <AgentRuntimeIcon runtimeKind={kind} className="size-5" />
                   </span>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h3 id={`${inputId}-title`} className="truncate font-semibold text-foreground">
@@ -228,6 +240,7 @@ export function RuntimeExecutablePanel({
         description="Select the exact executable file that OpenDucktor must use."
         confirmLabel="Use executable"
         selectionMode="file"
+        {...(pickerInitialPath ? { initialPath: pickerInitialPath } : {})}
         onConfirm={(path) => {
           if (pickerRuntimeKind) updateRuntime(pickerRuntimeKind, { executablePath: path });
           setPickerRuntimeKind(null);

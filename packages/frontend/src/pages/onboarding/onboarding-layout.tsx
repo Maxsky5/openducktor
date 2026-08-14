@@ -7,7 +7,6 @@ import {
   useRef,
 } from "react";
 import openducktorMarkUrl from "@/assets/openducktor-mark.svg";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export type OnboardingStage = "welcome" | "runtimes" | "workspace";
@@ -16,19 +15,16 @@ const ONBOARDING_STAGES = [
   {
     id: "welcome",
     label: "Welcome",
-    description: "How work moves",
     icon: Route,
   },
   {
     id: "runtimes",
-    label: "Runtimes",
-    description: "What runs agents",
+    label: "Coding agents",
     icon: Cpu,
   },
   {
     id: "workspace",
     label: "Workspace",
-    description: "Where work lives",
     icon: FolderGit2,
   },
 ] as const;
@@ -65,7 +61,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
       className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
     >
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="flex items-center justify-between gap-4 pb-5">
+        <header className="flex items-center gap-3 pb-5">
           <div className="flex items-center gap-3">
             <span
               className="block size-9 shrink-0 bg-foreground"
@@ -77,11 +73,10 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
               <span className="text-xs text-muted-foreground">Local delivery workspace</span>
             </div>
           </div>
-          <Badge variant="outline">First-time setup</Badge>
         </header>
 
         <nav
-          className="rounded-xl border border-border bg-card px-3 py-3 shadow-sm sm:px-5"
+          className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-10 sm:py-5"
           aria-label="Onboarding progress"
           data-orientation="horizontal"
         >
@@ -94,23 +89,24 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
                 <li
                   key={item.id}
                   aria-current={current ? "step" : undefined}
-                  className="relative flex min-w-0 justify-center px-1 sm:px-3"
+                  className="relative min-w-0 text-center"
                 >
-                  {index > 0 ? (
+                  {index < ONBOARDING_STAGES.length - 1 ? (
                     <span
+                      data-progress-connector=""
                       className={cn(
-                        "absolute right-1/2 top-5 h-px w-full",
-                        index <= currentStageIndex ? "bg-primary" : "bg-border",
+                        "absolute top-5 left-1/2 h-px w-full",
+                        index < currentStageIndex ? "bg-primary" : "bg-border",
                       )}
                       aria-hidden="true"
                     />
                   ) : null}
-                  <div className="relative flex min-w-0 flex-col items-center gap-2 bg-card px-2 text-center sm:flex-row sm:px-3 sm:text-left">
+                  <div className="relative flex min-w-0 flex-col items-center">
                     <span
                       className={cn(
-                        "flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors duration-150 motion-reduce:transition-none",
-                        complete && "border-foreground bg-foreground text-background",
-                        current && "border-primary bg-primary text-primary-foreground",
+                        "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border bg-card ring-4 ring-card transition-colors duration-150 motion-reduce:transition-none",
+                        complete && "border-primary bg-primary text-primary-foreground",
+                        current && "border-primary bg-primary text-primary-foreground shadow-sm",
                         !complete && !current && "border-input bg-card text-muted-foreground",
                       )}
                     >
@@ -120,18 +116,14 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
                         <Icon className="size-4" aria-hidden="true" />
                       )}
                     </span>
-                    <span className="min-w-0">
-                      <span
-                        className={cn(
-                          "block text-xs font-semibold sm:text-sm",
-                          current && "text-primary",
-                        )}
-                      >
-                        {item.label}
-                      </span>
-                      <span className="hidden text-xs text-muted-foreground md:block">
-                        {item.description}
-                      </span>
+                    <span
+                      className={cn(
+                        "mt-2.5 block max-w-full truncate px-1 text-xs font-semibold sm:text-sm",
+                        current ? "text-primary" : "text-muted-foreground",
+                        complete && "text-foreground",
+                      )}
+                    >
+                      {item.label}
                     </span>
                   </div>
                 </li>

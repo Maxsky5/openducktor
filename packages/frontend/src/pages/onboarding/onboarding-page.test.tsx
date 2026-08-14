@@ -132,7 +132,7 @@ const renderOnboarding = ({
 
 const enterRuntimeStage = async (): Promise<void> => {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -154,12 +154,28 @@ describe("OnboardingPage runtime validation", () => {
   test("renders a horizontal progress indicator above the current stage", () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
 
-    expect(
-      screen
-        .getByRole("navigation", { name: "Onboarding progress" })
-        .getAttribute("data-orientation"),
-    ).toBe("horizontal");
+    const progress = screen.getByRole("navigation", { name: "Onboarding progress" });
+    expect(progress.getAttribute("data-orientation")).toBe("horizontal");
+    expect(progress.querySelectorAll("[data-progress-connector]")).toHaveLength(2);
+    expect(within(progress).getByText("Coding agents")).toBeTruthy();
     expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  test("keeps the Welcome stage focused on the setup task", () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+
+    expect(
+      screen.getByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "OpenDucktor works with a local Git repository and guides each change through Spec, Plan, Build, and QA.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Configure coding agents" })).toBeTruthy();
+    expect(screen.queryByText("First-time setup")).toBeNull();
+    expect(screen.queryByText("Move from idea to reviewed change.")).toBeNull();
+    expect(screen.queryByText("Define the outcome")).toBeNull();
   });
 
   test("preloads the Kanban destination while the user completes onboarding", () => {
@@ -177,7 +193,7 @@ describe("OnboardingPage runtime validation", () => {
     onboardingShell.scrollTop = 320;
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Continue to runtimes" }));
+      fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -206,7 +222,7 @@ describe("OnboardingPage runtime validation", () => {
 
     try {
       renderOnboarding({ runtimes });
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
 
       await screen.findByRole("heading", { name: "Configure agent runtimes" });
       expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
@@ -225,6 +241,56 @@ describe("OnboardingPage runtime validation", () => {
       await within(opencodeSection()).findByText("Available");
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
+  test("uses runtime brand marks and opens Browse in the configured executable directory", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/Users/dev/.local/bin/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const original = {
+      filesystemListDirectory: host.filesystemListDirectory,
+      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
+    };
+    const filesystemListDirectory = mock(async () => ({
+      currentPath: "/Users/dev/.local/bin",
+      currentPathIsGitRepo: false,
+      parentPath: "/Users/dev/.local",
+      homePath: "/Users/dev",
+      entries: [],
+    }));
+    host.filesystemListDirectory = filesystemListDirectory;
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+
+      for (const definition of runtimeDefinitions) {
+        const section = screen.getByRole("heading", { name: definition.label }).closest("section");
+        if (!section) throw new Error(`${definition.label} section is missing`);
+        expect(section.querySelector(`[data-runtime-logo="${definition.kind}"] svg`)).toBeTruthy();
+      }
+      expect(opencodeSection().textContent).not.toContain("OC");
+
+      await act(async () => {
+        fireEvent.click(within(opencodeSection()).getByRole("button", { name: "Browse" }));
+        await Promise.resolve();
+      });
+
+      await waitFor(() =>
+        expect(filesystemListDirectory).toHaveBeenCalledWith({
+          path: "/Users/dev/.local/bin",
+          includeFiles: true,
+        }),
+      );
+      await screen.findByText("/Users/dev/.local/bin");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    } finally {
+      host.filesystemListDirectory = original.filesystemListDirectory;
+      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
     }
   });
 
@@ -248,7 +314,7 @@ describe("OnboardingPage runtime validation", () => {
     try {
       renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
@@ -293,7 +359,7 @@ describe("OnboardingPage runtime validation", () => {
     try {
       renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
@@ -343,7 +409,7 @@ describe("OnboardingPage runtime validation", () => {
     try {
       renderOnboarding({ runtimes });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
         await Promise.resolve();
       });
       await screen.findByText("Runtime validation failed");

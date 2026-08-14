@@ -8,17 +8,22 @@ import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, Settings2 } from "l
 import { type ReactElement, type RefObject, useState } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
-const DELIVERY_PHASES = [
-  { label: "Spec", detail: "Define the outcome" },
-  { label: "Plan", detail: "Map the change" },
-  { label: "Build", detail: "Make the change" },
-  { label: "QA", detail: "Prove the result" },
+const SETUP_STEPS = [
+  {
+    label: "Configure coding agents",
+    detail: "Choose the local coding agents OpenDucktor can run and confirm each executable path.",
+    icon: Bot,
+  },
+  {
+    label: "Open your first workspace",
+    detail: "Choose the local Git repository where tasks and agent sessions will stay scoped.",
+    icon: FolderGit2,
+  },
 ] as const;
 
 type WelcomeStageProps = {
@@ -28,65 +33,54 @@ type WelcomeStageProps = {
 export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
   return (
     <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
-      <CardHeader className="gap-5 border-b border-border px-6 py-7 sm:px-9 sm:py-9">
-        <Badge variant="secondary" className="w-fit">
-          Welcome to OpenDucktor
-        </Badge>
-        <div className="flex max-w-3xl flex-col gap-3">
-          <CardTitle className="text-3xl leading-[1.08] tracking-tight sm:text-4xl lg:text-5xl">
-            Move from idea to reviewed change.
-          </CardTitle>
-          <CardDescription className="max-w-2xl text-base leading-relaxed sm:text-lg">
-            OpenDucktor keeps Spec, Plan, Build, and QA tied to one local Git repository.
+      <CardContent className="grid flex-1 p-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <section className="flex flex-col justify-center border-b border-border px-6 py-9 sm:px-9 sm:py-12 lg:border-r lg:border-b-0 lg:px-12">
+          <p className="text-sm font-semibold text-primary">Welcome to OpenDucktor</p>
+          <h1 className="mt-4 max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+            Set up your local coding workspace
+          </h1>
+          <CardDescription className="mt-4 max-w-2xl text-base leading-relaxed sm:text-lg">
+            OpenDucktor works with a local Git repository and guides each change through Spec, Plan,
+            Build, and QA.
           </CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex flex-1 flex-col gap-7 bg-muted/20 px-6 py-7 sm:px-9 sm:py-8">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
-          {DELIVERY_PHASES.map((phase, index) => (
-            <div
-              key={phase.label}
-              className="flex min-h-28 flex-col justify-between gap-3 bg-card p-4 sm:p-5"
-            >
-              <span className="font-mono text-xs text-muted-foreground">0{index + 1}</span>
-              <div>
-                <p className="font-semibold">{phase.label}</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{phase.detail}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-2 sm:divide-x sm:divide-border">
-          <div className="flex items-start gap-3 border-b border-border p-5 sm:border-b-0">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
-              <Bot className="size-4" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-sm font-medium">Connect agent runtimes</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Confirm the exact tools and executable paths OpenDucktor can use.
-              </p>
-            </div>
+          <div className="mt-8 rounded-xl border border-border bg-muted/30 p-5">
+            <p className="text-sm font-semibold text-foreground">Built around your repository</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Your tasks, agent sessions, and change history stay tied to the workspace you open.
+            </p>
           </div>
-          <div className="flex items-start gap-3 p-5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
-              <FolderGit2 className="size-4" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-sm font-medium">Open your first workspace</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Choose the local Git repository where work will stay scoped.
-              </p>
-            </div>
+        </section>
+
+        <section
+          className="flex flex-col justify-center bg-muted/20 px-6 py-9 sm:px-9 sm:py-12"
+          aria-label="Setup steps"
+        >
+          <p className="text-sm font-semibold text-foreground">Two quick setup steps</p>
+          <div className="mt-5 divide-y divide-border border-y border-border">
+            {SETUP_STEPS.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div key={step.label} className="flex gap-4 py-5">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm">
+                    <Icon className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground">Step {index + 1}</p>
+                    <p className="mt-1 font-semibold text-foreground">{step.label}</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                      {step.detail}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </section>
       </CardContent>
 
       <div className="flex justify-end border-t border-border bg-card px-6 py-4 sm:px-9">
         <Button size="lg" onClick={onContinue}>
-          Continue to runtimes
+          Configure coding agents
           <ArrowRight data-icon="inline-end" />
         </Button>
       </div>

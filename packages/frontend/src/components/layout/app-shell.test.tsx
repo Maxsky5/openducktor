@@ -399,7 +399,7 @@ describe("AppShell", () => {
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
     );
     expect(
-      screen.getByRole("heading", { name: "Move from idea to reviewed change." }),
+      screen.getByRole("heading", { name: "Set up your local coding workspace" }),
     ).toBeTruthy();
     expect(screen.queryByText("Kanban")).toBeNull();
   });
@@ -410,7 +410,7 @@ describe("AppShell", () => {
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
     expect(
-      screen.queryByRole("heading", { name: "Move from idea to reviewed change." }),
+      screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
     ).toBeNull();
   });
 
@@ -430,7 +430,7 @@ describe("AppShell", () => {
     await waitFor(() =>
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Continue to runtimes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
     await screen.findByRole("heading", { name: "Configure agent runtimes" });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
@@ -468,7 +468,7 @@ describe("AppShell", () => {
     await waitFor(() =>
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Continue to runtimes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
     await screen.findByRole("heading", { name: "Configure agent runtimes" });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
@@ -490,7 +490,7 @@ describe("AppShell", () => {
   test("moves from welcome to runtime setup without mounting the workspace shell", () => {
     renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 
-    fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
 
     expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
     expect(screen.getAllByText("Executable path")).toHaveLength(3);
