@@ -4,7 +4,7 @@ import {
   type FilesystemListDirectoryInput,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
-import { Data, Effect } from "effect";
+import { Data, Effect, Either } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 export type FilesystemListDirectoryErrorKind =
   | "home_directory_unavailable"
@@ -28,15 +28,21 @@ export type FilesystemService = {
     input?: FilesystemListDirectoryInput,
   ): Effect.Effect<DirectoryListing, FilesystemListDirectoryError>;
 };
-const hasNodeErrorCode = (error: unknown, code: string): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "code" in error &&
-  (
-    error as {
-      code?: unknown;
+const hasNodeErrorCode = (error: unknown, code: string): boolean => {
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (typeof current === "object" && current !== null) {
+    if (visited.has(current)) {
+      return false;
     }
-  ).code === code;
+    visited.add(current);
+    if ("code" in current && current.code === code) {
+      return true;
+    }
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return false;
+};
 const resolveHome = (filesystem: FilesystemPort): string => {
   const home = filesystem.homeDirectory();
   if (home) {
@@ -139,18 +145,20 @@ const readDirectoryEntriesEffect = (
       );
     const visibleEntries = [];
     for (const entry of entries) {
-      const metadata = yield* filesystem
-        .stat(entry.path)
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new FilesystemListDirectoryError(
-                "read_failed",
-                `Failed to read directory '${currentPath}': ${String(error)}`,
-                { cause: error },
-              ),
+      const metadataResult = yield* Effect.either(filesystem.stat(entry.path));
+      if (Either.isLeft(metadataResult)) {
+        if (hasNodeErrorCode(metadataResult.left, "ENOENT")) {
+          continue;
+        }
+        return yield* Effect.fail(
+          new FilesystemListDirectoryError(
+            "read_failed",
+            `Failed to read directory '${currentPath}': ${String(metadataResult.left)}`,
+            { cause: metadataResult.left },
           ),
         );
+      }
+      const metadata = metadataResult.right;
       if (!metadata.isDirectory && !includeFiles) {
         continue;
       }
