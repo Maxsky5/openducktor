@@ -5,7 +5,6 @@ import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createTaskAssetAwareTaskStore } from "./task-asset-aware-task-store";
 import { createTaskAssetStagingService } from "./task-asset-staging-service";
 
@@ -24,9 +23,7 @@ const createHarness = async () => {
   const filePort = createNodeTaskAssetFilePort({ configDir: sqlite.configDir });
   const staging = createTaskAssetStagingService(filePort);
   const registry = createSqliteTaskAssetRegistry({
-    resolveDatabasePath: ({ workspaceId }) =>
-      resolveSqliteTaskStoreDatabasePath({ configDir: sqlite.configDir, workspaceId }),
-    resolveWorkspaceIdForRepoPath: () => Effect.succeed("fairnest"),
+    contextProvider: sqlite.contextProvider,
   });
   const store = createTaskAssetAwareTaskStore({
     inner: sqlite.store,

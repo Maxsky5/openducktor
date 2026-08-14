@@ -84,6 +84,17 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
 });
 
 describe("createSqliteTaskRepository SQLite integration", () => {
+  test("disposes retained connections when the test harness is cleaned up", async () => {
+    const { cleanup, repoPath, store } = await createRepositoryHarness();
+    await Effect.runPromise(store.listTasks({ repoPath }));
+
+    await cleanup();
+
+    await expect(Effect.runPromise(store.listTasks({ repoPath }))).rejects.toThrow(
+      "The SQLite task store is stopping and cannot accept a new operation.",
+    );
+  });
+
   test("diagnoses and initializes a workspace-scoped SQLite database with Drizzle migrations", async () => {
     const { databasePath, repoPath, store } = await createRepositoryHarness();
 

@@ -11,21 +11,13 @@ import type { TaskDescriptionAssetPersistencePort } from "../../ports/task-descr
 import { getTaskCard } from "./sqlite-task-card-read-model";
 import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import { requireTaskRow } from "./sqlite-task-queries";
-import {
-  createSqliteTaskRepositoryContextProvider,
-  type ResolveSqliteTaskStorePath,
-  type ResolveWorkspaceIdForRepoPath,
-  type SqliteTaskRepositoryContextProvider,
-} from "./sqlite-task-repository-context";
+import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import { type TaskStoreSession, taskAssets, tasks } from "./sqlite-task-store-schema";
 import { applyTaskPatch } from "./sqlite-task-writes";
 
 export type CreateSqliteTaskAssetRegistryInput = {
-  contextProvider?: SqliteTaskRepositoryContextProvider;
+  contextProvider: SqliteTaskRepositoryContextProvider;
   now?: () => Date;
-  processEnv?: NodeJS.ProcessEnv;
-  resolveDatabasePath?: ResolveSqliteTaskStorePath;
-  resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
 };
 
 const toRecord = (row: typeof taskAssets.$inferSelect): TaskAssetRecord => ({
@@ -91,21 +83,10 @@ const samePatchedTaskFields = (
 };
 
 export const createSqliteTaskAssetRegistry = ({
-  contextProvider,
+  contextProvider: withDatabase,
   now = () => new Date(),
-  processEnv = process.env,
-  resolveDatabasePath,
-  resolveWorkspaceIdForRepoPath,
 }: CreateSqliteTaskAssetRegistryInput): TaskAssetRegistryPort &
   TaskDescriptionAssetPersistencePort => {
-  const withDatabase =
-    contextProvider ??
-    createSqliteTaskRepositoryContextProvider({
-      processEnv,
-      ...(resolveDatabasePath ? { resolveDatabasePath } : {}),
-      resolveWorkspaceIdForRepoPath,
-    });
-
   return {
     taskExists(input) {
       return withDatabase(input.repoPath, "sqliteTaskAssetRegistry.taskExists", ({ session }) =>

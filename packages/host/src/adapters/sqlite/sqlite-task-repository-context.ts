@@ -1,14 +1,16 @@
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
-import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
+import { HostOperationError } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
+import {
+  type ManagedSqliteTaskStoreConnection,
+  type OpenSqliteTaskStoreConnection,
+  openSqliteTaskStoreConnection,
+  type SqliteTaskStoreStorage,
+} from "./sqlite-task-store-connection";
 import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
-import { ensureSchema } from "./sqlite-task-store-migrations";
-import { type TaskStoreSession, taskStoreSchema } from "./sqlite-task-store-schema";
+import type { TaskStoreSession } from "./sqlite-task-store-schema";
 
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
@@ -39,26 +41,30 @@ export type SqliteTaskRepositoryContextManager = {
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
   onBackgroundFailure?: (failure: HostOperationError) => Effect.Effect<void, never>;
+  openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;
   resolveWorkspaceIdForRepoPath: ResolveWorkspaceIdForRepoPath;
 };
 
-type SqliteTaskRepositoryStorage = {
-  databasePath: string;
-  repoPath: string;
-  workspaceId: string;
-};
-
-type ManagedSqliteTaskStoreConnection = {
-  close: Effect.Effect<void, HostOperationError>;
-  operationSemaphore: Effect.Semaphore;
-  scope: Scope.CloseableScope;
-  session: TaskStoreSession;
-};
-
 type ConnectionFlight = Deferred.Deferred<ManagedSqliteTaskStoreConnection, TaskStoreError>;
 type CloseFlight = Deferred.Deferred<void, HostOperationError>;
+type IdleClose = {
+  fiber: Fiber.RuntimeFiber<void, never>;
+  token: object;
+};
+type ConnectionEntry = { demand: number } & (
+  | { _tag: "vacant" }
+  | { _tag: "opening"; flight: ConnectionFlight }
+  | {
+      _tag: "ready";
+      connection: ManagedSqliteTaskStoreConnection;
+      idleClose: IdleClose | null;
+    }
+  | { _tag: "closing"; flight: CloseFlight }
+  | { _tag: "failed"; failure: HostOperationError }
+);
+type ReadyConnectionEntry = Extract<ConnectionEntry, { _tag: "ready" }>;
 
 const SQLITE_TASK_STORE_IDLE_TIMEOUT = "5 minutes";
 
@@ -76,19 +82,21 @@ const hostIsStoppingError = () =>
     message: "The SQLite task store is stopping and cannot accept a new operation.",
   });
 
+const connectionEntryStateError = (databasePath: string, message: string) =>
+  new HostOperationError({
+    operation: "sqliteTaskRepository.connectionState",
+    message,
+    details: { databasePath },
+  });
+
 export const createSqliteTaskRepositoryContextManager = ({
   onBackgroundFailure = (failure) => Effect.logError(failure.message),
+  openConnection = openSqliteTaskStoreConnection,
   processEnv,
   resolveDatabasePath = resolveDefaultDatabasePath(processEnv),
   resolveWorkspaceIdForRepoPath,
 }: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
-  const connectionFlights = new Map<string, ConnectionFlight>();
-  const connections = new Map<string, ManagedSqliteTaskStoreConnection>();
-  const closingFlights = new Map<string, CloseFlight>();
-  const closeFailures = new Map<string, HostOperationError>();
-  const demands = new Map<string, number>();
-  const idleFibers = new Map<string, Fiber.RuntimeFiber<void, never>>();
-  const idleGenerations = new Map<string, number>();
+  const entries = new Map<string, ConnectionEntry>();
   let accepting = true;
   let totalDemand = 0;
   let shutdownWaiter: Deferred.Deferred<void> | null = null;
@@ -101,46 +109,7 @@ export const createSqliteTaskRepositoryContextManager = ({
         databasePath,
         repoPath,
         workspaceId,
-      } satisfies SqliteTaskRepositoryStorage;
-    });
-
-  const openConnection = (storage: SqliteTaskRepositoryStorage) =>
-    Effect.gen(function* () {
-      yield* Effect.tryPromise({
-        try: () => mkdir(path.dirname(storage.databasePath), { recursive: true }),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "sqliteTaskRepository.createDatabaseDirectory",
-            message: errorMessage(cause),
-            cause,
-            details: { databasePath: storage.databasePath },
-          }),
-      });
-      const scope = yield* Scope.make();
-      const openExit = yield* Effect.exit(
-        Effect.gen(function* () {
-          const connection = yield* openSqliteDrizzleConnection<typeof taskStoreSchema>({
-            databasePath: storage.databasePath,
-            configureWal: true,
-            config: {
-              schema: taskStoreSchema,
-            },
-          }).pipe(Scope.extend(scope));
-          yield* ensureSchema(connection.database, connection.session, storage.databasePath);
-          const operationSemaphore = yield* Effect.makeSemaphore(1);
-          return {
-            close: connection.close,
-            operationSemaphore,
-            scope,
-            session: connection.session,
-          } satisfies ManagedSqliteTaskStoreConnection;
-        }),
-      );
-      if (Exit.isFailure(openExit)) {
-        yield* Scope.close(scope, openExit);
-        return yield* Effect.failCause(openExit.cause);
-      }
-      return openExit.value;
+      } satisfies SqliteTaskStoreStorage;
     });
 
   const completeConnectionFlight = (
@@ -150,26 +119,45 @@ export const createSqliteTaskRepositoryContextManager = ({
   ) =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(open);
-      if (Exit.isSuccess(exit)) {
-        connections.set(databasePath, exit.value);
+      const transitionError = yield* Effect.sync(() => {
+        const current = entries.get(databasePath);
+        if (current?._tag !== "opening" || current.flight !== flight) {
+          return connectionEntryStateError(
+            databasePath,
+            "The SQLite task store connection changed while it was opening.",
+          );
+        }
+        if (Exit.isSuccess(exit)) {
+          entries.set(databasePath, {
+            _tag: "ready",
+            connection: exit.value,
+            demand: current.demand,
+            idleClose: null,
+          });
+        } else if (current.demand === 0) {
+          entries.delete(databasePath);
+        } else {
+          entries.set(databasePath, { _tag: "vacant", demand: current.demand });
+        }
+        return null;
+      });
+      if (transitionError) {
+        yield* Deferred.fail(flight, transitionError);
+        if (Exit.isSuccess(exit)) {
+          yield* exit.value.close.pipe(Effect.ignore);
+          yield* Scope.close(exit.value.scope, Exit.void);
+        }
+        return yield* transitionError;
       }
       yield* Deferred.done(flight, exit);
       if (Exit.isFailure(exit)) {
         return yield* Effect.failCause(exit.cause);
       }
       return exit.value;
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (connectionFlights.get(databasePath) === flight) {
-            connectionFlights.delete(databasePath);
-          }
-        }),
-      ),
-    );
+    });
 
   const acquireConnection = (
-    storage: SqliteTaskRepositoryStorage,
+    storage: SqliteTaskStoreStorage,
   ): Effect.Effect<ManagedSqliteTaskStoreConnection, TaskStoreError> =>
     Effect.suspend(() =>
       Effect.uninterruptibleMask((restore) =>
@@ -179,23 +167,36 @@ export const createSqliteTaskRepositoryContextManager = ({
             TaskStoreError
           >();
           const reservation = yield* Effect.sync(() => {
-            const closeFailure = closeFailures.get(storage.databasePath);
-            if (closeFailure) return { _tag: "close-failed" as const, failure: closeFailure };
-            const closingFlight = closingFlights.get(storage.databasePath);
-            if (closingFlight) return { _tag: "closing" as const, flight: closingFlight };
-            const connection = connections.get(storage.databasePath);
-            if (connection) {
-              return { _tag: "ready" as const, connection };
+            const current = entries.get(storage.databasePath);
+            if (!current) {
+              return {
+                _tag: "invalid" as const,
+                failure: connectionEntryStateError(
+                  storage.databasePath,
+                  "The SQLite task store connection has no reserved demand.",
+                ),
+              };
             }
-            const existingFlight = connectionFlights.get(storage.databasePath);
-            if (existingFlight) {
-              return { _tag: "opening" as const, flight: existingFlight };
+            switch (current._tag) {
+              case "failed":
+                return { _tag: "failed" as const, failure: current.failure };
+              case "closing":
+                return { _tag: "closing" as const, flight: current.flight };
+              case "ready":
+                return { _tag: "ready" as const, connection: current.connection };
+              case "opening":
+                return { _tag: "opening" as const, flight: current.flight };
+              case "vacant":
+                entries.set(storage.databasePath, {
+                  _tag: "opening",
+                  demand: current.demand,
+                  flight: newFlight,
+                });
+                return { _tag: "created" as const, flight: newFlight };
             }
-            connectionFlights.set(storage.databasePath, newFlight);
-            return { _tag: "created" as const, flight: newFlight };
           });
 
-          if (reservation._tag === "close-failed") {
+          if (reservation._tag === "invalid" || reservation._tag === "failed") {
             return yield* reservation.failure;
           }
           if (reservation._tag === "closing") {
@@ -225,59 +226,75 @@ export const createSqliteTaskRepositoryContextManager = ({
     Effect.gen(function* () {
       const closeResult = yield* Effect.either(connection.close);
       yield* Scope.close(connection.scope, Exit.void);
+      const transitionError = yield* Effect.sync(() => {
+        const current = entries.get(databasePath);
+        if (current?._tag !== "closing" || current.flight !== closeFlight) {
+          return connectionEntryStateError(
+            databasePath,
+            "The SQLite task store connection changed while it was closing.",
+          );
+        }
+        if (closeResult._tag === "Left") {
+          entries.set(databasePath, {
+            _tag: "failed",
+            demand: current.demand,
+            failure: closeResult.left,
+          });
+        } else if (current.demand === 0) {
+          entries.delete(databasePath);
+        } else {
+          entries.set(databasePath, { _tag: "vacant", demand: current.demand });
+        }
+        return null;
+      });
+      if (transitionError) {
+        yield* Deferred.fail(closeFlight, transitionError);
+        return yield* transitionError;
+      }
       if (closeResult._tag === "Left") {
-        closeFailures.set(databasePath, closeResult.left);
         yield* Deferred.fail(closeFlight, closeResult.left);
         return yield* closeResult.left;
       }
       yield* Deferred.succeed(closeFlight, undefined);
-      if (closingFlights.get(databasePath) === closeFlight) {
-        closingFlights.delete(databasePath);
-      }
     });
 
-  const closeIdleConnection = (databasePath: string, generation: number) =>
+  const closeIdleConnection = (databasePath: string, token: object) =>
     Effect.gen(function* () {
       const closeFlight = yield* Deferred.make<void, HostOperationError>();
       const reservation = yield* Effect.sync(() => {
-        const connection = connections.get(databasePath);
+        const current = entries.get(databasePath);
         if (
           !accepting ||
-          !connection ||
-          (demands.get(databasePath) ?? 0) !== 0 ||
-          idleGenerations.get(databasePath) !== generation
+          current?._tag !== "ready" ||
+          current.demand !== 0 ||
+          current.idleClose?.token !== token
         ) {
           return null;
         }
-        connections.delete(databasePath);
-        idleFibers.delete(databasePath);
-        closingFlights.set(databasePath, closeFlight);
-        return connection;
+        entries.set(databasePath, {
+          _tag: "closing",
+          demand: 0,
+          flight: closeFlight,
+        });
+        return current.connection;
       });
       if (!reservation) return;
       yield* closeManagedConnection(databasePath, reservation, closeFlight);
     });
 
-  const scheduleIdleClose = (databasePath: string) =>
+  const scheduleIdleClose = (databasePath: string, entry: ReadyConnectionEntry) =>
     Effect.gen(function* () {
-      const generation = yield* Effect.sync(() => {
-        const next = (idleGenerations.get(databasePath) ?? 0) + 1;
-        idleGenerations.set(databasePath, next);
-        return next;
-      });
+      const token = {};
       const fiber = yield* Effect.forkDaemon(
         Effect.sleep(SQLITE_TASK_STORE_IDLE_TIMEOUT).pipe(
-          Effect.zipRight(closeIdleConnection(databasePath, generation)),
+          Effect.zipRight(closeIdleConnection(databasePath, token)),
           Effect.catchAll(onBackgroundFailure),
         ),
       );
       const keepFiber = yield* Effect.sync(() => {
-        if (
-          accepting &&
-          (demands.get(databasePath) ?? 0) === 0 &&
-          idleGenerations.get(databasePath) === generation
-        ) {
-          idleFibers.set(databasePath, fiber);
+        const current = entries.get(databasePath);
+        if (accepting && current === entry && current.demand === 0) {
+          current.idleClose = { fiber, token };
           return true;
         }
         return false;
@@ -292,11 +309,21 @@ export const createSqliteTaskRepositoryContextManager = ({
       const reservation = yield* Effect.sync(() => {
         if (!accepting) return { _tag: "stopping" as const };
         totalDemand += 1;
-        demands.set(databasePath, (demands.get(databasePath) ?? 0) + 1);
-        idleGenerations.set(databasePath, (idleGenerations.get(databasePath) ?? 0) + 1);
-        const idleFiber = idleFibers.get(databasePath) ?? null;
-        idleFibers.delete(databasePath);
-        return { _tag: "reserved" as const, idleFiber };
+        const current = entries.get(databasePath);
+        if (!current) {
+          entries.set(databasePath, { _tag: "vacant", demand: 1 });
+          return { _tag: "reserved" as const, idleFiber: null };
+        }
+        current.demand += 1;
+        if (current._tag === "ready") {
+          const idleFiber = current.idleClose?.fiber ?? null;
+          current.idleClose = null;
+          return {
+            _tag: "reserved" as const,
+            idleFiber,
+          };
+        }
+        return { _tag: "reserved" as const, idleFiber: null };
       });
       if (reservation._tag === "stopping") {
         return yield* hostIsStoppingError();
@@ -309,18 +336,38 @@ export const createSqliteTaskRepositoryContextManager = ({
   const releaseDemand = (databasePath: string) =>
     Effect.gen(function* () {
       const released = yield* Effect.sync(() => {
-        const currentDemand = demands.get(databasePath) ?? 0;
-        const nextDemand = Math.max(0, currentDemand - 1);
-        if (nextDemand === 0) demands.delete(databasePath);
-        else demands.set(databasePath, nextDemand);
-        totalDemand = Math.max(0, totalDemand - 1);
+        const current = entries.get(databasePath);
+        if (!current || current.demand === 0 || totalDemand === 0) {
+          return {
+            _tag: "invalid" as const,
+            failure: connectionEntryStateError(
+              databasePath,
+              "The SQLite task store released a connection without reserved demand.",
+            ),
+          };
+        }
+        const nextDemand = current.demand - 1;
+        totalDemand -= 1;
+        let idleEntry: ReadyConnectionEntry | null = null;
+        if (current._tag === "vacant" && nextDemand === 0) {
+          entries.delete(databasePath);
+        } else {
+          current.demand = nextDemand;
+          if (accepting && current._tag === "ready" && nextDemand === 0) {
+            idleEntry = current;
+          }
+        }
         return {
-          scheduleIdle: accepting && nextDemand === 0 && connections.has(databasePath),
+          _tag: "released" as const,
+          idleEntry,
           shutdownWaiter: totalDemand === 0 ? shutdownWaiter : null,
         };
       });
-      if (released.scheduleIdle) {
-        yield* scheduleIdleClose(databasePath);
+      if (released._tag === "invalid") {
+        return yield* released.failure;
+      }
+      if (released.idleEntry) {
+        yield* scheduleIdleClose(databasePath, released.idleEntry);
       }
       if (released.shutdownWaiter) {
         yield* Deferred.succeed(released.shutdownWaiter, undefined);
@@ -341,7 +388,7 @@ export const createSqliteTaskRepositoryContextManager = ({
             }),
           );
           if (Exit.isFailure(acquireExit)) {
-            yield* releaseDemand(storage.databasePath);
+            yield* releaseDemand(storage.databasePath).pipe(Effect.orDie);
             return yield* Effect.failCause(acquireExit.cause);
           }
           return acquireExit.value;
@@ -350,7 +397,7 @@ export const createSqliteTaskRepositoryContextManager = ({
         (connection) =>
           connection.operationSemaphore
             .release(1)
-            .pipe(Effect.zipRight(releaseDemand(storage.databasePath))),
+            .pipe(Effect.zipRight(releaseDemand(storage.databasePath)), Effect.orDie),
       );
       return yield* run.pipe(
         Effect.mapError((cause) =>
@@ -359,16 +406,43 @@ export const createSqliteTaskRepositoryContextManager = ({
       );
     });
 
+  const closeRetainedEntry = (databasePath: string, entry: ReadyConnectionEntry) =>
+    Effect.gen(function* () {
+      const closeFlight = yield* Deferred.make<void, HostOperationError>();
+      const reservation = yield* Effect.sync(() => {
+        const current = entries.get(databasePath);
+        if (current === entry) {
+          entries.set(databasePath, {
+            _tag: "closing",
+            demand: current.demand,
+            flight: closeFlight,
+          });
+          return { _tag: "close" as const, connection: current.connection };
+        }
+        if (current?._tag === "closing") {
+          return { _tag: "wait" as const, flight: current.flight };
+        }
+        return { _tag: "done" as const };
+      });
+      if (reservation._tag === "close") {
+        yield* closeManagedConnection(databasePath, reservation.connection, closeFlight);
+      } else if (reservation._tag === "wait") {
+        yield* Deferred.await(reservation.flight);
+      }
+    });
+
   const dispose = () =>
     Effect.gen(function* () {
       const waiter = yield* Deferred.make<void>();
       const shutdown = yield* Effect.sync(() => {
         accepting = false;
         shutdownWaiter ??= waiter;
-        const fibers = Array.from(idleFibers.values());
-        idleFibers.clear();
-        for (const databasePath of idleGenerations.keys()) {
-          idleGenerations.set(databasePath, (idleGenerations.get(databasePath) ?? 0) + 1);
+        const fibers: Fiber.RuntimeFiber<void, never>[] = [];
+        for (const entry of entries.values()) {
+          if (entry._tag === "ready" && entry.idleClose) {
+            fibers.push(entry.idleClose.fiber);
+            entry.idleClose = null;
+          }
         }
         return { drained: totalDemand === 0, fibers, waiter: shutdownWaiter };
       });
@@ -376,27 +450,23 @@ export const createSqliteTaskRepositoryContextManager = ({
       if (!shutdown.drained) {
         yield* Deferred.await(shutdown.waiter);
       }
-      const flights = Array.from(connectionFlights.values());
-      yield* Effect.forEach(flights, (flight) => Deferred.await(flight).pipe(Effect.ignore), {
-        discard: true,
-      });
-      const pendingCloses = Array.from(closingFlights.values());
+      const pendingCloses = Array.from(entries.values()).flatMap((entry) =>
+        entry._tag === "closing" ? [entry.flight] : [],
+      );
       yield* Effect.forEach(pendingCloses, (flight) => Deferred.await(flight).pipe(Effect.ignore), {
         discard: true,
       });
-      const failures: HostOperationError[] = Array.from(closeFailures.values());
-      for (const [databasePath, connection] of connections) {
-        const closeFlight = yield* Deferred.make<void, HostOperationError>();
-        connections.delete(databasePath);
-        closingFlights.set(databasePath, closeFlight);
-        const closeResult = yield* Effect.either(
-          closeManagedConnection(databasePath, connection, closeFlight),
-        );
-        if (closeResult._tag === "Left") {
-          failures.push(closeResult.left);
-        }
-      }
-      connections.clear();
+      yield* Effect.forEach(
+        Array.from(entries.entries()),
+        ([databasePath, entry]) =>
+          entry._tag === "ready"
+            ? closeRetainedEntry(databasePath, entry).pipe(Effect.ignore)
+            : Effect.void,
+        { concurrency: "unbounded", discard: true },
+      );
+      const failures = Array.from(entries.values()).flatMap((entry) =>
+        entry._tag === "failed" ? [entry.failure] : [],
+      );
       if (failures.length > 0) {
         return yield* new HostOperationError({
           operation: "sqliteTaskRepository.disposeConnections",
@@ -409,8 +479,3 @@ export const createSqliteTaskRepositoryContextManager = ({
 
   return { dispose, withDatabase };
 };
-
-export const createSqliteTaskRepositoryContextProvider = (
-  input: CreateSqliteTaskRepositoryContextManagerInput,
-): SqliteTaskRepositoryContextProvider =>
-  createSqliteTaskRepositoryContextManager(input).withDatabase;

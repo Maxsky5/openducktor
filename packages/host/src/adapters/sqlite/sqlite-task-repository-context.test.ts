@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
+import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
 
 const tempDirectories = new Set<string>();
 
@@ -18,6 +20,38 @@ const createHarness = async () => {
     resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
   });
   return { configDir, manager };
+};
+
+const createCloseFailureHarness = async (
+  onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never> = () =>
+    Effect.void,
+) => {
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-failure-"));
+  tempDirectories.add(configDir);
+  const manager = createSqliteTaskRepositoryContextManager({
+    onBackgroundFailure,
+    processEnv: {},
+    resolveDatabasePath: ({ workspaceId }) =>
+      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
+    resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
+    openConnection: (storage) =>
+      openSqliteTaskStoreConnection(storage).pipe(
+        Effect.map((connection) => ({
+          ...connection,
+          close: connection.close.pipe(
+            Effect.zipRight(
+              Effect.fail(
+                new HostOperationError({
+                  operation: "test.closeSqliteTaskStoreConnection",
+                  message: `Failed to close ${storage.workspaceId}.`,
+                }),
+              ),
+            ),
+          ),
+        })),
+      ),
+  });
+  return manager;
 };
 
 afterEach(async () => {
@@ -267,4 +301,52 @@ test("closes retained connections during disposal", async () => {
     ),
   );
   expect(queryResult._tag).toBe("Left");
+});
+
+test("reports close failures from every retained database during disposal", async () => {
+  const manager = await createCloseFailureHarness();
+  await Effect.runPromise(
+    Effect.forEach(
+      ["/repos/alpha", "/repos/beta"],
+      (repoPath) => manager.withDatabase(repoPath, "test.open", () => Effect.void),
+      { discard: true },
+    ),
+  );
+
+  const result = await Effect.runPromise(Effect.either(manager.dispose()));
+
+  expect(result._tag).toBe("Left");
+  if (result._tag === "Left") {
+    expect(result.left.message.split("\n").sort()).toEqual([
+      "Failed to close alpha.",
+      "Failed to close beta.",
+    ]);
+  }
+});
+
+test("reports an idle close failure and rejects later operations for that database", async () => {
+  const backgroundFailures: HostOperationError[] = [];
+  const manager = await createCloseFailureHarness((failure) =>
+    Effect.sync(() => {
+      backgroundFailures.push(failure);
+    }),
+  );
+
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      yield* manager.withDatabase("/repos/alpha", "test.open", () => Effect.void);
+      yield* TestClock.adjust("5 minutes");
+      yield* Effect.yieldNow();
+      return yield* Effect.either(
+        manager.withDatabase("/repos/alpha", "test.after-close-failure", () => Effect.void),
+      );
+    }).pipe(Effect.provide(TestContext.TestContext)),
+  );
+
+  expect(backgroundFailures.map((failure) => failure.message)).toEqual(["Failed to close alpha."]);
+  expect(result._tag).toBe("Left");
+  if (result._tag === "Left") {
+    expect(result.left.message).toBe("Failed to close alpha.");
+  }
+  await Effect.runPromise(manager.dispose().pipe(Effect.ignore));
 });

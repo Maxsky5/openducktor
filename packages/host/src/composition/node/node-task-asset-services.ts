@@ -53,15 +53,11 @@ export const createNodeTaskAssetServices = ({
   });
   const registry = createSqliteTaskAssetRegistry({
     contextProvider: contextManager.withDatabase,
-    processEnv,
-    resolveWorkspaceIdForRepoPath,
   });
   const inner =
     configuredTaskStore ??
     createSqliteTaskRepository({
       contextProvider: contextManager.withDatabase,
-      processEnv,
-      resolveWorkspaceIdForRepoPath,
     });
   const taskAssetReadService = createTaskAssetReadService({
     filePort,
