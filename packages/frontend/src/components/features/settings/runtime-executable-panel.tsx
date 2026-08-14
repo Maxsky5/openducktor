@@ -157,7 +157,7 @@ export function RuntimeExecutablePanel({
                 <div className="flex min-w-0 items-center gap-3">
                   <span
                     data-runtime-logo={kind}
-                    className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground"
+                    className="flex size-9 shrink-0 items-center justify-center text-foreground"
                   >
                     <AgentRuntimeIcon runtimeKind={kind} className="size-5" />
                   </span>

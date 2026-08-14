@@ -7,7 +7,11 @@ import {
   useRef,
 } from "react";
 import openducktorMarkUrl from "@/assets/openducktor-mark.svg";
+import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
+import { getAppVersion } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
+
+const APP_VERSION = getAppVersion();
 
 export type OnboardingStage = "welcome" | "runtimes" | "workspace";
 
@@ -61,7 +65,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
       className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
     >
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="flex items-center gap-3 pb-5">
+        <header className="flex items-center justify-between gap-4 pb-5">
           <div className="flex items-center gap-3">
             <span
               className="block size-9 shrink-0 bg-foreground"
@@ -70,9 +74,12 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
             />
             <div className="flex flex-col">
               <span className="text-base font-semibold tracking-tight">OpenDucktor</span>
-              <span className="text-xs text-muted-foreground">Local delivery workspace</span>
+              {APP_VERSION ? (
+                <span className="text-xs text-muted-foreground">{APP_VERSION}</span>
+              ) : null}
             </div>
           </div>
+          <ThemeToggle />
         </header>
 
         <nav

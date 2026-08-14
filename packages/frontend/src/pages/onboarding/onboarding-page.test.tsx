@@ -10,6 +10,9 @@ import {
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import { getAppVersion } from "@/lib/app-version";
+import { hostBridge } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
 import * as pageLoaders from "@/pages";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
@@ -40,6 +43,7 @@ afterEach(() => {
   mountedViews.clear();
   restorePreloadKanbanPage?.();
   restorePreloadKanbanPage = null;
+  document.documentElement.classList.remove("light", "dark");
 });
 
 const runtimeDefinitions = [
@@ -121,9 +125,11 @@ const renderOnboarding = ({
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <WorkspaceStateContext value={workspaceState}>
-        <OnboardingPage />
-      </WorkspaceStateContext>
+      <ThemeProvider>
+        <WorkspaceStateContext value={workspaceState}>
+          <OnboardingPage />
+        </WorkspaceStateContext>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
   mountedViews.add(view);
@@ -176,6 +182,28 @@ describe("OnboardingPage runtime validation", () => {
     expect(screen.queryByText("First-time setup")).toBeNull();
     expect(screen.queryByText("Move from idea to reviewed change.")).toBeNull();
     expect(screen.queryByText("Define the outcome")).toBeNull();
+  });
+
+  test("shows the app version and theme control in the onboarding header", async () => {
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = mock(async () => undefined);
+
+    try {
+      renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+      const header = screen.getByRole("banner");
+      const appVersion = getAppVersion();
+
+      expect(within(header).queryByText("Local delivery workspace")).toBeNull();
+      if (appVersion) expect(within(header).getByText(appVersion)).toBeTruthy();
+
+      const themeSwitch = within(header).getByRole("switch", { name: "Toggle dark mode" });
+      fireEvent.click(themeSwitch);
+
+      await waitFor(() => expect(document.documentElement.classList.contains("dark")).toBe(true));
+      expect(themeSwitch.getAttribute("aria-checked")).toBe("true");
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
   });
 
   test("preloads the Kanban destination while the user completes onboarding", () => {
@@ -271,7 +299,9 @@ describe("OnboardingPage runtime validation", () => {
       for (const definition of runtimeDefinitions) {
         const section = screen.getByRole("heading", { name: definition.label }).closest("section");
         if (!section) throw new Error(`${definition.label} section is missing`);
-        expect(section.querySelector(`[data-runtime-logo="${definition.kind}"] svg`)).toBeTruthy();
+        const logo = section.querySelector<HTMLElement>(`[data-runtime-logo="${definition.kind}"]`);
+        expect(logo?.querySelector("svg")).toBeTruthy();
+        expect(logo?.className).not.toMatch(/\b(?:bg-|border|rounded)/);
       }
       expect(opencodeSection().textContent).not.toContain("OC");
 
