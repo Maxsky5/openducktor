@@ -453,7 +453,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
       true,
     );
-    expect(screen.getByRole("status", { name: "Saved" })).toBeTruthy();
+    const cleanStatus = screen.getByRole("status", { name: "Saved" });
+    const stableStatusClassName = cleanStatus.className;
+    expect(cleanStatus).toBeTruthy();
+    expect(stableStatusClassName).not.toContain("sr-only");
     expect(firstItem?.version).toBe(1);
     expect(firstItem?.file.cacheKey).toBe(
       `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
@@ -469,6 +472,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
     });
     await waitForDirtyFile();
+    const dirtyStatus = screen.getByRole("status", { name: "Unsaved changes" });
+    expect(dirtyStatus.className).toBe(stableStatusClassName);
     const saveButton = screen.getByRole("button", { name: "Save file" });
     expect(fireEvent.mouseDown(saveButton)).toBe(false);
     await runAsyncUiAction(() => fireEvent.click(saveButton));
@@ -481,6 +486,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       revision: "revision:const first = true;",
     });
     await waitForCleanFile();
+    const savedStatus = screen.getByRole("status", { name: "Saved" });
+    expect(savedStatus.className).toBe(stableStatusClassName);
     await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
     expect(latestCodeViewProps?.items[0]).toMatchObject({
       edit: true,

@@ -260,7 +260,7 @@ function FilePreviewHeader({
   onClose: () => void;
 }): ReactElement {
   const isAvailable = saveState !== "unavailable";
-  const showsDirtyDot = saveState !== "clean" && isAvailable;
+  const showsUnsavedIndicator = saveState !== "clean" && isAvailable;
   const isSaving = saveState === "saving";
   const saveLabel = isSaving ? "Saving file" : "Save file";
   const statusLabel = FILE_PREVIEW_STATUS_LABEL[saveState];
@@ -271,12 +271,20 @@ function FilePreviewHeader({
         <span className="truncate text-sm font-medium">{relativePath}</span>
         {isAvailable ? (
           <span
-            className={showsDirtyDot ? "size-2 shrink-0 rounded-full bg-foreground" : "sr-only"}
+            className="flex size-2 shrink-0 items-center justify-center"
             role="status"
             aria-label={statusLabel}
-            title={showsDirtyDot ? statusLabel : undefined}
+            title={showsUnsavedIndicator ? statusLabel : undefined}
           >
-            {showsDirtyDot ? null : statusLabel}
+            <span
+              aria-hidden="true"
+              className={
+                showsUnsavedIndicator
+                  ? "size-2 rounded-full bg-foreground"
+                  : "size-2 rounded-full bg-foreground opacity-0"
+              }
+            />
+            <span className="sr-only">{statusLabel}</span>
           </span>
         ) : null}
       </div>
