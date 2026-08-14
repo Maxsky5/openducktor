@@ -1,7 +1,9 @@
 import {
+  type AgentModelFavorite,
   agentModelFavoritesSchema,
   globalConfigSchema,
   globalGitConfigSchema,
+  isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
@@ -26,6 +28,13 @@ import {
 } from "./workspace-settings-model";
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
+
+const areAgentModelFavoritesEqual = (
+  left: readonly AgentModelFavorite[],
+  right: readonly AgentModelFavorite[],
+): boolean =>
+  left.length === right.length &&
+  left.every((favorite, index) => isSameAgentModelFavorite(favorite, right[index] ?? null));
 
 const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
@@ -314,6 +323,15 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message:
+              "Model favorites changed since settings were loaded. Reload settings and retry.",
+            field: "agentModelFavorites",
+          }),
+        );
+      }
       const workspaces = yield* normalizeSnapshotWorkspaces(
         settingsConfig,
         config,

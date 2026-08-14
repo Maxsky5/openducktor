@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { act, createElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -157,7 +157,8 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
-  test("makes the combined picker read-only when reusing an existing session", () => {
+  test("makes the combined picker read-only and explains reuse mode from the keyboard", async () => {
+    const onSelectModelPair = mock(() => {});
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
@@ -165,6 +166,7 @@ describe("SessionStartModal", () => {
           selectedStartMode: "reuse",
           existingSessionOptions: [existingSessionOption("session-1")],
           selectedSourceSessionValue: existingSessionOption("session-1").value,
+          onSelectModelPair,
         }),
       }),
     );
@@ -176,8 +178,28 @@ describe("SessionStartModal", () => {
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
     expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(true);
-    expect(modelPicker.hasAttribute("disabled")).toBe(true);
+    expect(modelPicker.hasAttribute("disabled")).toBe(false);
+    expect(modelPicker.getAttribute("aria-disabled")).toBe("true");
+    const reasonId = modelPicker.getAttribute("aria-describedby");
+    expect(reasonId).not.toBeNull();
+    expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
+      "Reuse mode keeps the source session runtime and model.",
+    );
     expect(variantCombobox.hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      modelPicker.focus();
+    });
+    expect(document.activeElement).toBe(modelPicker);
+    await act(async () => {
+      fireEvent.keyDown(modelPicker, { key: "Enter" });
+      fireEvent.keyUp(modelPicker, { key: "Enter" });
+      fireEvent.keyDown(modelPicker, { key: " " });
+      fireEvent.keyUp(modelPicker, { key: " " });
+    });
+
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+    expect(onSelectModelPair).not.toHaveBeenCalled();
 
     unmount();
   });

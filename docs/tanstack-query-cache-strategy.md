@@ -150,7 +150,7 @@ Examples:
 - saving repo settings invalidates repo config
 - task mutations invalidate repo task data and runs
 
-The Settings full-snapshot save and the narrow favorites mutation are serialized. A full save blocks while the favorites mutation is pending, then merges the latest cached favorites into its draft payload. Failed favorite writes leave the last canonical cache value unchanged and expose an explicit retry.
+The Settings full-snapshot save and the narrow favorites mutation are serialized. A full save blocks while the favorites mutation is pending, then merges the latest cached favorites into its draft payload. The full-save input echoes that canonical field as a concurrency token; the host rejects a stale value instead of changing or ignoring favorites. Only the narrow favorites command can change the field. Failed favorite writes leave the last canonical cache value unchanged and expose an explicit retry.
 
 ## Non-goals
 

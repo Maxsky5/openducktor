@@ -124,6 +124,46 @@ describe("ModelPicker", () => {
     expect(screen.queryByText("GPT 5 Codex")).toBeNull();
   });
 
+  test.each(["Enter", " "])(
+    "keeps a read-only trigger focusable and closed for %s",
+    async (key) => {
+      const onValueChange = mock(() => {});
+      const onOpenChange = mock(() => {});
+      render(
+        <ModelPicker
+          runtimes={runtimes}
+          value={value}
+          favoriteState={favoriteState()}
+          selectionPolicy={{
+            kind: "read_only",
+            reason: "Reuse mode keeps the source session runtime and model.",
+          }}
+          onValueChange={onValueChange}
+          onOpenChange={onOpenChange}
+        />,
+      );
+
+      const trigger = screen.getByRole("button", {
+        name: "Select model, OpenCode, GPT Five",
+        description: "Reuse mode keeps the source session runtime and model.",
+      });
+      await act(async () => {
+        trigger.focus();
+      });
+      expect(document.activeElement).toBe(trigger);
+      expect(trigger.getAttribute("aria-disabled")).toBe("true");
+
+      await act(async () => {
+        fireEvent.keyDown(trigger, { key });
+        fireEvent.keyUp(trigger, { key });
+      });
+
+      expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(onValueChange).not.toHaveBeenCalled();
+    },
+  );
+
   test("keeps a retained catalog display-only while a refresh is in flight", async () => {
     const onValueChange = mock(() => {});
     const refreshingRuntimes = [

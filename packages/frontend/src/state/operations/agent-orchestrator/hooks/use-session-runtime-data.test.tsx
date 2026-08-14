@@ -5,7 +5,7 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { host } from "@/state/operations/shared/host";
@@ -84,6 +84,13 @@ const sessionTarget = (state = sessionState()) => ({
 
 const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
+
+const useSessionRuntimeDataWithQueryClient = (
+  args: Parameters<typeof useSessionRuntimeData>[0],
+) => ({
+  runtimeData: useSessionRuntimeData(args),
+  queryClient: useQueryClient(),
+});
 
 describe("useSessionRuntimeData", () => {
   test("returns empty runtime data without a selected session", async () => {
@@ -339,13 +346,8 @@ describe("useSessionRuntimeData", () => {
       return request;
     });
     const readSessionTodos = mock(async () => []);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const isolatedWrapper = ({ children }: PropsWithChildren) =>
-      createElement(QueryClientProvider, { client: queryClient }, children);
     const harness = createHookHarness(
-      useSessionRuntimeData,
+      useSessionRuntimeDataWithQueryClient,
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionState(),
@@ -354,14 +356,14 @@ describe("useSessionRuntimeData", () => {
         loadRuntimeCatalog,
         readSessionTodos,
       },
-      { wrapper: isolatedWrapper },
+      { wrapper },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.modelCatalog === emptyCatalog);
+      await harness.waitFor((latest) => latest.runtimeData.modelCatalog === emptyCatalog);
 
-      await harness.run(() => {
+      await harness.run(({ queryClient }) => {
         void queryClient.invalidateQueries({
           queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
           exact: true,
@@ -369,13 +371,13 @@ describe("useSessionRuntimeData", () => {
       });
       await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2);
       expect(
-        queryClient.isFetching({
+        harness.getLatest().queryClient.isFetching({
           queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
           exact: true,
         }),
       ).toBe(1);
-      await harness.waitFor((latest) => latest.isLoadingModelCatalog);
-      expect(harness.getLatest()).toEqual(
+      await harness.waitFor((latest) => latest.runtimeData.isLoadingModelCatalog);
+      expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
           modelCatalog: emptyCatalog,
           isLoadingModelCatalog: true,
@@ -386,11 +388,11 @@ describe("useSessionRuntimeData", () => {
       resolveSuccessfulRefresh?.(refreshedCatalog);
       await harness.waitFor(
         (latest) =>
-          latest.modelCatalog?.models[0]?.modelId === "gpt-5" && !latest.isLoadingModelCatalog,
+          latest.runtimeData.modelCatalog?.models[0]?.modelId === "gpt-5" &&
+          !latest.runtimeData.isLoadingModelCatalog,
       );
     } finally {
       await harness.unmount();
-      queryClient.clear();
     }
   });
 
@@ -407,13 +409,8 @@ describe("useSessionRuntimeData", () => {
       }
       return request;
     });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const isolatedWrapper = ({ children }: PropsWithChildren) =>
-      createElement(QueryClientProvider, { client: queryClient }, children);
     const harness = createHookHarness(
-      useSessionRuntimeData,
+      useSessionRuntimeDataWithQueryClient,
       {
         repoPath: "/repo",
         selectedSessionIdentity: sessionState(),
@@ -422,24 +419,26 @@ describe("useSessionRuntimeData", () => {
         loadRuntimeCatalog,
         readSessionTodos: mock(async () => []),
       },
-      { wrapper: isolatedWrapper },
+      { wrapper },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.modelCatalog === emptyCatalog);
-      await harness.run(() => {
+      await harness.waitFor((latest) => latest.runtimeData.modelCatalog === emptyCatalog);
+      await harness.run(({ queryClient }) => {
         void queryClient.invalidateQueries({
           queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
           exact: true,
         });
       });
-      await harness.waitFor((latest) => latest.isLoadingModelCatalog);
-      expect(harness.getLatest().catalogError).toBeNull();
+      await harness.waitFor((latest) => latest.runtimeData.isLoadingModelCatalog);
+      expect(harness.getLatest().runtimeData.catalogError).toBeNull();
 
       rejectRefresh?.(new Error("Catalog refresh failed"));
-      await harness.waitFor((latest) => latest.catalogError === "Catalog refresh failed");
-      expect(harness.getLatest()).toEqual(
+      await harness.waitFor(
+        (latest) => latest.runtimeData.catalogError === "Catalog refresh failed",
+      );
+      expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
           modelCatalog: emptyCatalog,
           isLoadingModelCatalog: false,
@@ -448,7 +447,6 @@ describe("useSessionRuntimeData", () => {
       );
     } finally {
       await harness.unmount();
-      queryClient.clear();
     }
   });
 

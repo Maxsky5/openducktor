@@ -269,6 +269,7 @@ export function ModelPicker({
     activeViewFor(value, runtimes, selectionPolicy),
   );
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+  const readOnlyReasonId = useId();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const modelButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const lockedRuntimeKind =
@@ -426,11 +427,13 @@ export function ModelPicker({
     <Button
       type="button"
       variant="outline"
-      disabled={readOnlyReason !== null}
-      title={readOnlyReason ?? undefined}
       aria-label={triggerAriaLabel}
+      aria-disabled={readOnlyReason !== null}
+      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
+      onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
       className={cn(
         "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
+        readOnlyReason && "cursor-not-allowed opacity-50",
         triggerClassName,
       )}
     >
@@ -446,12 +449,15 @@ export function ModelPicker({
     <TooltipProvider>
       <Popover open={open} onOpenChange={handleOpenChange}>
         {readOnlyReason ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="block">{trigger}</span>
-            </TooltipTrigger>
-            <TooltipContent>{readOnlyReason}</TooltipContent>
-          </Tooltip>
+          <>
+            <span id={readOnlyReasonId} className="sr-only">
+              {readOnlyReason}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+              <TooltipContent>{readOnlyReason}</TooltipContent>
+            </Tooltip>
+          </>
         ) : (
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         )}

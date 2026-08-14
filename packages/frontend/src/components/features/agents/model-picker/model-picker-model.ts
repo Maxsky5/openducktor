@@ -1,4 +1,10 @@
-import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import {
+  type AgentModelFavorite,
+  agentModelFavoriteKey,
+  isSameAgentModelFavorite,
+  type RuntimeDescriptor,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 
@@ -21,15 +27,12 @@ export type ModelPickerItem = {
 };
 
 export const modelPickerValueKey = (value: ModelPickerValue): string =>
-  `${value.runtimeKind}\u0000${value.providerId}\u0000${value.modelId}`;
+  agentModelFavoriteKey(value);
 
 export const isSameModelPickerValue = (
   left: ModelPickerValue | null,
   right: ModelPickerValue | null,
-): boolean =>
-  left?.runtimeKind === right?.runtimeKind &&
-  left?.providerId === right?.providerId &&
-  left?.modelId === right?.modelId;
+): boolean => isSameAgentModelFavorite(left, right);
 
 const normalizeSearchTerms = (query: string): string[] =>
   query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);

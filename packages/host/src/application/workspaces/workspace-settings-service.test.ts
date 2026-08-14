@@ -582,7 +582,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
-  test("preserves a completed favorite update when a stale full settings save runs second", async () => {
+  test("rejects a stale full settings save after a favorite update completes", async () => {
     let markFavoriteWriteStarted: (() => void) | undefined;
     let releaseFavoriteWrite: (() => void) | undefined;
     const favoriteWriteStarted = new Promise<void>((resolve) => {
@@ -623,9 +623,12 @@ describe("createWorkspaceSettingsService", () => {
     );
     releaseFavoriteWrite?.();
 
-    await Promise.all([favoriteWrite, settingsWrite]);
+    await favoriteWrite;
+    await expect(settingsWrite).rejects.toThrow(
+      "Model favorites changed since settings were loaded. Reload settings and retry.",
+    );
     const persisted = await Effect.runPromise(service.getSettingsSnapshot());
-    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
     expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
   test("rejects invalid appearance snapshot settings without writing config", async () => {

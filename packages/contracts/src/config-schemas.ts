@@ -578,12 +578,23 @@ export const agentModelFavoriteSchema = z
   .strict();
 export type AgentModelFavorite = z.infer<typeof agentModelFavoriteSchema>;
 
+export const agentModelFavoriteKey = (favorite: AgentModelFavorite): string =>
+  `${favorite.runtimeKind}\u0000${favorite.providerId}\u0000${favorite.modelId}`;
+
+export const isSameAgentModelFavorite = (
+  left: AgentModelFavorite | null,
+  right: AgentModelFavorite | null,
+): boolean =>
+  left?.runtimeKind === right?.runtimeKind &&
+  left?.providerId === right?.providerId &&
+  left?.modelId === right?.modelId;
+
 export const agentModelFavoritesSchema = z
   .array(agentModelFavoriteSchema)
   .transform((favorites) => {
     const seen = new Set<string>();
     return favorites.filter((favorite) => {
-      const key = `${favorite.runtimeKind}\u0000${favorite.providerId}\u0000${favorite.modelId}`;
+      const key = agentModelFavoriteKey(favorite);
       if (seen.has(key)) {
         return false;
       }
@@ -652,7 +663,11 @@ export const settingsSnapshotSaveInputSchema = z.object({
   kanban: kanbanSettingsSchema,
   autopilot: autopilotSettingsSchema,
   agentRuntimes: agentRuntimesSchema.removeDefault(),
-  agentModelFavorites: agentModelFavoritesSchema.removeDefault(),
+  agentModelFavorites: agentModelFavoritesSchema
+    .removeDefault()
+    .describe(
+      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
+    ),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema),
   globalPromptOverrides: repoPromptOverridesSchema,
 });

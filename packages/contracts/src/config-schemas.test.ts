@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   APP_PLATFORM_VALUES,
   AUTOPILOT_EVENT_IDS,
+  agentModelFavoriteKey,
   agentModelFavoritesSchema,
   appearanceSettingsSchema,
   appPlatformSchema,
@@ -19,6 +20,7 @@ import {
   DEFAULT_KANBAN_SETTINGS,
   globalConfigSchema,
   HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES,
+  isSameAgentModelFavorite,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   persistedGlobalConfigV2Schema,
@@ -109,6 +111,9 @@ describe("config-schemas", () => {
         git: { defaultMergeMethod: "merge_commit" },
       }).success,
     ).toBe(false);
+    expect(settingsSnapshotSaveInputSchema.shape.agentModelFavorites.description).toBe(
+      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
+    );
   });
 
   test("defaults missing agent model favorites and canonicalizes exact tuples", () => {
@@ -138,6 +143,10 @@ describe("config-schemas", () => {
       { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
       { runtimeKind: "opencode", providerId: "proxy", modelId: "gpt-5" },
     ]);
+    expect(agentModelFavoriteKey(favorites[0])).toBe("opencode\u0000openai\u0000gpt-5");
+    expect(isSameAgentModelFavorite(favorites[0], favorites[0])).toBe(true);
+    expect(isSameAgentModelFavorite(favorites[0], favorites[1])).toBe(false);
+    expect(isSameAgentModelFavorite(null, null)).toBe(true);
   });
 
   test("rejects blank agent model favorite identifiers", () => {

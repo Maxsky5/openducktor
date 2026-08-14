@@ -1,4 +1,8 @@
-import type { AgentModelFavorite, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  type AgentModelFavorite,
+  isSameAgentModelFavorite,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -27,16 +31,13 @@ export type AgentModelFavoritesState = {
   retryMutation: () => void;
 };
 
-const isSameFavorite = (left: AgentModelFavorite, right: AgentModelFavorite): boolean =>
-  left.runtimeKind === right.runtimeKind &&
-  left.providerId === right.providerId &&
-  left.modelId === right.modelId;
-
 const applyFavoriteMutationIntent = (
   favorites: AgentModelFavorite[],
   intent: FavoriteMutationIntent,
 ): AgentModelFavorite[] => {
-  const withoutTarget = favorites.filter((favorite) => !isSameFavorite(favorite, intent.favorite));
+  const withoutTarget = favorites.filter(
+    (favorite) => !isSameAgentModelFavorite(favorite, intent.favorite),
+  );
   return intent.shouldBeFavorite ? [...withoutTarget, intent.favorite] : withoutTarget;
 };
 
@@ -67,7 +68,7 @@ export function useAgentModelFavorites({
 
   const isFavorite = useCallback(
     (favorite: AgentModelFavorite): boolean =>
-      favorites?.some((entry) => isSameFavorite(entry, favorite)) ?? false,
+      favorites?.some((entry) => isSameAgentModelFavorite(entry, favorite)) ?? false,
     [favorites],
   );
 
