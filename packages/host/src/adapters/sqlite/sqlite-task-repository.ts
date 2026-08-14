@@ -24,6 +24,7 @@ import {
   createSqliteTaskRepositoryContextProvider,
   type ResolveSqliteTaskStorePath,
   type ResolveWorkspaceIdForRepoPath,
+  type SqliteTaskRepositoryContextProvider,
 } from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
@@ -50,6 +51,7 @@ const blockingTaskStoreHealth = (detail: string) => ({
 });
 
 export type CreateSqliteTaskRepositoryInput = {
+  contextProvider?: SqliteTaskRepositoryContextProvider;
   now?: () => Date;
   processEnv?: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;
@@ -57,16 +59,19 @@ export type CreateSqliteTaskRepositoryInput = {
 };
 
 export const createSqliteTaskRepository = ({
+  contextProvider,
   now = () => new Date(),
   processEnv = process.env,
   resolveDatabasePath,
   resolveWorkspaceIdForRepoPath,
 }: CreateSqliteTaskRepositoryInput): TaskStorePort => {
-  const withDatabase = createSqliteTaskRepositoryContextProvider({
-    processEnv,
-    ...(resolveDatabasePath === undefined ? {} : { resolveDatabasePath }),
-    resolveWorkspaceIdForRepoPath,
-  });
+  const withDatabase =
+    contextProvider ??
+    createSqliteTaskRepositoryContextProvider({
+      processEnv,
+      ...(resolveDatabasePath === undefined ? {} : { resolveDatabasePath }),
+      resolveWorkspaceIdForRepoPath,
+    });
 
   return {
     clearAgentSessionsByRoles(input) {

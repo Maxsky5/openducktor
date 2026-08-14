@@ -6,7 +6,7 @@ import {
 } from "drizzle-orm/sqlite-proxy";
 import type { SQLiteProxyTransaction } from "drizzle-orm/sqlite-proxy/session";
 import type { DrizzleConfig } from "drizzle-orm/utils";
-import { type Cause, Effect, Exit, Scope } from "effect";
+import { type Cause, Deferred, Effect, Exit, Scope } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   currentSqliteDriverRuntime,
@@ -41,6 +41,7 @@ export type SqliteDrizzleSession<TSchema extends Record<string, unknown>> = {
 };
 
 export type SqliteDrizzleConnection<TSchema extends Record<string, unknown>> = {
+  readonly close: Effect.Effect<void, HostOperationError>;
   readonly database: SqliteRemoteDatabase<TSchema>;
   readonly session: SqliteDrizzleSession<TSchema>;
 };
@@ -185,21 +186,39 @@ export const openSqliteDrizzleConnection = <TSchema extends Record<string, unkno
 > =>
   Effect.gen(function* () {
     const sqlite = yield* openSqliteDatabase(databasePath, runtime);
+    const closeCompletion = yield* Deferred.make<void, HostOperationError>();
+    let closeStarted = false;
+    const close = Effect.uninterruptible(
+      Effect.gen(function* () {
+        const ownsClose = yield* Effect.sync(() => {
+          if (closeStarted) return false;
+          closeStarted = true;
+          return true;
+        });
+        if (!ownsClose) {
+          return yield* Deferred.await(closeCompletion);
+        }
+        const closeExit = yield* Effect.exit(sqlite.close());
+        yield* Deferred.done(closeCompletion, closeExit);
+        if (Exit.isFailure(closeExit)) {
+          return yield* Effect.failCause(closeExit.cause);
+        }
+      }),
+    );
     const scope = yield* Effect.scope;
     yield* Scope.addFinalizer(
       scope,
-      sqlite
-        .close()
-        .pipe(
-          Effect.catchAll((cause) =>
-            Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
-          ),
+      close.pipe(
+        Effect.catchAll((cause) =>
+          Effect.logWarning(`Failed to close SQLite task store database: ${cause.message}`),
         ),
+      ),
     );
     yield* configureDatabase(sqlite, configureWal);
 
     const database = drizzle(makeRemoteCallback(sqlite), config);
     return {
+      close,
       database,
       session: makeSqliteDrizzleSession(database),
     };

@@ -15,11 +15,13 @@ import {
   createSqliteTaskRepositoryContextProvider,
   type ResolveSqliteTaskStorePath,
   type ResolveWorkspaceIdForRepoPath,
+  type SqliteTaskRepositoryContextProvider,
 } from "./sqlite-task-repository-context";
 import { type TaskStoreSession, taskAssets, tasks } from "./sqlite-task-store-schema";
 import { applyTaskPatch } from "./sqlite-task-writes";
 
 export type CreateSqliteTaskAssetRegistryInput = {
+  contextProvider?: SqliteTaskRepositoryContextProvider;
   now?: () => Date;
   processEnv?: NodeJS.ProcessEnv;
   resolveDatabasePath?: ResolveSqliteTaskStorePath;
@@ -89,17 +91,20 @@ const samePatchedTaskFields = (
 };
 
 export const createSqliteTaskAssetRegistry = ({
+  contextProvider,
   now = () => new Date(),
   processEnv = process.env,
   resolveDatabasePath,
   resolveWorkspaceIdForRepoPath,
 }: CreateSqliteTaskAssetRegistryInput): TaskAssetRegistryPort &
   TaskDescriptionAssetPersistencePort => {
-  const withDatabase = createSqliteTaskRepositoryContextProvider({
-    processEnv,
-    ...(resolveDatabasePath ? { resolveDatabasePath } : {}),
-    resolveWorkspaceIdForRepoPath,
-  });
+  const withDatabase =
+    contextProvider ??
+    createSqliteTaskRepositoryContextProvider({
+      processEnv,
+      ...(resolveDatabasePath ? { resolveDatabasePath } : {}),
+      resolveWorkspaceIdForRepoPath,
+    });
 
   return {
     taskExists(input) {
