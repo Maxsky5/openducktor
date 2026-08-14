@@ -157,7 +157,7 @@ describe("AgentRuntimesSection", () => {
     }
   });
 
-  test("shows vertical runtime tabs with status badges and selects OpenCode first", () => {
+  test("shows one selected runtime editor with logo tabs and selects OpenCode first", () => {
     const renderer = render(
       createSection({
         ...DEFAULT_AGENT_RUNTIMES,
@@ -175,12 +175,21 @@ describe("AgentRuntimesSection", () => {
       expect(tabs[2]?.textContent).toContain("Codex");
       expect(tabs[2]?.textContent).toContain("Disabled");
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+      expect(tabs[0]?.querySelector('[data-runtime-logo="opencode"]')).toBeTruthy();
+      expect(tabs[1]?.querySelector('[data-runtime-logo="claude"]')).toBeTruthy();
+      expect(tabs[2]?.querySelector('[data-runtime-logo="codex"]')).toBeTruthy();
+      expect(screen.getAllByLabelText("Executable path")).toHaveLength(1);
+      expect(screen.getByPlaceholderText("Path to OpenCode")).toBeTruthy();
       expect(renderer.container.innerHTML).toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
       );
       expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
       expect(renderer.container.innerHTML).not.toContain("Role override");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
+
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      expect(screen.queryByPlaceholderText("Path to OpenCode")).toBeNull();
+      expect(screen.getByPlaceholderText("Path to Codex")).toBeTruthy();
     } finally {
       renderer.unmount();
     }

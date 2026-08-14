@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -207,38 +208,6 @@ function PolicyValueDropdown<T extends string | boolean>({
         wrapOptionLabels
         onValueChange={(nextValue) => onChange(policyValueFromOption(values, nextValue))}
       />
-    </div>
-  );
-}
-
-function RuntimeOverview({
-  definition,
-  enabled,
-  disabled,
-  onToggle,
-}: {
-  definition: RuntimeDescriptor;
-  enabled: boolean;
-  disabled: boolean;
-  onToggle: (enabled: boolean) => void;
-}): ReactElement {
-  return (
-    <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-[1fr_auto] sm:items-start">
-      <div className="min-w-0 space-y-2">
-        <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
-        <p className="text-xs text-muted-foreground">{definition.description}</p>
-      </div>
-      <div className="flex items-center gap-2 justify-self-start sm:justify-self-end">
-        <Label htmlFor={`agent-runtime-${definition.kind}`} className="text-xs">
-          Enable runtime
-        </Label>
-        <Switch
-          id={`agent-runtime-${definition.kind}`}
-          checked={enabled}
-          disabled={disabled}
-          onCheckedChange={onToggle}
-        />
-      </div>
     </div>
   );
 }
@@ -765,16 +734,6 @@ export function AgentRuntimesSection({
         </p>
       </div>
 
-      <RuntimeExecutablePanel
-        runtimes={agentRuntimes}
-        definitions={sortedRuntimeDefinitions}
-        results={executableQuery.data?.runtimes ?? []}
-        disabled={disabled}
-        isChecking={isCheckingExecutables || executableQuery.isFetching}
-        onChange={(next) => onUpdateAgentRuntimes(() => next)}
-        onCheckAgain={() => void onCheckAgain()}
-      />
-
       {runtimeDiscoveryError ? (
         <div className="flex items-center justify-between gap-3 text-sm" role="alert">
           <span className="text-destructive">
@@ -830,7 +789,7 @@ export function AgentRuntimesSection({
       ) : null}
 
       {selectedDefinition ? (
-        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[14rem_minmax(0,1fr)]">
+        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[15rem_minmax(0,1fr)]">
           <aside className="border-border bg-muted/50 p-3 md:border-r">
             <div className="space-y-1" role="tablist">
               {sortedRuntimeDefinitions.map((definition) => {
@@ -848,7 +807,7 @@ export function AgentRuntimesSection({
                     aria-selected={selectedDefinition.kind === definition.kind}
                     variant="ghost"
                     className={cn(
-                      "w-full justify-between gap-3 border text-left",
+                      "w-full justify-between gap-2 border px-3 text-left",
                       selectedDefinition.kind === definition.kind
                         ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                         : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground",
@@ -856,7 +815,15 @@ export function AgentRuntimesSection({
                     disabled={disabled}
                     onClick={() => setSelectedRuntimeKind(definition.kind)}
                   >
-                    <span className="truncate">{definition.label}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        data-runtime-logo={runtimeKind}
+                        className="flex size-5 shrink-0 items-center justify-center"
+                      >
+                        <AgentRuntimeIcon runtimeKind={runtimeKind} />
+                      </span>
+                      <span className="truncate">{definition.label}</span>
+                    </span>
                     <Badge
                       variant="outline"
                       className={cn(
@@ -876,7 +843,6 @@ export function AgentRuntimesSection({
 
           {(() => {
             const runtimeKind = selectedDefinition.kind as RuntimeKind;
-            const enabled = agentRuntimes[runtimeKind]?.enabled === true;
             const updateRuntime = (
               updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
             ) =>
@@ -892,19 +858,15 @@ export function AgentRuntimesSection({
                 aria-labelledby={`agent-runtime-tab-${selectedDefinition.kind}`}
                 className="min-w-0 space-y-4 p-3"
               >
-                <RuntimeOverview
-                  definition={selectedDefinition}
-                  enabled={enabled}
+                <p className="text-sm text-muted-foreground">{selectedDefinition.description}</p>
+                <RuntimeExecutablePanel
+                  runtimes={agentRuntimes}
+                  definitions={[selectedDefinition]}
+                  results={executableQuery.data?.runtimes ?? []}
                   disabled={disabled}
-                  onToggle={(nextEnabled) =>
-                    onUpdateAgentRuntimes((current) => ({
-                      ...current,
-                      [runtimeKind]: {
-                        ...(current[runtimeKind] ?? {}),
-                        enabled: nextEnabled,
-                      },
-                    }))
-                  }
+                  isChecking={isCheckingExecutables || executableQuery.isFetching}
+                  onChange={(next) => onUpdateAgentRuntimes(() => next)}
+                  onCheckAgain={() => void onCheckAgain()}
                 />
                 {selectedDefinition.kind === "codex" ? (
                   <CodexSettings
