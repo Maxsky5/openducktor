@@ -280,6 +280,58 @@ describe("useSettingsModalController", () => {
     await harness.unmount();
   });
 
+  test("does not report runtime errors before initial executable validation completes", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    const initialValidation = createDeferred<RuntimeExecutableCheck>();
+    const validationResult: RuntimeExecutableCheck = {
+      runtimes: [
+        {
+          kind: "opencode",
+          path: "/tools/opencode",
+          ok: true,
+          version: "1.0.0",
+          error: null,
+        },
+        {
+          kind: "codex",
+          path: "",
+          ok: false,
+          version: null,
+          error: "Executable path is empty.",
+        },
+        {
+          kind: "claude",
+          path: "",
+          ok: false,
+          version: null,
+          error: "Executable path is empty.",
+        },
+      ],
+    };
+    host.runtimeExecutablesCheck = mock(async () => initialValidation.promise);
+    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.snapshotDraft !== null && state.isLoadingRuntimeExecutables,
+      );
+
+      expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
+      expect(harness.getLatest().settingsSectionErrorCountById.runtimes).toBe(0);
+
+      await harness.run(() => {
+        initialValidation.resolve(validationResult);
+      });
+      await harness.waitFor((state) => !state.isLoadingRuntimeExecutables);
+      expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
+    } finally {
+      initialValidation.resolve(validationResult);
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
   test("fails closed when runtime definitions cannot load", async () => {
     saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(true, false, {

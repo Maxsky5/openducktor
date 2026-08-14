@@ -304,7 +304,9 @@ export const useSettingsModalController = ({
   const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
     runtimeDefinitions,
     snapshotDraft,
-    runtimeExecutableResults: runtimeExecutableQuery.data?.runtimes ?? [],
+    ...(runtimeExecutableQuery.data
+      ? { runtimeExecutableResults: runtimeExecutableQuery.data.runtimes }
+      : {}),
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
   const codexDangerAcknowledgementKey = useMemo(
