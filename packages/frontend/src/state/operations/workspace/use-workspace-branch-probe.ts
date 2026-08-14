@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { CancelledError, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { gitQueryKeys, loadCurrentBranchFromQuery } from "../../queries/git";
@@ -159,22 +159,35 @@ export function useWorkspaceBranchProbe({
                   }
                 : { status: "synced" };
           } catch (error) {
-            outcome =
-              branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath
-                ? {
-                    status: "skipped",
-                    reason: "repo_changed",
-                  }
-                : {
-                    status: "degraded",
-                    error: classifyBranchProbeError(error, "branch_refresh"),
-                  };
+            if (error instanceof CancelledError) {
+              outcome = {
+                status: "skipped",
+                reason: "cancelled",
+              };
+            } else if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
+              outcome = {
+                status: "skipped",
+                reason: "repo_changed",
+              };
+            } else {
+              outcome = {
+                status: "degraded",
+                error: classifyBranchProbeError(error, "branch_refresh"),
+              };
+            }
           }
         }
       }
 
       return outcome;
     } catch (error) {
+      if (error instanceof CancelledError) {
+        return {
+          status: "skipped",
+          reason: "cancelled",
+        };
+      }
+
       if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
         return {
           status: "skipped",

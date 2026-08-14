@@ -29,7 +29,7 @@ export type BranchProbeError = {
 export type BranchProbeOutcome =
   | {
       status: "skipped";
-      reason: "preconditions" | "repo_missing" | "repo_changed";
+      reason: "preconditions" | "repo_missing" | "repo_changed" | "cancelled";
     }
   | {
       status: "unchanged";
