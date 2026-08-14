@@ -164,6 +164,60 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
+  test("applies repository policy before subscribing to a retained unbound session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribeUnbound = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+
+    const unsubscribeRepository = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      () => {},
+    );
+
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        sessionID: "session-opencode-1",
+        title: "Repository session",
+        permission: expect.arrayContaining([
+          { permission: "odt_create_task", pattern: "*", action: "ask" },
+          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
+        ]),
+      }),
+    );
+    unsubscribeRepository();
+    unsubscribeUnbound();
+  });
+
+  test("keeps a retained session unbound when subscription policy binding fails", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribeUnbound = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+    mock.session.updateResult = {
+      data: undefined,
+      error: new Error("permission update rejected"),
+    };
+    const repositorySessionRef = sessionRuntimeRef("session-opencode-1", {
+      sessionScope: repositoryScope,
+    });
+
+    await expect(adapter.subscribeEvents(repositorySessionRef, () => {})).rejects.toThrow(
+      "update repository session policy",
+    );
+
+    mock.session.updateResult = { data: { id: "session-opencode-1" }, error: undefined };
+    const unsubscribeRepository = await adapter.subscribeEvents(repositorySessionRef, () => {});
+
+    expect(mock.session.updateCalls).toHaveLength(2);
+    unsubscribeRepository();
+    unsubscribeUnbound();
+  });
+
   test("keeps a retained session unbound when approval policy binding fails", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });

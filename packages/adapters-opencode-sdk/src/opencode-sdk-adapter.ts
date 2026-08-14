@@ -835,7 +835,11 @@ export class OpencodeSdkAdapter
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
-    if (!this.sessions.has(input.externalSessionId)) {
+    const retainedSession = this.sessions.get(input.externalSessionId);
+    if (
+      !retainedSession ||
+      (retainedSession.summary.sessionAssociation.kind === "unbound" && input.sessionScope)
+    ) {
       await this.ensureSessionState(input);
     }
 
