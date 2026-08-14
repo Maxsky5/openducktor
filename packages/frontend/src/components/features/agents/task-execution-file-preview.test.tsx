@@ -62,6 +62,14 @@ const runAsyncUiAction = async (action: () => void): Promise<void> => {
   });
 };
 
+const waitForDirtyFile = async (): Promise<void> => {
+  await screen.findByLabelText("Unsaved changes");
+};
+
+const waitForCleanFile = async (): Promise<void> => {
+  await waitFor(() => expect(screen.queryByLabelText("Unsaved changes")).toBeNull());
+};
+
 const previewWorkerPool = {
   isWorkingPool: () => false,
   getFileResultCache: (file: { cacheKey?: string }) =>
@@ -417,7 +425,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByText("Binary files cannot be previewed as text.");
     expect(latestCodeViewProps).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
   });
 
   test("keeps failed reads out of the editor", async () => {
@@ -430,7 +438,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByText("Unable to read file 'src/first.ts'.");
     expect(latestCodeViewProps).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
   });
 
   test("opens in edit mode and saves the exact draft without remounting the editor", async () => {
@@ -442,7 +450,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
     const firstItem = latestCodeViewProps?.items[0];
-    expect(firstItem?.version).toBe(0);
+    expect(firstItem?.version).toBe(1);
     expect(firstItem?.file.cacheKey).toBe(
       `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
     );
@@ -455,8 +463,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
         contents: "const first = false;\n",
       });
     });
-    await screen.findByText("Unsaved");
-    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await waitForDirtyFile();
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(writeTextFileMock).toHaveBeenCalledWith({
@@ -465,8 +475,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       contents: "const first = false;\n",
       revision: "revision:const first = true;",
     });
-    await screen.findByText("Saved");
-    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 1 });
+    await waitForCleanFile();
+    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 2 });
     expect(latestCodeViewProps?.items[0]?.file.cacheKey).toContain(":saved");
     expect(codeViewMountCount).toBe(1);
     expect(onEditStateChange).toHaveBeenCalledWith({ isDirty: false, isSaving: false });
@@ -484,7 +494,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       act(() => {
         latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
       });
-      await screen.findByText("Unsaved");
+      await waitForDirtyFile();
       await runAsyncUiAction(() =>
         fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
           key: "s",
@@ -493,7 +503,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
         }),
       );
       await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(expectedWriteCount));
-      await screen.findByText("Saved");
+      await waitForCleanFile();
     };
 
     await editAndSave("first save");
@@ -519,17 +529,19 @@ describe("TaskExecutionSelectedFilePreview", () => {
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
-    const firstSaveButton = await screen.findByRole("button", { name: "Save" });
+    const firstSaveButton = await screen.findByRole("button", { name: "Save file" });
     await runAsyncUiAction(() => fireEvent.click(firstSaveButton));
 
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toContain("Permission denied");
-    expect(screen.getByText("Unsaved")).toBeTruthy();
-    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 0 });
+    expect(screen.getByLabelText("Unsaved changes")).toBeTruthy();
+    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 1 });
 
-    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
-    await screen.findByText("Saved");
+    await waitForCleanFile();
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({ contents: "draft" });
   });
 
@@ -559,7 +571,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
     });
 
-    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
     await screen.findByText("The file changed after it was loaded.");
     await runAsyncUiAction(() =>
       fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
@@ -572,8 +586,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await runAsyncUiAction(() =>
       fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
     );
-    await screen.findByText("Unsaved");
-    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await waitForDirtyFile();
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
 
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
@@ -592,7 +608,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "changed" });
     });
-    await screen.findByText("Unsaved");
+    await waitForDirtyFile();
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, {
         ...item?.file,
@@ -600,8 +616,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
     });
 
-    await screen.findByText("Saved");
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
+    await waitForCleanFile();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
     expect(writeTextFileMock).not.toHaveBeenCalled();
   });
 
@@ -619,7 +635,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
     });
-    const saveButton = await screen.findByRole("button", { name: "Save" });
+    const saveButton = await screen.findByRole<HTMLButtonElement>("button", { name: "Save file" });
 
     fireEvent.click(saveButton);
     fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
@@ -628,7 +644,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
-    await screen.findByText("Saving...");
+    await screen.findByRole("button", { name: "Saving file" });
+    expect(saveButton.disabled).toBe(true);
     await act(async () => {
       resolveWrite({
         kind: "text",
@@ -641,7 +658,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
       await pendingWrite;
     });
-    await screen.findByText("Saved");
+    await waitForCleanFile();
   });
 
   test("keeps text entered during Save dirty against the returned revision", async () => {
@@ -658,7 +675,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "first draft" });
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save file" }));
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
 
     act(() => {
@@ -677,10 +694,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await pendingWrite;
     });
 
-    await screen.findByText("Unsaved");
-    await runAsyncUiAction(() => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    await waitForDirtyFile();
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(2));
-    await screen.findByText("Saved");
+    await waitForCleanFile();
     expect(writeTextFileMock.mock.calls[1]?.[0]).toMatchObject({
       contents: "newer draft",
       revision: "revision-2",
@@ -702,6 +721,21 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(latestCodeViewProps?.editorOptions).toBe(options);
     expect(latestCodeViewProps?.items[0]?.edit).toBe(true);
     expect(codeViewMountCount).toBe(1);
+  });
+
+  test("focuses the first visible line when the editor attaches", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const editorOptions = latestCodeViewProps?.editorOptions as
+      | { onAttach?: (editor: { focus(options: unknown): void }) => void }
+      | undefined;
+    const focus = mock(() => {});
+
+    expect(editorOptions?.onAttach).toBeFunction();
+    editorOptions?.onAttach?.({ focus });
+    expect(focus).toHaveBeenCalledWith({ lineNumber: "first-visible", preventScroll: true });
   });
 
   test("renders the discard guard and routes both decisions", async () => {

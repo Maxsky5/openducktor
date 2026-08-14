@@ -8,7 +8,7 @@ import {
 import { Editor, type EditorOptions } from "@pierre/diffs/edit";
 import { CodeView, EditProvider, useWorkerPool } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
-import { FileCode2, LoaderCircle, X } from "lucide-react";
+import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import {
   type CSSProperties,
   memo,
@@ -216,40 +216,69 @@ function FileConflictReviewDialog({
   );
 }
 
+type FilePreviewSaveState = "clean" | "dirty" | "saving" | "blocked";
+
+const resolveFilePreviewSaveState = ({
+  isDirty,
+  isSaving,
+  hasStaleConflict,
+}: {
+  isDirty: boolean;
+  isSaving: boolean;
+  hasStaleConflict: boolean;
+}): FilePreviewSaveState => {
+  if (!isDirty) return "clean";
+  if (isSaving) return "saving";
+  if (hasStaleConflict) return "blocked";
+  return "dirty";
+};
+
 function FilePreviewHeader({
   relativePath,
   isSwitchingFiles,
-  status,
-  canSave,
-  isSaving,
+  saveState,
   onSave,
   onClose,
 }: {
   relativePath: string;
   isSwitchingFiles: boolean;
-  status: "Saved" | "Unsaved" | "Saving..." | null;
-  canSave: boolean;
-  isSaving: boolean;
+  saveState: FilePreviewSaveState;
   onSave: () => void;
   onClose: () => void;
 }): ReactElement {
+  const isDirty = saveState !== "clean";
+  const isSaving = saveState === "saving";
+  const saveLabel = isSaving ? "Saving file" : "Save file";
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
       <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1 truncate text-sm font-medium">{relativePath}</div>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-sm font-medium">{relativePath}</span>
+        {isDirty ? (
+          <span
+            className="size-2 shrink-0 rounded-full bg-foreground"
+            role="status"
+            aria-label="Unsaved changes"
+            title="Unsaved changes"
+          />
+        ) : null}
+      </div>
       {isSwitchingFiles ? (
         <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
       ) : null}
-      {status ? (
-        <>
-          <div className="shrink-0 text-xs text-muted-foreground" role="status">
-            {status}
-          </div>
-          <Button type="button" variant="outline" size="sm" disabled={!canSave} onClick={onSave}>
-            {isSaving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-            Save
-          </Button>
-        </>
+      {isDirty ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          aria-label={saveLabel}
+          title={saveLabel}
+          disabled={saveState !== "dirty"}
+          onClick={onSave}
+        >
+          {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
+        </Button>
       ) : null}
       <Button
         type="button"
@@ -264,22 +293,6 @@ function FilePreviewHeader({
     </div>
   );
 }
-
-const fileEditorStatus = ({
-  hasSession,
-  isSwitchingFiles,
-  isSaving,
-  isDirty,
-}: {
-  hasSession: boolean;
-  isSwitchingFiles: boolean;
-  isSaving: boolean;
-  isDirty: boolean;
-}): "Saved" | "Unsaved" | "Saving..." | null => {
-  if (!hasSession || isSwitchingFiles) return null;
-  if (isSaving) return "Saving...";
-  return isDirty ? "Unsaved" : "Saved";
-};
 
 function FileSaveErrorBanner({
   message,
@@ -479,7 +492,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         type: "file",
         file: visibleSnapshot.codeViewFile.file,
         edit: isCurrentEditableItem,
-        version: isCurrentEditableItem ? (editor.session?.version ?? 0) : 0,
+        version: isCurrentEditableItem ? (editor.session?.version ?? 0) + 1 : 0,
       },
     ];
   }, [codeViewFileId, editor.session, isSwitchingFiles, readyCurrentSnapshot, visibleSnapshot]);
@@ -489,7 +502,12 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   );
   const editorOptions = useMemo<EditorOptions<undefined>>(() => {
     const clipboard = getShellBridge().editorClipboard;
-    return clipboard ? { clipboard } : {};
+    return {
+      ...(clipboard ? { clipboard } : {}),
+      onAttach(attachedEditor) {
+        attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });
+      },
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -581,14 +599,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       <FilePreviewHeader
         relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
         isSwitchingFiles={isSwitchingFiles}
-        status={fileEditorStatus({
-          hasSession: editor.session !== null,
-          isSwitchingFiles,
-          isSaving: editor.isSaving,
+        saveState={resolveFilePreviewSaveState({
           isDirty: editor.isDirty,
+          isSaving: editor.isSaving,
+          hasStaleConflict: editor.hasStaleConflict,
         })}
-        canSave={editor.isDirty && !editor.isSaving && !editor.hasStaleConflict}
-        isSaving={editor.isSaving}
         onSave={() => void editor.save()}
         onClose={onClose}
       />
