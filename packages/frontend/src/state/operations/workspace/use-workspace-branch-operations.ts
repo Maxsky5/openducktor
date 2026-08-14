@@ -48,7 +48,6 @@ export function useWorkspaceBranchOperations({
     ...currentBranchQueryOptions(queryRepoPath, hostClient),
     enabled: false,
   });
-  const [, setBranchCacheRevision] = useState(0);
   const [loadingBranchRepoPath, setLoadingBranchRepoPath] = useState<string | null>(null);
   const [switchingBranchRepoPath, setSwitchingBranchRepoPath] = useState<string | null>(null);
   const branchRequestVersionRef = useRef(0);
@@ -66,7 +65,6 @@ export function useWorkspaceBranchOperations({
       lastKnownBranchNameRef.current = current.name ?? null;
       lastKnownDetachedRef.current = current.detached;
       lastKnownRevisionRef.current = current.revision ?? null;
-      setBranchCacheRevision((revision) => revision + 1);
       updateBranchSyncDegradedForRepo(repoPath, false);
     },
     [updateBranchSyncDegradedForRepo],
@@ -122,6 +120,13 @@ export function useWorkspaceBranchOperations({
         ) {
           applyBranchState(repoPath, current);
         }
+      } catch (error) {
+        const requestWasSuperseded =
+          branchRequestVersionRef.current !== requestVersion ||
+          currentWorkspaceRepoPathRef.current !== repoPath;
+        if (!requestWasSuperseded) {
+          throw error;
+        }
       } finally {
         if (
           branchRequestVersionRef.current === requestVersion &&
@@ -155,15 +160,9 @@ export function useWorkspaceBranchOperations({
     [activeRepo, clearBranchData, refreshBranchesForRepo],
   );
 
-  const cachedBranches = activeRepo
-    ? queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(activeRepo))
-    : undefined;
-  const cachedCurrentBranch = activeRepo
-    ? queryClient.getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch(activeRepo))
-    : undefined;
-  const branches = cachedBranches ?? [];
-  const activeBranch = cachedCurrentBranch ?? null;
-  const hasBranchData = cachedBranches !== undefined && cachedCurrentBranch !== undefined;
+  const branches = branchesQuery.data ?? [];
+  const activeBranch = currentBranchQuery.data ?? null;
+  const hasBranchData = branchesQuery.data !== undefined && currentBranchQuery.data !== undefined;
   const isLoadingBranches =
     !hasBranchData &&
     (loadingBranchRepoPath === activeRepo ||
@@ -188,9 +187,24 @@ export function useWorkspaceBranchOperations({
       const previousBranch = cachedActiveBranch;
       const repoPath = activeRepo;
       const requestVersion = ++branchRequestVersionRef.current;
+      const cancelBranchQueries = async (): Promise<void> => {
+        await Promise.all([
+          queryClient.cancelQueries(
+            { queryKey: gitQueryKeys.currentBranch(repoPath), exact: true },
+            { silent: true },
+          ),
+          queryClient.cancelQueries(
+            { queryKey: gitQueryKeys.branches(repoPath), exact: true },
+            { silent: true },
+          ),
+        ]);
+      };
+      setLoadingBranchRepoPath(null);
       setSwitchingBranchRepoPath(repoPath);
 
       try {
+        await cancelBranchQueries();
+
         let current: GitCurrentBranch;
 
         try {
@@ -216,6 +230,15 @@ export function useWorkspaceBranchOperations({
           branchRequestVersionRef.current === requestVersion &&
           currentWorkspaceRepoPathRef.current === repoPath
         ) {
+          await cancelBranchQueries();
+
+          if (
+            branchRequestVersionRef.current !== requestVersion ||
+            currentWorkspaceRepoPathRef.current !== repoPath
+          ) {
+            return;
+          }
+
           queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
           applyBranchState(repoPath, current);
 
