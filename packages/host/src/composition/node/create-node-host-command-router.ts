@@ -226,10 +226,9 @@ export const createNodeEffectHostCommandRouter = (
         onBackgroundFailure,
         resolveRuntimePolicy: (scope) =>
           loadGlobalConfig(settingsConfig).pipe(
-            Effect.map(({ agentRuntimes }) => {
-              const role = scope.kind === "workflow" ? scope.role : null;
-              return resolveCodexEffectivePolicy(agentRuntimes.codex, role);
-            }),
+            Effect.map(({ agentRuntimes: { codex } }) =>
+              resolveCodexEffectivePolicy(codex, scope.kind === "workflow" ? scope.role : null),
+            ),
           ),
       }),
       processEnv,
