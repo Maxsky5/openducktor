@@ -441,7 +441,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
   });
 
-  test("opens in edit mode and saves the exact draft without remounting the editor", async () => {
+  test("opens in edit mode and saves without replacing Pierre's editor document", async () => {
     const onClose = mock(() => {});
     const onEditStateChange = mock(() => {});
 
@@ -460,6 +460,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    highlightCompletionMode = "manual";
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
@@ -468,9 +469,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
     });
     await waitForDirtyFile();
-    await runAsyncUiAction(() =>
-      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
-    );
+    const saveButton = screen.getByRole("button", { name: "Save file" });
+    expect(fireEvent.mouseDown(saveButton)).toBe(false);
+    await runAsyncUiAction(() => fireEvent.click(saveButton));
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(writeTextFileMock).toHaveBeenCalledWith({
@@ -480,8 +481,15 @@ describe("TaskExecutionSelectedFilePreview", () => {
       revision: "revision:const first = true;",
     });
     await waitForCleanFile();
-    expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 2 });
-    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toContain(":saved");
+    await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
+    expect(latestCodeViewProps?.items[0]).toMatchObject({
+      edit: true,
+      version: firstItem?.version,
+      file: {
+        cacheKey: firstItem?.file.cacheKey,
+        contents: firstItem?.file.contents,
+      },
+    });
     expect(codeViewMountCount).toBe(1);
     expect(onEditStateChange).toHaveBeenCalledWith({ isDirty: false, isSaving: false });
   });

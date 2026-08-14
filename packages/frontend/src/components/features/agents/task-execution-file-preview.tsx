@@ -292,9 +292,10 @@ function FilePreviewHeader({
           aria-label={saveLabel}
           title={saveLabel}
           disabled={saveState !== "dirty"}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={onSave}
         >
-          {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
+          <Save />
         </Button>
       ) : null}
       <Button
@@ -499,10 +500,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       return [];
     }
 
-    const isCurrentEditableItem =
-      editor.session?.id === codeViewFileId &&
-      readyCurrentSnapshot?.codeViewFile?.id === codeViewFileId &&
-      !isSwitchingFiles;
+    const isCurrentEditableItem = editor.session?.id === codeViewFileId && !isSwitchingFiles;
     return [
       {
         id: codeViewFileId,
@@ -512,7 +510,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         version: isCurrentEditableItem ? (editor.session?.version ?? 0) + 1 : 0,
       },
     ];
-  }, [codeViewFileId, editor.session, isSwitchingFiles, readyCurrentSnapshot, visibleSnapshot]);
+  }, [codeViewFileId, editor.session, isSwitchingFiles, visibleSnapshot]);
   const createEditor = useCallback(
     (options: EditorOptions<undefined>) => new Editor<undefined>(options),
     [],

@@ -47,7 +47,6 @@ type EditorAction =
       sessionId: string;
       baselineRevision: string;
       result: WorkspaceTextFileWriteResult;
-      hasNewerDraft: boolean;
       isDirty: boolean;
     }
   | { type: "save_failed"; failure: SaveFailure }
@@ -107,8 +106,10 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
         session: {
           ...state.session,
           baseline: action.result,
-          source: action.hasNewerDraft ? state.session.source : action.result,
-          version: action.hasNewerDraft ? state.session.version : state.session.version + 1,
+          // Keep Pierre's live document unchanged. Publishing a new cache key or version here
+          // rebuilds its TextDocument and drops the user's focus, selection, and undo history.
+          source: state.session.source,
+          version: state.session.version,
         },
         isDirty: action.isDirty,
         isSaving: false,
@@ -216,7 +217,6 @@ export const useTaskExecutionFileEditor = ({
         sessionId: session.id,
         baselineRevision,
         result: saved,
-        hasNewerDraft,
         isDirty: hasNewerDraft && latestDraft !== saved.contents,
       });
     } catch (cause) {
