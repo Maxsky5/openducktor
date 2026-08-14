@@ -81,34 +81,23 @@ const createAdmissionGate = (): AdmissionGate => {
   let activeLeases = 0;
   let shutdownWaiter: Deferred.Deferred<void> | null = null;
 
-  const acquireLease = Effect.gen(function* () {
-    const admitted = yield* Effect.sync(() => {
-      if (!accepting) return false;
-      activeLeases += 1;
-      return true;
-    });
-    if (!admitted) {
-      return yield* hostIsStoppingError();
+  const acquireLease = Effect.suspend(() => {
+    if (!accepting) {
+      return Effect.fail(hostIsStoppingError());
     }
+    activeLeases += 1;
+    return Effect.void;
   });
 
-  const releaseLease = Effect.gen(function* () {
-    const released = yield* Effect.sync(() => {
-      if (activeLeases === 0) {
-        return { failure: invalidAdmissionReleaseError(), waiter: null };
-      }
-      activeLeases -= 1;
-      return {
-        failure: null,
-        waiter: activeLeases === 0 ? shutdownWaiter : null,
-      };
-    });
-    if (released.failure) {
-      return yield* Effect.die(released.failure);
+  const releaseLease = Effect.suspend(() => {
+    if (activeLeases === 0) {
+      return Effect.die(invalidAdmissionReleaseError());
     }
-    if (released.waiter) {
-      yield* Deferred.succeed(released.waiter, undefined);
+    activeLeases -= 1;
+    if (activeLeases > 0 || !shutdownWaiter) {
+      return Effect.void;
     }
+    return Deferred.succeed(shutdownWaiter, undefined).pipe(Effect.asVoid);
   });
 
   const withLease: AdmissionGate["withLease"] = (use) =>
