@@ -216,17 +216,30 @@ function FileConflictReviewDialog({
   );
 }
 
-type FilePreviewSaveState = "clean" | "dirty" | "saving" | "blocked";
+type FilePreviewSaveState = "unavailable" | "clean" | "dirty" | "saving" | "blocked";
+
+const FILE_PREVIEW_STATUS_LABEL: Record<FilePreviewSaveState, string> = {
+  unavailable: "",
+  clean: "Saved",
+  dirty: "Unsaved changes",
+  saving: "Saving",
+  blocked: "Unsaved changes",
+};
 
 const resolveFilePreviewSaveState = ({
+  hasSession,
+  isSwitchingFiles,
   isDirty,
   isSaving,
   hasStaleConflict,
 }: {
+  hasSession: boolean;
+  isSwitchingFiles: boolean;
   isDirty: boolean;
   isSaving: boolean;
   hasStaleConflict: boolean;
 }): FilePreviewSaveState => {
+  if (!hasSession || isSwitchingFiles) return "unavailable";
   if (!isDirty) return "clean";
   if (isSaving) return "saving";
   if (hasStaleConflict) return "blocked";
@@ -246,27 +259,31 @@ function FilePreviewHeader({
   onSave: () => void;
   onClose: () => void;
 }): ReactElement {
-  const isDirty = saveState !== "clean";
+  const isAvailable = saveState !== "unavailable";
+  const showsDirtyDot = saveState !== "clean" && isAvailable;
   const isSaving = saveState === "saving";
   const saveLabel = isSaving ? "Saving file" : "Save file";
+  const statusLabel = FILE_PREVIEW_STATUS_LABEL[saveState];
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
       <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-medium">{relativePath}</span>
-        {isDirty ? (
+        {isAvailable ? (
           <span
-            className="size-2 shrink-0 rounded-full bg-foreground"
+            className={showsDirtyDot ? "size-2 shrink-0 rounded-full bg-foreground" : "sr-only"}
             role="status"
-            aria-label="Unsaved changes"
-            title="Unsaved changes"
-          />
+            aria-label={statusLabel}
+            title={showsDirtyDot ? statusLabel : undefined}
+          >
+            {showsDirtyDot ? null : statusLabel}
+          </span>
         ) : null}
       </div>
       {isSwitchingFiles ? (
         <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
       ) : null}
-      {isDirty ? (
+      {isAvailable ? (
         <Button
           type="button"
           variant="ghost"
@@ -600,6 +617,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
         isSwitchingFiles={isSwitchingFiles}
         saveState={resolveFilePreviewSaveState({
+          hasSession: editor.session !== null,
+          isSwitchingFiles,
           isDirty: editor.isDirty,
           isSaving: editor.isSaving,
           hasStaleConflict: editor.hasStaleConflict,

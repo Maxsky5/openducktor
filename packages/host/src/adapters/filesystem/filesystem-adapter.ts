@@ -11,6 +11,7 @@ import {
   type FilesystemPort,
 } from "../../ports/filesystem-port";
 import { readBoundedFileBytes } from "./bounded-file-read";
+import { conditionallyReplaceOpenFile } from "./conditional-file-replace";
 
 const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number }): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
@@ -100,6 +101,9 @@ const verifyOpenFileContainment = async (
   if (!isContainedPath(currentCanonicalRoot, canonicalTarget)) {
     throw unavailableFile(inputPath, "The selected file moved outside the workspace root.");
   }
+  if (path.relative(path.resolve(inputPath), canonicalTarget) !== "") {
+    throw unavailableFile(inputPath, "The selected file moved after it was loaded.");
+  }
 
   const [openedMetadata, targetMetadata] = await Promise.all([file.stat(), stat(canonicalTarget)]);
   if (openedMetadata.dev !== targetMetadata.dev || openedMetadata.ino !== targetMetadata.ino) {
@@ -177,37 +181,17 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
       try: async () => {
         const file = await open(inputPath, "r+");
         try {
-          await verifyOpenFileContainment(file, canonicalRootPath, inputPath);
-          const current = await snapshotOpenFile(file, maxCurrentBytes + 1);
-          if (!current.isFile) {
-            throw new FilesystemFileOperationError({
-              code: "unavailable_file",
-              operation: "replace",
-              path: inputPath,
-              message: "The selected path is not a file.",
-            });
-          }
-          if (current.bytes.byteLength > maxCurrentBytes) {
-            throw new FilesystemFileOperationError({
-              code: "too_large",
-              operation: "replace",
-              path: inputPath,
-              message: `The current file is larger than ${maxCurrentBytes} bytes.`,
-            });
-          }
-          if (current.revision !== expectedRevision) {
-            throw new FilesystemFileOperationError({
-              code: "stale_revision",
-              operation: "replace",
-              path: inputPath,
-              message: "The file changed after it was loaded.",
-            });
-          }
-
-          await file.truncate(0);
-          await writeAllBytes(file, bytes);
-          await file.sync();
-          return await snapshotOpenFile(file, bytes.byteLength + 1);
+          return await conditionallyReplaceOpenFile({
+            inputPath,
+            expectedRevision,
+            bytes,
+            maxCurrentBytes,
+            verifyEntry: () => verifyOpenFileContainment(file, canonicalRootPath, inputPath),
+            snapshot: () => snapshotOpenFile(file, maxCurrentBytes + 1),
+            truncate: () => file.truncate(0),
+            write: (replacement) => writeAllBytes(file, replacement),
+            sync: () => file.sync(),
+          });
         } finally {
           await file.close();
         }

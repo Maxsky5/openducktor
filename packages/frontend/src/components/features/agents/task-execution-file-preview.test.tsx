@@ -63,11 +63,11 @@ const runAsyncUiAction = async (action: () => void): Promise<void> => {
 };
 
 const waitForDirtyFile = async (): Promise<void> => {
-  await screen.findByLabelText("Unsaved changes");
+  await screen.findByRole("status", { name: "Unsaved changes" });
 };
 
 const waitForCleanFile = async (): Promise<void> => {
-  await waitFor(() => expect(screen.queryByLabelText("Unsaved changes")).toBeNull());
+  await screen.findByRole("status", { name: "Saved" });
 };
 
 const previewWorkerPool = {
@@ -450,6 +450,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
     const firstItem = latestCodeViewProps?.items[0];
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole("status", { name: "Saved" })).toBeTruthy();
     expect(firstItem?.version).toBe(1);
     expect(firstItem?.file.cacheKey).toBe(
       `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
@@ -534,7 +538,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByRole("alert");
     expect(screen.getByRole("alert").textContent).toContain("Permission denied");
-    expect(screen.getByLabelText("Unsaved changes")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
     expect(latestCodeViewProps?.items[0]).toMatchObject({ edit: true, version: 1 });
 
     await runAsyncUiAction(() =>
@@ -617,7 +621,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await waitForCleanFile();
-    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
     expect(writeTextFileMock).not.toHaveBeenCalled();
   });
 
@@ -645,6 +651,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     await screen.findByRole("button", { name: "Saving file" });
+    await screen.findByRole("status", { name: "Saving" });
     expect(saveButton.disabled).toBe(true);
     await act(async () => {
       resolveWrite({

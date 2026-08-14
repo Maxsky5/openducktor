@@ -160,6 +160,56 @@ describe("createFilesystemAdapter file snapshots", () => {
     expect(await readFile(movedPath, "utf8")).toBe("same contents");
   });
 
+  test("rejects an in-root move that leaves a symbolic link at the original path", async () => {
+    const filePath = await createTempFile(encoder.encode("same contents"));
+    const movedPath = `${filePath}.moved`;
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    await rename(filePath, movedPath);
+    await symlink(movedPath, filePath);
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        canonicalRootPath: path.dirname(filePath),
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(await readFile(movedPath, "utf8")).toBe("same contents");
+  });
+
+  test("rejects an in-root parent move that leaves a symbolic link at the original path", async () => {
+    const rootDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-root-"));
+    tempDirectories.push(rootDirectory);
+    const rootPath = await realpath(rootDirectory);
+    const parentPath = path.join(rootPath, "nested");
+    const movedParentPath = path.join(rootPath, "moved-nested");
+    const filePath = path.join(parentPath, "file.txt");
+    await mkdir(parentPath);
+    await writeFile(filePath, "same contents");
+    const filesystem = createFilesystemAdapter();
+    const original = await Effect.runPromise(filesystem.readFileSnapshot(filePath, 1024));
+    await rename(parentPath, movedParentPath);
+    await symlink(movedParentPath, parentPath);
+
+    const exit = await Effect.runPromiseExit(
+      filesystem.replaceFileBytes({
+        canonicalRootPath: rootPath,
+        path: filePath,
+        expectedRevision: original.revision,
+        bytes: encoder.encode("draft"),
+        maxCurrentBytes: 1024,
+      }),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(await readFile(path.join(movedParentPath, "file.txt"), "utf8")).toBe("same contents");
+  });
+
   test("rejects a parent-directory pivot to the original file outside the workspace", async () => {
     const rootDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-root-"));
     const outsideDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-file-write-outside-"));
