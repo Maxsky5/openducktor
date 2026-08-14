@@ -10,6 +10,7 @@ import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-fi
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
+import { createRuntimeExecutableProbes } from "../../adapters/runtimes/runtime-executable-probes";
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
@@ -32,6 +33,7 @@ import {
   LocalAttachmentPortTag,
 } from "../../ports/local-attachment-port";
 import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-tools-port";
+import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
@@ -53,6 +55,7 @@ export type NodeHostDefaultPorts = {
   openInTools: OpenInToolsPort;
   processEnv: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
+  runtimeExecutableProbes: RuntimeExecutableProbesByKind;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
@@ -67,12 +70,14 @@ export type CreateNodeHostDefaultPortsInput = {
 } & Partial<{
   codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
+  clientVersion: string;
   devServerProcesses: DevServerProcessPort;
   filesystem: FilesystemPort;
   git: GitPort;
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
   processEnv: NodeJS.ProcessEnv;
+  runtimeExecutableProbes: RuntimeExecutableProbesByKind;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
@@ -129,9 +134,15 @@ const makeNodeHostDefaultPorts = (
         },
         systemCommands,
       });
+    const runtimeExecutableProbes =
+      input.runtimeExecutableProbes ??
+      createRuntimeExecutableProbes({
+        ...(input.clientVersion ? { clientVersion: input.clientVersion } : {}),
+        processEnv,
+      });
     const runtimeHealth =
       input.runtimeHealth ??
-      createRuntimeHealthProbe(systemCommands, toolDiscovery, input.runtimeDistribution);
+      createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
     const runtimeDefinitionsService = createRuntimeDefinitionsService();
     const runtimeExecutableCheckService = createRuntimeExecutableCheckService({
       runtimeDefinitionsService,
@@ -171,6 +182,7 @@ const makeNodeHostDefaultPorts = (
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
       runtimeDistribution: input.runtimeDistribution,
+      runtimeExecutableProbes,
       runtimeHealth,
       settingsConfig,
       systemCommands,

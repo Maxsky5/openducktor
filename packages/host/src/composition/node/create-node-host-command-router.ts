@@ -110,6 +110,7 @@ export const createNodeEffectHostCommandRouter = (
     openInTools,
     processEnv,
     runtimeDistribution,
+    runtimeExecutableProbes,
     runtimeHealth,
     settingsConfig,
     systemCommands,
@@ -163,9 +164,9 @@ export const createNodeEffectHostCommandRouter = (
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
     processEnv,
+    runtimeExecutableProbe: runtimeExecutableProbes.claude,
     runtimeDistribution,
     settingsConfig,
-    systemCommands,
     toolDiscovery,
     workingDirectoryDependencies: claudeWorkingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>

@@ -3,20 +3,19 @@ import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@open
 import { Effect, Exit, Scope } from "effect";
 import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
-import { validateClaudeAgentSdkStartupDependencies } from "./claude-agent-sdk-dependencies";
 
 export type CreateClaudeWorkspaceRuntimeStarterInput = {
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   now?: () => Date;
   prepareLiveSessionAdapter: ClaudeLiveSessionAdapterPreparer;
   runtimeId?: () => string;
-  systemCommands: SystemCommandPort;
+  runtimeExecutableProbe: RuntimeExecutableProbePort;
   settingsConfig: SettingsConfigPort;
   toolDiscovery: ToolDiscoveryPort;
 };
@@ -26,7 +25,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
   now = () => new Date(),
   prepareLiveSessionAdapter,
   runtimeId = () => randomUUID(),
-  systemCommands,
+  runtimeExecutableProbe,
   settingsConfig,
   toolDiscovery,
 }: CreateClaudeWorkspaceRuntimeStarterInput): RuntimeWorkspaceStarterPort => ({
@@ -47,11 +46,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
         settingsConfig,
         toolDiscovery,
       });
-      yield* validateClaudeAgentSdkStartupDependencies({
-        systemCommands,
-        toolDiscovery,
-        executablePath,
-      });
+      yield* runtimeExecutableProbe.probeExecutable(executablePath);
 
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;

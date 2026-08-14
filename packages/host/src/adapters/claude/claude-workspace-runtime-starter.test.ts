@@ -3,8 +3,8 @@ import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Cause, Chunk, Effect, Exit } from "effect";
 import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
+import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import type { ClaudeLiveSessionAdapterPreparer } from "../agent-sessions/claude-live-session-adapter";
@@ -17,19 +17,9 @@ const createStartInput = () => ({
   descriptor: structuredClone(RUNTIME_DESCRIPTORS_BY_KIND.claude),
 });
 
-const createSystemCommands = (
-  version: string | null = "2.1.232 (Claude Code)",
-): SystemCommandPort => ({
-  resolveCommandPath() {
-    return Effect.succeed(null);
-  },
-  versionCommand() {
-    return Effect.succeed(version);
-  },
-  runCommandAllowFailure() {
-    return Effect.succeed({ ok: false, stdout: "", stderr: "" });
-  },
-});
+const successfulRuntimeExecutableProbe: RuntimeExecutableProbePort = {
+  probeExecutable: () => Effect.void,
+};
 
 const createToolDiscovery = ({
   claudePath = process.execPath,
@@ -141,7 +131,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       liveSessionLifecycle: liveSession.liveSessionLifecycle,
       prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
       runtimeId: () => "runtime-claude",
-      systemCommands: createSystemCommands(),
+      runtimeExecutableProbe: successfulRuntimeExecutableProbe,
       ...createRuntimePathDependencies(),
     });
 
@@ -162,18 +152,17 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
     expect(liveSession.calls.released).toBe(1);
   });
 
-  test("uses the normal command timeout when reading the Claude version", async () => {
+  test("probes the exact saved executable before returning a runtime", async () => {
     const liveSession = createLiveSessionDependencies();
-    const timeoutCalls: Array<number | undefined> = [];
+    const probeCalls: string[] = [];
     const starter = createClaudeWorkspaceRuntimeStarter({
       liveSessionLifecycle: liveSession.liveSessionLifecycle,
       prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
       runtimeId: () => "runtime-claude",
-      systemCommands: {
-        ...createSystemCommands(),
-        versionCommand(_command, _args, options) {
-          timeoutCalls.push(options?.timeoutMs);
-          return Effect.succeed(options?.timeoutMs === 10_000 ? "2.1.220 (Claude Code)" : null);
+      runtimeExecutableProbe: {
+        probeExecutable(executablePath) {
+          probeCalls.push(executablePath);
+          return Effect.void;
         },
       },
       ...createRuntimePathDependencies(),
@@ -181,7 +170,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
 
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
 
-    expect(timeoutCalls).toEqual([10_000]);
+    expect(probeCalls).toEqual([process.execPath]);
     await Effect.runPromise(handle.stop());
   });
 
@@ -191,7 +180,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       liveSessionLifecycle: liveSession.liveSessionLifecycle,
       prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
       runtimeId: () => "runtime-claude",
-      systemCommands: createSystemCommands(),
+      runtimeExecutableProbe: successfulRuntimeExecutableProbe,
       ...createRuntimePathDependencies(),
     });
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
@@ -212,7 +201,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
         runtimeIdCalls += 1;
         return "runtime-claude";
       },
-      systemCommands: createSystemCommands(),
+      runtimeExecutableProbe: successfulRuntimeExecutableProbe,
       ...createRuntimePathDependencies(null),
     });
 
@@ -241,15 +230,24 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
         runtimeIdCalls += 1;
         return "runtime-claude";
       },
-      systemCommands: createSystemCommands("edgee 0.1.7"),
+      runtimeExecutableProbe: {
+        probeExecutable(executablePath) {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "claudeExecutableProbe.initialize",
+              message: `Selected executable does not speak the Claude Agent SDK protocol: ${executablePath}`,
+            }),
+          );
+        },
+      },
       ...createRuntimePathDependencies(),
     });
 
     const failure = await firstFailure(starter.startWorkspaceRuntime(createStartInput()));
 
     expect(failure).toMatchObject({
-      dependency: "claude",
-      message: `Selected executable is not Claude Code: ${process.execPath}`,
+      operation: "claudeExecutableProbe.initialize",
+      message: `Selected executable does not speak the Claude Agent SDK protocol: ${process.execPath}`,
     });
     expect(runtimeIdCalls).toBe(0);
     expect(liveSession.calls).toEqual({
