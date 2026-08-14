@@ -182,7 +182,7 @@ describe("OnboardingPage runtime validation", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Configure coding agents" })).toBeTruthy();
-    expect(screen.getByText("Welcome to OpenDucktor").className).toContain("text-primary-text");
+    expect(screen.queryByText("Welcome to OpenDucktor")).toBeNull();
     expect(screen.queryByText("First-time setup")).toBeNull();
     expect(screen.queryByText("Move from idea to reviewed change.")).toBeNull();
     expect(screen.queryByText("Define the outcome")).toBeNull();
@@ -814,6 +814,7 @@ describe("OnboardingPage runtime validation", () => {
     try {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
+      expect(screen.queryByText("Agent tools")).toBeNull();
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -833,6 +834,7 @@ describe("OnboardingPage runtime validation", () => {
       await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
       fireEvent.click(screen.getByRole("button", { name: "Continue without a runtime" }));
       await screen.findByRole("heading", { name: "Open your first workspace" });
+      expect(screen.queryByText("Repository boundary")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: /Back/ }));
       expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);

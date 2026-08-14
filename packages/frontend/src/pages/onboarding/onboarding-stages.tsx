@@ -4,7 +4,7 @@ import type {
   RuntimeExecutableCheckResult,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, Settings2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks } from "lucide-react";
 import { type ReactElement, type RefObject, useState } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
@@ -35,8 +35,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
     <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
       <CardContent className="grid flex-1 p-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
         <section className="flex flex-col justify-center border-b border-border px-6 py-9 sm:px-9 sm:py-12 lg:border-r lg:border-b-0 lg:px-12">
-          <p className="text-sm font-semibold text-primary-text">Welcome to OpenDucktor</p>
-          <h1 className="mt-4 max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+          <h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
             Set up your local coding workspace
           </h1>
           <CardDescription className="mt-4 max-w-2xl text-base leading-relaxed sm:text-lg">
@@ -134,10 +133,6 @@ export function RuntimeStage({
   return (
     <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
       <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary-text">
-          <Settings2 className="size-4" aria-hidden="true" />
-          Agent tools
-        </div>
         <CardTitle className="text-2xl sm:text-3xl">Configure agent runtimes</CardTitle>
         <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
           Choose which runtimes OpenDucktor can use. Every check and agent session will use the
@@ -270,10 +265,6 @@ export function WorkspaceStage({
   return (
     <Card className="overflow-hidden shadow-sm">
       <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary-text">
-          <FolderGit2 className="size-4" aria-hidden="true" />
-          Repository boundary
-        </div>
         <CardTitle className="text-2xl sm:text-3xl">Open your first workspace</CardTitle>
         <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
           Choose the local Git repository where OpenDucktor will keep tasks, agent sessions, and
