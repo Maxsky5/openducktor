@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
+import { preloadKanbanPage } from "@/pages";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   runtimeDefinitionsQueryOptions,
@@ -78,6 +79,10 @@ export function OnboardingPage(): ReactElement {
   });
 
   const checkResults = validationQuery.data?.runtimes ?? [];
+
+  useEffect(() => {
+    preloadKanbanPage();
+  }, []);
 
   useEffect(() => {
     if (!validationQuery.data) return;

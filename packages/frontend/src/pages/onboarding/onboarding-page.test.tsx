@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AgentRuntimes,
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -10,6 +10,7 @@ import {
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
+import * as pageLoaders from "@/pages";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import {
@@ -22,9 +23,22 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { OnboardingPage } from "./onboarding-page";
 
 const mountedViews = new Set<ReturnType<typeof render>>();
+let preloadKanbanPageCalls = 0;
+let restorePreloadKanbanPage: (() => void) | null = null;
+
+beforeEach(() => {
+  preloadKanbanPageCalls = 0;
+  const preloadKanbanPageSpy = spyOn(pageLoaders, "preloadKanbanPage").mockImplementation(() => {
+    preloadKanbanPageCalls += 1;
+  });
+  restorePreloadKanbanPage = () => preloadKanbanPageSpy.mockRestore();
+});
+
 afterEach(() => {
   for (const view of mountedViews) view.unmount();
   mountedViews.clear();
+  restorePreloadKanbanPage?.();
+  restorePreloadKanbanPage = null;
 });
 
 const runtimeDefinitions = [
@@ -136,6 +150,12 @@ const opencodeSection = (): HTMLElement => {
 };
 
 describe("OnboardingPage runtime validation", () => {
+  test("preloads the Kanban destination while the user completes onboarding", () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+
+    expect(preloadKanbanPageCalls).toBe(1);
+  });
+
   test("keeps runtime cards neutral while exact paths are being checked", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
