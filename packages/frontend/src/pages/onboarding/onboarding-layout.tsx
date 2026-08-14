@@ -126,7 +126,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
                     <span
                       className={cn(
                         "mt-2.5 block max-w-full truncate px-1 text-xs font-semibold sm:text-sm",
-                        current ? "text-primary" : "text-muted-foreground",
+                        current ? "text-foreground" : "text-muted-foreground",
                         complete && "text-foreground",
                       )}
                     >

@@ -161,9 +161,12 @@ describe("OnboardingPage runtime validation", () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
 
     const progress = screen.getByRole("navigation", { name: "Onboarding progress" });
+    const currentStepLabel = within(progress).getByText("Welcome");
     expect(progress.getAttribute("data-orientation")).toBe("horizontal");
     expect(progress.querySelectorAll("[data-progress-connector]")).toHaveLength(2);
     expect(within(progress).getByText("Coding agents")).toBeTruthy();
+    expect(currentStepLabel.className).toContain("text-foreground");
+    expect(currentStepLabel.className).not.toContain("text-primary");
     expect(screen.queryByRole("complementary")).toBeNull();
   });
 
@@ -179,6 +182,7 @@ describe("OnboardingPage runtime validation", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Configure coding agents" })).toBeTruthy();
+    expect(screen.getByText("Welcome to OpenDucktor").className).toContain("text-primary-text");
     expect(screen.queryByText("First-time setup")).toBeNull();
     expect(screen.queryByText("Move from idea to reviewed change.")).toBeNull();
     expect(screen.queryByText("Define the outcome")).toBeNull();
