@@ -14,6 +14,7 @@ import {
   claudeAgentStreamPartSchema,
   claudeAgentUserMessageDisplayPartSchema,
   claudeLoadAgentSessionHistoryInputSchema,
+  claudeLoadAgentSessionTodosInputSchema,
   claudeSearchAgentFilesInputSchema,
 } from "./claude-runtime-command-contracts";
 
@@ -77,6 +78,24 @@ describe("Claude runtime command contracts", () => {
         variant: "high",
       },
     });
+  });
+
+  test("accepts repository scope for policy-bound session reads", () => {
+    const repositorySessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" as const },
+      sessionScope: { kind: "repository" as const },
+    };
+
+    expect(claudeLoadAgentSessionHistoryInputSchema.parse(repositorySessionRef)).toEqual(
+      repositorySessionRef,
+    );
+    expect(claudeLoadAgentSessionTodosInputSchema.parse(repositorySessionRef)).toEqual(
+      repositorySessionRef,
+    );
   });
 
   test("composes runtime-neutral response schemas instead of redefining them", () => {

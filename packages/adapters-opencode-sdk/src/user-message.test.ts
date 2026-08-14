@@ -410,8 +410,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
-      events.push(event),
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
     );
 
     await adapter.sendUserMessage({
@@ -485,8 +486,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
-      events.push(event),
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
     );
 
     await expect(

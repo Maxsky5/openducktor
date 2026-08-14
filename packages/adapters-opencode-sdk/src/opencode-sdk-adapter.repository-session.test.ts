@@ -191,6 +191,30 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribeUnbound();
   });
 
+  test("rejects a mismatched scope before subscribing to a retained session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribeWorkflow = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", {
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+      }),
+      () => {},
+    );
+    const updateCallCount = mock.session.updateCalls.length;
+
+    await expect(
+      adapter.subscribeEvents(
+        sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+        () => {},
+      ),
+    ).rejects.toThrow(
+      "registered workflow scope for task 'task-1' and role 'build' does not match the requested repository scope",
+    );
+
+    expect(mock.session.updateCalls).toHaveLength(updateCallCount);
+    unsubscribeWorkflow();
+  });
+
   test("keeps a retained session unbound when subscription policy binding fails", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });

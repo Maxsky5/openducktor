@@ -17,6 +17,7 @@ import {
 import {
   type AgentTranscriptModelSelection,
   agentSessionLiveRefSchema,
+  agentSessionScopeSchema,
   agentSessionWorkflowScopeSchema,
   runtimeWorkingDirectoryRefSchema,
 } from "./agent-session-schemas";
@@ -72,7 +73,7 @@ export type ClaudeWorkflowSessionScope = z.infer<typeof claudeWorkflowSessionSco
 
 const claudePolicyBoundSessionRefSchema = claudeAgentSessionRefSchema.extend({
   runtimePolicy: claudeAgentRuntimePolicySchema,
-  sessionScope: claudeWorkflowSessionScopeSchema.optional(),
+  sessionScope: agentSessionScopeSchema.optional(),
   model: claudeAgentModelSelectionSchema.optional(),
 });
 

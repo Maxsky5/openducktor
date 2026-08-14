@@ -73,6 +73,7 @@ import {
   adoptPreparedOpencodeSessionPolicy,
   applyRuntimeContextToSession,
   applySessionPolicy,
+  assertRuntimeContextCompatibleWithSession,
   requireOpencodeSessionPolicyRuntime,
   synchronizeOpencodeSessionPolicy,
 } from "./opencode-session-binding";
@@ -811,6 +812,7 @@ export class OpencodeSdkAdapter
     const session =
       this.retainedPolicyBoundSessionState(input) ??
       (await this.bindPolicyBoundSessionState(input));
+    assertRuntimeContextCompatibleWithSession(session, input, "subscribe to events");
     const registeredSessionRef = opencodeSessionRef(session);
     if (!agentSessionRefsEqual(registeredSessionRef, input)) {
       throw new Error(

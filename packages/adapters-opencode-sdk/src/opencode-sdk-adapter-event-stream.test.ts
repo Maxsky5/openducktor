@@ -721,9 +721,12 @@ describe("OpencodeSdkAdapter event stream", () => {
     const events: AgentEvent[] = [];
     await startDefaultSession(adapter, "planner");
 
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
-      events.push(event);
-    });
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "planner" }),
+      (event) => {
+        events.push(event);
+      },
+    );
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {
