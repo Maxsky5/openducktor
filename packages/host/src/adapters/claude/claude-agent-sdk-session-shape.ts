@@ -1,26 +1,32 @@
 import type {
   AgentSessionRuntimeSnapshot,
+  AgentSessionScope,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
   SendAgentUserMessageInput,
   SessionRef,
 } from "@openducktor/core";
-import { agentSessionRefsEqual, toAgentSessionRuntimeSnapshot } from "@openducktor/core";
+import {
+  agentSessionRefsEqual,
+  agentSessionScopesEqual,
+  describeAgentSessionScope,
+  toAgentSessionRuntimeSnapshot,
+} from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type { ClaudeSession, ClaudeSessionInput } from "./claude-agent-sdk-types";
-import { claudeSessionRef, claudeWorkflowScope } from "./claude-agent-sdk-utils";
+import { claudeSessionRef, claudeSessionScope } from "./claude-agent-sdk-utils";
 
 export const createClaudeSessionSummary = (
   input: ClaudeSessionInput,
   sessionInput: { externalSessionId: string; title?: string },
   startedAt: string,
 ): AgentSessionSummary => {
-  const sessionAssociation = claudeWorkflowScope(input);
+  const sessionAssociation = claudeSessionScope(input);
   if (!sessionAssociation) {
     throw new HostValidationError({
       field: "sessionScope",
-      message: "Cannot create a Claude session summary without workflow session context.",
+      message: "Cannot create a Claude session summary without session context.",
       details: { externalSessionId: sessionInput.externalSessionId },
     });
   }
@@ -158,16 +164,30 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
 
 export const assertClaudeSessionRef = (
   session: ClaudeSession,
-  ref: SessionRef,
+  ref: SessionRef & { sessionScope?: AgentSessionScope },
   action: string,
 ): void => {
   const expected = claudeSessionRef(session);
-  if (agentSessionRefsEqual(expected, ref)) {
+  if (!agentSessionRefsEqual(expected, ref)) {
+    throw new HostValidationError({
+      field: "externalSessionId",
+      message: `Cannot ${action} Claude session '${ref.externalSessionId}' from repo '${ref.repoPath}' and working directory '${ref.workingDirectory}' because the registered session belongs to repo '${expected.repoPath}' and working directory '${expected.workingDirectory}'.`,
+      details: { requested: ref, actual: expected },
+    });
+  }
+  if (!ref.sessionScope) {
     return;
   }
+  const registeredScope = claudeSessionScope(session.input);
+  if (registeredScope && agentSessionScopesEqual(registeredScope, ref.sessionScope)) {
+    return;
+  }
+  const registeredDescription = registeredScope
+    ? describeAgentSessionScope(registeredScope)
+    : "no registered scope";
   throw new HostValidationError({
-    field: "externalSessionId",
-    message: `Cannot ${action} Claude session '${ref.externalSessionId}' from repo '${ref.repoPath}' and working directory '${ref.workingDirectory}' because the registered session belongs to repo '${expected.repoPath}' and working directory '${expected.workingDirectory}'.`,
-    details: { requested: ref, actual: expected },
+    field: "sessionScope",
+    message: `Cannot ${action} Claude session '${ref.externalSessionId}' because its registered ${registeredDescription} does not match requested ${describeAgentSessionScope(ref.sessionScope)}.`,
+    details: { requested: ref.sessionScope, actual: registeredScope },
   });
 };

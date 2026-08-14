@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { snapshotForClaudeSession, toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
+import {
+  createClaudeSessionSummary,
+  snapshotForClaudeSession,
+  toClaudeDisplayParts,
+} from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
@@ -32,6 +36,33 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
     },
     ...overrides,
   }) as ClaudeSession;
+
+describe("createClaudeSessionSummary", () => {
+  test("preserves repository scope without a fake task or role", () => {
+    expect(
+      createClaudeSessionSummary(
+        {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "repository" },
+          systemPrompt: "Help with this repository",
+        },
+        { externalSessionId: "session-repository", title: "Repository session" },
+        "2026-06-25T20:00:00.000Z",
+      ),
+    ).toEqual({
+      externalSessionId: "session-repository",
+      runtimeKind: "claude",
+      workingDirectory: "/repo",
+      title: "Repository session",
+      sessionAssociation: { kind: "repository" },
+      startedAt: "2026-06-25T20:00:00.000Z",
+      status: "starting",
+    });
+  });
+});
 
 describe("snapshotForClaudeSession", () => {
   test("uses authoritative SDK idle state when no local turn remains pending", () => {

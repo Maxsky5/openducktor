@@ -286,60 +286,79 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
-  test("rejects repository controls before workspace validation", async () => {
-    let canonicalizePathCalls = 0;
-    const harness = await createHarness({
-      ...workingDirectoryDependencies,
-      settingsConfig: {
-        ...workingDirectoryDependencies.settingsConfig,
-        canonicalizePath: (path) => {
-          canonicalizePathCalls += 1;
-          return Effect.succeed(path);
-        },
-      },
-    });
-    harness.setStartSession(() => Effect.die("startSession should not be called"));
-    harness.setResumeSession(() => Effect.die("resumeSession should not be called"));
-    harness.setForkSession(() => Effect.die("forkSession should not be called"));
-    harness.setSendUserMessage(() => Effect.die("sendUserMessage should not be called"));
-
+  test("forwards repository controls after workspace validation", async () => {
+    const harness = await createHarness();
     const repositoryInput = {
       ...startInput,
       sessionScope: { kind: "repository" } as const,
     };
-    const attempts = [
-      harness.adapter.startSession(repositoryInput).pipe(Effect.asVoid),
-      harness.adapter
-        .resumeSession({
-          ...repositoryInput,
-          externalSessionId: "session-1",
-        })
-        .pipe(Effect.asVoid),
-      harness.adapter
-        .forkSession({
-          ...repositoryInput,
-          parentExternalSessionId: "parent-session",
-        })
-        .pipe(Effect.asVoid),
-      harness.adapter
-        .sendUserMessage({
-          ...repositoryInput,
-          externalSessionId: "session-1",
-          parts: [{ kind: "text", text: "Start" }],
-        })
-        .pipe(Effect.asVoid),
-    ];
-
-    for (const attempt of attempts) {
-      expect(await Effect.runPromise(Effect.either(attempt))).toMatchObject({
-        _tag: "Left",
-        left: {
-          _tag: "HostValidationError",
-          field: "sessionScope",
-        },
+    const repositorySummary = {
+      ...summary,
+      title: "Repository session",
+      sessionAssociation: { kind: "repository" } as const,
+    };
+    const calls: Array<{ operation: string; sessionScope: unknown; runtimeId: string }> = [];
+    harness.setStartSession((input, runtimeId) => {
+      calls.push({ operation: "start", sessionScope: input.sessionScope, runtimeId });
+      return Effect.succeed(repositorySummary);
+    });
+    harness.setResumeSession((input, runtimeId) => {
+      calls.push({ operation: "resume", sessionScope: input.sessionScope, runtimeId });
+      return Effect.succeed(repositorySummary);
+    });
+    harness.setForkSession((input, runtimeId) => {
+      calls.push({ operation: "fork", sessionScope: input.sessionScope, runtimeId });
+      return Effect.succeed(repositorySummary);
+    });
+    const loadContextScopes: unknown[] = [];
+    harness.setLoadSessionContextUsage((input) => {
+      loadContextScopes.push(input.sessionScope);
+      return Effect.succeed(null);
+    });
+    harness.setSendUserMessage((input, runtimeId) => {
+      calls.push({ operation: "send", sessionScope: input.sessionScope, runtimeId });
+      return Effect.succeed({
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp: "2026-07-17T10:02:00.000Z",
+        messageId: "user-1",
+        message: "Start",
+        parts: [{ kind: "text", text: "Start" }],
+        state: "read",
       });
-    }
-    expect(canonicalizePathCalls).toBe(0);
+    });
+
+    await Effect.runPromise(harness.adapter.startSession(repositoryInput));
+    await Effect.runPromise(
+      harness.adapter.resumeSession({ ...repositoryInput, externalSessionId: "session-1" }),
+    );
+    await Effect.runPromise(
+      harness.adapter.forkSession({
+        ...repositoryInput,
+        parentExternalSessionId: "parent-session",
+      }),
+    );
+    await Effect.runPromise(
+      harness.adapter.sendUserMessage({
+        ...repositoryInput,
+        externalSessionId: "session-1",
+        parts: [{ kind: "text", text: "Start" }],
+      }),
+    );
+    await Effect.runPromise(
+      harness.adapter.loadContext({
+        ...repositoryInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(calls).toEqual([
+      { operation: "start", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
+      { operation: "resume", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
+      { operation: "fork", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
+      { operation: "send", sessionScope: { kind: "repository" }, runtimeId: "runtime-1" },
+    ]);
+    expect(loadContextScopes).toEqual([{ kind: "repository" }]);
   });
 
   test("rejects session operations outside the selected workspace before calling the SDK", async () => {

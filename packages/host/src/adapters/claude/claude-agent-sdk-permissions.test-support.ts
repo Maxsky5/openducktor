@@ -1,4 +1,4 @@
-import type { AgentRole } from "@openducktor/core";
+import type { AgentRole, AgentSessionScope } from "@openducktor/core";
 import { createClaudeCanUseTool as createClaudeCanUseToolBase } from "./claude-agent-sdk-permissions";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
@@ -11,8 +11,8 @@ export const createClaudeCanUseTool = (
     ...input,
   });
 
-export const createClaudePermissionTestSession = (
-  role: AgentRole = "spec",
+const createClaudePermissionTestSessionForScope = (
+  sessionScope: AgentSessionScope,
 ): ClaudeSessionContext => ({
   acceptedUserMessages: [],
   activeSdkUserTurnCount: 0,
@@ -25,7 +25,7 @@ export const createClaudePermissionTestSession = (
     workingDirectory: "/repo",
     externalSessionId: "session-1",
     runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "workflow", taskId: "task-1", role },
+    sessionScope,
   },
   model: undefined,
   pendingApprovals: new Map(),
@@ -39,7 +39,7 @@ export const createClaudePermissionTestSession = (
     externalSessionId: "session-1",
     runtimeKind: "claude",
     workingDirectory: "/repo",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+    sessionAssociation: sessionScope,
     startedAt: "2026-06-25T12:00:00.000Z",
     status: "idle",
   },
@@ -54,3 +54,9 @@ export const createClaudePermissionTestSession = (
   toolStartedAtMsByCallId: new Map(),
   todosById: new Map(),
 });
+
+export const createClaudePermissionTestSession = (role: AgentRole = "spec"): ClaudeSessionContext =>
+  createClaudePermissionTestSessionForScope({ kind: "workflow", taskId: "task-1", role });
+
+export const createClaudeRepositoryPermissionTestSession = (): ClaudeSessionContext =>
+  createClaudePermissionTestSessionForScope({ kind: "repository" });

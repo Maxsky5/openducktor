@@ -1,13 +1,13 @@
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, toClaudeOdtToolAliases } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
+  AgentSessionScope,
   AgentSessionWorkflowScope,
   AgentStreamPart,
   SessionRef,
 } from "@openducktor/core";
-import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { ClaudeAgentSdkServiceError, ClaudeSessionContext } from "./claude-agent-sdk-types";
@@ -76,12 +76,23 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const readStringProp = (value: unknown, key: string): string | undefined =>
   isRecord(value) ? readText(value[key]) : undefined;
 
-export const claudeWorkflowScope = (input: unknown): AgentSessionWorkflowScope | null => {
+export const claudeSessionScope = (input: unknown): AgentSessionScope | null => {
   if (!isRecord(input)) {
     return null;
   }
   const scope = input.sessionScope;
-  return isRecord(scope) && scope.kind === "workflow" ? (scope as AgentSessionWorkflowScope) : null;
+  if (!isRecord(scope)) {
+    return null;
+  }
+  if (scope.kind === "repository") {
+    return scope as AgentSessionScope;
+  }
+  return scope.kind === "workflow" ? (scope as AgentSessionWorkflowScope) : null;
+};
+
+const claudeWorkflowScope = (input: unknown): AgentSessionWorkflowScope | null => {
+  const scope = claudeSessionScope(input);
+  return scope?.kind === "workflow" ? scope : null;
 };
 
 export const claudeWorkflowRole = (input: unknown): AgentRole | null =>
@@ -98,11 +109,25 @@ export const isReadOnlyWorkflowRole = (role: AgentRole | null): boolean =>
   role !== null && role !== "build";
 
 export const canonicalOdtToolName = (toolName: string): string | null => {
-  return normalizeOdtWorkflowToolName(
-    toolName,
-    CLAUDE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-  );
+  const trimmedToolName = toolName.trim();
+  for (const canonicalToolName of ODT_MCP_TOOL_NAMES) {
+    if (
+      trimmedToolName === canonicalToolName ||
+      toClaudeOdtToolAliases(canonicalToolName).includes(trimmedToolName)
+    ) {
+      return canonicalToolName;
+    }
+  }
+  return null;
 };
+
+const READ_ONLY_ODT_TOOL_NAMES = new Set([
+  "odt_get_workspaces",
+  "odt_search_tasks",
+  "odt_read_task",
+  "odt_read_task_assets",
+  "odt_read_task_documents",
+]);
 
 export const permissionRequestTypeForTool = (
   toolName: string,
@@ -133,11 +158,8 @@ export const mutationForTool = (
     return "mutating";
   }
   const odtTool = canonicalOdtToolName(toolName);
-  if (odtTool && odtTool !== "odt_read_task" && odtTool !== "odt_read_task_documents") {
-    return "mutating";
-  }
   if (odtTool) {
-    return "read_only";
+    return READ_ONLY_ODT_TOOL_NAMES.has(odtTool) ? "read_only" : "mutating";
   }
   return "unknown";
 };
