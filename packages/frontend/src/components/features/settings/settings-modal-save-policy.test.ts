@@ -67,7 +67,7 @@ describe("settings-modal-save-policy", () => {
       "Fix 1 reusable prompt field error before saving.",
     );
     expect(buildRuntimeAvailabilitySaveError(2)).toBe(
-      "Fix 2 disabled runtime selections before saving.",
+      "Fix 2 runtime executable errors before saving.",
     );
     expect(buildCodexDangerousSettingsSaveError()).toBe(
       "Confirm the Codex safety acknowledgement before saving.",

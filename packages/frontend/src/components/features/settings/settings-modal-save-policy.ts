@@ -31,7 +31,7 @@ export const buildReusablePromptValidationSaveError = (totalErrorCount: number):
 
 export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";
-  return `Fix ${totalErrorCount} disabled runtime selection${suffix} before saving.`;
+  return `Fix ${totalErrorCount} runtime executable error${suffix} before saving.`;
 };
 
 export const buildCodexDangerousSettingsSaveError = (): string =>

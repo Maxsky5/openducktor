@@ -121,7 +121,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("blocks disabled runtime selections before persistence", async () => {
+  test("blocks runtime executable errors before persistence", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs({
@@ -139,7 +139,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe("Fix 2 disabled runtime selections before saving.");
+    expect(harness.getLatest().saveError).toBe("Fix 2 runtime executable errors before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
     await harness.unmount();

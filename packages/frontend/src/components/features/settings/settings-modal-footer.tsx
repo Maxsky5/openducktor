@@ -94,7 +94,7 @@ export function SettingsModalFooter({
         !hasReusablePromptValidationErrors &&
         hasRuntimeAvailabilityErrors ? (
           <span className="text-destructive-muted">
-            {validationSummary.runtimeAvailabilityErrorCount} disabled runtime selection
+            {validationSummary.runtimeAvailabilityErrorCount} runtime executable error
             {validationSummary.runtimeAvailabilityErrorCount > 1 ? "s" : ""}.
           </span>
         ) : null}

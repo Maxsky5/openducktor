@@ -92,7 +92,7 @@ describe("SettingsModalFooter", () => {
     }
   });
 
-  test("disables save and shows runtime availability count", () => {
+  test("disables save and shows runtime executable error count", () => {
     const renderer = renderFooter({
       validationSummary: {
         promptPlaceholderErrorCount: 0,
@@ -107,7 +107,7 @@ describe("SettingsModalFooter", () => {
       expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(screen.getByText(/2 disabled runtime selections\./i)).toBeTruthy();
+      expect(screen.getByText(/2 runtime executable errors\./i)).toBeTruthy();
     } finally {
       renderer.unmount();
     }
