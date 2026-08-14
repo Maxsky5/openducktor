@@ -180,8 +180,11 @@ describe("AgentRuntimesSection", () => {
       expect(tabs[2]?.querySelector('[data-runtime-logo="codex"]')).toBeTruthy();
       expect(screen.getAllByLabelText("Executable path")).toHaveLength(1);
       expect(screen.getByPlaceholderText("Path to OpenCode")).toBeTruthy();
-      expect(renderer.container.innerHTML).toContain(
+      expect(renderer.container.innerHTML).not.toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+      );
+      expect(renderer.container.innerHTML).not.toContain(
+        "OpenDucktor uses these exact paths for checks and agent sessions.",
       );
       expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
       expect(renderer.container.innerHTML).not.toContain("Role override");
@@ -191,6 +194,86 @@ describe("AgentRuntimesSection", () => {
       expect(screen.queryByPlaceholderText("Path to OpenCode")).toBeNull();
       expect(screen.getByPlaceholderText("Path to Codex")).toBeTruthy();
     } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("keeps runtime controls active while showing the selected runtime check", () => {
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        isCheckingExecutables: true,
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect((screen.getByRole("tab", { name: /OpenCode/i }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect((screen.getByRole("switch", { name: "Enabled" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect(
+        (screen.getByRole("textbox", { name: "Executable path" }) as HTMLInputElement).disabled,
+      ).toBe(false);
+      expect((screen.getByRole("button", { name: "Browse" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect(
+        (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows only the version and aligns Check again with the runtime status", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => ({
+      runtimes: [
+        {
+          kind: "opencode" as const,
+          path: "/opt/homebrew/bin/opencode",
+          ok: true,
+          version: "1.18.9",
+          error: null,
+        },
+      ],
+    }));
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      await screen.findByText("1.18.9");
+      expect(screen.queryByText("1.18.9 at /opt/homebrew/bin/opencode")).toBeNull();
+      const statusRow = renderer.container.querySelector('[data-runtime-status-row="opencode"]');
+      expect(statusRow).toBeTruthy();
+      expect(statusRow?.contains(screen.getByRole("button", { name: "Check again" }))).toBe(true);
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
       renderer.unmount();
     }
   });
@@ -602,7 +685,7 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole("tab", { name: /OpenCode/i }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      expect(renderer.container.innerHTML).toContain(
+      expect(renderer.container.innerHTML).not.toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
       );
     } finally {

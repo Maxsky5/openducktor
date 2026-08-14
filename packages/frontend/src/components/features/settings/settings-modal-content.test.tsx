@@ -395,7 +395,9 @@ describe("settings modal content", () => {
     );
 
     expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
-    expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
+    expect(html).not.toContain(
+      "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+    );
     expect(html).toContain("Codex");
     expect(html).toContain("Disabled");
     expect(html).not.toContain("Codex defaults");

@@ -271,6 +271,8 @@ describe("OnboardingPage runtime validation", () => {
         validation.resolve(createCheck(runtimes, true));
       });
       await within(opencodeSection()).findByText("Available");
+      expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
+      expect(within(opencodeSection()).queryByText("1.0.0 at /valid/opencode")).toBeNull();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
@@ -746,7 +748,8 @@ describe("OnboardingPage runtime validation", () => {
           ],
         });
       });
-      await within(opencodeSection()).findByText(/opencode 1.0.0 at \/changed\/opencode/);
+      await within(opencodeSection()).findByText("opencode 1.0.0");
+      expect(within(opencodeSection()).queryByText(/\/changed\/opencode/)).toBeNull();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
@@ -790,7 +793,8 @@ describe("OnboardingPage runtime validation", () => {
       fireEvent.click(enabledSwitch);
       expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
       fireEvent.change(pathInput, { target: { value: "/custom/opencode-v2" } });
-      await within(opencodeSection()).findByText(/1.0.0 at \/custom\/opencode-v2/);
+      await within(opencodeSection()).findByText("1.0.0");
+      expect(within(opencodeSection()).queryByText(/\/custom\/opencode-v2/)).toBeNull();
       expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
     } finally {
       host.runtimeExecutablesCheck = originalCheck;

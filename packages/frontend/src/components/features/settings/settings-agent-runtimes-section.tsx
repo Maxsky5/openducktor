@@ -858,13 +858,13 @@ export function AgentRuntimesSection({
                 aria-labelledby={`agent-runtime-tab-${selectedDefinition.kind}`}
                 className="min-w-0 space-y-4 p-3"
               >
-                <p className="text-sm text-muted-foreground">{selectedDefinition.description}</p>
                 <RuntimeExecutablePanel
                   runtimes={agentRuntimes}
                   definitions={[selectedDefinition]}
                   results={executableQuery.data?.runtimes ?? []}
                   disabled={disabled}
                   isChecking={isCheckingExecutables || executableQuery.isFetching}
+                  checkAgainPlacement="runtime-status"
                   onChange={(next) => onUpdateAgentRuntimes(() => next)}
                   onCheckAgain={() => void onCheckAgain()}
                 />

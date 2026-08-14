@@ -18,6 +18,7 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
+import { isSettingsInteractionDisabled } from "./settings-modal-model";
 import {
   INITIAL_SETTINGS_MODAL_NAVIGATION,
   resolveSettingsModalOpenState,
@@ -64,8 +65,7 @@ export function SettingsModal({
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
     workspaceSelectionPolicy,
   });
-  const isInteractionDisabled =
-    controller.isLoadingSettings || controller.isSaving || controller.isCheckingRuntimeExecutables;
+  const isInteractionDisabled = isSettingsInteractionDisabled(controller);
 
   const handleSectionChange = (section: SettingsSectionId): void => {
     setNavigation((current) => ({ ...current, section }));

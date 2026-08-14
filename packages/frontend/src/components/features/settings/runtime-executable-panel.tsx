@@ -23,6 +23,7 @@ type RuntimeExecutablePanelProps = {
   disabled?: boolean;
   isChecking?: boolean;
   checkingRuntimeKinds?: readonly RuntimeKind[];
+  checkAgainPlacement?: "panel" | "runtime-status";
   onChange: (next: AgentRuntimes) => void;
   onCheckAgain: () => void;
 };
@@ -75,7 +76,7 @@ function RuntimeStatusMessage({
     return (
       <span className="inline-flex items-center gap-1.5">
         <CircleCheck className="size-3.5 text-success-muted" aria-hidden="true" />
-        {result.version ?? "Executable is ready"} at {result.path}
+        {result.version ?? "Executable is ready"}
       </span>
     );
   }
@@ -93,6 +94,23 @@ function RuntimeStatusMessage({
   return <span>Enter or choose an executable path.</span>;
 }
 
+function CheckAgainButton({
+  disabled,
+  isChecking,
+  onCheckAgain,
+}: {
+  disabled: boolean;
+  isChecking: boolean;
+  onCheckAgain: () => void;
+}): ReactElement {
+  return (
+    <Button type="button" variant="outline" disabled={disabled} onClick={onCheckAgain}>
+      <RefreshCw data-icon="inline-start" />
+      {isChecking ? "Checking..." : "Check again"}
+    </Button>
+  );
+}
+
 export function RuntimeExecutablePanel({
   runtimes,
   definitions,
@@ -100,6 +118,7 @@ export function RuntimeExecutablePanel({
   disabled = false,
   isChecking = false,
   checkingRuntimeKinds = [],
+  checkAgainPlacement = "panel",
   onChange,
   onCheckAgain,
 }: RuntimeExecutablePanelProps): ReactElement {
@@ -119,20 +138,15 @@ export function RuntimeExecutablePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          OpenDucktor uses these exact paths for checks and agent sessions.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled || isAnyRuntimeChecking}
-          onClick={onCheckAgain}
-        >
-          <RefreshCw data-icon="inline-start" />
-          {isChecking ? "Checking..." : "Check again"}
-        </Button>
-      </div>
+      {checkAgainPlacement === "panel" ? (
+        <div className="flex justify-end">
+          <CheckAgainButton
+            disabled={disabled || isAnyRuntimeChecking}
+            isChecking={isChecking}
+            onCheckAgain={onCheckAgain}
+          />
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         {definitions.map((definition) => {
@@ -210,21 +224,33 @@ export function RuntimeExecutablePanel({
                     Browse
                   </Button>
                 </div>
-                <p
-                  id={`${inputId}-status`}
-                  className={cn(
-                    "text-sm",
-                    inputInvalid ? "text-destructive" : "text-muted-foreground",
-                  )}
-                  aria-live="polite"
+                <div
+                  data-runtime-status-row={kind}
+                  className="flex min-h-9 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <RuntimeStatusMessage
-                    result={result}
-                    isChecking={isRuntimeChecking}
-                    showInvalidState={showInvalidState}
-                    enabled={config.enabled}
-                  />
-                </p>
+                  <p
+                    id={`${inputId}-status`}
+                    className={cn(
+                      "min-w-0 flex-1 text-sm",
+                      inputInvalid ? "text-destructive" : "text-muted-foreground",
+                    )}
+                    aria-live="polite"
+                  >
+                    <RuntimeStatusMessage
+                      result={result}
+                      isChecking={isRuntimeChecking}
+                      showInvalidState={showInvalidState}
+                      enabled={config.enabled}
+                    />
+                  </p>
+                  {checkAgainPlacement === "runtime-status" ? (
+                    <CheckAgainButton
+                      disabled={disabled || isAnyRuntimeChecking}
+                      isChecking={isChecking}
+                      onCheckAgain={onCheckAgain}
+                    />
+                  ) : null}
+                </div>
               </div>
             </section>
           );

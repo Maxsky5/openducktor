@@ -15,6 +15,7 @@ import {
   findCatalogModel,
   getMissingRequiredRoleLabels,
   getNeededCatalogRuntimeKinds,
+  isSettingsInteractionDisabled,
   resolvePromptOverrideFallbackTemplate,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
@@ -79,6 +80,30 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 });
 
 describe("settings-modal-model", () => {
+  test("keeps settings interactive while runtime executables are checked", () => {
+    expect(
+      isSettingsInteractionDisabled({
+        isLoadingSettings: false,
+        isSaving: false,
+        isCheckingRuntimeExecutables: true,
+      }),
+    ).toBe(false);
+    expect(
+      isSettingsInteractionDisabled({
+        isLoadingSettings: true,
+        isSaving: false,
+        isCheckingRuntimeExecutables: false,
+      }),
+    ).toBe(true);
+    expect(
+      isSettingsInteractionDisabled({
+        isLoadingSettings: false,
+        isSaving: true,
+        isCheckingRuntimeExecutables: false,
+      }),
+    ).toBe(true);
+  });
+
   test("normalizes null defaults to empty values", () => {
     expect(ensureDraftAgentDefault(null)).toEqual({
       providerId: "",
