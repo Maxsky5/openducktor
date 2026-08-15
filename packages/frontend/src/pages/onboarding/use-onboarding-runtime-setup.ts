@@ -22,14 +22,11 @@ const runtimeStageActivity = ({
   isLoading,
   isValidating,
   isRediscovering,
-  isSaving,
 }: {
   isLoading: boolean;
   isValidating: boolean;
   isRediscovering: boolean;
-  isSaving: boolean;
 }): RuntimeStageActivity => {
-  if (isSaving) return "saving";
   if (isRediscovering) return "rediscovering";
   if (isLoading) return "loading";
   if (isValidating) return "validating";
@@ -194,7 +191,6 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     runtimeLoading ||
     validationPending ||
     isChecking ||
-    isSaving ||
     !!runtimeRequestError ||
     runtimeDiscoveryError !== null;
 
@@ -220,7 +216,6 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
       isLoading: runtimeLoading,
       isValidating: validationPending,
       isRediscovering: isChecking,
-      isSaving,
     }),
     showNoRuntimeWarning,
     continueDisabled,

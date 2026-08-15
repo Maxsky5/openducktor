@@ -55,6 +55,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
           stageError={runtimeSetup.stageError}
           stageErrorRef={runtimeSetup.stageErrorRef}
           activity={runtimeSetup.activity}
+          isSaving={runtimeSetup.isSaving}
           checkingRuntimeKinds={runtimeSetup.checkingRuntimeKinds}
           showNoRuntimeWarning={runtimeSetup.showNoRuntimeWarning}
           continueDisabled={runtimeSetup.continueDisabled}

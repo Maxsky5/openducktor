@@ -934,6 +934,54 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("keeps the coding-agent form visually stable while save is pending", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const save = createDeferred<void>();
+    const saveSettingsSnapshot = mock(async () => save.promise);
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+
+    try {
+      renderOnboarding({ runtimes, saveSettingsSnapshot });
+      await enterRuntimeStage();
+      await within(opencodeSection()).findByText("Available");
+
+      const heading = screen.getByRole("heading", { name: "Configure coding agents" });
+      const stage = heading.closest('[data-slot="card"]');
+      const pathInput = screen.getByLabelText("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }) as HTMLInputElement;
+      const enabledSwitch = within(opencodeSection()).getByRole("switch", {
+        name: "Enabled",
+      }) as HTMLButtonElement;
+
+      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+      await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
+
+      expect(stage?.hasAttribute("inert")).toBe(true);
+      expect(pathInput.disabled).toBe(false);
+      expect(enabledSwitch.disabled).toBe(false);
+      expect(
+        (screen.getByRole("button", { name: "Scan for coding agents" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+      expect(
+        (screen.getByRole("button", { name: "Continue to workspace" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+      expect(screen.queryByRole("button", { name: "Saving coding agents..." })).toBeNull();
+
+      await act(async () => save.resolve());
+      await screen.findByRole("heading", { name: "Open your first workspace" });
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("submits the no-runtime confirmation only once while saving", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
     const save = createDeferred<void>();

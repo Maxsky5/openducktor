@@ -112,6 +112,7 @@ type RuntimeStageProps = {
   stageError: string | null;
   stageErrorRef: RefObject<HTMLParagraphElement | null>;
   activity: RuntimeStageActivity;
+  isSaving: boolean;
   checkingRuntimeKinds: readonly RuntimeKind[];
   showNoRuntimeWarning: boolean;
   continueDisabled: boolean;
@@ -122,7 +123,7 @@ type RuntimeStageProps = {
   onContinue: () => void;
 };
 
-export type RuntimeStageActivity = "idle" | "loading" | "validating" | "rediscovering" | "saving";
+export type RuntimeStageActivity = "idle" | "loading" | "validating" | "rediscovering";
 
 export function RuntimeStage({
   runtimeDraft,
@@ -133,6 +134,7 @@ export function RuntimeStage({
   stageError,
   stageErrorRef,
   activity,
+  isSaving,
   checkingRuntimeKinds,
   showNoRuntimeWarning,
   continueDisabled,
@@ -144,16 +146,18 @@ export function RuntimeStage({
 }: RuntimeStageProps): ReactElement {
   const isLoading = activity === "loading";
   const isRediscovering = activity === "rediscovering";
-  const isSaving = activity === "saving";
   const scanDisabled =
     !runtimeDraft ||
-    isSaving ||
     isRediscovering ||
     activity === "validating" ||
     checkingRuntimeKinds.length > 0;
 
   return (
-    <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
+    <Card
+      className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm"
+      inert={isSaving}
+      aria-busy={isSaving}
+    >
       <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-2xl sm:text-3xl">Configure coding agents</CardTitle>
@@ -217,7 +221,7 @@ export function RuntimeStage({
             runtimes={runtimeDraft}
             definitions={definitions}
             results={results}
-            disabled={isSaving || isRediscovering}
+            disabled={isRediscovering}
             isChecking={isRediscovering}
             checkingRuntimeKinds={checkingRuntimeKinds}
             onChange={onChange}
@@ -266,15 +270,20 @@ export function RuntimeStage({
             {stageError}
           </p>
         ) : null}
+        {isSaving ? (
+          <span className="sr-only" role="status">
+            Saving coding agents...
+          </span>
+        ) : null}
       </CardContent>
 
       <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
-        <Button variant="outline" onClick={onBack} disabled={isSaving || isRediscovering}>
+        <Button variant="outline" onClick={onBack} disabled={isRediscovering}>
           <ArrowLeft data-icon="inline-start" />
           Back
         </Button>
         <Button size="lg" onClick={onContinue} disabled={continueDisabled}>
-          {isSaving ? "Saving coding agents..." : "Continue to workspace"}
+          Continue to workspace
           <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
