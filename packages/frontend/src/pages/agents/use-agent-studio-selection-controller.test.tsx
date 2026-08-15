@@ -1468,6 +1468,42 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("keeps a closed task selected when its QA session is retained", async () => {
+    const openTask = createTask("task-1");
+    const closedTask = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "closed",
+    });
+    const qaSession = createSession("task-1", "qa-session", {
+      role: "qa",
+      status: "idle",
+    });
+    const buildArgs = (task: typeof openTask): HookArgs =>
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        tasks: [task],
+        sessions: [qaSession],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      });
+    const harness = createHookHarness(buildArgs(openTask));
+
+    try {
+      await harness.mount();
+      await harness.update(buildArgs(closedTask));
+
+      const latest = harness.getLatest();
+      expect(latest.taskId).toBe("task-1");
+      expect(latest.selectedTask?.status).toBe("closed");
+      expect(latest.taskTabs.map((tab) => tab.taskId)).toEqual(["task-1"]);
+      expect(latest.view.selectedSession.loadedSession?.externalSessionId).toBe("qa-session");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("tab shows working status when newer idle session exists but older session is running", async () => {
     const olderRunningSession = createSession("task-1", "session-old", {
       role: "build",

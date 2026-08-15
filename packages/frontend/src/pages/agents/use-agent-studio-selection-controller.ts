@@ -161,6 +161,7 @@ export function useAgentStudioSelectionController({
     selectedTask: navigationBase.selectedTask,
     tasks,
     isLoadingTasks,
+    isSessionReadModelReady: sessionReadModelLoadState.kind === "ready",
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,

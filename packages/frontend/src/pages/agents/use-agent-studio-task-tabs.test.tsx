@@ -82,6 +82,7 @@ const withWorkspaceId = (
   selectedTask: null,
   tasks: [],
   isLoadingTasks: false,
+  isSessionReadModelReady: true,
   latestSessionByTaskId: new Map(),
   selectAgentStudioSelection: () => {},
   ...overrides,
@@ -496,6 +497,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [createTask("task-2")],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-2", latestSession]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -508,6 +510,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [createTask("task-2")],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-2", latestSession]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -567,6 +570,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [createTask("task-b")],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-b", repoBSession]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -655,6 +659,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [createTask("task-b")],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -668,6 +673,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [createTask("task-a")],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a-2")]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -736,6 +742,7 @@ describe("useAgentStudioTaskTabs", () => {
           }),
         ],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map([["task-1", latestSession]]),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
@@ -755,6 +762,104 @@ describe("useAgentStudioTaskTabs", () => {
         value: originalStorage,
       });
     }
+  });
+
+  test("keeps a closed task tab selectable when it has a retained QA session", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedWorkspaceTaskTabs(memoryStorage, {
+        "workspace-repo": { tabs: ["task-1", "task-2"], activeTaskId: "task-1" },
+      });
+
+      const taskOne = createTask("task-1");
+      const taskTwo = createTask("task-2");
+      const qaSession = createAgentSessionSummaryFixture({
+        externalSessionId: "qa-session",
+        taskId: "task-2",
+        role: "qa",
+      });
+      const closedTaskTwo = createTaskCardFixture({
+        id: "task-2",
+        title: "task-2",
+        status: "closed",
+      });
+      const updateCalls: AgentStudioSelectionState[] = [];
+      const buildArgs = (taskTwoState: typeof taskTwo): HookArgs =>
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
+          taskId: "task-1",
+          selectedTask: taskOne,
+          tasks: [taskOne, taskTwoState],
+          isLoadingTasks: false,
+          latestSessionByTaskId: new Map([["task-2", qaSession]]),
+          selectAgentStudioSelection: (updates) => {
+            updateCalls.push(updates);
+          },
+        });
+      const harness = createHookHarness(buildArgs(taskTwo));
+
+      await harness.mount();
+      await harness.update(buildArgs(closedTaskTwo));
+
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+
+      await harness.run((state) => {
+        state.handleSelectTab("task-2");
+      });
+
+      expect(updateCalls.at(-1)).toEqual(taskSelection("task-2"));
+      await harness.update({
+        ...buildArgs(closedTaskTwo),
+        taskId: "task-2",
+        selectedTask: closedTaskTwo,
+      });
+
+      expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+      expect(
+        parsePersistedTaskTabs(memoryStorage.getItem(toTabsStorageKey("workspace-repo"))),
+      ).toEqual({
+        tabs: ["task-1", "task-2"],
+        activeTaskId: "task-2",
+      });
+      await harness.unmount();
+    });
+  });
+
+  test("keeps a closed task tab while retained sessions are still loading", async () => {
+    const memoryStorage = createMemoryStorage();
+    await withMockedLocalStorage(memoryStorage, async () => {
+      seedWorkspaceTaskTabs(memoryStorage, {
+        "workspace-repo": { tabs: ["task-1"], activeTaskId: "task-1" },
+      });
+      const closedTask = createTaskCardFixture({
+        id: "task-1",
+        title: "task-1",
+        status: "closed",
+      });
+      const closedTaskWithoutSession = createTaskCardFixture({
+        id: "task-2",
+        title: "task-2",
+        status: "closed",
+      });
+      const harness = createHookHarness(
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
+          taskId: "task-1",
+          selectedTask: closedTask,
+          tasks: [closedTask, closedTaskWithoutSession],
+          isLoadingTasks: false,
+          isSessionReadModelReady: false,
+          latestSessionByTaskId: new Map(),
+        }),
+      );
+
+      await harness.mount();
+
+      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
+      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
+      expect(harness.getLatest().availableTabTasks).toEqual([]);
+      await harness.unmount();
+    });
   });
 
   test("clearing active repo skips fallback routing and resets tabs", async () => {
@@ -799,6 +904,7 @@ describe("useAgentStudioTaskTabs", () => {
         selectedTask: null,
         tasks: [],
         isLoadingTasks: false,
+        isSessionReadModelReady: true,
         latestSessionByTaskId: new Map(),
         selectAgentStudioSelection: (updates) => {
           updateCalls.push(updates);
