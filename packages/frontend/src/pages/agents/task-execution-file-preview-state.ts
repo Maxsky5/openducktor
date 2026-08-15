@@ -19,6 +19,7 @@ export type TaskExecutionFilePreviewState = {
 export type TaskExecutionFilePreviewAction =
   | { type: "request"; intent: TaskExecutionFilePreviewIntent }
   | { type: "clear" }
+  | { type: "force_clear" }
   | { type: "report_leave_policy"; policy: TaskExecutionFilePreviewLeavePolicy }
   | { type: "keep_editing" }
   | { type: "discard" };
@@ -81,8 +82,22 @@ export const reportTaskExecutionFilePreviewLeavePolicy = (
   if (state.selectedFile === null || state.leavePolicy === policy) {
     return state;
   }
+  if (
+    policy === "allow" &&
+    state.pendingIntent !== null &&
+    state.pendingIntent.type !== "leave_context"
+  ) {
+    return applyPreviewIntent({ ...state, leavePolicy: policy }, state.pendingIntent);
+  }
   return { ...state, leavePolicy: policy };
 };
+
+export const forceClearTaskExecutionFilePreviewState = (
+  state: TaskExecutionFilePreviewState,
+): TaskExecutionFilePreviewState =>
+  state.selectedFile === null
+    ? state
+    : applyPreviewIntent({ ...state, pendingIntent: null }, { type: "close" });
 
 export const keepEditingTaskExecutionFilePreview = (
   state: TaskExecutionFilePreviewState,
@@ -103,6 +118,8 @@ export const taskExecutionFilePreviewReducer = (
       return requestTaskExecutionFilePreviewIntent(state, action.intent);
     case "clear":
       return clearTaskExecutionFilePreviewState(state);
+    case "force_clear":
+      return forceClearTaskExecutionFilePreviewState(state);
     case "report_leave_policy":
       return reportTaskExecutionFilePreviewLeavePolicy(state, action.policy);
     case "keep_editing":

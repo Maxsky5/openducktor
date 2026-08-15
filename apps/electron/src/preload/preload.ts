@@ -23,6 +23,7 @@ import {
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
 } from "../shared/electron-bridge-contract";
+import { readEditorClipboardText } from "./editor-clipboard";
 import { createElectronHostInvoke } from "./electron-host-invoke";
 import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
@@ -120,7 +121,7 @@ const electronApi: OpenDucktorElectronApi = {
   taskStream,
   editorClipboard: {
     readText(type) {
-      return type ? clipboard.read(type) : clipboard.readText();
+      return readEditorClipboardText(clipboard, type);
     },
   },
 };

@@ -509,22 +509,23 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
     codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
+  const hasActiveEditorSession =
+    codeViewFileId !== null && editor.session?.id === codeViewFileId && !isSwitchingFiles;
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];
     }
 
-    const isCurrentEditableItem = editor.session?.id === codeViewFileId && !isSwitchingFiles;
     return [
       {
         id: codeViewFileId,
         type: "file",
         file: visibleSnapshot.codeViewFile.file,
-        edit: isCurrentEditableItem,
-        version: isCurrentEditableItem ? (editor.session?.version ?? 0) + 1 : 0,
+        edit: hasActiveEditorSession,
+        version: hasActiveEditorSession ? (editor.session?.version ?? 0) + 1 : 0,
       },
     ];
-  }, [codeViewFileId, editor.session, isSwitchingFiles, visibleSnapshot]);
+  }, [codeViewFileId, editor.session, hasActiveEditorSession, visibleSnapshot]);
   const createEditor = useCallback(
     (options: EditorOptions<undefined>) => new Editor<undefined>(options),
     [],
@@ -565,8 +566,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
       if (isSave) {
         event.preventDefault();
+        if (hasPendingDiscard) return;
         const canSave =
-          editor.session !== null && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict;
+          hasActiveEditorSession && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict;
         if (canSave) {
           void editor.save();
         }
@@ -583,7 +585,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       editor.isDirty,
       editor.isSaving,
       editor.save,
-      editor.session,
+      hasActiveEditorSession,
       hasPendingDiscard,
       onClose,
     ],
@@ -594,7 +596,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   }
 
   let body: ReactElement;
-  if (isFileError) {
+  if (isFileError && !hasActiveEditorSession) {
     body = <FilePreviewState message={errorMessage(fileError)} />;
   } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
     body = <FilePreviewState message="Loading file..." />;
@@ -628,7 +630,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
         isSwitchingFiles={isSwitchingFiles}
         saveState={resolveFilePreviewSaveState({
-          hasSession: editor.session !== null,
+          hasSession: hasActiveEditorSession,
           isSwitchingFiles,
           isDirty: editor.isDirty,
           isSaving: editor.isSaving,

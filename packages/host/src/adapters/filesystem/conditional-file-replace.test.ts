@@ -111,4 +111,27 @@ describe("conditionallyReplaceOpenFile", () => {
     expect(currentContents).toBe("draft");
     expect(new TextDecoder().decode(replacement.bytes)).toBe("draft");
   });
+
+  test("reports a conflict when the post-write snapshot differs from the draft", async () => {
+    let snapshotCount = 0;
+
+    const replacement = conditionallyReplaceOpenFile({
+      inputPath: "/repo/file.txt",
+      expectedRevision: "original",
+      bytes: encoder.encode("draft"),
+      maxCurrentBytes: 1024,
+      verifyEntry: async () => undefined,
+      snapshot: async () => {
+        snapshotCount += 1;
+        if (snapshotCount === 1) return snapshot("original", "original");
+        return snapshot("external change", "external");
+      },
+      truncate: async () => undefined,
+      write: async () => undefined,
+      sync: async () => undefined,
+    });
+
+    await expect(replacement).rejects.toMatchObject({ code: "stale_revision" });
+    expect(snapshotCount).toBe(2);
+  });
 });

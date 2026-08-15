@@ -76,4 +76,50 @@ describe("useTaskExecutionFilePreviewController", () => {
     expect(applyContextTransition).not.toHaveBeenCalled();
     expect(view.result.current.model.selectedFile).toEqual(firstFile);
   });
+
+  test("coalesces a newer context transition while confirmation is pending", () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController());
+    const firstApply = mock(() => {});
+    const firstCancel = mock(() => {});
+    const secondApply = mock(() => {});
+    const secondCancel = mock(() => {});
+    act(() => view.result.current.onSelectFile(firstFile));
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+
+    act(() => view.result.current.requestContextTransition(firstApply, firstCancel));
+    act(() => view.result.current.requestContextTransition(secondApply, secondCancel));
+    act(() => view.result.current.model.onDiscard());
+
+    expect(firstApply).not.toHaveBeenCalled();
+    expect(firstCancel).toHaveBeenCalledTimes(1);
+    expect(secondApply).toHaveBeenCalledTimes(1);
+    expect(secondCancel).not.toHaveBeenCalled();
+  });
+
+  test("cancels a blocked context transition when a file intent is pending", () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController());
+    const cancelTransition = mock(() => {});
+    act(() => view.result.current.onSelectFile(firstFile));
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+    act(() => view.result.current.onSelectFile({ rootPath: "/repo", relativePath: "second.ts" }));
+
+    act(() => view.result.current.requestContextTransition(() => {}, cancelTransition));
+
+    expect(cancelTransition).toHaveBeenCalledTimes(1);
+  });
+
+  test("force-closes a dirty preview at a repository boundary", () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController());
+    const applyTransition = mock(() => {});
+    act(() => view.result.current.onSelectFile(firstFile));
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+
+    act(() =>
+      view.result.current.requestContextTransition(applyTransition, undefined, { force: true }),
+    );
+
+    expect(applyTransition).toHaveBeenCalledTimes(1);
+    expect(view.result.current.model.selectedFile).toBeNull();
+    expect(view.result.current.model.hasPendingDiscard).toBe(false);
+  });
 });

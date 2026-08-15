@@ -56,7 +56,9 @@ describe("createFilesystemAdapter file snapshots", () => {
     expect(saved.bytes).toEqual(encoder.encode("short"));
     expect(saved.revision).not.toBe(original.revision);
     const savedMetadata = await stat(filePath);
-    expect(savedMetadata.mode & 0o777).toBe(0o640);
+    if (process.platform !== "win32") {
+      expect(savedMetadata.mode & 0o777).toBe(0o640);
+    }
     expect(savedMetadata.ino).toBe(originalMetadata.ino);
   });
 

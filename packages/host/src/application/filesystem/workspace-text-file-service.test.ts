@@ -269,10 +269,45 @@ describe("createWorkspaceTextFileService", () => {
         revision: loaded.revision,
       }),
     );
+    const lateBinary = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: `${"a".repeat(8192)}\0b`,
+        revision: loaded.revision,
+      }),
+    );
 
     expect(oversized.code).toBe("unsupported_file");
     expect(binary.code).toBe("unsupported_file");
+    expect(lateBinary.code).toBe("unsupported_file");
     expect(await readFile(filePath, "utf8")).toBe("before");
+  });
+
+  test("reports a stale revision before classifying changed current contents", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    await writeFile(filePath, "before");
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["file.txt"]),
+    );
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+    await writeFile(filePath, new Uint8Array([0x61, 0, 0x62]));
+
+    const failure = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: "draft",
+        revision: loaded.revision,
+      }),
+    );
+
+    expect(failure.code).toBe("stale_revision");
   });
 
   test("rejects unlisted, missing, and escaping files without creating a target", async () => {
@@ -370,10 +405,8 @@ describe("createWorkspaceTextFileService", () => {
   test("rejects binary, invalid UTF-8, and oversized current files", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");
-    const service = createWorkspaceTextFileService(
-      createFilesystemAdapter(),
-      createGitPort(["file.txt"]),
-    );
+    const filesystem = createFilesystemAdapter();
+    const service = createWorkspaceTextFileService(filesystem, createGitPort(["file.txt"]));
     const cases = [
       new Uint8Array([0x61, 0, 0x62]),
       new Uint8Array([0xc3, 0x28]),
@@ -382,12 +415,15 @@ describe("createWorkspaceTextFileService", () => {
 
     for (const bytes of cases) {
       await writeFile(filePath, bytes);
+      const current = await Effect.runPromise(
+        filesystem.readFileSnapshot(filePath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1),
+      );
       const failure = await writeFailure(
         service.writeTextFile({
           rootPath,
           relativePath: "file.txt",
           contents: "draft",
-          revision: "revision",
+          revision: current.revision,
         }),
       );
       expect(failure.code).toBe("unsupported_file");

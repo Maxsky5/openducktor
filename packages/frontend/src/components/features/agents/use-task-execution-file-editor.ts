@@ -50,7 +50,12 @@ type EditorAction =
       result: WorkspaceTextFileWriteResult;
       isDirty: boolean;
     }
-  | { type: "save_failed"; failure: SaveFailure }
+  | {
+      type: "save_failed";
+      sessionId: string;
+      baselineRevision: string;
+      failure: SaveFailure;
+    }
   | { type: "conflict_review_started" }
   | { type: "conflict_review_loaded"; result: TextFileResult }
   | { type: "conflict_review_failed"; message: string }
@@ -118,6 +123,13 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
         conflictReview: null,
       };
     case "save_failed":
+      if (
+        !state.session ||
+        state.session.id !== action.sessionId ||
+        state.session.baseline.revision !== action.baselineRevision
+      ) {
+        return { ...state, isSaving: false };
+      }
       return { ...state, isSaving: false, saveFailure: action.failure };
     case "conflict_review_started":
       return { ...state, isReviewingConflict: true, conflictReview: null };
@@ -166,6 +178,19 @@ export const useTaskExecutionFileEditor = ({
   const [state, dispatch] = useReducer(editorStateReducer, INITIAL_EDITOR_STATE);
   const draftRef = useRef("");
   const saveInFlightRef = useRef(false);
+  const stateRef = useRef(state);
+  const selectedFileId = selectedFile
+    ? `${selectedFile.rootPath}:${selectedFile.relativePath}`
+    : null;
+  const selectedFileIdRef = useRef(selectedFileId);
+
+  useLayoutEffect(() => {
+    selectedFileIdRef.current = selectedFileId;
+  }, [selectedFileId]);
+
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useLayoutEffect(() => {
     if (!selectedFile || !readyResult) return;
@@ -197,6 +222,7 @@ export const useTaskExecutionFileEditor = ({
     const session = state.session;
     if (
       !session ||
+      session.id !== selectedFileId ||
       !state.isDirty ||
       state.saveFailure?.code === "stale_revision" ||
       saveInFlightRef.current
@@ -215,28 +241,62 @@ export const useTaskExecutionFileEditor = ({
         contents: contentsToSave,
         revision: baselineRevision,
       });
+      const activeSession = stateRef.current.session;
+      const saveStillMatchesActiveSession =
+        selectedFileIdRef.current === session.id &&
+        activeSession?.id === session.id &&
+        activeSession.baseline.revision === baselineRevision;
+      if (!saveStillMatchesActiveSession) {
+        dispatch({
+          type: "save_succeeded",
+          sessionId: session.id,
+          baselineRevision,
+          result: saved,
+          isDirty: false,
+        });
+        return;
+      }
       const latestDraft = draftRef.current;
       const hasNewerDraft = latestDraft !== contentsToSave;
+      const isDirty = hasNewerDraft && latestDraft !== saved.contents;
       if (!hasNewerDraft) draftRef.current = saved.contents;
       dispatch({
         type: "save_succeeded",
         sessionId: session.id,
         baselineRevision,
         result: saved,
-        isDirty: hasNewerDraft && latestDraft !== saved.contents,
+        isDirty,
       });
-      onLeavePolicyChange(hasNewerDraft && latestDraft !== saved.contents ? "confirm" : "allow");
+      onLeavePolicyChange(isDirty ? "confirm" : "allow");
     } catch (cause) {
       const failure = workspaceWriteFailure(cause);
       dispatch({
         type: "save_failed",
+        sessionId: session.id,
+        baselineRevision,
         failure: { code: failure?.code ?? null, message: failure?.message ?? errorMessage(cause) },
       });
-      onLeavePolicyChange(draftRef.current !== session.baseline.contents ? "confirm" : "allow");
+      const activeSession = stateRef.current.session;
+      if (
+        selectedFileIdRef.current === session.id &&
+        activeSession?.id === session.id &&
+        activeSession.baseline.revision === baselineRevision
+      ) {
+        onLeavePolicyChange(
+          draftRef.current !== activeSession.baseline.contents ? "confirm" : "allow",
+        );
+      }
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [mutation, onLeavePolicyChange, state.isDirty, state.saveFailure?.code, state.session]);
+  }, [
+    mutation,
+    onLeavePolicyChange,
+    selectedFileId,
+    state.isDirty,
+    state.saveFailure?.code,
+    state.session,
+  ]);
 
   const reviewLatestVersion = useCallback(async (): Promise<void> => {
     const session = state.session;

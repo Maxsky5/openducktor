@@ -45,6 +45,11 @@ const validateExpectedSnapshot = (
   }
 };
 
+const bytesEqual = (left: Uint8Array, right: Uint8Array): boolean => {
+  if (left.byteLength !== right.byteLength) return false;
+  return left.every((byte, index) => byte === right[index]);
+};
+
 export const conditionallyReplaceOpenFile = async (
   input: ConditionalFileReplaceInput,
 ): Promise<FilesystemFileSnapshot> => {
@@ -58,5 +63,14 @@ export const conditionallyReplaceOpenFile = async (
   await input.truncate();
   await input.write(input.bytes);
   await input.sync();
-  return input.snapshot();
+  const saved = await input.snapshot();
+  if (!bytesEqual(saved.bytes, input.bytes)) {
+    throw new FilesystemFileOperationError({
+      code: "stale_revision",
+      operation: "replace",
+      path: input.inputPath,
+      message: "The file changed before the saved contents could be confirmed.",
+    });
+  }
+  return saved;
 };

@@ -42,16 +42,18 @@ export const workspaceFileTreeSchema = z.object({
 });
 export type WorkspaceFileTree = z.infer<typeof workspaceFileTreeSchema>;
 
+const workspaceTextFileTextResultSchema = z.object({
+  kind: z.literal("text"),
+  rootPath: z.string().min(1),
+  relativePath: z.string().min(1),
+  contents: z.string(),
+  size: z.number().nonnegative(),
+  mtimeMs: z.number().nonnegative().nullable(),
+  revision: z.string().min(1),
+});
+
 export const workspaceTextFileReadResultSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("text"),
-    rootPath: z.string().min(1),
-    relativePath: z.string().min(1),
-    contents: z.string(),
-    size: z.number().nonnegative(),
-    mtimeMs: z.number().nonnegative().nullable(),
-    revision: z.string().min(1),
-  }),
+  workspaceTextFileTextResultSchema,
   z.object({
     kind: z.literal("unsupported"),
     rootPath: z.string().min(1),
@@ -74,7 +76,7 @@ export const workspaceTextFileWriteInputSchema = z
   .strict();
 export type WorkspaceTextFileWriteInput = z.infer<typeof workspaceTextFileWriteInputSchema>;
 
-export const workspaceTextFileWriteResultSchema = workspaceTextFileReadResultSchema.options[0];
+export const workspaceTextFileWriteResultSchema = workspaceTextFileTextResultSchema.strict();
 export type WorkspaceTextFileWriteResult = z.infer<typeof workspaceTextFileWriteResultSchema>;
 
 export const workspaceTextFileWriteFailureCodeSchema = z.enum([

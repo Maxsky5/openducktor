@@ -21,6 +21,6 @@ describe("Electron preload policy", () => {
     const source = readPreloadSource();
 
     expect(source).toContain("const { clipboard, contextBridge, ipcRenderer } = electron");
-    expect(source).toContain("return type ? clipboard.read(type) : clipboard.readText()");
+    expect(source).toContain("return readEditorClipboardText(clipboard, type)");
   });
 });

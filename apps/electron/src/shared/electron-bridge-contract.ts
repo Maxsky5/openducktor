@@ -28,6 +28,9 @@ export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update
 export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
   "OpenDucktor is shutting down. The requested command was not run.";
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
+export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
+  "application/vnd.pierre.diffs-selections+json" as const;
+export type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
 export const ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL = "openducktor:task-stream:subscribe";
@@ -141,6 +144,6 @@ export type OpenDucktorElectronApi = {
   terminals: OpenDucktorElectronTerminalApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
   editorClipboard: {
-    readText(type?: string): string;
+    readText(type?: EditorClipboardReadType): string;
   };
 };

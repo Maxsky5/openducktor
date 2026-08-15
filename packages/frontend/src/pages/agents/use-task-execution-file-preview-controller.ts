@@ -12,7 +12,11 @@ import {
 export type UseTaskExecutionFilePreviewControllerResult = {
   model: TaskExecutionSelectedFilePreviewModel;
   onSelectFile(file: TaskExecutionSelectedFile): void;
-  requestContextTransition(applyTransition: () => void, cancelTransition?: () => void): void;
+  requestContextTransition(
+    applyTransition: () => void,
+    cancelTransition?: () => void,
+    options?: { force: boolean },
+  ): void;
 };
 
 type PendingContextTransition = {
@@ -60,22 +64,51 @@ export const useTaskExecutionFilePreviewController =
       transition?.cancel?.();
     }, []);
     const onDiscard = useCallback(() => {
-      const transition =
-        stateRef.current.pendingIntent?.type === "leave_context"
-          ? pendingContextTransitionRef.current
-          : null;
+      const pendingIntent = stateRef.current.pendingIntent;
+      const transition = pendingContextTransitionRef.current;
       pendingContextTransitionRef.current = null;
       dispatch({ type: "discard" });
-      transition?.apply();
+      if (pendingIntent?.type === "leave_context") {
+        transition?.apply();
+        return;
+      }
+      transition?.cancel?.();
     }, []);
     const requestContextTransition = useCallback(
-      (applyTransition: () => void, cancelTransition?: () => void) => {
+      (
+        applyTransition: () => void,
+        cancelTransition?: () => void,
+        options?: { force: boolean },
+      ) => {
         const currentState = stateRef.current;
         if (currentState.selectedFile === null) {
           applyTransition();
           return;
         }
-        if (currentState.pendingIntent !== null || pendingContextTransitionRef.current !== null) {
+        const storedTransition = pendingContextTransitionRef.current;
+        if (options?.force) {
+          pendingContextTransitionRef.current = null;
+          dispatch({ type: "force_clear" });
+          storedTransition?.cancel?.();
+          applyTransition();
+          return;
+        }
+        if (
+          storedTransition !== null &&
+          (currentState.pendingIntent === null ||
+            currentState.pendingIntent.type === "leave_context")
+        ) {
+          storedTransition.cancel?.();
+          pendingContextTransitionRef.current = {
+            apply: applyTransition,
+            cancel: cancelTransition ?? null,
+          };
+          return;
+        }
+        if (currentState.pendingIntent !== null || storedTransition !== null) {
+          storedTransition?.cancel?.();
+          pendingContextTransitionRef.current = null;
+          cancelTransition?.();
           return;
         }
         if (currentState.leavePolicy === "allow") {

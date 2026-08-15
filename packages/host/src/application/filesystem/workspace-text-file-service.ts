@@ -45,8 +45,8 @@ export type WorkspaceTextFileService = {
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
-const isBinaryBytes = (bytes: Uint8Array): boolean => {
-  const sampleLength = Math.min(bytes.byteLength, 8192);
+const isBinaryBytes = (bytes: Uint8Array, maxBytes = 8192): boolean => {
+  const sampleLength = Math.min(bytes.byteLength, maxBytes);
   for (let index = 0; index < sampleLength; index += 1) {
     if (bytes[index] === 0) {
       return true;
@@ -248,7 +248,7 @@ export const createWorkspaceTextFileService = (
           ),
         );
       }
-      if (isBinaryBytes(bytes)) {
+      if (isBinaryBytes(bytes, bytes.byteLength)) {
         return yield* Effect.fail(
           unsupportedWrite("Binary contents cannot be saved as text.", input),
         );
@@ -282,14 +282,6 @@ export const createWorkspaceTextFileService = (
       const current = yield* filesystem
         .readFileSnapshot(canonicalPath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1)
         .pipe(Effect.mapError((cause) => mapFileOperationFailure(cause, canonicalInput)));
-      if (current.bytes.byteLength > MAX_WORKSPACE_TEXT_FILE_BYTES) {
-        return yield* Effect.fail(
-          unsupportedWrite("The current file is too large to edit.", canonicalInput),
-        );
-      }
-      yield* readSnapshotAsText(current, canonicalInput).pipe(
-        Effect.mapError((cause) => unsupportedWrite(cause.message, canonicalInput)),
-      );
       if (current.revision !== input.revision) {
         return yield* Effect.fail(
           writeFailure(
@@ -299,7 +291,14 @@ export const createWorkspaceTextFileService = (
           ),
         );
       }
-
+      if (current.bytes.byteLength > MAX_WORKSPACE_TEXT_FILE_BYTES) {
+        return yield* Effect.fail(
+          unsupportedWrite("The current file is too large to edit.", canonicalInput),
+        );
+      }
+      yield* readSnapshotAsText(current, canonicalInput).pipe(
+        Effect.mapError((cause) => unsupportedWrite(cause.message, canonicalInput)),
+      );
       const saved = yield* filesystem
         .replaceFileBytes({
           canonicalRootPath: canonicalRoot,

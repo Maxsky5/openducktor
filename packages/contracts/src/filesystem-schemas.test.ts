@@ -45,6 +45,12 @@ describe("workspace text file contracts", () => {
     ).toBe(false);
   });
 
+  test("rejects unknown write result fields", () => {
+    expect(
+      workspaceTextFileWriteResultSchema.safeParse({ ...textResult, unexpected: true }).success,
+    ).toBe(false);
+  });
+
   test("parses structured workspace write failures", () => {
     expect(
       hostInvokeFailureSchema.parse({

@@ -57,6 +57,24 @@ describe("task execution file preview state", () => {
     });
   });
 
+  test("applies a pending file switch when the draft becomes clean", () => {
+    const opened = requestTaskExecutionFilePreviewIntent(createTaskExecutionFilePreviewState(), {
+      type: "select",
+      file: firstFile,
+    });
+    const dirty = reportTaskExecutionFilePreviewLeavePolicy(opened, "confirm");
+    const pending = requestTaskExecutionFilePreviewIntent(dirty, {
+      type: "select",
+      file: secondFile,
+    });
+
+    expect(reportTaskExecutionFilePreviewLeavePolicy(pending, "allow")).toMatchObject({
+      selectedFile: secondFile,
+      leavePolicy: "allow",
+      pendingIntent: null,
+    });
+  });
+
   test("ignores close and switch requests while saving", () => {
     const opened = requestTaskExecutionFilePreviewIntent(createTaskExecutionFilePreviewState(), {
       type: "select",

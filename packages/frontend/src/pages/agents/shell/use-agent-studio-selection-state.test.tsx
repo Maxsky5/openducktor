@@ -127,6 +127,75 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 
+  test("applies the latest external route after a newer navigation arrives", async () => {
+    let firstApplyTransition: (() => void) | null = null;
+    const requestContextTransition = mock((apply: () => void) => {
+      firstApplyTransition ??= apply;
+    });
+    const harness = createHookHarness(baseProps({ requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(baseProps({ taskIdParam: "task-2", requestContextTransition }));
+    await harness.update(baseProps({ taskIdParam: "task-3", requestContextTransition }));
+    await harness.run(() => firstApplyTransition?.());
+
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-3"));
+    await harness.unmount();
+  });
+
+  test("does not restore a route superseded by a newer external navigation", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    const cancelTransitions: Array<() => void> = [];
+    const requestContextTransition = mock((_apply: () => void, cancel?: () => void) => {
+      if (cancel) cancelTransitions.push(cancel);
+    });
+    const harness = createHookHarness(baseProps({ scheduleQueryUpdate, requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(
+      baseProps({
+        taskIdParam: "task-2",
+        scheduleQueryUpdate,
+        requestContextTransition,
+      }),
+    );
+    await harness.update(
+      baseProps({
+        taskIdParam: "task-3",
+        scheduleQueryUpdate,
+        requestContextTransition,
+      }),
+    );
+    await harness.run(() => cancelTransitions[0]?.());
+
+    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+    await harness.run(() => cancelTransitions[1]?.());
+    expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      task: "task-1",
+      session: undefined,
+      agent: undefined,
+    });
+    await harness.unmount();
+  });
+
+  test("forces the transition while a repository boundary is pending", async () => {
+    const options: unknown[] = [];
+    const requestContextTransition = mock(
+      (_apply: () => void, _cancel?: () => void, transitionOptions?: unknown) => {
+        options.push(transitionOptions);
+      },
+    );
+    const harness = createHookHarness(baseProps({ requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(
+      baseProps({ isRepoNavigationBoundaryPending: true, requestContextTransition }),
+    );
+
+    expect(options.at(-1)).toEqual({ force: true });
+    await harness.unmount();
+  });
+
   test("publishes selected session state immediately and mirrors it to the query", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const harness = createHookHarness(baseProps({ scheduleQueryUpdate }));

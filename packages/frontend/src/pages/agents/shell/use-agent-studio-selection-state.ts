@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectionState,
@@ -16,7 +16,11 @@ type UseAgentStudioSelectionStateArgs = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
-  requestContextTransition: (applyTransition: () => void, cancelTransition?: () => void) => void;
+  requestContextTransition: (
+    applyTransition: () => void,
+    cancelTransition?: () => void,
+    options?: { force: boolean },
+  ) => void;
 };
 
 type SelectionStateSnapshot = {
@@ -63,8 +67,21 @@ export function useAgentStudioSelectionState({
     routeQueryKey: routeSelectionQueryKey,
     selection: routeSelection,
   }));
+  const latestTransitionStateRef = useRef({
+    routeSelection,
+    routeSelectionQueryKey,
+    snapshot,
+  });
 
   const selection = snapshot.selection;
+
+  useLayoutEffect(() => {
+    latestTransitionStateRef.current = {
+      routeSelection,
+      routeSelectionQueryKey,
+      snapshot,
+    };
+  }, [routeSelection, routeSelectionQueryKey, snapshot]);
 
   useLayoutEffect(() => {
     if (snapshot.routeQueryKey === routeSelectionQueryKey) {
@@ -78,20 +95,27 @@ export function useAgentStudioSelectionState({
       });
       return;
     }
+    const requestedRouteQueryKey = routeSelectionQueryKey;
     requestContextTransition(
       () => {
+        const latest = latestTransitionStateRef.current;
         setSnapshot({
-          routeQueryKey: routeSelectionQueryKey,
-          selection: routeSelection,
+          routeQueryKey: latest.routeSelectionQueryKey,
+          selection: latest.routeSelection,
         });
       },
       () => {
-        scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(snapshot.selection));
+        const latest = latestTransitionStateRef.current;
+        if (latest.routeSelectionQueryKey !== requestedRouteQueryKey) return;
+        scheduleQueryUpdate(
+          buildAgentStudioSelectionQueryUpdateFromState(latest.snapshot.selection),
+        );
       },
+      { force: isRepoNavigationBoundaryPending },
     );
   }, [
+    isRepoNavigationBoundaryPending,
     requestContextTransition,
-    routeSelection,
     routeSelectionQueryKey,
     scheduleQueryUpdate,
     snapshot,
