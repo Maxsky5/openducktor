@@ -28,11 +28,8 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
 
   const isBranchPickerDisabled =
     isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
-  const branchPlaceholder = activeBranch?.detached
-    ? "Detached HEAD"
-    : isLoadingBranches
-      ? "Loading branches..."
-      : "Select branch...";
+  const defaultBranchPlaceholder = isLoadingBranches ? "Loading branches..." : "Select branch...";
+  const branchPlaceholder = activeBranch?.detached ? "Detached HEAD" : defaultBranchPlaceholder;
 
   return (
     <div className="space-y-2">

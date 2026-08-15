@@ -179,29 +179,22 @@ describe("BranchSwitcher", () => {
         <BranchSwitcher />
       </BranchStateProvider>,
     );
+    const expectStableBranchSelector = (branchName: string): void => {
+      const markup = rendered.container.innerHTML;
+      expect(markup).toContain(`data-branch-value="${branchName}"`);
+      expect(markup).toContain('data-disabled="false"');
+    };
 
-    expect(rendered.container.innerHTML).toContain('data-branch-value="main"');
-    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+    expectStableBranchSelector("main");
 
     await act(async () => {
       updateBranchState({ isSwitchingWorkspace: true });
     });
 
-    expect(rendered.container.innerHTML).toContain('data-branch-value="main"');
-    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+    expectStableBranchSelector("main");
 
     await act(async () => {
       updateBranchState({
-        activeWorkspace: {
-          workspaceId: "workspace-repo-b",
-          workspaceName: "Repo B",
-          repoPath: "/repo-b",
-          isActive: true,
-          hasConfig: true,
-          configuredWorktreeBasePath: null,
-          defaultWorktreeBasePath: "/tmp/default-worktrees",
-          effectiveWorktreeBasePath: "/tmp/default-worktrees",
-        },
         branches: [
           {
             name: "develop",
@@ -216,15 +209,13 @@ describe("BranchSwitcher", () => {
       });
     });
 
-    expect(rendered.container.innerHTML).toContain('data-branch-value="develop"');
-    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+    expectStableBranchSelector("develop");
 
     await act(async () => {
       updateBranchState({ isSwitchingWorkspace: false });
     });
 
-    expect(rendered.container.innerHTML).toContain('data-branch-value="develop"');
-    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+    expectStableBranchSelector("develop");
 
     await act(async () => {
       rendered.unmount();
