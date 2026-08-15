@@ -20,7 +20,6 @@ export function useAgentStudioTaskTabs(args: {
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  isSessionReadModelReady: boolean;
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
@@ -45,7 +44,6 @@ export function useAgentStudioTaskTabs(args: {
     selectedTask,
     tasks,
     isLoadingTasks,
-    isSessionReadModelReady,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
@@ -56,26 +54,20 @@ export function useAgentStudioTaskTabs(args: {
   const [loadedTabsStorageWorkspaceId, setLoadedTabsStorageWorkspaceId] = useState<string | null>(
     null,
   );
+  const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
 
   const selectableTaskIds = useMemo(
     () =>
       new Set(
         tasks.reduce<string[]>((taskIds, task) => {
-          if (
-            task.status !== "closed" ||
-            !isSessionReadModelReady ||
-            latestSessionByTaskId.has(task.id)
-          ) {
+          if (task.status !== "closed") {
             taskIds.push(task.id);
           }
           return taskIds;
         }, []),
       ),
-    [isSessionReadModelReady, latestSessionByTaskId, tasks],
+    [tasks],
   );
-  const selectedTaskIsUnavailable =
-    selectedTask?.status === "closed" && !selectableTaskIds.has(selectedTask.id);
-  const taskIdForTabs = selectedTaskIsUnavailable ? "" : taskId;
   const selectableOpenTaskTabs = useMemo(
     () => openTaskTabs.filter((taskTabId) => selectableTaskIds.has(taskTabId)),
     [openTaskTabs, selectableTaskIds],
@@ -121,7 +113,7 @@ export function useAgentStudioTaskTabs(args: {
     activeWorkspaceId,
     taskId: taskIdForTabs,
     selectedTask,
-    selectableTaskIds,
+    tasks,
     isLoadingTasks,
     openTaskTabs,
     loadedTabsStorageWorkspaceId,
@@ -132,12 +124,8 @@ export function useAgentStudioTaskTabs(args: {
   });
 
   const availableTabTasks = useMemo(
-    () =>
-      getAvailableTabTasks(
-        tasks.filter((task) => task.status !== "closed" || latestSessionByTaskId.has(task.id)),
-        tabTaskIds,
-      ),
-    [latestSessionByTaskId, tabTaskIds, tasks],
+    () => getAvailableTabTasks(tasks, tabTaskIds),
+    [tabTaskIds, tasks],
   );
 
   const taskTabs = useMemo(

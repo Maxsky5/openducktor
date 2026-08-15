@@ -592,7 +592,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("sends to an existing QA session after the task closes", async () => {
+  test("sends to an existing QA session after the task status changes", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
@@ -612,7 +612,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         current: [
           createTaskCardFixture({
             id: "task-1",
-            status: "closed",
+            status: "in_progress",
             agentWorkflows: {
               spec: { required: false, canSkip: true, available: true, completed: false },
               planner: { required: false, canSkip: true, available: true, completed: false },

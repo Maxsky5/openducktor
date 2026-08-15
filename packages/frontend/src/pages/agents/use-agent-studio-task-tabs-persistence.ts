@@ -36,7 +36,7 @@ type UseTaskTabPersistenceArgs = {
   activeWorkspaceId: string | null;
   taskId: string;
   selectedTask: TaskCard | null;
-  selectableTaskIds: ReadonlySet<string>;
+  tasks: TaskCard[];
   isLoadingTasks: boolean;
   openTaskTabs: string[];
   loadedTabsStorageWorkspaceId: string | null;
@@ -55,7 +55,7 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     activeWorkspaceId,
     taskId,
     selectedTask,
-    selectableTaskIds,
+    tasks,
     isLoadingTasks,
     openTaskTabs,
     loadedTabsStorageWorkspaceId,
@@ -89,14 +89,22 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     if (isLoadingTasks) {
       return;
     }
+    const openTaskIds = new Set(
+      tasks.reduce<string[]>((taskIds, task) => {
+        if (task.status !== "closed") {
+          taskIds.push(task.id);
+        }
+        return taskIds;
+      }, []),
+    );
     setOpenTaskTabs((current) => {
-      const filtered = current.filter((taskTabId) => selectableTaskIds.has(taskTabId));
+      const filtered = current.filter((taskTabId) => openTaskIds.has(taskTabId));
       if (filtered.length === current.length) {
         return current;
       }
       return filtered;
     });
-  }, [isLoadingTasks, selectableTaskIds, setOpenTaskTabs]);
+  }, [isLoadingTasks, setOpenTaskTabs, tasks]);
 
   useEffect(() => {
     if (!taskId) {
@@ -105,7 +113,7 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
     if (!selectedTask) {
       return;
     }
-    if (!selectableTaskIds.has(taskId)) {
+    if (selectedTask.status === "closed") {
       return;
     }
     setOpenTaskTabs((current) => {
@@ -114,7 +122,7 @@ export function useTaskTabPersistence(args: UseTaskTabPersistenceArgs): void {
       }
       return [...current, taskId];
     });
-  }, [selectableTaskIds, selectedTask, setOpenTaskTabs, taskId]);
+  }, [selectedTask, setOpenTaskTabs, taskId]);
 
   useEffect(() => {
     if (!canPersistTaskTabs(activeWorkspaceId, loadedTabsStorageWorkspaceId)) {

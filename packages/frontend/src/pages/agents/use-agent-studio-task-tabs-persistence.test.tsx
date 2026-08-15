@@ -19,12 +19,10 @@ type HookArgs = Omit<
   Parameters<typeof useTaskTabPersistence>[0],
   | "openTaskTabs"
   | "loadedTabsStorageWorkspaceId"
-  | "selectableTaskIds"
   | "setOpenTaskTabs"
   | "resetLoadedTaskTabsStorage"
   | "applyLoadedTaskTabsStorage"
 > & {
-  tasks: TaskCard[];
   initialOpenTaskTabs?: string[];
   initialPersistedActiveTaskId?: string | null;
   initialLoadedTabsStorageWorkspaceId?: string | null;
@@ -129,9 +127,7 @@ const useTaskTabPersistenceHarness = (props: HookArgs) => {
     activeWorkspaceId: props.activeWorkspaceId,
     taskId: props.taskId,
     selectedTask: props.selectedTask,
-    selectableTaskIds: new Set(
-      props.tasks.filter((task) => task.status !== "closed").map((task) => task.id),
-    ),
+    tasks: props.tasks,
     isLoadingTasks: props.isLoadingTasks,
     activeTaskTabId: props.activeTaskTabId,
     openTaskTabs,
