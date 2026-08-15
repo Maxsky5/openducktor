@@ -77,7 +77,7 @@ describe("build tools", () => {
     expect(styles?.children).not.toContain("gradient");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
-    expect(splash?.children).not.toContain("Preparing your workspace");
+    expect(splash?.children).not.toContain("odt-startup__title");
     expect(splash?.children).toContain("./favicon.svg");
   });
 });

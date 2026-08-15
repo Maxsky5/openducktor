@@ -9,7 +9,7 @@ if (typeof document === "undefined") {
 const renderStartupSplash = (): HTMLElement => {
   document.body.innerHTML = `
     <div id="openducktor-startup" class="odt-startup" role="status">
-      <p data-odt-startup-status>Preparing your workspace</p>
+      <p data-odt-startup-status></p>
     </div>
   `;
   const splash = document.getElementById("openducktor-startup");

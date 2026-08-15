@@ -3,8 +3,7 @@ export const OPEN_DUCKTOR_STARTUP_BACKGROUND = "#ffffff";
 const STARTUP_SPLASH_STYLES = `
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
-  --odt-startup-foreground: #5100ff;
-  --odt-startup-line: rgba(81, 0, 255, 0.16);
+  --odt-startup-primary: #5100ff;
 }
 
 html,
@@ -25,7 +24,7 @@ body {
   place-items: center;
   overflow: hidden;
   background: var(--odt-startup-background);
-  color: var(--odt-startup-foreground);
+  color: var(--odt-startup-primary);
   font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   opacity: 1;
   transition: opacity 160ms ease-out;
@@ -36,137 +35,131 @@ body {
   opacity: 0;
 }
 
-.odt-startup__content {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  justify-items: center;
-  gap: 3rem;
-  padding: 2rem;
-  text-align: center;
-}
-
 .odt-startup__stage {
   position: relative;
   display: grid;
-  width: 5rem;
-  height: 5rem;
+  width: 15rem;
+  height: 15rem;
   place-items: center;
 }
 
-.odt-startup__stage::before {
+.odt-startup__field {
   position: absolute;
-  width: 12.5rem;
-  height: 12.5rem;
-  border-radius: 50%;
+  width: 14.5rem;
+  height: 14.5rem;
+  border-radius: 4.5rem;
   background: rgba(81, 0, 255, 0.025);
-  content: "";
+  transform: rotate(9deg);
+  animation: odt-startup-field 6s ease-in-out infinite alternate;
 }
 
-.odt-startup__ring,
-.odt-startup__orbit {
+.odt-startup__field--inner {
+  width: 11.5rem;
+  height: 11.5rem;
+  border: 1px solid rgba(81, 0, 255, 0.09);
+  border-radius: 3.75rem;
+  background: transparent;
+  transform: rotate(-8deg);
+  animation-name: odt-startup-field-inner;
+  animation-direction: alternate-reverse;
+  animation-duration: 7s;
+}
+
+.odt-startup__pulse {
   position: absolute;
-  width: 8rem;
-  height: 8rem;
+  width: 8.5rem;
+  height: 8.5rem;
   box-sizing: border-box;
-  border-radius: 50%;
+  border: 1px solid rgba(81, 0, 255, 0.18);
+  border-radius: 2.625rem;
+  opacity: 0;
+  animation: odt-startup-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-.odt-startup__ring {
-  border: 1px solid var(--odt-startup-line);
-}
-
-.odt-startup__ring--outer {
-  width: 10rem;
-  height: 10rem;
-  border-color: rgba(81, 0, 255, 0.08);
-}
-
-.odt-startup__orbit {
-  animation: odt-startup-spin 8s linear infinite;
-}
-
-.odt-startup__orbit::after {
-  position: absolute;
-  top: -0.25rem;
-  left: 50%;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--odt-startup-foreground);
-  content: "";
-  transform: translateX(-50%);
-}
-
-.odt-startup__orbit--second {
-  animation-delay: -2.67s;
-}
-
-.odt-startup__orbit--second::after {
-  top: -0.21875rem;
-  width: 0.375rem;
-  height: 0.375rem;
-  background: rgba(81, 0, 255, 0.72);
-}
-
-.odt-startup__orbit--third {
-  animation-delay: -5.33s;
-}
-
-.odt-startup__orbit--third::after {
-  top: -0.1875rem;
-  width: 0.3125rem;
-  height: 0.3125rem;
-  background: rgba(81, 0, 255, 0.48);
+.odt-startup__pulse--second {
+  animation-delay: 1.4s;
 }
 
 .odt-startup__mark {
   position: relative;
-  display: grid;
-  width: 4.5rem;
-  height: 4.5rem;
-  place-items: center;
-  animation: odt-startup-breathe 3s ease-in-out infinite;
-  border-radius: 1.125rem;
-  box-shadow: 0 1.25rem 3rem rgba(81, 0, 255, 0.16);
+  z-index: 1;
+  width: 7rem;
+  height: 7rem;
+  animation: odt-startup-breathe 3.2s ease-in-out infinite;
+  border-radius: 2rem;
+  box-shadow: 0 1.75rem 4rem rgba(81, 0, 255, 0.18);
+}
+
+.odt-startup__mark::before {
+  position: absolute;
+  inset: -0.5rem;
+  z-index: -1;
+  border-radius: 2.375rem;
+  background: rgba(81, 0, 255, 0.055);
+  content: "";
 }
 
 .odt-startup__mark img {
   display: block;
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 1.125rem;
-}
-
-.odt-startup__title {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
+  width: 7rem;
+  height: 7rem;
+  border-radius: 2rem;
 }
 
 .odt-startup__failure {
+  position: absolute;
+  top: calc(50% + 7.75rem);
   display: none;
-  max-width: 24rem;
-  margin: -1.75rem 0 0;
+  width: min(24rem, calc(100vw - 3rem));
+  margin: 0;
   color: rgba(81, 0, 255, 0.72);
   font-size: 0.875rem;
   line-height: 1.5;
+  text-align: center;
 }
 
-.odt-startup--failed .odt-startup__orbit,
+.odt-startup--failed .odt-startup__field,
 .odt-startup--failed .odt-startup__mark {
   animation: none;
+}
+
+.odt-startup--failed .odt-startup__pulse {
+  display: none;
 }
 
 .odt-startup--failed .odt-startup__failure {
   display: block;
 }
 
-@keyframes odt-startup-spin {
+@keyframes odt-startup-field {
+  from {
+    transform: rotate(9deg) scale(0.985);
+  }
+
   to {
-    transform: rotate(360deg);
+    transform: rotate(13deg) scale(1.015);
+  }
+}
+
+@keyframes odt-startup-field-inner {
+  from {
+    transform: rotate(-8deg) scale(0.99);
+  }
+
+  to {
+    transform: rotate(-12deg) scale(1.01);
+  }
+}
+
+@keyframes odt-startup-pulse {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.62);
   }
 }
 
@@ -177,7 +170,7 @@ body {
   }
 
   50% {
-    transform: scale(1.045);
+    transform: scale(1.035);
   }
 }
 
@@ -186,28 +179,34 @@ body {
     transition: none;
   }
 
-  .odt-startup__orbit,
+  .odt-startup__field,
   .odt-startup__mark {
     animation: none;
+  }
+
+  .odt-startup__pulse {
+    opacity: 0.14;
+    animation: none;
+    transform: scale(1.4);
+  }
+
+  .odt-startup__pulse--second {
+    display: none;
   }
 }
 `;
 
 const STARTUP_SPLASH_MARKUP = `
-<div class="odt-startup__content">
-  <div class="odt-startup__stage" aria-hidden="true">
-    <div class="odt-startup__ring"></div>
-    <div class="odt-startup__ring odt-startup__ring--outer"></div>
-    <div class="odt-startup__orbit"></div>
-    <div class="odt-startup__orbit odt-startup__orbit--second"></div>
-    <div class="odt-startup__orbit odt-startup__orbit--third"></div>
-    <div class="odt-startup__mark">
-      <img src="./favicon.svg" alt="" width="72" height="72" />
-    </div>
+<div class="odt-startup__stage">
+  <div class="odt-startup__field" aria-hidden="true"></div>
+  <div class="odt-startup__field odt-startup__field--inner" aria-hidden="true"></div>
+  <div class="odt-startup__pulse" aria-hidden="true"></div>
+  <div class="odt-startup__pulse odt-startup__pulse--second" aria-hidden="true"></div>
+  <div class="odt-startup__mark" aria-hidden="true">
+    <img src="./favicon.svg" alt="" width="112" height="112" />
   </div>
-  <p class="odt-startup__title">OpenDucktor</p>
-  <p class="odt-startup__failure" data-odt-startup-status></p>
 </div>
+<p class="odt-startup__failure" data-odt-startup-status></p>
 `;
 
 type StartupSplashHtmlTag = {
