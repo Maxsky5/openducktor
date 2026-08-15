@@ -846,6 +846,75 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
   });
 
+  test("restores accepted conflict contents after a clean editor remount", async () => {
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileResult(firstFile, "const first = true;"),
+    );
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileResult(firstFile, "const external = true;"),
+    );
+    writeTextFileMock.mockImplementationOnce(async () => {
+      throw new HostInvokeError("The file changed after it was loaded.", {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: {
+          code: "stale_revision",
+          message: "The file changed after it was loaded.",
+          rootPath: firstFile.rootPath,
+          relativePath: firstFile.relativePath,
+        },
+      });
+    });
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const firstItem = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(firstItem, {
+        ...firstItem?.file,
+        contents: "const external = true;",
+      });
+    });
+
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
+    await screen.findByText("The file changed after it was loaded.");
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+    await screen.findByRole("dialog", { name: "Review latest file" });
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Use latest as baseline" })),
+    );
+    await waitForCleanFile();
+
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Refresh failed.");
+    });
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+    await screen.findByText("Refresh failed.");
+    expect(screen.queryByTestId("mock-code-view")).toBeNull();
+
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileResult(firstFile, "const external = true;"),
+    );
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+
+    await screen.findByText("const external = true;");
+    expect(latestCodeViewProps?.items[0]).toMatchObject({
+      version: firstItem?.version,
+      file: {
+        cacheKey: firstItem?.file.cacheKey,
+        contents: "const external = true;",
+      },
+    });
+    expect(codeViewMountCount).toBe(2);
+  });
+
   test("ignores a conflict review that resolves after another file is selected", async () => {
     const pendingReview = createDeferred<WorkspaceTextFileReadResult>();
     writeTextFileMock.mockImplementationOnce(async () => {

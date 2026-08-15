@@ -171,7 +171,11 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
       if (!state.session) return state;
       return {
         ...state,
-        session: { ...state.session, baseline: action.result },
+        session: {
+          ...state.session,
+          baseline: action.result,
+          source: { ...action.result, revision: state.session.source.revision },
+        },
         isDirty: action.isDirty,
         saveFailure: null,
         conflictReview: null,
