@@ -35,6 +35,12 @@ body {
   opacity: 0;
 }
 
+.odt-startup__content {
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+}
+
 .odt-startup__stage {
   position: relative;
   display: grid;
@@ -106,9 +112,17 @@ body {
   border-radius: 2rem;
 }
 
+.odt-startup__title {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
 .odt-startup__failure {
   position: absolute;
-  top: calc(50% + 7.75rem);
+  top: calc(50% + 10rem);
   display: none;
   width: min(24rem, calc(100vw - 3rem));
   margin: 0;
@@ -197,14 +211,17 @@ body {
 `;
 
 const STARTUP_SPLASH_MARKUP = `
-<div class="odt-startup__stage">
-  <div class="odt-startup__field" aria-hidden="true"></div>
-  <div class="odt-startup__field odt-startup__field--inner" aria-hidden="true"></div>
-  <div class="odt-startup__pulse" aria-hidden="true"></div>
-  <div class="odt-startup__pulse odt-startup__pulse--second" aria-hidden="true"></div>
-  <div class="odt-startup__mark" aria-hidden="true">
-    <img src="./favicon.svg" alt="" width="112" height="112" />
+<div class="odt-startup__content">
+  <div class="odt-startup__stage">
+    <div class="odt-startup__field" aria-hidden="true"></div>
+    <div class="odt-startup__field odt-startup__field--inner" aria-hidden="true"></div>
+    <div class="odt-startup__pulse" aria-hidden="true"></div>
+    <div class="odt-startup__pulse odt-startup__pulse--second" aria-hidden="true"></div>
+    <div class="odt-startup__mark" aria-hidden="true">
+      <img src="./favicon.svg" alt="" width="112" height="112" />
+    </div>
   </div>
+  <p class="odt-startup__title">OpenDucktor</p>
 </div>
 <p class="odt-startup__failure" data-odt-startup-status></p>
 `;
