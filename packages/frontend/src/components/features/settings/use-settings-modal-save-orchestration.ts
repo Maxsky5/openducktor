@@ -1,4 +1,8 @@
-import type { SettingsSnapshot, SettingsSnapshotSaveInput } from "@openducktor/contracts";
+import type {
+  RuntimeKind,
+  SettingsSnapshot,
+  SettingsSnapshotSaveInput,
+} from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -28,6 +32,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   reusablePromptValidationErrorCount: number;
   hasRuntimeAvailabilityErrors: boolean;
   runtimeAvailabilityErrorCount: number;
+  invalidRuntimeKind: RuntimeKind | null;
+  onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
   isRuntimeRequestPending: boolean;
   runtimeRequestError: string | null;
   hasUnacknowledgedCodexDangerousSettings: boolean;
@@ -59,6 +65,8 @@ export const useSettingsModalSaveOrchestration = ({
   reusablePromptValidationErrorCount,
   hasRuntimeAvailabilityErrors,
   runtimeAvailabilityErrorCount,
+  invalidRuntimeKind,
+  onRuntimeAvailabilityError,
   isRuntimeRequestPending,
   runtimeRequestError,
   hasUnacknowledgedCodexDangerousSettings,
@@ -149,6 +157,9 @@ export const useSettingsModalSaveOrchestration = ({
     if (hasRuntimeAvailabilityErrors) {
       const reason = buildRuntimeAvailabilitySaveError(runtimeAvailabilityErrorCount);
       setSaveError(reason);
+      if (invalidRuntimeKind) {
+        onRuntimeAvailabilityError(invalidRuntimeKind);
+      }
       toast.error("Cannot save settings", {
         description: reason,
       });
@@ -220,6 +231,7 @@ export const useSettingsModalSaveOrchestration = ({
     hasPromptValidationErrors,
     hasReusablePromptValidationErrors,
     hasRuntimeAvailabilityErrors,
+    invalidRuntimeKind,
     isRuntimeRequestPending,
     runtimeRequestError,
     hasUnacknowledgedCodexDangerousSettings,
@@ -229,6 +241,7 @@ export const useSettingsModalSaveOrchestration = ({
     promptValidationState.totalErrorCount,
     repoScriptValidationErrorCount,
     runtimeAvailabilityErrorCount,
+    onRuntimeAvailabilityError,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
     selectedWorkspaceId,

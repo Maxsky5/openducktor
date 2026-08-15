@@ -797,6 +797,52 @@ describe("OnboardingPage runtime validation", () => {
     }
   });
 
+  test("preserves the user-entered path when validation resolves another executable path", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: false, executablePath: "" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") return createCheck(runtimes);
+      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      return {
+        runtimes: kinds.map((kind) => {
+          const requestedPath = input.paths[kind] ?? "";
+          const ok = kind === "opencode" && requestedPath === "~/.local/bin/opencode";
+          return {
+            kind,
+            path: ok ? "/Users/dev/.local/bin/opencode" : requestedPath,
+            ok,
+            version: ok ? "1.0.0" : null,
+            error: ok ? null : `${kind} executable is invalid.`,
+          };
+        }),
+      };
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      const pathInput = screen.getByLabelText("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }) as HTMLInputElement;
+
+      fireEvent.change(pathInput, { target: { value: "~/.local/bin/opencode" } });
+
+      await within(opencodeSection()).findByText("1.0.0");
+      expect(pathInput.value).toBe("~/.local/bin/opencode");
+      expect(
+        within(opencodeSection())
+          .getByRole("switch", { name: "Enabled" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("keeps the runtime step on save failure and supports retry, Workspace, and Back", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: false, executablePath: "" },

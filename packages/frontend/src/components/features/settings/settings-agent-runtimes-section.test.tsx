@@ -198,6 +198,39 @@ describe("AgentRuntimesSection", () => {
     }
   });
 
+  test("selects and focuses the requested invalid runtime", async () => {
+    const focusRequest = { kind: "runtime-executable" as const, runtimeKind: "codex" as const };
+    const onFocusRequestHandled = mock(() => {});
+    const props = {
+      ...runtimeDefinitionRequestProps,
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+      runtimeDefinitions: [
+        CLAUDE_RUNTIME_DESCRIPTOR,
+        CODEX_RUNTIME_DESCRIPTOR,
+        OPENCODE_RUNTIME_DESCRIPTOR,
+      ],
+      disabled: false,
+      requiresCodexDangerAcknowledgement: false,
+      isCodexDangerAcknowledged: false,
+      onCodexDangerAcknowledgedChange: () => {},
+      onUpdateAgentRuntimes: () => {},
+      onFocusRequestHandled,
+    };
+    const renderer = render(createElement(AgentRuntimesSection, { ...props, focusRequest: null }));
+
+    try {
+      renderer.rerender(createElement(AgentRuntimesSection, { ...props, focusRequest }));
+      const codexInput = await screen.findByPlaceholderText("Path to Codex");
+      await waitFor(() => expect(document.activeElement).toBe(codexInput));
+      expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      expect(onFocusRequestHandled).toHaveBeenCalledWith(focusRequest);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
   test("keeps runtime controls active while showing the selected runtime check", () => {
     const renderer = render(
       createElement(AgentRuntimesSection, {

@@ -26,6 +26,8 @@ import {
 } from "@/state/app-state-contexts";
 import { runtimeDiscoveryQueryOptions } from "@/state/queries/runtime";
 import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
+import { replaceRuntimeExecutablePaths } from "./runtime-executable-draft";
+import { invalidEnabledRuntime } from "./runtime-executable-validation";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -142,12 +144,14 @@ type UseSettingsModalControllerArgs = {
   open: boolean;
   shouldLoadCatalog: boolean;
   workspaceSelectionPolicy?: SettingsWorkspaceSelectionPolicy | undefined;
+  onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
 };
 
 export const useSettingsModalController = ({
   open,
   shouldLoadCatalog,
   workspaceSelectionPolicy,
+  onRuntimeAvailabilityError,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
   const queryClient = useQueryClient();
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
@@ -300,6 +304,10 @@ export const useSettingsModalController = ({
       : {}),
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
+  const invalidRuntimeKind = snapshotDraft
+    ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)
+        ?.kind ?? null)
+    : null;
   const codexDangerAcknowledgementKey = useMemo(
     () =>
       snapshotDraft
@@ -404,6 +412,8 @@ export const useSettingsModalController = ({
     reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
     hasRuntimeAvailabilityErrors,
     runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
+    invalidRuntimeKind,
+    onRuntimeAvailabilityError,
     isRuntimeRequestPending: isLoadingRuntimeDefinitions || isLoadingRuntimeExecutables,
     runtimeRequestError,
     hasUnacknowledgedCodexDangerousSettings,
@@ -478,22 +488,7 @@ export const useSettingsModalController = ({
       if (runtimeDiscoveryVisit.current !== visit) {
         return;
       }
-      const rowsByKind = new Map(discovered.runtimes.map((row) => [row.kind, row]));
-      updateAgentRuntimes((current) => ({
-        ...current,
-        opencode: {
-          ...current.opencode,
-          executablePath: rowsByKind.get("opencode")?.path ?? "",
-        },
-        codex: {
-          ...current.codex,
-          executablePath: rowsByKind.get("codex")?.path ?? "",
-        },
-        claude: {
-          ...current.claude,
-          executablePath: rowsByKind.get("claude")?.path ?? "",
-        },
-      }));
+      updateAgentRuntimes((current) => replaceRuntimeExecutablePaths(current, discovered.runtimes));
       setRuntimeDiscoveryError(null);
     } catch (error) {
       if (runtimeDiscoveryVisit.current === visit) {

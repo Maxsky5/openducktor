@@ -1,8 +1,4 @@
-import type { AgentRuntimes, RuntimeKind } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactElement, useEffect, useRef, useState } from "react";
-import { invalidEnabledRuntime } from "@/components/features/settings/runtime-executable-validation";
-import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
+import { type ReactElement, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,303 +8,60 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
-import { useWorkspaceState } from "@/state/app-state-provider";
-import {
-  runtimeDefinitionsQueryOptions,
-  runtimeDiscoveryQueryOptions,
-} from "@/state/queries/runtime";
-import { platformQueryOptions } from "@/state/queries/system";
-import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
-import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
-import {
-  RuntimeStage,
-  type RuntimeStageActivity,
-  WelcomeStage,
-  WorkspaceStage,
-} from "./onboarding-stages";
-
-const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
+import { RuntimeStage, WelcomeStage, WorkspaceStage } from "./onboarding-stages";
+import { useOnboardingRuntimeSetup } from "./use-onboarding-runtime-setup";
+import { useOnboardingWorkspaceCompletion } from "./use-onboarding-workspace-completion";
 
 type OnboardingPageProps = {
   onComplete: () => void;
 };
 
-function runtimeStageActivity({
-  isLoading,
-  isValidating,
-  isRediscovering,
-  isSaving,
-}: {
-  isLoading: boolean;
-  isValidating: boolean;
-  isRediscovering: boolean;
-  isSaving: boolean;
-}): RuntimeStageActivity {
-  if (isSaving) return "saving";
-  if (isRediscovering) return "rediscovering";
-  if (isLoading) return "loading";
-  if (isValidating) return "validating";
-  return "idle";
-}
-
 export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElement {
-  const queryClient = useQueryClient();
-  const { workspaces, addWorkspace, saveSettingsSnapshot } = useWorkspaceState();
   const [stage, setStage] = useState<OnboardingStage>("welcome");
-  const [runtimeDraftOverride, setRuntimeDraftOverride] = useState<AgentRuntimes | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [stageError, setStageError] = useState<string | null>(null);
-  const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
-  const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
-  const [completionRepoPath, setCompletionRepoPath] = useState<string | null>(null);
-  const saveInFlight = useRef(false);
-  const stageErrorRef = useRef<HTMLParagraphElement>(null);
-  const focusStageError = useRef(false);
-  const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
-  const editedRuntimePaths = useRef(new Set<RuntimeKind>());
-  const settingsQuery = useQuery({
-    ...settingsSnapshotQueryOptions(),
-    enabled: true,
+  const openWorkspaceStage = useCallback((): void => setStage("workspace"), []);
+  const runtimeSetup = useOnboardingRuntimeSetup({ onContinue: openWorkspaceStage });
+  const workspaceCompletion = useOnboardingWorkspaceCompletion({
+    settingsSnapshot: runtimeSetup.settingsSnapshot,
+    onComplete,
   });
-  const definitionsQuery = useQuery({
-    ...runtimeDefinitionsQueryOptions(),
-    enabled: true,
-  });
-  const savedAgentRuntimes = settingsQuery.data?.agentRuntimes;
-  const runtimeDraft = runtimeDraftOverride ?? savedAgentRuntimes ?? null;
-  const runtimeValidation = useRuntimeExecutableValidation(runtimeDraft, runtimeDraft !== null);
-  const checkResults = runtimeValidation.results;
-  const checkingRuntimeKinds = runtimeValidation.checkingRuntimeKinds;
-  const runtimeValidationError = runtimeValidation.error;
-  useEffect(() => {
-    if (checkResults.length === 0) return;
-    const resultsByKind = new Map(checkResults.map((row) => [row.kind, row]));
-    setRuntimeDraftOverride((currentOverride) => {
-      const current = currentOverride ?? savedAgentRuntimes;
-      if (!current) return currentOverride;
-      let next = current;
-      for (const kind of RUNTIME_KINDS) {
-        const result = resultsByKind.get(kind);
-        if (result?.ok !== true) continue;
-        const normalizedPathChanged = current[kind].executablePath !== result.path;
-        const shouldEnable =
-          editedRuntimePaths.current.has(kind) &&
-          !explicitRuntimeChoices.current.has(kind) &&
-          !current[kind].enabled;
-        if (!normalizedPathChanged && !shouldEnable) continue;
-        next = {
-          ...next,
-          [kind]: {
-            ...next[kind],
-            executablePath: result.path,
-            enabled: shouldEnable ? true : next[kind].enabled,
-          },
-        };
-      }
-      return next === current ? currentOverride : next;
-    });
-  }, [checkResults, savedAgentRuntimes]);
-
-  useEffect(() => {
-    if (!stageError || !focusStageError.current) return;
-    focusStageError.current = false;
-    stageErrorRef.current?.focus();
-  }, [stageError]);
-
-  const updateDraft = (next: AgentRuntimes): void => {
-    if (runtimeDraft) {
-      for (const kind of RUNTIME_KINDS) {
-        if (next[kind].enabled !== runtimeDraft[kind].enabled)
-          explicitRuntimeChoices.current.add(kind);
-        if (next[kind].executablePath !== runtimeDraft[kind].executablePath)
-          editedRuntimePaths.current.add(kind);
-      }
-    }
-    setRuntimeDraftOverride(next);
-  };
-
-  const checkAgain = async (): Promise<void> => {
-    setIsChecking(true);
-    setStageError(null);
-    setRuntimeDiscoveryError(null);
-    try {
-      const checked = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
-      if (runtimeDraft) {
-        const rows = new Map(checked.runtimes.map((row) => [row.kind, row]));
-        const nextDraft = {
-          ...runtimeDraft,
-          opencode: {
-            ...runtimeDraft.opencode,
-            executablePath: rows.get("opencode")?.path ?? "",
-            enabled: explicitRuntimeChoices.current.has("opencode")
-              ? runtimeDraft.opencode.enabled
-              : rows.get("opencode")?.ok === true,
-          },
-          codex: {
-            ...runtimeDraft.codex,
-            executablePath: rows.get("codex")?.path ?? "",
-            enabled: explicitRuntimeChoices.current.has("codex")
-              ? runtimeDraft.codex.enabled
-              : rows.get("codex")?.ok === true,
-          },
-          claude: {
-            ...runtimeDraft.claude,
-            executablePath: rows.get("claude")?.path ?? "",
-            enabled: explicitRuntimeChoices.current.has("claude")
-              ? runtimeDraft.claude.enabled
-              : rows.get("claude")?.ok === true,
-          },
-        };
-        setRuntimeDraftOverride(nextDraft);
-      }
-    } catch (cause) {
-      setRuntimeDiscoveryError(errorMessage(cause));
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
-  const saveRuntimes = async (allowNoRuntime = false): Promise<void> => {
-    if (
-      saveInFlight.current ||
-      isChecking ||
-      runtimeDiscoveryError !== null ||
-      !runtimeDraft ||
-      !settingsQuery.data ||
-      checkingRuntimeKinds.length > 0
-    )
-      return;
-    const invalid = invalidEnabledRuntime(runtimeDraft, checkResults);
-    if (invalid) {
-      focusStageError.current = false;
-      setStageError(invalid.error ?? `${invalid.kind} needs a valid executable path.`);
-      document.getElementById(`runtime-executable-${invalid.kind}`)?.focus();
-      return;
-    }
-    const validEnabledCount = checkResults.filter(
-      (result) => result.ok && runtimeDraft[result.kind].enabled,
-    ).length;
-    if (validEnabledCount === 0 && !allowNoRuntime) {
-      setConfirmNoRuntime(true);
-      return;
-    }
-
-    saveInFlight.current = true;
-    setIsSaving(true);
-    setStageError(null);
-    try {
-      await saveSettingsSnapshot(
-        prepareSettingsSnapshotForSave({ ...settingsQuery.data, agentRuntimes: runtimeDraft }),
-      );
-      setConfirmNoRuntime(false);
-      setStage("workspace");
-    } catch (cause) {
-      setConfirmNoRuntime(false);
-      focusStageError.current = true;
-      setStageError(errorMessage(cause));
-    } finally {
-      saveInFlight.current = false;
-      setIsSaving(false);
-    }
-  };
-
-  const runtimeLoading =
-    settingsQuery.isPending || definitionsQuery.isPending || runtimeDraft === null;
-  const validationPending = runtimeDraft !== null && checkingRuntimeKinds.length > 0;
-  const runtimeRequestError =
-    settingsQuery.error ?? definitionsQuery.error ?? runtimeValidationError;
-  const validEnabledRuntimeCount = runtimeDraft
-    ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
-    : 0;
-  const showNoRuntimeWarning =
-    checkResults.length === RUNTIME_KINDS.length &&
-    !validationPending &&
-    validEnabledRuntimeCount === 0;
-  const continueDisabled =
-    runtimeLoading ||
-    validationPending ||
-    isChecking ||
-    isSaving ||
-    !!runtimeRequestError ||
-    runtimeDiscoveryError !== null;
-  const runtimeActivity = runtimeStageActivity({
-    isLoading: runtimeLoading,
-    isValidating: validationPending,
-    isRediscovering: isChecking,
-    isSaving,
-  });
-
-  const retryRuntimeRequests = (): void => {
-    void settingsQuery.refetch();
-    void definitionsQuery.refetch();
-    if (runtimeDraft !== null) {
-      void runtimeValidation.refetch();
-    }
-  };
-
-  const addFirstWorkspace = async (input: Parameters<typeof addWorkspace>[0]): Promise<void> => {
-    await addWorkspace(input);
-    setCompletionRepoPath(input.repoPath);
-
-    const settings = settingsQuery.data;
-    if (!settings) {
-      throw new Error("Settings must be loaded before opening the first workspace.");
-    }
-
-    const destinationQueries: Promise<unknown>[] = [
-      queryClient.fetchQuery(
-        repoTaskDataQueryOptions(input.repoPath, settings.kanban.doneVisibleDays),
-      ),
-    ];
-    if (settings.appearance.horizontalScrollbarVisibility === "system") {
-      destinationQueries.push(queryClient.fetchQuery(platformQueryOptions()));
-    }
-
-    // Query keeps failed reads as errors for Kanban to report after the workspace already exists.
-    await Promise.allSettled(destinationQueries);
-    onComplete();
-  };
 
   return (
     <OnboardingLayout stage={stage}>
       {stage === "welcome" ? <WelcomeStage onContinue={() => setStage("runtimes")} /> : null}
       {stage === "runtimes" ? (
         <RuntimeStage
-          runtimeDraft={runtimeDraft}
-          definitions={definitionsQuery.data ?? []}
-          results={checkResults}
-          requestError={runtimeRequestError ? errorMessage(runtimeRequestError) : null}
-          discoveryError={runtimeDiscoveryError}
-          stageError={stageError}
-          stageErrorRef={stageErrorRef}
-          activity={runtimeActivity}
-          checkingRuntimeKinds={checkingRuntimeKinds}
-          showNoRuntimeWarning={showNoRuntimeWarning}
-          continueDisabled={continueDisabled}
-          onChange={updateDraft}
-          onCheckAgain={() => void checkAgain()}
-          onRetry={retryRuntimeRequests}
+          runtimeDraft={runtimeSetup.runtimeDraft}
+          definitions={runtimeSetup.definitions}
+          results={runtimeSetup.checkResults}
+          requestError={runtimeSetup.requestError}
+          discoveryError={runtimeSetup.discoveryError}
+          stageError={runtimeSetup.stageError}
+          stageErrorRef={runtimeSetup.stageErrorRef}
+          activity={runtimeSetup.activity}
+          checkingRuntimeKinds={runtimeSetup.checkingRuntimeKinds}
+          showNoRuntimeWarning={runtimeSetup.showNoRuntimeWarning}
+          continueDisabled={runtimeSetup.continueDisabled}
+          onChange={runtimeSetup.updateDraft}
+          onCheckAgain={() => void runtimeSetup.checkAgain()}
+          onRetry={runtimeSetup.retryRuntimeRequests}
           onBack={() => setStage("welcome")}
-          onContinue={() => void saveRuntimes()}
+          onContinue={() => void runtimeSetup.saveRuntimes()}
         />
       ) : null}
       {stage === "workspace" ? (
         <WorkspaceStage
-          workspaces={workspaces}
-          addWorkspace={addFirstWorkspace}
-          isFinalizing={completionRepoPath !== null}
+          workspaces={workspaceCompletion.workspaces}
+          addWorkspace={workspaceCompletion.addFirstWorkspace}
+          isFinalizing={workspaceCompletion.isFinalizing}
           onBack={() => setStage("runtimes")}
         />
       ) : null}
 
       <Dialog
-        open={confirmNoRuntime}
+        open={runtimeSetup.confirmNoRuntime}
         onOpenChange={(open) => {
-          if (!isSaving) setConfirmNoRuntime(open);
+          if (!runtimeSetup.isSaving) runtimeSetup.setConfirmNoRuntime(open);
         }}
       >
         <DialogContent>
@@ -322,13 +75,16 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
           <DialogFooter>
             <Button
               variant="outline"
-              disabled={isSaving}
-              onClick={() => setConfirmNoRuntime(false)}
+              disabled={runtimeSetup.isSaving}
+              onClick={() => runtimeSetup.setConfirmNoRuntime(false)}
             >
               Cancel
             </Button>
-            <Button disabled={isSaving} onClick={() => void saveRuntimes(true)}>
-              {isSaving ? "Saving..." : "Continue without a coding agent"}
+            <Button
+              disabled={runtimeSetup.isSaving}
+              onClick={() => void runtimeSetup.saveRuntimes(true)}
+            >
+              {runtimeSetup.isSaving ? "Saving..." : "Continue without a coding agent"}
             </Button>
           </DialogFooter>
         </DialogContent>

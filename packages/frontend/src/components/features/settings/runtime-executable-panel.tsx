@@ -5,7 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { FolderPickerDialog } from "@/components/features/repository/folder-picker-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ type RuntimeExecutablePanelProps = {
   isChecking?: boolean;
   checkingRuntimeKinds?: readonly RuntimeKind[];
   checkAgainPlacement?: "panel" | "runtime-status" | "hidden";
+  focusRuntimeKind?: RuntimeKind | null;
+  onFocusRuntimeHandled?: (runtimeKind: RuntimeKind) => void;
   onChange: (next: AgentRuntimes) => void;
   onCheckAgain: () => void;
 };
@@ -119,15 +121,26 @@ export function RuntimeExecutablePanel({
   isChecking = false,
   checkingRuntimeKinds = [],
   checkAgainPlacement = "panel",
+  focusRuntimeKind = null,
+  onFocusRuntimeHandled,
   onChange,
   onCheckAgain,
 }: RuntimeExecutablePanelProps): ReactElement {
   const [pickerRuntimeKind, setPickerRuntimeKind] = useState<RuntimeKind | null>(null);
+  const inputRefs = useRef<Partial<Record<RuntimeKind, HTMLInputElement | null>>>({});
   const checkingRuntimeKindSet = new Set(checkingRuntimeKinds);
   const isAnyRuntimeChecking = isChecking || checkingRuntimeKinds.length > 0;
   const pickerInitialPath = pickerRuntimeKind
     ? executableDirectory(runtimes[pickerRuntimeKind].executablePath)
     : undefined;
+
+  useEffect(() => {
+    if (!focusRuntimeKind) return;
+    const input = inputRefs.current[focusRuntimeKind];
+    if (!input) return;
+    input.focus();
+    onFocusRuntimeHandled?.(focusRuntimeKind);
+  }, [focusRuntimeKind, onFocusRuntimeHandled]);
 
   const updateRuntime = (kind: RuntimeKind, update: Partial<AgentRuntimes[RuntimeKind]>): void => {
     onChange({
@@ -204,6 +217,9 @@ export function RuntimeExecutablePanel({
                 </Label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
+                    ref={(input) => {
+                      inputRefs.current[kind] = input;
+                    }}
                     id={inputId}
                     value={config.executablePath}
                     disabled={disabled}

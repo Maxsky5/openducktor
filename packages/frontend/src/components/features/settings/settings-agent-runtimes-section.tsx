@@ -13,7 +13,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,12 @@ import { cn } from "@/lib/utils";
 import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
+
+type RuntimeExecutableFocusRequest = Extract<
+  SettingsContentFocusRequest,
+  { kind: "runtime-executable" }
+>;
 
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
@@ -44,6 +50,8 @@ type AgentRuntimesSectionProps = {
   isCodexDangerAcknowledged: boolean;
   onCodexDangerAcknowledgedChange: (acknowledged: boolean) => void;
   onUpdateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
+  focusRequest?: RuntimeExecutableFocusRequest | null;
+  onFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
 };
 
 type CodexPolicyField = keyof CodexPolicyFields;
@@ -713,16 +721,23 @@ export function AgentRuntimesSection({
   isCodexDangerAcknowledged,
   onCodexDangerAcknowledgedChange,
   onUpdateAgentRuntimes,
+  focusRequest = null,
+  onFocusRequestHandled,
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
+  const lastFocusedRuntimeKind = useRef<RuntimeKind | null>(null);
+  const requestedRuntimeKind = focusRequest?.runtimeKind ?? null;
+  const effectiveSelectedRuntimeKind =
+    requestedRuntimeKind ?? (selectedRuntimeKind || lastFocusedRuntimeKind.current);
   const executableValidation = useRuntimeExecutableValidation(agentRuntimes, true);
   const executableQueryError = executableValidation.error
     ? errorMessage(executableValidation.error)
     : null;
   const selectedDefinition =
-    sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
-    sortedRuntimeDefinitions[0];
+    sortedRuntimeDefinitions.find(
+      (definition) => definition.kind === effectiveSelectedRuntimeKind,
+    ) ?? sortedRuntimeDefinitions[0];
 
   return (
     <div className="grid gap-4 p-4">
@@ -813,7 +828,10 @@ export function AgentRuntimesSection({
                         : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground",
                     )}
                     disabled={disabled}
-                    onClick={() => setSelectedRuntimeKind(definition.kind)}
+                    onClick={() => {
+                      lastFocusedRuntimeKind.current = null;
+                      setSelectedRuntimeKind(definition.kind);
+                    }}
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <span
@@ -866,6 +884,13 @@ export function AgentRuntimesSection({
                   isChecking={isCheckingExecutables}
                   checkingRuntimeKinds={executableValidation.checkingRuntimeKinds}
                   checkAgainPlacement="runtime-status"
+                  focusRuntimeKind={requestedRuntimeKind}
+                  onFocusRuntimeHandled={(runtimeKind) => {
+                    lastFocusedRuntimeKind.current = runtimeKind;
+                    if (focusRequest?.runtimeKind === runtimeKind) {
+                      onFocusRequestHandled?.(focusRequest);
+                    }
+                  }}
                   onChange={(next) => onUpdateAgentRuntimes(() => next)}
                   onCheckAgain={() => void onCheckAgain()}
                 />

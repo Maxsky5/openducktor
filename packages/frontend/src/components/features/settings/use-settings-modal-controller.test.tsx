@@ -206,6 +206,7 @@ const createHookHarness = (
       useSettingsModalController({
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
+        onRuntimeAvailabilityError: () => {},
         ...(options && "requiredRepoPath" in options
           ? {
               workspaceSelectionPolicy: {

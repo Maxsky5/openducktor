@@ -154,6 +154,10 @@ export function SettingsModalContent({
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}
         onCodexDangerAcknowledgedChange={setCodexDangerAcknowledged}
         onUpdateAgentRuntimes={updateAgentRuntimes}
+        focusRequest={
+          contentFocusRequest?.kind === "runtime-executable" ? contentFocusRequest : null
+        }
+        onFocusRequestHandled={onContentFocusRequestHandled}
       />
     );
   }

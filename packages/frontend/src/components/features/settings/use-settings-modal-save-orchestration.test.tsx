@@ -50,6 +50,8 @@ const createArgs = (
   reusablePromptValidationErrorCount: 0,
   hasRuntimeAvailabilityErrors: false,
   runtimeAvailabilityErrorCount: 0,
+  invalidRuntimeKind: null,
+  onRuntimeAvailabilityError: () => {},
   isRuntimeRequestPending: false,
   runtimeRequestError: null,
   hasUnacknowledgedCodexDangerousSettings: false,
@@ -141,6 +143,28 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(didSave).toBe(false);
     expect(harness.getLatest().saveError).toBe("Fix 2 runtime executable errors before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("requests focus for the first invalid runtime when save is blocked", async () => {
+    const onRuntimeAvailabilityError = mock(() => {});
+    const harness = createHookHarness(
+      createArgs({
+        hasRuntimeAvailabilityErrors: true,
+        runtimeAvailabilityErrorCount: 1,
+        invalidRuntimeKind: "codex",
+        onRuntimeAvailabilityError,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    expect(onRuntimeAvailabilityError).toHaveBeenCalledTimes(1);
+    expect(onRuntimeAvailabilityError).toHaveBeenCalledWith("codex");
 
     await harness.unmount();
   });

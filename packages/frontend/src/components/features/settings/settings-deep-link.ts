@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 
@@ -6,9 +7,9 @@ export type SettingsDeepLink = {
   repositoryPath: string | null;
 };
 
-export type SettingsContentFocusRequest = {
-  kind: "repository-dev-servers";
-};
+export type SettingsContentFocusRequest =
+  | { kind: "repository-dev-servers" }
+  | { kind: "runtime-executable"; runtimeKind: RuntimeKind };
 
 type GlobalSettingsDeepLinkResolution = {
   scope: "global";

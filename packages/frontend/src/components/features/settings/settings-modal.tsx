@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { type ReactElement, useCallback, useState } from "react";
 import {
   Dialog,
@@ -55,6 +56,10 @@ export function SettingsModal({
   const [navigation, setNavigation] = useState<SettingsModalNavigationState>(
     INITIAL_SETTINGS_MODAL_NAVIGATION,
   );
+  const handleRuntimeAvailabilityError = useCallback((runtimeKind: RuntimeKind): void => {
+    setNavigation((current) => ({ ...current, section: "runtimes" }));
+    setContentFocusRequest({ kind: "runtime-executable", runtimeKind });
+  }, []);
   const workspaceSelectionPolicy =
     activeDeepLinkResolution?.scope === "repository"
       ? activeDeepLinkResolution.workspaceSelectionPolicy
@@ -64,6 +69,7 @@ export function SettingsModal({
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
     workspaceSelectionPolicy,
+    onRuntimeAvailabilityError: handleRuntimeAvailabilityError,
   });
   const isInteractionDisabled = isSettingsInteractionDisabled(controller);
 
