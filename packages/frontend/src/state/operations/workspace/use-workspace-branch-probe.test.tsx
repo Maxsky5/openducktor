@@ -37,9 +37,6 @@ const ProbeHarness = ({
 }: ProbeHarnessArgs) => {
   const queryClient = useQueryClient();
   const currentWorkspaceRepoPathRef = useRef<string | null>(activeRepoPath);
-  const lastKnownBranchNameRef = useRef<string | null>(null);
-  const lastKnownDetachedRef = useRef<boolean | null>(null);
-  const lastKnownRevisionRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     currentWorkspaceRepoPathRef.current = activeRepoPath;
@@ -52,9 +49,6 @@ const ProbeHarness = ({
   const branchProbeController = useMemo(
     () => ({
       currentWorkspaceRepoPathRef,
-      lastKnownBranchNameRef,
-      lastKnownDetachedRef,
-      lastKnownRevisionRef,
       refreshBranchesForRepo,
     }),
     [refreshBranchesForRepo],
@@ -74,6 +68,50 @@ const ProbeHarness = ({
 };
 
 describe("use-workspace-branch-probe", () => {
+  test("does not refresh branches when the cached branch identity is unchanged", async () => {
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+    const currentBranch = {
+      name: "main",
+      detached: false,
+      revision: "abc123",
+    };
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
+    const refreshBranchesForRepo = mock(async () => {});
+    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    workspaceHost.gitGetCurrentBranch = mock(async () => currentBranch);
+
+    const rendered = render(
+      <ProbeHarness
+        activeRepoPath="/repo-a"
+        isSwitchingWorkspace={false}
+        isLoadingBranches={false}
+        isSwitchingBranch={false}
+        setBranchSyncDegraded={setBranchSyncDegraded}
+        refreshBranchesForRepo={refreshBranchesForRepo}
+        captureQueryClient={(client) => {
+          queryClientCapture.current = client;
+        }}
+      />,
+      { wrapper: IsolatedQueryWrapper },
+    );
+
+    try {
+      const queryClient = queryClientCapture.current;
+      if (!queryClient) {
+        throw new Error("Query client was not captured");
+      }
+
+      queryClient.setQueryData(gitQueryKeys.currentBranch("/repo-a"), currentBranch);
+      await triggerFocus();
+
+      expect(refreshBranchesForRepo).not.toHaveBeenCalled();
+      expect(setBranchSyncDegraded).toHaveBeenCalledWith("/repo-a", false);
+    } finally {
+      rendered.unmount();
+      restoreBrowserGlobals();
+    }
+  });
+
   test("does not report degradation when a branch switch cancels the current branch probe", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();

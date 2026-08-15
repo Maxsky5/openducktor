@@ -39,8 +39,5 @@ export type UseWorkspaceOperationsResult = {
 
 export type WorkspaceBranchProbeController = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  lastKnownBranchNameRef: MutableRefObject<string | null>;
-  lastKnownDetachedRef: MutableRefObject<boolean | null>;
-  lastKnownRevisionRef: MutableRefObject<string | null>;
   refreshBranchesForRepo: (repoPath: string) => Promise<void>;
 };

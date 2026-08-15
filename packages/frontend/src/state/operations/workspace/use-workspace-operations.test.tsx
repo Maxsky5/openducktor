@@ -865,6 +865,7 @@ describe("use-workspace-operations", () => {
       await harness.run(async (value) => {
         await value.refreshBranches();
       });
+      await harness.waitFor((value) => value.activeBranch?.name === "main");
 
       expect(harness.getLatest().activeBranch).toEqual({
         name: "main",

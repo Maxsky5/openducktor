@@ -1,7 +1,12 @@
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import { CancelledError, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { invalidateCurrentBranchQuery, loadCurrentBranchFromQuery } from "../../queries/git";
+import {
+  gitQueryKeys,
+  invalidateCurrentBranchQuery,
+  loadCurrentBranchFromQuery,
+} from "../../queries/git";
 import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
@@ -99,6 +104,10 @@ export function useWorkspaceBranchProbe({
   const probeExternalBranchChange = useCallback(async (): Promise<BranchProbeOutcome> => {
     const repoPath = branchProbeController.currentWorkspaceRepoPathRef.current;
 
+    if (!repoPath) {
+      return { status: "skipped" };
+    }
+
     if (
       !shouldProbeExternalBranchChange({
         activeWorkspaceRepoPath: repoPath,
@@ -108,20 +117,13 @@ export function useWorkspaceBranchProbe({
         isSyncInFlight: probeGate.isInFlight(),
       })
     ) {
-      return {
-        status: "skipped",
-        reason: "preconditions",
-      };
-    }
-
-    if (!repoPath) {
-      return {
-        status: "skipped",
-        reason: "repo_missing",
-      };
+      return { status: "skipped" };
     }
 
     const probeToken = probeGate.begin();
+    const previousBranch = queryClient.getQueryData<GitCurrentBranch>(
+      gitQueryKeys.currentBranch(repoPath),
+    );
 
     try {
       await invalidateCurrentBranchQuery(queryClient, repoPath);
@@ -129,16 +131,13 @@ export function useWorkspaceBranchProbe({
       const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
       let outcome: BranchProbeOutcome;
       if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-        outcome = {
-          status: "skipped",
-          reason: "repo_changed",
-        };
+        outcome = { status: "skipped" };
       } else {
         const hasChanged = hasBranchIdentityChanged(
           current,
-          branchProbeController.lastKnownBranchNameRef.current,
-          branchProbeController.lastKnownDetachedRef.current,
-          branchProbeController.lastKnownRevisionRef.current,
+          previousBranch?.name ?? null,
+          previousBranch?.detached ?? null,
+          previousBranch?.revision ?? null,
         );
 
         if (!hasChanged) {
@@ -149,22 +148,13 @@ export function useWorkspaceBranchProbe({
 
             outcome =
               branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath
-                ? {
-                    status: "skipped",
-                    reason: "repo_changed",
-                  }
+                ? { status: "skipped" }
                 : { status: "synced" };
           } catch (error) {
             if (error instanceof CancelledError) {
-              outcome = {
-                status: "skipped",
-                reason: "cancelled",
-              };
+              outcome = { status: "skipped" };
             } else if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-              outcome = {
-                status: "skipped",
-                reason: "repo_changed",
-              };
+              outcome = { status: "skipped" };
             } else {
               outcome = {
                 status: "degraded",
@@ -178,17 +168,11 @@ export function useWorkspaceBranchProbe({
       return outcome;
     } catch (error) {
       if (error instanceof CancelledError) {
-        return {
-          status: "skipped",
-          reason: "cancelled",
-        };
+        return { status: "skipped" };
       }
 
       if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-        return {
-          status: "skipped",
-          reason: "repo_changed",
-        };
+        return { status: "skipped" };
       }
 
       return {

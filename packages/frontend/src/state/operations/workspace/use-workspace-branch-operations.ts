@@ -50,12 +50,8 @@ export function useWorkspaceBranchOperations({
     ...currentBranchQueryOptions(queryRepoPath, hostClient),
     enabled: false,
   });
-  const [loadingBranchRepoPath, setLoadingBranchRepoPath] = useState<string | null>(null);
   const [switchingBranchRepoPath, setSwitchingBranchRepoPath] = useState<string | null>(null);
   const branchRequestVersionRef = useRef(0);
-  const lastKnownBranchNameRef = useRef<string | null>(null);
-  const lastKnownDetachedRef = useRef<boolean | null>(null);
-  const lastKnownRevisionRef = useRef<string | null>(null);
   const currentWorkspaceRepoPathRef = useRef(activeRepo);
 
   useLayoutEffect(() => {
@@ -69,23 +65,9 @@ export function useWorkspaceBranchOperations({
     [],
   );
 
-  const applyBranchState = useCallback(
-    (repoPath: string, current: GitCurrentBranch): void => {
-      lastKnownBranchNameRef.current = current.name ?? null;
-      lastKnownDetachedRef.current = current.detached;
-      lastKnownRevisionRef.current = current.revision ?? null;
-      updateBranchSyncDegradedForRepo(repoPath, false);
-    },
-    [updateBranchSyncDegradedForRepo],
-  );
-
   const clearBranchData = useCallback(
     (repoPath = currentWorkspaceRepoPathRef.current): void => {
       branchRequestVersionRef.current += 1;
-      lastKnownBranchNameRef.current = null;
-      lastKnownDetachedRef.current = null;
-      lastKnownRevisionRef.current = null;
-      setLoadingBranchRepoPath(null);
       setSwitchingBranchRepoPath(null);
       updateBranchSyncDegradedForRepo(repoPath, false);
     },
@@ -95,12 +77,6 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
-      const hasCachedBranchData =
-        queryClient.getQueryData(gitQueryKeys.currentBranch(repoPath)) !== undefined &&
-        queryClient.getQueryData(gitQueryKeys.branches(repoPath)) !== undefined;
-      if (!hasCachedBranchData) {
-        setLoadingBranchRepoPath(repoPath);
-      }
 
       try {
         if (force) {
@@ -110,25 +86,21 @@ export function useWorkspaceBranchOperations({
           ]);
         }
 
-        const [current] = await Promise.all([
+        await Promise.all([
           loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
           loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
         ]);
 
         if (isCurrentBranchRequest(repoPath, requestVersion)) {
-          applyBranchState(repoPath, current);
+          updateBranchSyncDegradedForRepo(repoPath, false);
         }
       } catch (error) {
         if (isCurrentBranchRequest(repoPath, requestVersion)) {
           throw error;
         }
-      } finally {
-        if (isCurrentBranchRequest(repoPath, requestVersion)) {
-          setLoadingBranchRepoPath(null);
-        }
       }
     },
-    [applyBranchState, hostClient, isCurrentBranchRequest, queryClient],
+    [hostClient, isCurrentBranchRequest, queryClient, updateBranchSyncDegradedForRepo],
   );
 
   const refreshBranches = useCallback(
@@ -156,10 +128,7 @@ export function useWorkspaceBranchOperations({
   const activeBranch = currentBranchQuery.data ?? null;
   const hasBranchData = branchesQuery.data !== undefined && currentBranchQuery.data !== undefined;
   const isLoadingBranches =
-    !hasBranchData &&
-    (loadingBranchRepoPath === activeRepo ||
-      branchesQuery.isFetching ||
-      currentBranchQuery.isFetching);
+    !hasBranchData && (branchesQuery.isFetching || currentBranchQuery.isFetching);
   const isSwitchingBranch = switchingBranchRepoPath === activeRepo;
 
   const switchBranch = useCallback(
@@ -191,7 +160,6 @@ export function useWorkspaceBranchOperations({
           ),
         ]);
       };
-      setLoadingBranchRepoPath(null);
       setSwitchingBranchRepoPath(repoPath);
 
       try {
@@ -204,9 +172,6 @@ export function useWorkspaceBranchOperations({
         } catch (error) {
           if (isCurrentBranchRequest(repoPath, requestVersion)) {
             queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), previousBranch);
-            lastKnownBranchNameRef.current = previousBranch?.name ?? null;
-            lastKnownDetachedRef.current = previousBranch?.detached ?? null;
-            lastKnownRevisionRef.current = previousBranch?.revision ?? null;
 
             toast.error("Failed to switch branch", {
               description: errorMessage(error),
@@ -223,16 +188,11 @@ export function useWorkspaceBranchOperations({
           }
 
           queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
-          applyBranchState(repoPath, current);
+          updateBranchSyncDegradedForRepo(repoPath, false);
 
           try {
             await invalidateRepoBranchesQuery(queryClient, repoPath);
-
-            const allBranches = await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
-
-            if (isCurrentBranchRequest(repoPath, requestVersion)) {
-              queryClient.setQueryData(gitQueryKeys.branches(repoPath), allBranches);
-            }
+            await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
           } catch (error) {
             if (isCurrentBranchRequest(repoPath, requestVersion)) {
               toast.error("Branch switched, but failed to refresh branch list", {
@@ -249,15 +209,19 @@ export function useWorkspaceBranchOperations({
         }
       }
     },
-    [activeBranch, activeRepo, applyBranchState, hostClient, isCurrentBranchRequest, queryClient],
+    [
+      activeBranch,
+      activeRepo,
+      hostClient,
+      isCurrentBranchRequest,
+      queryClient,
+      updateBranchSyncDegradedForRepo,
+    ],
   );
 
   const branchProbeController = useMemo<WorkspaceBranchProbeController>(
     () => ({
       currentWorkspaceRepoPathRef,
-      lastKnownBranchNameRef,
-      lastKnownDetachedRef,
-      lastKnownRevisionRef,
       refreshBranchesForRepo: (repoPath) => refreshBranchesForRepo(repoPath, true),
     }),
     [refreshBranchesForRepo],

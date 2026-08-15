@@ -72,6 +72,11 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 
       return queryClient;
     },
+    waitFor: async (
+      predicate: (value: ReturnType<typeof useWorkspaceBranchOperations>) => boolean,
+    ) => {
+      await sharedHarness.waitFor(() => Boolean(latest && predicate(latest)));
+    },
     unmount: async () => {
       await sharedHarness.unmount();
     },
@@ -101,6 +106,7 @@ describe("use-workspace-branch-operations", () => {
       await harness.run(async (value) => {
         await value.refreshBranches();
       });
+      await harness.waitFor((value) => value.activeBranch?.name === "main");
 
       expect(harness.getLatest().activeBranch).toEqual({
         name: "main",

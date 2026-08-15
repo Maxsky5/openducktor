@@ -28,14 +28,7 @@ export type BranchProbeError = {
 
 export type BranchProbeOutcome =
   | {
-      status: "skipped";
-      reason: "preconditions" | "repo_missing" | "repo_changed" | "cancelled";
-    }
-  | {
-      status: "unchanged";
-    }
-  | {
-      status: "synced";
+      status: "skipped" | "unchanged" | "synced";
     }
   | {
       status: "degraded";
