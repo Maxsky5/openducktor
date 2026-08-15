@@ -163,7 +163,7 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
-  test("restores fresh cached branch data without loading when returning to a repository", async () => {
+  test("restores cached branch data and revalidates only the current branch", async () => {
     const currentBranches = new Map([
       ["/repo-a", { name: "main", detached: false }],
       ["/repo-b", { name: "develop", detached: false }],
@@ -232,8 +232,75 @@ describe("use-workspace-branch-operations", () => {
         await value.refreshBranches();
       });
 
-      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
       expect(gitGetBranches).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes cached branches when repository reactivation finds a branch change", async () => {
+    const currentBranches = new Map<string, GitCurrentBranch>([
+      ["/repo-a", { name: "main", detached: false, revision: "abc123" }],
+      ["/repo-b", { name: "develop", detached: false, revision: "def456" }],
+    ]);
+    const repoBranches = new Map<string, GitBranch[]>([
+      ["/repo-a", [{ name: "main", isCurrent: true, isRemote: false }]],
+      ["/repo-b", [{ name: "develop", isCurrent: true, isRemote: false }]],
+    ]);
+    const gitGetCurrentBranch = mock(async (repoPath: string) => {
+      const current = currentBranches.get(repoPath);
+      if (!current) {
+        throw new Error(`Missing current branch fixture for ${repoPath}`);
+      }
+      return current;
+    });
+    const gitGetBranches = mock(async (repoPath: string) => {
+      const branches = repoBranches.get(repoPath);
+      if (!branches) {
+        throw new Error(`Missing branch list fixture for ${repoPath}`);
+      }
+      return branches;
+    });
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      currentBranches.set("/repo-a", {
+        name: "feature/reactivation",
+        detached: false,
+        revision: "ghi789",
+      });
+      repoBranches.set("/repo-a", [
+        { name: "main", isCurrent: false, isRemote: false },
+        { name: "feature/reactivation", isCurrent: true, isRemote: false },
+      ]);
+      await harness.updateArgs({ activeRepo: "/repo-a" });
+
+      expect(harness.getLatest().activeBranch?.name).toBe("main");
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      await harness.waitFor((value) => value.activeBranch?.name === "feature/reactivation");
+      expect(harness.getLatest().branches).toEqual([
+        { name: "main", isCurrent: false, isRemote: false },
+        { name: "feature/reactivation", isCurrent: true, isRemote: false },
+      ]);
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
+      expect(gitGetBranches).toHaveBeenCalledTimes(3);
     } finally {
       await harness.unmount();
     }

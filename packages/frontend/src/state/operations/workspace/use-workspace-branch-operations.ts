@@ -12,7 +12,7 @@ import {
   loadRepoBranchesFromQuery,
   repoBranchesQueryOptions,
 } from "../../queries/git";
-import { shouldSkipBranchSwitch } from "./workspace-operations-model";
+import { hasBranchIdentityChanged, shouldSkipBranchSwitch } from "./workspace-operations-model";
 import type { WorkspaceBranchOperationsHostClient } from "./workspace-operations-types";
 
 type UseWorkspaceBranchOperationsArgs = {
@@ -86,19 +86,44 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
+      const cachedCurrentBranch = queryClient.getQueryData<GitCurrentBranch>(
+        gitQueryKeys.currentBranch(repoPath),
+      );
+      const cachedBranches = queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(repoPath));
+      const canRevalidateCachedData =
+        !force && cachedCurrentBranch !== undefined && cachedBranches !== undefined;
+      const branchListHasError =
+        queryClient.getQueryState(gitQueryKeys.branches(repoPath))?.status === "error";
 
       if (force) {
         await Promise.all([
           invalidateCurrentBranchQuery(queryClient, repoPath),
           invalidateRepoBranchesQuery(queryClient, repoPath),
         ]);
+      } else if (canRevalidateCachedData) {
+        await invalidateCurrentBranchQuery(queryClient, repoPath);
       }
 
       try {
-        await Promise.all([
-          loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
-          loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
-        ]);
+        if (canRevalidateCachedData) {
+          const currentBranch = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
+          const branchIdentityChanged = hasBranchIdentityChanged(
+            currentBranch,
+            cachedCurrentBranch.name ?? null,
+            cachedCurrentBranch.detached,
+            cachedCurrentBranch.revision ?? null,
+          );
+
+          if (branchIdentityChanged || branchListHasError) {
+            await invalidateRepoBranchesQuery(queryClient, repoPath);
+            await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
+          }
+        } else {
+          await Promise.all([
+            loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
+            loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
+          ]);
+        }
       } catch (error) {
         if (error instanceof CancelledError) {
           return;

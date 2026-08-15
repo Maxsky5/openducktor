@@ -238,6 +238,28 @@ describe("BranchSwitcher", () => {
     });
   });
 
+  test("disables the selector when the repository has no branches", async () => {
+    resetBranchState();
+    updateBranchState({
+      branches: [],
+      activeBranch: null,
+      isLoadingBranches: false,
+    });
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    const selector = rendered.container.querySelector('[data-disabled="true"]');
+    expect(selector?.getAttribute("data-placeholder")).toBe("Select branch...");
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
   test("uses the active branch name on the first render", async () => {
     activeBranchName = "feature/desloppify";
     resetBranchState();
@@ -303,6 +325,75 @@ describe("BranchSwitcher", () => {
     await act(async () => {
       rendered.unmount();
     });
+  });
+
+  test("keeps the active repository pending branch when an inactive switch completes", async () => {
+    const repoASwitch = createDeferred<void>();
+    const repoBSwitch = createDeferred<void>();
+    switchBranch.mockImplementation((branchName: string) =>
+      branchName === "feature/repo-a" ? repoASwitch.promise : repoBSwitch.promise,
+    );
+    resetBranchState();
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    try {
+      await act(async () => {
+        latestOnValueChange?.("feature/repo-a");
+        updateBranchState({ isSwitchingBranch: true });
+      });
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-a"]'),
+      ).not.toBeNull();
+
+      await act(async () => {
+        updateBranchState({
+          activeWorkspace: {
+            workspaceId: "workspace-repo-b",
+            workspaceName: "Repo B",
+            repoPath: "/repo-b",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: "/tmp/default-worktrees",
+            effectiveWorktreeBasePath: "/tmp/default-worktrees",
+          },
+          branches: [
+            { name: "release", isCurrent: true, isRemote: false },
+            { name: "feature/repo-b", isCurrent: false, isRemote: false },
+          ],
+          activeBranch: { name: "release", detached: false },
+          isSwitchingBranch: false,
+        });
+      });
+      await act(async () => {
+        latestOnValueChange?.("feature/repo-b");
+        updateBranchState({ isSwitchingBranch: true });
+      });
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-b"]'),
+      ).not.toBeNull();
+
+      await act(async () => {
+        repoASwitch.resolve();
+        await flush();
+      });
+
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-b"]'),
+      ).not.toBeNull();
+    } finally {
+      repoASwitch.resolve();
+      repoBSwitch.resolve();
+      await act(async () => {
+        await flush();
+        rendered.unmount();
+      });
+    }
   });
 
   test("restores the active branch after a switch fails", async () => {
