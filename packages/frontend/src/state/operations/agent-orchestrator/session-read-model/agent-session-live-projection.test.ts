@@ -562,6 +562,68 @@ describe("agent session live projection", () => {
     expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("idle");
   });
 
+  test("does not let stale OpenCode idle observations cancel an accepted local send", () => {
+    const opencodeIdentity = {
+      runtimeKind: "opencode" as const,
+      workingDirectory,
+      externalSessionId: "thread-1",
+    };
+    const tasks = taskSessionRecords({
+      taskId: "task-1",
+      record: record("thread-1", { runtimeKind: "opencode" }),
+    });
+    const loaded = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [
+        snapshot("thread-1", {
+          ref: { repoPath, ...opencodeIdentity },
+        }),
+      ],
+    });
+    const current = getAgentSession(loaded, opencodeIdentity);
+    if (!current) {
+      throw new Error("Expected projected OpenCode session.");
+    }
+    const afterAcceptedSend = replaceAgentSession(loaded, {
+      ...current,
+      status: "running",
+      pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+    });
+    const staleIdleSnapshot = snapshot("thread-1", {
+      ref: { repoPath, ...opencodeIdentity },
+    });
+
+    const afterIdleDelta = applyAgentSessionLiveDelta({
+      current: afterAcceptedSend,
+      taskSessionRecords: tasks,
+      envelope: { type: "session_upsert", session: staleIdleSnapshot },
+    });
+    const afterIdleReconnect = buildAgentSessionLiveCollection({
+      current: afterAcceptedSend,
+      taskSessionRecords: tasks,
+      snapshots: [staleIdleSnapshot],
+    });
+    const afterLiveRemoval = applyAgentSessionLiveDelta({
+      current: afterAcceptedSend,
+      taskSessionRecords: tasks,
+      envelope: { type: "session_removed", ref: staleIdleSnapshot.ref },
+    });
+
+    expect(getAgentSession(afterIdleDelta, opencodeIdentity)).toMatchObject({
+      status: "running",
+      pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+    });
+    expect(getAgentSession(afterIdleReconnect, opencodeIdentity)).toMatchObject({
+      status: "running",
+      pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+    });
+    expect(getAgentSession(afterLiveRemoval, opencodeIdentity)).toMatchObject({
+      status: "running",
+      pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+    });
+  });
+
   test.each(["stopped", "error"] as const)(
     "does not resurrect a session after terminal %s activity",
     (terminalStatus) => {

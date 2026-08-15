@@ -2016,7 +2016,7 @@ describe("opencode-sdk-adapter", () => {
     expect(snapshots).toMatchObject([
       {
         availability: "runtime",
-        classification: "running",
+        classification: "idle",
         ref: {
           externalSessionId: "external-session-1",
           workingDirectory: defaultWorkingDirectory,
@@ -2025,70 +2025,6 @@ describe("opencode-sdk-adapter", () => {
         pendingQuestions: [],
       },
     ]);
-  });
-
-  test("new sessions stay running while OpenCode still reports pre-kickoff idle", async () => {
-    const mock = makeMockClient();
-    const idleLiveClient = {
-      ...mock.client,
-      session: {
-        ...mock.client.session,
-        list: async (input?: unknown) => {
-          mock.listCalls.push(input);
-          return {
-            data: [
-              {
-                id: "external-session-1",
-                projectID: "project-1",
-                directory: defaultWorkingDirectory,
-                title: "BUILD task-1",
-                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
-              },
-            ],
-            error: undefined,
-          };
-        },
-        status: async (input?: unknown) => {
-          mock.statusCalls.push(input);
-          return { data: { "external-session-1": { type: "idle" } }, error: undefined };
-        },
-      },
-      permission: {
-        ...mock.client.permission,
-        list: async (input?: unknown) => {
-          mock.permissionListCalls.push(input);
-          return { data: [], error: undefined };
-        },
-      },
-      question: {
-        ...mock.client.question,
-        list: async (input?: unknown) => {
-          mock.questionListCalls.push(input);
-          return { data: [], error: undefined };
-        },
-      },
-    } as unknown as OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => idleLiveClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await adapter.startSession({
-      repoPath: defaultRepoPath,
-      runtimeKind: "opencode",
-      workingDirectory: defaultWorkingDirectory,
-      sessionScope: opencodeWorkflowScope("build"),
-      runtimePolicy: opencodeRuntimePolicy,
-      systemPrompt: "system",
-    });
-
-    const snapshots = await adapter.listSessionRuntimeSnapshots({
-      repoPath: defaultRepoPath,
-      runtimeKind: "opencode",
-      directories: [defaultWorkingDirectory],
-    });
-
-    expect(snapshots[0]).toMatchObject({ availability: "runtime", classification: "running" });
   });
 
   test("local-only runtime snapshots preserve the awaiting turn marker", async () => {

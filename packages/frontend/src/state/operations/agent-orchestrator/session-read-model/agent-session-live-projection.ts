@@ -40,6 +40,28 @@ const toSessionIdentity = (ref: AgentSessionLiveRef): AgentSessionIdentity => ({
 const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";
 
+const projectObservedSessionActivity = (
+  current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
+  observedStatus: AgentSessionState["status"],
+): Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt"> => {
+  if (isTerminalSessionStatus(current.status)) {
+    return { status: current.status, pendingUserMessageStartedAt: undefined };
+  }
+  if (observedStatus !== "idle") {
+    return {
+      status: observedStatus,
+      pendingUserMessageStartedAt: current.pendingUserMessageStartedAt,
+    };
+  }
+  if (current.status === "starting") {
+    return current;
+  }
+  if (current.pendingUserMessageStartedAt !== undefined) {
+    return { status: "running", pendingUserMessageStartedAt: current.pendingUserMessageStartedAt };
+  }
+  return { status: "idle", pendingUserMessageStartedAt: undefined };
+};
+
 type PendingInputRouting = {
   source: AgentPendingInputSource;
   responseSession: AgentSessionIdentity;
@@ -140,8 +162,7 @@ const applyDirectSnapshot = (
     };
   }
   const snapshotStatus = agentSessionStatusFromActivity(snapshot.activity);
-  const nextStatus =
-    current.status === "starting" && snapshotStatus === "idle" ? "starting" : snapshotStatus;
+  const activity = projectObservedSessionActivity(current, snapshotStatus);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
@@ -150,13 +171,12 @@ const applyDirectSnapshot = (
   return {
     ...current,
     title: snapshot.title,
-    status: nextStatus,
-    runtimeStatusMessage: nextStatus === "idle" ? null : current.runtimeStatusMessage,
+    ...activity,
+    runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
     contextUsage: toContextUsage(snapshot.contextUsage),
-    ...(nextStatus === "idle" ? { pendingUserMessageStartedAt: undefined } : {}),
   };
 };
 
@@ -266,19 +286,18 @@ const rebuildProjectedPendingInput = (
   return rebuilt;
 };
 
-const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionState => ({
-  ...session,
-  status:
-    session.status === "starting" || isTerminalSessionStatus(session.status)
-      ? session.status
-      : "idle",
-  runtimeStatusMessage: null,
-  liveParentExternalSessionId: undefined,
-  pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
-  pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
-  contextUsage: null,
-  pendingUserMessageStartedAt: undefined,
-});
+const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionState => {
+  const activity = projectObservedSessionActivity(session, "idle");
+  return {
+    ...session,
+    ...activity,
+    runtimeStatusMessage: null,
+    liveParentExternalSessionId: undefined,
+    pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
+    pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
+    contextUsage: null,
+  };
+};
 
 const persistedRecordKeys = (taskSessionRecords: TaskSessionRecords): Set<string> =>
   new Set(
@@ -289,16 +308,12 @@ const persistedRecordKeys = (taskSessionRecords: TaskSessionRecords): Set<string
 
 const resetSessionLiveStateForSnapshot = (session: AgentSessionState): AgentSessionState => ({
   ...session,
-  status:
-    session.status === "starting" || isTerminalSessionStatus(session.status)
-      ? session.status
-      : "idle",
+  ...projectObservedSessionActivity(session, "idle"),
   runtimeStatusMessage: null,
   liveParentExternalSessionId: undefined,
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
-  pendingUserMessageStartedAt: undefined,
 });
 
 const materializePersistedSessions = ({

@@ -13,6 +13,13 @@ describe("OpencodeSdkAdapter event stream", () => {
   test("maps message.updated events into assistant parts and assistant message", async () => {
     const streamEvents: Event[] = [
       {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -92,6 +99,13 @@ describe("OpencodeSdkAdapter event stream", () => {
 
   test("synthesizes session_idle from terminal assistant completion when no idle event follows", async () => {
     const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
       {
         type: "message.updated",
         properties: {
@@ -616,6 +630,13 @@ describe("OpencodeSdkAdapter event stream", () => {
   test("maps completed MCP tool part with isError=true as error status", async () => {
     const streamEvents: Event[] = [
       {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -683,6 +704,13 @@ describe("OpencodeSdkAdapter event stream", () => {
 
   test("maps flattened MCP tool error JSON output as error status", async () => {
     const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
       {
         type: "message.updated",
         properties: {
