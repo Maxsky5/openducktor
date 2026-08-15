@@ -19,6 +19,7 @@ import { host } from "@/state/operations/host";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
+  runtimeQueryKeys,
 } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -937,18 +938,36 @@ describe("OnboardingPage runtime validation", () => {
   test("keeps the coding-agent form visually stable while save is pending", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
-      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
-      claude: { enabled: false, executablePath: "" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
+      claude: { enabled: true, executablePath: "/valid/claude" },
     };
-    const save = createDeferred<void>();
-    const saveSettingsSnapshot = mock(async () => save.promise);
+    const availableCheck: RuntimeExecutableCheck = {
+      runtimes: runtimeDefinitions.map(({ kind }) => ({
+        kind,
+        path: runtimes[kind].executablePath,
+        ok: true,
+        version: `${kind} 1.0.0`,
+        error: null,
+      })),
+    };
+    const refreshedValidation = createDeferred<RuntimeExecutableCheck>();
+    let refreshPending = false;
+    let queryClient: ReturnType<typeof createQueryClient>;
+    const saveSettingsSnapshot = mock(async () => {
+      refreshPending = true;
+      await queryClient.invalidateQueries({
+        queryKey: [...runtimeQueryKeys.all, "executables"],
+      });
+    });
     const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    host.runtimeExecutablesCheck = mock(async () =>
+      refreshPending ? refreshedValidation.promise : availableCheck,
+    );
 
     try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
+      queryClient = renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
-      await within(opencodeSection()).findByText("Available");
+      await waitFor(() => expect(screen.getAllByText("Available")).toHaveLength(3));
 
       const heading = screen.getByRole("heading", { name: "Configure coding agents" });
       const stage = heading.closest('[data-slot="card"]');
@@ -958,24 +977,29 @@ describe("OnboardingPage runtime validation", () => {
       const enabledSwitch = within(opencodeSection()).getByRole("switch", {
         name: "Enabled",
       }) as HTMLButtonElement;
+      const scanButton = screen.getByRole("button", {
+        name: "Scan for coding agents",
+      }) as HTMLButtonElement;
+      const continueButton = screen.getByRole("button", {
+        name: "Continue to workspace",
+      }) as HTMLButtonElement;
 
-      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+      await act(async () => {
+        fireEvent.click(continueButton);
+        await Promise.resolve();
+      });
       await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
 
       expect(stage?.hasAttribute("inert")).toBe(true);
+      expect(stage?.textContent?.match(/Available/g)).toHaveLength(3);
+      expect(stage?.textContent).not.toContain("Checking");
       expect(pathInput.disabled).toBe(false);
       expect(enabledSwitch.disabled).toBe(false);
-      expect(
-        (screen.getByRole("button", { name: "Scan for coding agents" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false);
-      expect(
-        (screen.getByRole("button", { name: "Continue to workspace" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false);
+      expect(scanButton.disabled).toBe(false);
+      expect(continueButton.disabled).toBe(false);
       expect(screen.queryByRole("button", { name: "Saving coding agents..." })).toBeNull();
 
-      await act(async () => save.resolve());
+      await act(async () => refreshedValidation.resolve(availableCheck));
       await screen.findByRole("heading", { name: "Open your first workspace" });
     } finally {
       host.runtimeExecutablesCheck = originalCheck;

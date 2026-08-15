@@ -14,7 +14,10 @@ import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
 } from "@/state/queries/runtime";
-import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
+import {
+  type RuntimeExecutableValidationResult,
+  useRuntimeExecutableValidation,
+} from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { RuntimeStageActivity } from "./onboarding-stages";
 
@@ -33,12 +36,21 @@ const runtimeStageActivity = ({
   return "idle";
 };
 
+type SavingStageSnapshot = {
+  checkResults: RuntimeExecutableValidationResult[];
+  checkingRuntimeKinds: RuntimeKind[];
+  activity: RuntimeStageActivity;
+  showNoRuntimeWarning: boolean;
+  continueDisabled: boolean;
+};
+
 export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => void }) => {
   const queryClient = useQueryClient();
   const { saveSettingsSnapshot } = useWorkspaceState();
   const [runtimeDraftOverride, setRuntimeDraftOverride] = useState<AgentRuntimes | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savingStageSnapshot, setSavingStageSnapshot] = useState<SavingStageSnapshot | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
@@ -130,6 +142,30 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     }
   };
 
+  const runtimeLoading =
+    settingsQuery.isPending || definitionsQuery.isPending || runtimeDraft === null;
+  const validationPending = runtimeDraft !== null && checkingRuntimeKinds.length > 0;
+  const runtimeRequestError =
+    settingsQuery.error ?? definitionsQuery.error ?? runtimeValidation.error;
+  const validEnabledRuntimeCount = runtimeDraft
+    ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
+    : 0;
+  const showNoRuntimeWarning =
+    checkResults.length === knownRuntimeKindValues.length &&
+    !validationPending &&
+    validEnabledRuntimeCount === 0;
+  const activity = runtimeStageActivity({
+    isLoading: runtimeLoading,
+    isValidating: validationPending,
+    isRediscovering: isChecking,
+  });
+  const continueDisabled =
+    runtimeLoading ||
+    validationPending ||
+    isChecking ||
+    !!runtimeRequestError ||
+    runtimeDiscoveryError !== null;
+
   const saveRuntimes = async (allowNoRuntime = false): Promise<void> => {
     if (
       saveInFlight.current ||
@@ -157,6 +193,13 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     }
 
     saveInFlight.current = true;
+    setSavingStageSnapshot({
+      checkResults,
+      checkingRuntimeKinds,
+      activity,
+      showNoRuntimeWarning,
+      continueDisabled,
+    });
     setIsSaving(true);
     setStageError(null);
     try {
@@ -172,27 +215,11 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     } finally {
       saveInFlight.current = false;
       setIsSaving(false);
+      setSavingStageSnapshot(null);
     }
   };
 
-  const runtimeLoading =
-    settingsQuery.isPending || definitionsQuery.isPending || runtimeDraft === null;
-  const validationPending = runtimeDraft !== null && checkingRuntimeKinds.length > 0;
-  const runtimeRequestError =
-    settingsQuery.error ?? definitionsQuery.error ?? runtimeValidation.error;
-  const validEnabledRuntimeCount = runtimeDraft
-    ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
-    : 0;
-  const showNoRuntimeWarning =
-    checkResults.length === knownRuntimeKindValues.length &&
-    !validationPending &&
-    validEnabledRuntimeCount === 0;
-  const continueDisabled =
-    runtimeLoading ||
-    validationPending ||
-    isChecking ||
-    !!runtimeRequestError ||
-    runtimeDiscoveryError !== null;
+  const visibleStageSnapshot = isSaving ? savingStageSnapshot : null;
 
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
@@ -206,19 +233,15 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     settingsSnapshot: settingsQuery.data,
     runtimeDraft,
     definitions: definitionsQuery.data ?? [],
-    checkResults,
-    checkingRuntimeKinds,
+    checkResults: visibleStageSnapshot?.checkResults ?? checkResults,
+    checkingRuntimeKinds: visibleStageSnapshot?.checkingRuntimeKinds ?? checkingRuntimeKinds,
     requestError: runtimeRequestError ? errorMessage(runtimeRequestError) : null,
     discoveryError: runtimeDiscoveryError,
     stageError,
     stageErrorRef,
-    activity: runtimeStageActivity({
-      isLoading: runtimeLoading,
-      isValidating: validationPending,
-      isRediscovering: isChecking,
-    }),
-    showNoRuntimeWarning,
-    continueDisabled,
+    activity: visibleStageSnapshot?.activity ?? activity,
+    showNoRuntimeWarning: visibleStageSnapshot?.showNoRuntimeWarning ?? showNoRuntimeWarning,
+    continueDisabled: visibleStageSnapshot?.continueDisabled ?? continueDisabled,
     confirmNoRuntime,
     isSaving,
     updateDraft,
