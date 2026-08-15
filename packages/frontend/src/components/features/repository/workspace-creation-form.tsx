@@ -14,13 +14,13 @@ import {
 
 const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export const deriveWorkspaceNameFromRepoPath = (repoPath: string): string => {
+const deriveWorkspaceNameFromRepoPath = (repoPath: string): string => {
   const trimmedPath = repoPath.trim().replace(/[\\/]+$/, "");
   const segments = trimmedPath.split(/[\\/]+/).filter(Boolean);
   return segments.at(-1)?.trim() || repoPath.trim();
 };
 
-export const proposeWorkspaceId = (input: string): string => {
+const proposeWorkspaceId = (input: string): string => {
   const normalized = input
     .trim()
     .toLowerCase()
@@ -29,7 +29,7 @@ export const proposeWorkspaceId = (input: string): string => {
   return normalized || "workspace";
 };
 
-export const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): string => {
+const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): string => {
   if (!existingIds.has(candidate)) return candidate;
   let suffix = 2;
   while (existingIds.has(`${candidate}-${suffix}`)) suffix += 1;

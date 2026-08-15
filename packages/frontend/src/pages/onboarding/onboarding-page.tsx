@@ -78,7 +78,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
     ...runtimeDefinitionsQueryOptions(),
     enabled: true,
   });
-  const runtimeDraft = runtimeDraftOverride ?? settingsQuery.data?.agentRuntimes ?? null;
+  const savedAgentRuntimes = settingsQuery.data?.agentRuntimes;
+  const runtimeDraft = runtimeDraftOverride ?? savedAgentRuntimes ?? null;
   const runtimeValidation = useRuntimeExecutableValidation(runtimeDraft, runtimeDraft !== null);
   const checkResults = runtimeValidation.results;
   const checkingRuntimeKinds = runtimeValidation.checkingRuntimeKinds;
@@ -87,7 +88,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
     if (checkResults.length === 0) return;
     const resultsByKind = new Map(checkResults.map((row) => [row.kind, row]));
     setRuntimeDraftOverride((currentOverride) => {
-      const current = currentOverride ?? settingsQuery.data?.agentRuntimes;
+      const current = currentOverride ?? savedAgentRuntimes;
       if (!current) return currentOverride;
       let next = current;
       for (const kind of RUNTIME_KINDS) {
@@ -110,7 +111,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
       }
       return next === current ? currentOverride : next;
     });
-  }, [checkResults, settingsQuery.data]);
+  }, [checkResults, savedAgentRuntimes]);
 
   useEffect(() => {
     if (!stageError || !focusStageError.current) return;
