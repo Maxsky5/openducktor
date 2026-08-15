@@ -27,10 +27,9 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
   const { messages, ...sessionOverrides } = overrides;
   const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
 
-  const session: AgentSessionState = {
+  return {
     externalSessionId,
     taskId: "task-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,
@@ -45,13 +44,6 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     selectedModel: null,
     ...sessionOverrides,
   };
-  if (!sessionOverrides.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
-  return session;
 };
 
 const deriveLoadedTranscriptStateForSession = ({

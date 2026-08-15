@@ -1,9 +1,5 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import {
-  formatWorkflowAgentSessionTitle,
-  requireSessionWorkingDirectory,
-  workflowAgentSessionScope,
-} from "@openducktor/core";
+import { formatWorkflowAgentSessionTitle, requireSessionWorkingDirectory } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
 import { normalizePersistedSelection } from "./models";
@@ -67,7 +63,6 @@ export const fromPersistedSessionRecord = ({
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
     taskId,
-    sessionAssociation: workflowAgentSessionScope(taskId, record.role),
     role: record.role,
     // Persisted task-store records are durable session fields only. Cold reads
     // start idle; mounted refreshes may preserve current live state separately.
@@ -111,7 +106,6 @@ export const toPersistedSessionView = ({
     ...current,
     taskId: persisted.taskId,
     runtimeKind: persisted.runtimeKind,
-    sessionAssociation: persisted.sessionAssociation,
     role: persisted.role,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,

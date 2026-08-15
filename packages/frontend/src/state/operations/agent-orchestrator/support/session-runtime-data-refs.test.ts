@@ -22,7 +22,6 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
 const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   ...sessionIdentity(),
   taskId: "task-1",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   role: "build",
   title: "BUILD task-1",
   status: "idle",
@@ -131,14 +130,11 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
-  test("returns unscoped todo refs for an unbound session", () => {
+  test("returns todo refs when selected workflow session has no known role", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState({
-          role: null,
-          sessionAssociation: { kind: "unbound" },
-        }),
+        selectedSessionIdentity: sessionState({ role: null }),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),

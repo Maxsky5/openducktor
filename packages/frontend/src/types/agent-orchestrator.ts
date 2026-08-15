@@ -1,5 +1,4 @@
 import type {
-  AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
   FileContent,
   FileDiff,
@@ -182,7 +181,6 @@ export type AgentSessionState = {
   title?: string;
   taskId: string;
   runtimeKind: RuntimeKind;
-  sessionAssociation: AgentSessionAssociation;
   role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   runtimeStatusMessage: string | null;

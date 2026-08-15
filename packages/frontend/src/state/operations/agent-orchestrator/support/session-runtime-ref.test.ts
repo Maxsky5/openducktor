@@ -3,32 +3,22 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
 import { toRuntimeSessionRef } from "./session-runtime-ref";
 
-const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
-  const session: AgentSessionState = {
-    externalSessionId: "session-1",
-    taskId: "task-1",
-    runtimeKind: "codex",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    role: "build",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    workingDirectory: "/repo/worktree",
-    messages: createSessionMessagesState(overrides.externalSessionId ?? "session-1"),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    historyLoadState: "not_requested",
-    ...overrides,
-  };
-  if (!overrides.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
-  return session;
-};
+const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
+  externalSessionId: "session-1",
+  taskId: "task-1",
+  runtimeKind: "codex",
+  role: "build",
+  status: "idle",
+  runtimeStatusMessage: null,
+  startedAt: "2026-02-22T08:00:00.000Z",
+  workingDirectory: "/repo/worktree",
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "session-1"),
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
+  historyLoadState: "not_requested",
+  ...overrides,
+});
 
 describe("runtime session refs", () => {
   test("builds session refs from mandatory session runtime fields", () => {

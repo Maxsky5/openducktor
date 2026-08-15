@@ -44,7 +44,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     runtimeKind: "opencode",
     externalSessionId: "external-1",
     taskId: "task-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "running",
     runtimeStatusMessage: null,
@@ -57,12 +56,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
     ...overrides,
     historyLoadState: overrides.historyLoadState ?? "not_requested",
   };
-  if (!overrides.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
   return toAgentSessionSummary(session);
 };
 

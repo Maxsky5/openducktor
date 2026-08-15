@@ -19,7 +19,6 @@ const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState 
   taskId: "task-1",
   role: "build",
   runtimeKind: "codex",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   workingDirectory: "/repo/worktree",
   status: "idle",
   runtimeStatusMessage: null,
@@ -82,7 +81,7 @@ const createHarness = (
 };
 
 describe("useRuntimeTranscriptSessionHistory", () => {
-  test("uses the live repository association for the history request", async () => {
+  test("forwards repository scope unchanged to the history request", async () => {
     const readSessionHistory = mock(async () => []);
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
@@ -102,16 +101,10 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           externalSessionId: "repository-thread",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
+          sessionScope: { kind: "repository" },
         },
         repoReadinessState: "ready" as const,
-        liveSession: session({
-          externalSessionId: "repository-thread",
-          taskId: "",
-          runtimeKind: "opencode",
-          role: null,
-          sessionAssociation: { kind: "repository" },
-          messages: createSessionMessagesState("repository-thread"),
-        }),
+        liveSession: null,
       },
       { wrapper },
     );

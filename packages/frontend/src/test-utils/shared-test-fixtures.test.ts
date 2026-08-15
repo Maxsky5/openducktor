@@ -61,21 +61,6 @@ describe("shared test fixtures", () => {
     expect(createAgentSessionFixture().externalSessionId).toBe(TEST_EXTERNAL_SESSION_IDS.default);
   });
 
-  test("createAgentSessionFixture derives workflow association from effective overrides", () => {
-    expect(createAgentSessionFixture({ taskId: "task-2", role: "qa" }).sessionAssociation).toEqual({
-      kind: "workflow",
-      taskId: "task-2",
-      role: "qa",
-    });
-    expect(
-      createAgentSessionFixture({
-        taskId: "",
-        role: null,
-        sessionAssociation: { kind: "repository" },
-      }).sessionAssociation,
-    ).toEqual({ kind: "repository" });
-  });
-
   test("createChatSettingsFixture derives from canonical defaults", () => {
     expect(createChatSettingsFixture({ expandFileDiffsByDefault: false })).toEqual({
       ...DEFAULT_CHAT_SETTINGS,

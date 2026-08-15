@@ -6,6 +6,7 @@ import type {
   PolicyBoundSessionRef,
   RuntimeKind,
 } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
 
@@ -13,7 +14,8 @@ type RuntimeSessionContextSource = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 > & {
-  sessionScope: AgentSessionScope | null;
+  taskId?: string;
+  role?: AgentSessionState["role"];
   selectedModel?: AgentSessionState["selectedModel"];
 };
 
@@ -79,13 +81,15 @@ export const resolveRuntimeSessionContextRef = async (
   session: RuntimeSessionContextSource,
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy,
 ): Promise<PolicyBoundSessionRef> => {
+  const sessionScope =
+    session.role && session.taskId ? workflowAgentSessionScope(session.taskId, session.role) : null;
   const runtimePolicy = await resolveAgentSessionRuntimePolicy({
     runtimeKind: session.runtimeKind,
-    sessionScope: session.sessionScope,
+    sessionScope,
     loadSettingsSnapshot,
   });
   return {
     ...toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy),
-    ...(session.sessionScope ? { sessionScope: session.sessionScope } : {}),
+    ...(sessionScope ? { sessionScope } : {}),
   };
 };

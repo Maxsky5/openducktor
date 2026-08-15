@@ -25,7 +25,6 @@ export const buildInitialSession = ({
   ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
   taskId: startedCtx.taskId,
   runtimeKind: startedCtx.summary.runtimeKind,
-  sessionAssociation: startedCtx.summary.sessionAssociation,
   role: startedCtx.role,
   status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
   runtimeStatusMessage: null,

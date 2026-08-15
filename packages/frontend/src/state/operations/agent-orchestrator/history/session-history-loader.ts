@@ -209,13 +209,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
     const sessionRef = await resolveRuntimeSessionContextRef(
       repoPath,
-      {
-        ...sessionForHistory,
-        sessionScope:
-          sessionForHistory.sessionAssociation.kind === "unbound"
-            ? null
-            : sessionForHistory.sessionAssociation,
-      },
+      sessionForHistory,
       loadSettingsSnapshot ??
         (() => {
           throw new Error(

@@ -7,7 +7,6 @@ const sessionFixture: AgentSessionState = {
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   taskId: "task-1",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   role: "build",
   status: "running",
   runtimeStatusMessage: null,

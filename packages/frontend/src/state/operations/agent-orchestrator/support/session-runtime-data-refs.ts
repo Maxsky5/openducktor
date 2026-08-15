@@ -1,12 +1,13 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
+import { workflowAgentSessionScope } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
 
 type SessionRuntimeDataSource =
   | AgentSessionIdentity
-  | (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel" | "sessionAssociation">);
+  | (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel" | "taskId" | "role">);
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
@@ -76,13 +77,13 @@ export const resolveSessionRuntimeDataRefs = ({
   }
 
   const todosRef = toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy);
+  const sessionScope =
+    "role" in selectedSessionIdentity && selectedSessionIdentity.role
+      ? workflowAgentSessionScope(selectedSessionIdentity.taskId, selectedSessionIdentity.role)
+      : null;
   return {
     kind: "available",
     catalogRef,
-    todosRef:
-      "sessionAssociation" in selectedSessionIdentity &&
-      selectedSessionIdentity.sessionAssociation.kind !== "unbound"
-        ? { ...todosRef, sessionScope: selectedSessionIdentity.sessionAssociation }
-        : todosRef,
+    todosRef: sessionScope ? { ...todosRef, sessionScope } : todosRef,
   };
 };

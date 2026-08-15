@@ -44,28 +44,6 @@ describe("session runtime policy", () => {
     });
   });
 
-  test("keeps explicit repository scope on restored session refs", async () => {
-    const snapshot = createSettingsSnapshotFixture();
-    const ref = await resolveRuntimeSessionContextRef(
-      "/repo",
-      {
-        externalSessionId: "repository-session",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        sessionScope: { kind: "repository" },
-      },
-      async () => snapshot,
-    );
-
-    expect(ref.sessionScope).toEqual({ kind: "repository" });
-    expect(ref.runtimePolicy).toEqual({
-      kind: "codex",
-      policy: expect.objectContaining({
-        sandboxMode: snapshot.agentRuntimes.codex.defaults.sandboxMode,
-      }),
-    });
-  });
-
   test("does not infer repository scope from missing workflow metadata", async () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",
@@ -73,7 +51,6 @@ describe("session runtime policy", () => {
         externalSessionId: "unbound-session",
         runtimeKind: "opencode",
         workingDirectory: "/repo",
-        sessionScope: null,
       },
       async () => createSettingsSnapshotFixture(),
     );

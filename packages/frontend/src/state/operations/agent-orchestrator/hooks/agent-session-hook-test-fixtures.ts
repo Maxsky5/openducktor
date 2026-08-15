@@ -51,7 +51,6 @@ export const createSession = (overrides: CreateSessionOverrides = {}): AgentSess
     runtimeKind: "opencode",
     externalSessionId,
     taskId: "task-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,

@@ -36,7 +36,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionW
     runtimeKind: "opencode",
     externalSessionId: "ext-session-1",
     taskId: "task-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     role: "spec",
     status: "idle",
     runtimeStatusMessage: null,
@@ -49,12 +48,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionW
     ...overrides,
     historyLoadState: overrides.historyLoadState ?? "not_requested",
   };
-  if (!overrides.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
   const summary = toAgentSessionSummary(session);
   if (summary.role === null) {
     throw new Error("Workflow summary fixtures require a role.");

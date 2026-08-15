@@ -30,11 +30,6 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(loadedSession.status).toBe("idle");
     expect(loadedSession.title).toBe("BUILD task-1");
     expect(loadedSession.runtimeKind).toBe("opencode");
-    expect(loadedSession.sessionAssociation).toEqual({
-      kind: "workflow",
-      taskId: "task-1",
-      role: "build",
-    });
     expect(loadedSession.pendingApprovals).toEqual([]);
     expect(loadedSession.pendingQuestions).toEqual([]);
     expect(sessionMessagesToArray(loadedSession)).toEqual([]);

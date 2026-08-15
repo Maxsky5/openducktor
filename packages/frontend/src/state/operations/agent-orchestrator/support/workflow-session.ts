@@ -3,7 +3,5 @@ import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent
 export const isWorkflowAgentSession = (
   session: AgentSessionState | null | undefined,
 ): session is WorkflowAgentSessionState => {
-  return Boolean(
-    session && session.role !== null && session.sessionAssociation.kind === "workflow",
-  );
+  return Boolean(session && session.role !== null);
 };

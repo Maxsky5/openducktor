@@ -83,7 +83,6 @@ const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
   taskId: "task-1",
   runtimeKind: "opencode",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
   role: "spec",
   status: "running",
   runtimeStatusMessage: null,
@@ -120,12 +119,6 @@ export const buildSession = (
     ...baseSession,
     ...overrideSessionFields,
   };
-  if (!overrideSessionFields.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 

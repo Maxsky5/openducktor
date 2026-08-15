@@ -44,10 +44,9 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
 
 const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
   const identity = sessionIdentity(overrides);
-  const session: AgentSessionState = {
+  return {
     ...identity,
     taskId: "task-1",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     role: "build",
     status: "idle",
     runtimeStatusMessage: null,
@@ -60,13 +59,6 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
     selectedModel: null,
     ...overrides,
   };
-  if (!overrides.sessionAssociation) {
-    session.sessionAssociation =
-      session.taskId && session.role
-        ? { kind: "workflow", taskId: session.taskId, role: session.role }
-        : { kind: "unbound" };
-  }
-  return session;
 };
 
 const wrapper = ({ children }: PropsWithChildren) =>
@@ -238,36 +230,6 @@ describe("useSessionRuntimeData", () => {
         workingDirectory: "/repo",
       });
       expect(harness.getLatest().todos).toEqual([todoFixture]);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("reads repository todos with repository scope", async () => {
-    const readSessionTodos = mock(async () => [todoFixture]);
-    const harness = createHookHarness(
-      useSessionRuntimeData,
-      {
-        repoPath: "/repo",
-        selectedSessionIdentity: sessionState({
-          taskId: "",
-          role: null,
-          sessionAssociation: { kind: "repository" },
-        }),
-        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
-        repoReadinessState: "ready" as const,
-        loadRuntimeCatalog: async () => emptyCatalog,
-        readSessionTodos,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((latest) => latest.todos.length === 1);
-      expect(readSessionTodos).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionScope: { kind: "repository" } }),
-      );
     } finally {
       await harness.unmount();
     }
