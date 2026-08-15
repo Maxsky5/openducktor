@@ -384,6 +384,31 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
+  test("shows the workspace load failure when no cached workspace exists", () => {
+    renderAppShellForTest({
+      workspacePresence: {
+        hasWorkspaces: false,
+        workspaceLoadError: new Error("Workspace list unavailable"),
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("keeps cached workspaces visible after a background refresh fails", () => {
+    renderAppShellForTest({
+      workspacePresence: { workspaceLoadError: new Error("Workspace refresh unavailable") },
+    });
+
+    expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(
+      screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeNull();
+  });
+
   test("redirects an empty workspace from kanban to onboarding", async () => {
     renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
 

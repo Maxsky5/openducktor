@@ -257,7 +257,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
     );
   }
 
-  if (workspaceLoadError) {
+  if (workspaceLoadError && !hasWorkspaces) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
         <div

@@ -498,12 +498,16 @@ describe("discoverToolPath", () => {
 
   test("validates only the supplied executable path and never falls back", async () => {
     await withTempDir(async (root) => {
-      const executable = join(root, "custom-codex");
+      const executableName = process.platform === "win32" ? "custom-codex.cmd" : "custom-codex";
+      const executable = join(root, executableName);
       await writeExecutable(executable);
       const adapter = createToolDiscoveryAdapter({
         env: {},
-        options: { platform: "linux" },
-        systemCommands: createSystemCommandRunner({ env: { PATH: root }, platform: "linux" }),
+        options: { platform: process.platform },
+        systemCommands: createSystemCommandRunner({
+          env: { PATH: root },
+          platform: process.platform,
+        }),
       });
 
       await expect(
@@ -514,7 +518,9 @@ describe("discoverToolPath", () => {
         sourceCategory: "provided_path",
       });
       await expect(
-        Effect.runPromise(validateExactToolPath(adapter, "codex", join(root, "missing-codex"))),
+        Effect.runPromise(
+          validateExactToolPath(adapter, "codex", join(root, `missing-${executableName}`)),
+        ),
       ).rejects.toThrow(`Saved Codex path points to a missing or non-executable file`);
     });
   });
