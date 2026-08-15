@@ -85,7 +85,6 @@ type WorkspaceCreationFormProps = {
   renderActions?: (actions: {
     primaryAction: ReactElement;
     secondaryAction: ReactElement | null;
-    hint: string | null;
   }) => ReactNode;
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
@@ -122,7 +121,6 @@ export function WorkspaceCreationForm({
       validationError = `Workspace ID already exists: ${state.workspaceId.trim()}`;
   }
   const busy = disabled || state.submitting;
-  const selectionHint = "Choose a local Git repository to continue.";
 
   const confirmRepo = (repoPath: string): void => {
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);
@@ -192,7 +190,7 @@ export function WorkspaceCreationForm({
           {...(renderActions
             ? {
                 renderActions: ({ primaryAction, secondaryAction }) =>
-                  renderActions({ primaryAction, secondaryAction, hint: selectionHint }),
+                  renderActions({ primaryAction, secondaryAction }),
               }
             : {})}
           {...(state.repoPath
@@ -239,9 +237,7 @@ export function WorkspaceCreationForm({
             />
           </div>
         </div>
-      ) : renderActions ? null : (
-        <p className="text-sm text-muted-foreground">{selectionHint}</p>
-      )}
+      ) : null}
 
       {state.error || validationError ? (
         <p className="text-sm text-destructive" role="alert">
@@ -250,8 +246,7 @@ export function WorkspaceCreationForm({
       ) : null}
 
       {submitAction
-        ? (renderActions?.({ primaryAction: submitAction, secondaryAction: null, hint: null }) ??
-          submitAction)
+        ? (renderActions?.({ primaryAction: submitAction, secondaryAction: null }) ?? submitAction)
         : null}
 
       {repositoryPicker === "dialog" && state.pickerOpen ? (

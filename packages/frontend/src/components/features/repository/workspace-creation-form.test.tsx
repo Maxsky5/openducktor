@@ -54,10 +54,9 @@ function InlineWorkspaceCreationForm({
       repositoryPicker="inline"
       {...(composeActions
         ? {
-            renderActions: ({ primaryAction, secondaryAction, hint }) => (
+            renderActions: ({ primaryAction, secondaryAction }) => (
               <div data-testid="workspace-actions">
                 <button type="button">Back to coding agents</button>
-                {hint ? <p>{hint}</p> : null}
                 {secondaryAction}
                 {primaryAction}
               </div>
@@ -122,13 +121,14 @@ describe("WorkspaceCreationForm", () => {
     mountedViews.add(view);
 
     expect(await screen.findByText("/repo")).toBeTruthy();
+    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
     expect(await screen.findByRole("button", { name: /^open repository$/i })).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  test("lets the onboarding host compose one action row across repository selection and submit", async () => {
+  test("lets the onboarding host compose its actions without duplicate helper copy", async () => {
     const addWorkspace = mock(async () => {});
     const view = render(
       <QueryProvider useIsolatedClient>
@@ -138,18 +138,13 @@ describe("WorkspaceCreationForm", () => {
     mountedViews.add(view);
 
     const selectionActions = await screen.findByTestId("workspace-actions");
-    expect(
-      within(selectionActions).getByText("Choose a local Git repository to continue."),
-    ).toBeTruthy();
+    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
     expect(
       within(selectionActions).getByRole("button", { name: "Back to coding agents" }),
     ).toBeTruthy();
     fireEvent.click(within(selectionActions).getByRole("button", { name: "Choose This Folder" }));
 
     const submitActions = await screen.findByTestId("workspace-actions");
-    expect(
-      within(submitActions).queryByText("Choose a local Git repository to continue."),
-    ).toBeNull();
     expect(
       within(submitActions).getByRole("button", { name: "Back to coding agents" }),
     ).toBeTruthy();

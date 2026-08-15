@@ -449,18 +449,22 @@ describe("AppShell", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     const selectionActions = await screen.findByTestId("onboarding-workspace-actions");
+    const workspaceContent = screen.getByTestId("onboarding-workspace-content");
+    const workspaceFooter = screen.getByTestId("onboarding-workspace-footer");
+    expect(workspaceContent.contains(workspaceFooter)).toBe(false);
+    expect(workspaceFooter.parentElement).toBe(workspaceContent.parentElement);
+    expect(workspaceFooter.contains(selectionActions)).toBe(true);
     expect(
-      within(selectionActions).getByRole("button", { name: "Back to coding agents" }),
+      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
     ).toBeTruthy();
-    expect(
-      within(selectionActions).getByText("Choose a local Git repository to continue."),
-    ).toBeTruthy();
-    fireEvent.click(within(selectionActions).getByRole("button", { name: "Choose This Folder" }));
+    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
+    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
     const submitActions = await screen.findByTestId("onboarding-workspace-actions");
+    expect(workspaceFooter.contains(submitActions)).toBe(true);
     expect(
-      within(submitActions).getByRole("button", { name: "Back to coding agents" }),
+      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
     ).toBeTruthy();
-    expect(within(submitActions).getByRole("button", { name: "Open repository" })).toBeTruthy();
+    expect(within(workspaceFooter).getByRole("button", { name: "Open repository" })).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();

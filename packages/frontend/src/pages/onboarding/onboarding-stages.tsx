@@ -14,6 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { type ReactElement, type RefObject, useState } from "react";
+import { createPortal } from "react-dom";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { Button } from "@/components/ui/button";
@@ -288,6 +289,7 @@ export function WorkspaceStage({
   onBack,
 }: WorkspaceStageProps): ReactElement {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+  const [footerElement, setFooterElement] = useState<HTMLDivElement | null>(null);
 
   return (
     <Card className="overflow-hidden shadow-sm">
@@ -299,7 +301,10 @@ export function WorkspaceStage({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6">
+      <CardContent
+        data-testid="onboarding-workspace-content"
+        className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6"
+      >
         <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationForm
             workspaces={workspaces}
@@ -307,27 +312,20 @@ export function WorkspaceStage({
             disabled={isFinalizing}
             repositoryPicker="inline"
             onSubmittingChange={setIsCreatingWorkspace}
-            renderActions={({ primaryAction, secondaryAction, hint }) => (
-              <div
-                data-testid="onboarding-workspace-actions"
-                className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isCreatingWorkspace || isFinalizing}
-                  onClick={onBack}
-                >
-                  <ArrowLeft data-icon="inline-start" />
-                  Back to coding agents
-                </Button>
-                <div className="flex min-w-0 flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end">
-                  {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
-                  {secondaryAction}
-                  {primaryAction}
-                </div>
-              </div>
-            )}
+            renderActions={({ primaryAction, secondaryAction }) =>
+              footerElement
+                ? createPortal(
+                    <div
+                      data-testid="onboarding-workspace-actions"
+                      className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end"
+                    >
+                      {secondaryAction}
+                      {primaryAction}
+                    </div>,
+                    footerElement,
+                  )
+                : null
+            }
           />
           {isFinalizing ? (
             <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-card/95 p-6">
@@ -342,6 +340,21 @@ export function WorkspaceStage({
           ) : null}
         </div>
       </CardContent>
+      <div
+        ref={setFooterElement}
+        data-testid="onboarding-workspace-footer"
+        className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:items-center sm:px-9"
+      >
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isCreatingWorkspace || isFinalizing}
+          onClick={onBack}
+        >
+          <ArrowLeft data-icon="inline-start" />
+          Back to coding agents
+        </Button>
+      </div>
     </Card>
   );
 }
