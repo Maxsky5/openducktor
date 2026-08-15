@@ -272,7 +272,6 @@ const createWorkspaceBranchStateValue = (): WorkspaceBranchStateContextValue => 
   activeWorkspace: activeWorkspaceFixture,
   branches: [],
   activeBranch: null,
-  isSwitchingWorkspace: false,
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,

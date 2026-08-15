@@ -9,7 +9,6 @@ import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
 
 let branchSyncDegraded = false;
-let isSwitchingWorkspace = false;
 let isSwitchingBranch = false;
 let activeBranchName = "main";
 let latestOnValueChange: ((value: string) => void) | undefined;
@@ -44,7 +43,6 @@ const resetBranchState = (): void => {
       name: activeBranchName,
       detached: false,
     },
-    isSwitchingWorkspace,
     isLoadingBranches: false,
     isSwitchingBranch,
     branchSyncDegraded,
@@ -130,21 +128,28 @@ describe("BranchSwitcher", () => {
       BranchSelector: ({
         value,
         disabled,
+        placeholder,
         onValueChange,
       }: {
         value: string;
         disabled?: boolean;
+        placeholder?: string;
         onValueChange?: (value: string) => void;
       }) => {
         latestOnValueChange = onValueChange;
-        return <div data-branch-value={value} data-disabled={disabled ? "true" : "false"} />;
+        return (
+          <div
+            data-branch-value={value}
+            data-disabled={disabled ? "true" : "false"}
+            data-placeholder={placeholder}
+          />
+        );
       },
     }));
   });
 
   beforeEach(() => {
     branchSyncDegraded = false;
-    isSwitchingWorkspace = false;
     isSwitchingBranch = false;
     activeBranchName = "main";
     latestOnValueChange = undefined;
@@ -174,13 +179,85 @@ describe("BranchSwitcher", () => {
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
-  test("disables branch selection while switching repositories", async () => {
-    isSwitchingWorkspace = true;
-    resetBranchState();
+  test("keeps the selector enabled while the cached repository branch changes", async () => {
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderBranchSwitcherMarkup(BranchSwitcher);
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+    const expectStableBranchSelector = (branchName: string): void => {
+      const selector = rendered.container.querySelector(`[data-branch-value="${branchName}"]`);
+      expect(selector?.getAttribute("data-disabled")).toBe("false");
+    };
 
-    expect(html).toContain('data-disabled="true"');
+    expectStableBranchSelector("main");
+
+    await act(async () => {
+      updateBranchState({
+        branches: [
+          {
+            name: "develop",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+        activeBranch: {
+          name: "develop",
+          detached: false,
+        },
+      });
+    });
+
+    expectStableBranchSelector("develop");
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("disables the selector and shows loading on an uncached first load", async () => {
+    resetBranchState();
+    updateBranchState({
+      branches: [],
+      activeBranch: null,
+      isLoadingBranches: true,
+    });
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    const selector = rendered.container.querySelector('[data-disabled="true"]');
+    expect(selector?.getAttribute("data-placeholder")).toBe("Loading branches...");
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("disables the selector when the repository has no branches", async () => {
+    resetBranchState();
+    updateBranchState({
+      branches: [],
+      activeBranch: null,
+      isLoadingBranches: false,
+    });
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    const selector = rendered.container.querySelector('[data-disabled="true"]');
+    expect(selector?.getAttribute("data-placeholder")).toBe("Select branch...");
+
+    await act(async () => {
+      rendered.unmount();
+    });
   });
 
   test("uses the active branch name on the first render", async () => {
@@ -244,6 +321,106 @@ describe("BranchSwitcher", () => {
     });
 
     expect(rendered.container.innerHTML).toContain('data-branch-value="release"');
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("keeps the active repository pending branch when an inactive switch completes", async () => {
+    const repoASwitch = createDeferred<void>();
+    const repoBSwitch = createDeferred<void>();
+    switchBranch.mockImplementation((branchName: string) =>
+      branchName === "feature/repo-a" ? repoASwitch.promise : repoBSwitch.promise,
+    );
+    resetBranchState();
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    try {
+      await act(async () => {
+        latestOnValueChange?.("feature/repo-a");
+        updateBranchState({ isSwitchingBranch: true });
+      });
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-a"]'),
+      ).not.toBeNull();
+
+      await act(async () => {
+        updateBranchState({
+          activeWorkspace: {
+            workspaceId: "workspace-repo-b",
+            workspaceName: "Repo B",
+            repoPath: "/repo-b",
+            isActive: true,
+            hasConfig: true,
+            configuredWorktreeBasePath: null,
+            defaultWorktreeBasePath: "/tmp/default-worktrees",
+            effectiveWorktreeBasePath: "/tmp/default-worktrees",
+          },
+          branches: [
+            { name: "release", isCurrent: true, isRemote: false },
+            { name: "feature/repo-b", isCurrent: false, isRemote: false },
+          ],
+          activeBranch: { name: "release", detached: false },
+          isSwitchingBranch: false,
+        });
+      });
+      await act(async () => {
+        latestOnValueChange?.("feature/repo-b");
+        updateBranchState({ isSwitchingBranch: true });
+      });
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-b"]'),
+      ).not.toBeNull();
+
+      await act(async () => {
+        repoASwitch.resolve();
+        await flush();
+      });
+
+      expect(
+        rendered.container.querySelector('[data-branch-value="feature/repo-b"]'),
+      ).not.toBeNull();
+    } finally {
+      repoASwitch.resolve();
+      repoBSwitch.resolve();
+      await act(async () => {
+        await flush();
+        rendered.unmount();
+      });
+    }
+  });
+
+  test("restores the active branch after a switch fails", async () => {
+    const deferred = createDeferred<void>();
+    switchBranch.mockImplementationOnce(() => deferred.promise);
+    resetBranchState();
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    await act(async () => {
+      latestOnValueChange?.("feature/desloppify");
+      updateBranchState({ isSwitchingBranch: true });
+    });
+    expect(
+      rendered.container.querySelector('[data-branch-value="feature/desloppify"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      deferred.reject(new Error("checkout failed"));
+      updateBranchState({ isSwitchingBranch: false });
+      await flush();
+    });
+    expect(rendered.container.querySelector('[data-branch-value="main"]')).not.toBeNull();
 
     await act(async () => {
       rendered.unmount();

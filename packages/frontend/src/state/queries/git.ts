@@ -59,7 +59,7 @@ export const repoBranchesQueryOptions = (
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-const currentBranchQueryOptions = (
+export const currentBranchQueryOptions = (
   repoPath: string,
   hostClient: GitCurrentBranchQueryHost = host,
 ) =>
@@ -124,6 +124,16 @@ export const loadCurrentBranchFromQuery = (
   hostClient?: GitCurrentBranchQueryHost,
 ): Promise<GitCurrentBranch> =>
   queryClient.fetchQuery(currentBranchQueryOptions(repoPath, hostClient));
+
+export const invalidateCurrentBranchQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    queryKey: gitQueryKeys.currentBranch(repoPath),
+    exact: true,
+    refetchType: "none",
+  });
 
 export const loadWorktreeStatusFromQuery = (
   queryClient: QueryClient,

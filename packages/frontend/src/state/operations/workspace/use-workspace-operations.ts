@@ -49,7 +49,6 @@ export function useWorkspaceOperations({
     refreshBranches,
     switchBranch,
     clearBranchData,
-    branchProbeController,
   } = useWorkspaceBranchOperations({
     activeRepo,
     hostClient,
@@ -83,7 +82,6 @@ export function useWorkspaceOperations({
     isLoadingBranches,
     isSwitchingBranch,
     hostClient,
-    branchProbeController,
     setBranchSyncDegraded: updateBranchSyncDegradedForRepo,
   });
 

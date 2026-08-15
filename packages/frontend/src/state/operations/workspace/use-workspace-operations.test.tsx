@@ -865,6 +865,7 @@ describe("use-workspace-operations", () => {
       await harness.run(async (value) => {
         await value.refreshBranches();
       });
+      await harness.waitFor((value) => value.activeBranch?.name === "main");
 
       expect(harness.getLatest().activeBranch).toEqual({
         name: "main",
@@ -1421,6 +1422,7 @@ describe("use-workspace-operations", () => {
       });
       await triggerFocus();
 
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().branchSyncDegraded).toBe(true);
       expect(toastError).toHaveBeenCalledWith("Branch sync probe degraded", {
         description: "[branch_refresh] git branches load failed",

@@ -1,26 +1,35 @@
-import { memo, type ReactElement, useMemo, useState } from "react";
+import { memo, type ReactElement, useMemo, useRef, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
+
+type PendingBranchSelection = {
+  repoPath: string;
+  requestId: number;
+  value: string;
+};
 
 export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | null {
   const {
     activeWorkspace,
     branches,
     activeBranch,
-    isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
     branchSyncDegraded,
     switchBranch,
   } = useWorkspaceBranchState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const [pendingBranchValue, setPendingBranchValue] = useState<string | null>(null);
+  const [pendingBranchSelection, setPendingBranchSelection] =
+    useState<PendingBranchSelection | null>(null);
+  const pendingBranchRequestIdRef = useRef(0);
   const activeBranchValue = activeBranch?.name ?? "";
 
   const branchOptions = useMemo(() => toBranchSelectorOptions(branches), [branches]);
+  const activePendingBranchValue =
+    pendingBranchSelection?.repoPath === workspaceRepoPath ? pendingBranchSelection.value : null;
   const selectedBranchValue = isSwitchingBranch
-    ? (pendingBranchValue ?? activeBranchValue)
+    ? (activePendingBranchValue ?? activeBranchValue)
     : activeBranchValue;
 
   if (!workspaceRepoPath) {
@@ -28,12 +37,9 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
   }
 
   const isBranchPickerDisabled =
-    isSwitchingWorkspace || isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
-  const branchPlaceholder = activeBranch?.detached
-    ? "Detached HEAD"
-    : isLoadingBranches
-      ? "Loading branches..."
-      : "Select branch...";
+    isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
+  const defaultBranchPlaceholder = isLoadingBranches ? "Loading branches..." : "Select branch...";
+  const branchPlaceholder = activeBranch?.detached ? "Detached HEAD" : defaultBranchPlaceholder;
 
   return (
     <div className="space-y-2">
@@ -53,11 +59,21 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
             return;
           }
 
-          setPendingBranchValue(nextBranch);
+          const requestId = ++pendingBranchRequestIdRef.current;
+          setPendingBranchSelection({
+            repoPath: workspaceRepoPath,
+            requestId,
+            value: nextBranch,
+          });
           void switchBranch(nextBranch)
             .catch(() => undefined)
             .finally(() => {
-              setPendingBranchValue(null);
+              setPendingBranchSelection((currentSelection) =>
+                currentSelection?.repoPath === workspaceRepoPath &&
+                currentSelection.requestId === requestId
+                  ? null
+                  : currentSelection,
+              );
             });
         }}
       />

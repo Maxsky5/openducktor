@@ -101,7 +101,6 @@ export type WorkspaceBranchStateContextValue = Pick<
   | "activeWorkspace"
   | "branches"
   | "activeBranch"
-  | "isSwitchingWorkspace"
   | "isLoadingBranches"
   | "isSwitchingBranch"
   | "branchSyncDegraded"

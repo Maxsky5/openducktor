@@ -127,7 +127,6 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
   activeWorkspace,
   branches: [],
   activeBranch: null,
-  isSwitchingWorkspace: false,
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
