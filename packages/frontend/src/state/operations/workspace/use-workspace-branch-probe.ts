@@ -1,5 +1,5 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
-import { CancelledError, useQueryClient } from "@tanstack/react-query";
+import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -35,6 +35,29 @@ type ProbeGates = {
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
+};
+
+const refreshChangedBranchList = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  hostClient: WorkspaceBranchProbeHostClient,
+  isRepoActive: () => boolean,
+): Promise<BranchProbeOutcome> => {
+  try {
+    await invalidateRepoBranchesQuery(queryClient, repoPath);
+    await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
+  } catch (error) {
+    if (error instanceof CancelledError || !isRepoActive()) {
+      return { status: "skipped" };
+    }
+
+    return {
+      status: "degraded",
+      error: classifyBranchProbeError(error, "branch_refresh"),
+    };
+  }
+
+  return isRepoActive() ? { status: "synced" } : { status: "skipped" };
 };
 
 export function useWorkspaceBranchProbe({
@@ -128,42 +151,27 @@ export function useWorkspaceBranchProbe({
       await invalidateCurrentBranchQuery(queryClient, repoPath);
 
       const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
-      let outcome: BranchProbeOutcome;
       if (activeRepoPathRef.current !== repoPath) {
-        outcome = { status: "skipped" };
-      } else {
-        const hasChanged = hasBranchIdentityChanged(
-          current,
-          previousBranch?.name ?? null,
-          previousBranch?.detached ?? null,
-          previousBranch?.revision ?? null,
-        );
-
-        if (!hasChanged) {
-          outcome = { status: "unchanged" };
-        } else {
-          try {
-            await invalidateRepoBranchesQuery(queryClient, repoPath);
-            await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
-
-            outcome =
-              activeRepoPathRef.current !== repoPath ? { status: "skipped" } : { status: "synced" };
-          } catch (error) {
-            if (error instanceof CancelledError) {
-              outcome = { status: "skipped" };
-            } else if (activeRepoPathRef.current !== repoPath) {
-              outcome = { status: "skipped" };
-            } else {
-              outcome = {
-                status: "degraded",
-                error: classifyBranchProbeError(error, "branch_refresh"),
-              };
-            }
-          }
-        }
+        return { status: "skipped" };
       }
 
-      return outcome;
+      const hasChanged = hasBranchIdentityChanged(
+        current,
+        previousBranch?.name ?? null,
+        previousBranch?.detached ?? null,
+        previousBranch?.revision ?? null,
+      );
+
+      if (!hasChanged) {
+        return { status: "unchanged" };
+      }
+
+      return refreshChangedBranchList(
+        queryClient,
+        repoPath,
+        hostClient,
+        () => activeRepoPathRef.current === repoPath,
+      );
     } catch (error) {
       if (error instanceof CancelledError) {
         return { status: "skipped" };
