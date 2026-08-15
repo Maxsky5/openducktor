@@ -187,7 +187,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     const session = createRepositorySession();
     const options = await buildOptions(session);
 
-    expect(options.allowedTools).toEqual([]);
+    expect(options).not.toHaveProperty("allowedTools");
     expect(options.disallowedTools).toBeUndefined();
     expect(options.canUseTool).toBeFunction();
     const openducktorServer = options.mcpServers?.openducktor;
@@ -243,15 +243,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.forwardSubagentText).toBe(true);
     expect(options.includePartialMessages).toBe(true);
     expect(options).toHaveProperty("permissionMode");
-    expect(options.allowedTools).toEqual([
-      "mcp__openducktor__odt_read_task",
-      "mcp__openducktor__odt_read_task_assets",
-      "mcp__openducktor__odt_read_task_documents",
-      "mcp__openducktor__odt_build_blocked",
-      "mcp__openducktor__odt_build_resumed",
-      "mcp__openducktor__odt_build_completed",
-      "mcp__openducktor__odt_set_pull_request",
-    ]);
+    expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = options.systemPrompt;
     if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
@@ -289,17 +281,12 @@ describe("buildClaudeAgentSdkOptions", () => {
     session.abortController.abort();
   });
 
-  test("auto-allows every workflow tool assigned to the spec role", async () => {
+  test("keeps workflow tool availability separate from Claude approval policy", async () => {
     const session = createSession("spec");
 
     const options = await buildOptions(session);
 
-    expect(options.allowedTools).toEqual([
-      "mcp__openducktor__odt_read_task",
-      "mcp__openducktor__odt_read_task_assets",
-      "mcp__openducktor__odt_read_task_documents",
-      "mcp__openducktor__odt_set_spec",
-    ]);
+    expect(options).not.toHaveProperty("allowedTools");
     const openducktorServer = options.mcpServers?.openducktor;
     if (!openducktorServer || !("env" in openducktorServer)) {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
@@ -444,22 +431,24 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
-  test("explicitly allows safe reads when inherited dontAsk mode would skip permission prompts", async () => {
+  test("leaves approval decisions to Claude for permitted workflow tools and safe reads", async () => {
     const session = createSession("spec");
     const options = await buildOptions(session);
 
-    expect(
-      await preToolUseHook(options, {
+    for (const tool of [
+      {
         permissionMode: "dontAsk",
         toolName: "Read",
         toolInput: { file_path: session.input.workingDirectory },
-      }),
-    ).toMatchObject({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "allow",
       },
-    });
+      {
+        permissionMode: "default",
+        toolName: "mcp__openducktor__odt_read_task",
+        toolInput: { taskId: "task-1" },
+      },
+    ]) {
+      expect(await preToolUseHook(options, tool)).toEqual({});
+    }
   });
 
   test("keeps worktree path routing active in inherited bypass mode", async () => {
@@ -492,7 +481,6 @@ describe("buildClaudeAgentSdkOptions", () => {
       expect(hookOutput).toMatchObject({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: "allow",
           permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
           updatedInput: {
             content: "export {};",
@@ -500,8 +488,14 @@ describe("buildClaudeAgentSdkOptions", () => {
         },
       });
       const hookSpecificOutput = (
-        hookOutput as { hookSpecificOutput?: { updatedInput?: Record<string, unknown> } }
+        hookOutput as {
+          hookSpecificOutput?: {
+            permissionDecision?: unknown;
+            updatedInput?: Record<string, unknown>;
+          };
+        }
       ).hookSpecificOutput;
+      expect(hookSpecificOutput).not.toHaveProperty("permissionDecision");
       const updatedInput = hookSpecificOutput?.updatedInput;
       expect(normalizePathForComparison(String(updatedInput?.file_path))).toBe(
         normalizePathForComparison(join(workingDirectory, "src", "index.ts")),
