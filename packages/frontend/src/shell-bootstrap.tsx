@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
@@ -9,6 +9,7 @@ import {
   type OpenDucktorShellBootstrapOptions,
   runOpenDucktorShellBootstrap,
 } from "./shell-bootstrap-workflow";
+import { dismissOpenDucktorStartupSplash } from "./startup-splash";
 import { loadSettingsSnapshotFromQuery } from "./state/queries/workspace";
 
 const SETTINGS_PRELOAD_ERROR_MESSAGE = "Failed to preload settings snapshot before app bootstrap.";
@@ -21,9 +22,18 @@ type ShellRouterMode = NonNullable<OpenDucktorShellBootstrapOptions["routerMode"
 const kanbanLocationForRouter = (routerMode: ShellRouterMode): string =>
   routerMode === "hash" ? "#/kanban" : "/kanban";
 
+const StartupSplashLifecycle = (): null => {
+  useEffect(() => {
+    dismissOpenDucktorStartupSplash();
+  }, []);
+
+  return null;
+};
+
 const renderOpenDucktorShellApp = (rootElement: HTMLElement, routerMode: ShellRouterMode): void => {
   createRoot(rootElement).render(
     <StrictMode>
+      <StartupSplashLifecycle />
       <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
         <App routerMode={routerMode} />
       </AppCrashShell>

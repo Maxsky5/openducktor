@@ -13,3 +13,4 @@ export {
   bootstrapOpenDucktorShell,
   type OpenDucktorShellBootstrapOptions,
 } from "./shell-bootstrap";
+export { showOpenDucktorStartupFailure } from "./startup-splash";

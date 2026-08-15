@@ -427,6 +427,7 @@ const createMainWindowEffect = (
           minWidth: 1024,
           minHeight: 720,
           autoHideMenuBar: process.platform !== "darwin",
+          backgroundColor: "#ffffff",
           title: "OpenDucktor",
           icon: resolveElectronWindowIcon(),
           ...resolveElectronWindowChromeOptions(electronAppPlatform),

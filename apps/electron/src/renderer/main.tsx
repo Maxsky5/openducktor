@@ -1,4 +1,4 @@
-import { bootstrapOpenDucktorShell } from "@openducktor/frontend";
+import { bootstrapOpenDucktorShell, showOpenDucktorStartupFailure } from "@openducktor/frontend";
 import "@openducktor/frontend/styles.css";
 import { ELECTRON_WINDOW_TITLE_BAR_HEIGHT } from "../shared/electron-bridge-contract";
 import { createElectronShellBridge, getElectronApi } from "./electron-shell-bridge";
@@ -15,5 +15,6 @@ bootstrapOpenDucktorShell({
   prepare: initializeElectronWindowChrome,
   routerMode: "hash",
 }).catch((error: unknown) => {
+  showOpenDucktorStartupFailure();
   console.error("Critical Electron bootstrap failure", error);
 });

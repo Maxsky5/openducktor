@@ -3,6 +3,10 @@ import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanDirectory, markExecutable, runCommand } from "./index";
+import {
+  createOpenDucktorStartupSplashPlugin,
+  OPEN_DUCKTOR_STARTUP_BACKGROUND,
+} from "./startup-splash";
 
 describe("build tools", () => {
   it("removes a directory tree", async () => {
@@ -60,4 +64,20 @@ describe("build tools", () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Failing command failed with exit code 7.");
   }, 5000);
+
+  it("creates the shared startup splash for Vite HTML", () => {
+    const plugin = createOpenDucktorStartupSplashPlugin();
+    const result = plugin.transformIndexHtml();
+    const styles = result.tags.find((tag) => tag.tag === "style");
+    const splash = result.tags.find((tag) => tag.attrs?.id === "openducktor-startup");
+
+    expect(plugin.enforce).toBe("pre");
+    expect(styles?.injectTo).toBe("head-prepend");
+    expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_BACKGROUND);
+    expect(styles?.children).not.toContain("gradient");
+    expect(splash?.injectTo).toBe("body-prepend");
+    expect(splash?.attrs?.role).toBe("status");
+    expect(splash?.children).toContain("Preparing your workspace");
+    expect(splash?.children).toContain("./favicon.svg");
+  });
 });
