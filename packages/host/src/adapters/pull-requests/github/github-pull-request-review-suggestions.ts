@@ -1,8 +1,12 @@
 type GithubReviewCommentContentInput = {
   body: string;
   diffHunk: string | null;
-  startLine: number | null;
-  endLine: number | null;
+  lineRanges: GithubReviewCommentLineRange[];
+};
+
+export type GithubReviewCommentLineRange = {
+  startLine: number;
+  endLine: number;
 };
 
 type GithubReviewCommentContent = {
@@ -77,8 +81,7 @@ const buildSuggestionPatch = (
 export const parseGithubReviewCommentContent = ({
   body,
   diffHunk,
-  startLine,
-  endLine,
+  lineRanges,
 }: GithubReviewCommentContentInput): GithubReviewCommentContent => {
   const replacements: string[] = [];
   const markdownBody = body
@@ -92,25 +95,36 @@ export const parseGithubReviewCommentContent = ({
   if (replacements.length === 0) {
     return { body: markdownBody, suggestionPatches: [], suggestionWarning: null };
   }
-  if (!diffHunk || startLine === null || endLine === null) {
+  if (!diffHunk || lineRanges.length === 0) {
     return { body: body.trim(), suggestionPatches: [], suggestionWarning: null };
   }
 
-  const suggestionPatches: string[] = [];
-  for (const replacement of replacements) {
-    const suggestionPatch = buildSuggestionPatch(diffHunk, startLine, endLine, replacement);
-    if (!suggestionPatch) {
+  for (const lineRange of lineRanges) {
+    const suggestionPatches: string[] = [];
+    for (const replacement of replacements) {
+      const suggestionPatch = buildSuggestionPatch(
+        diffHunk,
+        lineRange.startLine,
+        lineRange.endLine,
+        replacement,
+      );
+      if (!suggestionPatch) {
+        break;
+      }
+      suggestionPatches.push(suggestionPatch);
+    }
+    if (suggestionPatches.length === replacements.length) {
       return {
-        body: body.trim(),
-        suggestionPatches: [],
-        suggestionWarning: "GitHub suggestion lines could not be located in the review diff hunk.",
+        body: markdownBody,
+        suggestionPatches,
+        suggestionWarning: null,
       };
     }
-    suggestionPatches.push(suggestionPatch);
   }
+
   return {
-    body: markdownBody,
-    suggestionPatches,
-    suggestionWarning: null,
+    body: body.trim(),
+    suggestionPatches: [],
+    suggestionWarning: "GitHub suggestion lines could not be located in the review diff hunk.",
   };
 };

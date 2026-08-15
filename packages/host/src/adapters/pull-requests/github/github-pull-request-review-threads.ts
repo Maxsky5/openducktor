@@ -14,7 +14,10 @@ import {
   toNullableGithubObject,
   toNullableGithubString,
 } from "./github-pull-request-review-payload";
-import { parseGithubReviewCommentContent } from "./github-pull-request-review-suggestions";
+import {
+  type GithubReviewCommentLineRange,
+  parseGithubReviewCommentContent,
+} from "./github-pull-request-review-suggestions";
 
 export type ReviewThreadCommentsCursor = {
   threadId: string;
@@ -118,6 +121,12 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 const toNullableNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
 
+const toLineRange = (
+  startLine: number | null,
+  endLine: number | null,
+): GithubReviewCommentLineRange | null =>
+  endLine === null ? null : { startLine: startLine ?? endLine, endLine };
+
 const toReviewThreadComment = (
   payloadValue: unknown,
   field: string,
@@ -127,14 +136,17 @@ const toReviewThreadComment = (
   const payload = requireGithubObject(payloadValue, field);
   const body = typeof payload.body === "string" ? payload.body : "";
   const patch = toNullableGithubString(payload.diffHunk);
-  const line = toNullableNumber(payload.line) ?? toNullableNumber(payload.originalLine);
-  const startLine =
-    toNullableNumber(payload.startLine) ?? toNullableNumber(payload.originalStartLine) ?? line;
+  const currentLine = toNullableNumber(payload.line);
+  const originalLine = toNullableNumber(payload.originalLine);
+  const line = currentLine ?? originalLine;
+  const lineRanges = [
+    toLineRange(toNullableNumber(payload.originalStartLine), originalLine),
+    toLineRange(toNullableNumber(payload.startLine), currentLine),
+  ].filter((lineRange): lineRange is GithubReviewCommentLineRange => lineRange !== null);
   const content = parseGithubReviewCommentContent({
     body,
     diffHunk: patch,
-    startLine,
-    endLine: line,
+    lineRanges,
   });
   if (!content.body && content.suggestionPatches.length === 0) {
     return null;

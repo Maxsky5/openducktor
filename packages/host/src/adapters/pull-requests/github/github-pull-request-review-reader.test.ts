@@ -767,7 +767,7 @@ describe("createGithubPullRequestReviewReader", () => {
     expect(suggestionComment?.suggestionPatches).toEqual([]);
   });
 
-  test("keeps CI data and attaches a warning when stale line metadata cannot build a suggestion patch", async () => {
+  test("keeps CI data and attaches a warning when no line range can build a suggestion patch", async () => {
     const suggestionBody = [
       "Use the current session identity.",
       "",
@@ -798,6 +798,8 @@ describe("createGithubPullRequestReviewReader", () => {
                     path: "packages/host/src/example.ts",
                     startLine: 20,
                     line: 20,
+                    originalStartLine: 30,
+                    originalLine: 30,
                   },
                 ],
               },
@@ -821,6 +823,143 @@ describe("createGithubPullRequestReviewReader", () => {
       body: suggestionBody,
       suggestionPatches: [],
       suggestionWarning: "GitHub suggestion lines could not be located in the review diff hunk.",
+    });
+  });
+
+  test("renders the outdated PR 820 suggestion from its original line metadata", async () => {
+    const suggestionBody = [
+      "Do not wrap the request error twice.",
+      "",
+      "```suggestion",
+      '  let updated: Awaited<ReturnType<SessionRecord["client"]["session"]["update"]>>;',
+      "  try {",
+      "    updated = await input.client.session.update({",
+      "      directory: input.workingDirectory,",
+      "      sessionID: input.externalSessionId,",
+      "      title: input.policy.title,",
+      "      permission: input.policy.permission,",
+      "    });",
+      "  } catch (error) {",
+      "    throw toOpenCodeRequestError(action, error);",
+      "  }",
+      "  if (updated.data === undefined || updated.data === null) {",
+      "    throw toOpenCodeRequestError(action, updated.error, updated.response);",
+      "  }",
+      "```",
+    ].join("\n");
+    const diffHunk = [
+      "@@ -0,0 +1,76 @@",
+      '+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";',
+      '+import type { PolicyBoundSessionRef } from "@openducktor/core";',
+      '+import { agentSessionScopesEqual, describeAgentSessionScope } from "@openducktor/core";',
+      '+import type { OpencodeSessionPolicy } from "./opencode-session-policy";',
+      '+import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";',
+      '+import { toOpenCodeRequestError } from "./request-errors";',
+      '+import type { SessionInput, SessionRecord } from "./types";',
+      "+",
+      "+export const applySessionPolicy = async (input: {",
+      '+  client: SessionRecord["client"];',
+      "+  externalSessionId: string;",
+      "+  policy: OpencodeSessionPolicy;",
+      "+  workingDirectory: string;",
+      "+}): Promise<void> => {",
+      "+  const action = `update $" +
+        "{input.policy.toolSelection.kind} session policy for session '$" +
+        "{input.externalSessionId}'`;",
+      "+  try {",
+      "+    const updated = await input.client.session.update({",
+      "+      directory: input.workingDirectory,",
+      "+      sessionID: input.externalSessionId,",
+      "+      title: input.policy.title,",
+      "+      permission: input.policy.permission,",
+      "+    });",
+      "+    if (updated.data === undefined || updated.data === null) {",
+      "+      throw toOpenCodeRequestError(action, updated.error, updated.response);",
+      "+    }",
+      "+  } catch (error) {",
+      "+    throw toOpenCodeRequestError(action, error);",
+      "+  }",
+    ].join("\n");
+    const provider = createGithubPullRequestReviewReader();
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          pullRequestViewResponse: fairnestPullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-pr-820",
+              isResolved: true,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "PRRC_kwDOPVuxos7hQmRJ",
+                    author: { login: "coderabbitai" },
+                    body: suggestionBody,
+                    diffHunk,
+                    url: "https://github.com/Maxsky5/openducktor/pull/820#discussion_r3779338377",
+                    createdAt: "2026-08-11T20:19:39Z",
+                    updatedAt: "2026-08-11T20:19:39Z",
+                    path: "packages/adapters-opencode-sdk/src/opencode-session-binding.ts",
+                    startLine: 33,
+                    line: 45,
+                    originalStartLine: 16,
+                    originalLine: 28,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "Maxsky5", name: "openducktor" },
+        pullRequestNumber: 820,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.checks).toHaveLength(2);
+    expect(context.comments).toHaveLength(3);
+    expect(context.comments[2]).toMatchObject({
+      id: "PRRC_kwDOPVuxos7hQmRJ",
+      body: "Do not wrap the request error twice.",
+      line: 45,
+      suggestionPatches: [
+        [
+          "@@ -16,13 +16,14 @@",
+          "-  try {",
+          "-    const updated = await input.client.session.update({",
+          "-      directory: input.workingDirectory,",
+          "-      sessionID: input.externalSessionId,",
+          "-      title: input.policy.title,",
+          "-      permission: input.policy.permission,",
+          "-    });",
+          "-    if (updated.data === undefined || updated.data === null) {",
+          "-      throw toOpenCodeRequestError(action, updated.error, updated.response);",
+          "-    }",
+          "-  } catch (error) {",
+          "-    throw toOpenCodeRequestError(action, error);",
+          "-  }",
+          '+  let updated: Awaited<ReturnType<SessionRecord["client"]["session"]["update"]>>;',
+          "+  try {",
+          "+    updated = await input.client.session.update({",
+          "+      directory: input.workingDirectory,",
+          "+      sessionID: input.externalSessionId,",
+          "+      title: input.policy.title,",
+          "+      permission: input.policy.permission,",
+          "+    });",
+          "+  } catch (error) {",
+          "+    throw toOpenCodeRequestError(action, error);",
+          "+  }",
+          "+  if (updated.data === undefined || updated.data === null) {",
+          "+    throw toOpenCodeRequestError(action, updated.error, updated.response);",
+          "+  }",
+        ].join("\n"),
+      ],
+      suggestionWarning: null,
     });
   });
 
