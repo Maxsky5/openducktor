@@ -73,6 +73,7 @@ const pullRequestReviewActivityFields = {
   body: z.string(),
   patch: z.string().nullable(),
   suggestionPatches: z.array(z.string().min(1)),
+  suggestionWarning: z.string().min(1).nullable(),
   url: nullableUrlSchema,
   createdAt: nullableDateTimeSchema,
   updatedAt: nullableDateTimeSchema,

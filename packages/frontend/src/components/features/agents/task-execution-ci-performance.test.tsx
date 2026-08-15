@@ -36,6 +36,7 @@ const createPerformanceComment = (index: number): PullRequestReviewActivity => (
   suggestionPatches: [
     `@@ -8,1 +8,1 @@\n-disabled={isCheckLoading${index}}\n+disabled={isAnyCheckLoading${index}}`,
   ],
+  suggestionWarning: null,
   url: `https://github.com/openai/openducktor/pull/110#discussion_r${index}`,
   createdAt: "2026-07-10T10:00:00Z",
   updatedAt: null,

@@ -16,6 +16,7 @@ const comment = (id: string, author = "reviewer"): PullRequestReviewActivity => 
   body: `Comment ${id}`,
   patch: null,
   suggestionPatches: [],
+  suggestionWarning: null,
   url: null,
   createdAt: "2026-07-10T10:00:00Z",
   updatedAt: null,

@@ -17,6 +17,7 @@ const createComment = (): PullRequestReviewActivity => ({
   body: "Please update this.",
   patch: null,
   suggestionPatches: [],
+  suggestionWarning: null,
   url: "https://github.com/openai/openducktor/pull/733#discussion_r1",
   createdAt: "2026-07-12T08:00:00Z",
   updatedAt: null,
@@ -190,6 +191,25 @@ test("labels suggested changes as a distinct review section", () => {
 
   expect(view.getByRole("heading", { name: "Suggested change" })).toBeTruthy();
   expect(view.getByLabelText("Suggested change")).toBeTruthy();
+});
+
+test("shows a warning on the comment whose suggestion patch could not be built", () => {
+  const warning = "GitHub suggestion lines could not be located in the review diff hunk.";
+  const view = render(
+    <TooltipProvider>
+      <TaskExecutionCiCommentCard
+        comment={{
+          ...createComment(),
+          body: "```suggestion\nconst enabled = true;\n```",
+          suggestionWarning: warning,
+        }}
+        isBot={true}
+      />
+    </TooltipProvider>,
+  );
+
+  expect(view.getByRole("alert").textContent).toContain(warning);
+  expect(view.getByText("const enabled = true;")).toBeTruthy();
 });
 
 test("collapses resolved comments by default and toggles comment bodies", () => {

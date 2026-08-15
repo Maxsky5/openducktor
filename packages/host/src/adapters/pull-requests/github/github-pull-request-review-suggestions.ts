@@ -1,21 +1,28 @@
-import { HostValidationError } from "../../../effect/host-errors";
-
 type GithubReviewCommentContentInput = {
   body: string;
   diffHunk: string | null;
-  startLine: number | null;
-  endLine: number | null;
+  lineRanges: GithubReviewCommentLineRange[];
+};
+
+export type GithubReviewCommentLineRange = {
+  startLine: number;
+  endLine: number;
 };
 
 type GithubReviewCommentContent = {
   body: string;
   suggestionPatches: string[];
+  suggestionWarning: string | null;
 };
 
 const GITHUB_SUGGESTION_BLOCK = /^```suggestion[^\r\n]*\r?\n([\s\S]*?)^```[ \t]*\r?$/gmu;
 const DIFF_HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/u;
 
-const selectedRightSideLines = (diffHunk: string, startLine: number, endLine: number): string[] => {
+const selectedRightSideLines = (
+  diffHunk: string,
+  startLine: number,
+  endLine: number,
+): string[] | null => {
   const selectedLines: string[] = [];
   let rightLineNumber: number | null = null;
 
@@ -43,11 +50,7 @@ const selectedRightSideLines = (diffHunk: string, startLine: number, endLine: nu
 
   const expectedLineCount = endLine - startLine + 1;
   if (selectedLines.length !== expectedLineCount) {
-    throw new HostValidationError({
-      field: "suggestion.diffHunk",
-      message: "GitHub suggestion lines could not be located in the review diff hunk.",
-      details: { endLine, expectedLineCount, selectedLineCount: selectedLines.length, startLine },
-    });
+    return null;
   }
   return selectedLines;
 };
@@ -62,8 +65,11 @@ const buildSuggestionPatch = (
   startLine: number,
   endLine: number,
   replacement: string,
-): string => {
+): string | null => {
   const currentLines = selectedRightSideLines(diffHunk, startLine, endLine);
+  if (!currentLines) {
+    return null;
+  }
   const nextLines = replacementLines(replacement);
   return [
     `@@ -${startLine},${currentLines.length} +${startLine},${nextLines.length} @@`,
@@ -75,8 +81,7 @@ const buildSuggestionPatch = (
 export const parseGithubReviewCommentContent = ({
   body,
   diffHunk,
-  startLine,
-  endLine,
+  lineRanges,
 }: GithubReviewCommentContentInput): GithubReviewCommentContent => {
   const replacements: string[] = [];
   const markdownBody = body
@@ -88,16 +93,38 @@ export const parseGithubReviewCommentContent = ({
     .trim();
 
   if (replacements.length === 0) {
-    return { body: markdownBody, suggestionPatches: [] };
+    return { body: markdownBody, suggestionPatches: [], suggestionWarning: null };
   }
-  if (!diffHunk || startLine === null || endLine === null) {
-    return { body: body.trim(), suggestionPatches: [] };
+  if (!diffHunk || lineRanges.length === 0) {
+    return { body: body.trim(), suggestionPatches: [], suggestionWarning: null };
+  }
+
+  for (const lineRange of lineRanges) {
+    const suggestionPatches: string[] = [];
+    for (const replacement of replacements) {
+      const suggestionPatch = buildSuggestionPatch(
+        diffHunk,
+        lineRange.startLine,
+        lineRange.endLine,
+        replacement,
+      );
+      if (!suggestionPatch) {
+        break;
+      }
+      suggestionPatches.push(suggestionPatch);
+    }
+    if (suggestionPatches.length === replacements.length) {
+      return {
+        body: markdownBody,
+        suggestionPatches,
+        suggestionWarning: null,
+      };
+    }
   }
 
   return {
-    body: markdownBody,
-    suggestionPatches: replacements.map((replacement) =>
-      buildSuggestionPatch(diffHunk, startLine, endLine, replacement),
-    ),
+    body: body.trim(),
+    suggestionPatches: [],
+    suggestionWarning: "GitHub suggestion lines could not be located in the review diff hunk.",
   };
 };
