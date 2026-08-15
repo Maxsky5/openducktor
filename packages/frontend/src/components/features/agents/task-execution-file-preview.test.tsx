@@ -67,7 +67,7 @@ const waitForDirtyFile = async (): Promise<void> => {
 };
 
 const waitForCleanFile = async (): Promise<void> => {
-  await screen.findByRole("status", { name: "Saved" });
+  await waitFor(() => expect(screen.queryByRole("status", { name: "Unsaved changes" })).toBeNull());
 };
 
 const previewWorkerPool = {
@@ -453,14 +453,19 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
       true,
     );
-    const cleanStatus = screen.getByRole("status", { name: "Saved" });
-    const stableStatusClassName = cleanStatus.className;
-    expect(cleanStatus).toBeTruthy();
-    expect(stableStatusClassName).not.toContain("sr-only");
+    expect(screen.queryByRole("status")).toBeNull();
     expect(firstItem?.version).toBe(1);
     expect(firstItem?.file.cacheKey).toBe(
       `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
     );
+    const providerFactory = editProviderFactories.at(-1);
+    const editorOptions = latestCodeViewProps?.editorOptions;
+    const attachedEditor = { focus: mock(() => {}) };
+    (
+      editorOptions as
+        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
+        | undefined
+    )?.onAttach?.(attachedEditor);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     highlightCompletionMode = "manual";
@@ -472,8 +477,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       });
     });
     await waitForDirtyFile();
-    const dirtyStatus = screen.getByRole("status", { name: "Unsaved changes" });
-    expect(dirtyStatus.className).toBe(stableStatusClassName);
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
     const saveButton = screen.getByRole("button", { name: "Save file" });
     expect(fireEvent.mouseDown(saveButton)).toBe(false);
     await runAsyncUiAction(() => fireEvent.click(saveButton));
@@ -486,8 +490,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       revision: "revision:const first = true;",
     });
     await waitForCleanFile();
-    const savedStatus = screen.getByRole("status", { name: "Saved" });
-    expect(savedStatus.className).toBe(stableStatusClassName);
+    expect(screen.queryByRole("status")).toBeNull();
     await waitFor(() => expect(primeFileHighlightCacheMock).toHaveBeenCalledTimes(2));
     expect(latestCodeViewProps?.items[0]).toMatchObject({
       edit: true,
@@ -497,6 +500,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
         contents: firstItem?.file.contents,
       },
     });
+    expect(editProviderFactories.at(-1)).toBe(providerFactory);
+    expect(latestCodeViewProps?.editorOptions).toBe(editorOptions);
+    expect(attachedEditor.focus).toHaveBeenCalledTimes(1);
     expect(codeViewMountCount).toBe(1);
     expect(onEditStateChange).toHaveBeenCalledWith({ isDirty: false, isSaving: false });
   });
@@ -665,9 +671,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
-    await screen.findByRole("button", { name: "Saving file" });
-    await screen.findByRole("status", { name: "Saving" });
-    expect(saveButton.disabled).toBe(true);
+    const pendingSaveButton = await screen.findByRole<HTMLButtonElement>("button", {
+      name: "Saving file",
+    });
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+    expect(pendingSaveButton.getAttribute("aria-busy")).toBe("true");
+    expect(pendingSaveButton.disabled).toBe(true);
     await act(async () => {
       resolveWrite({
         kind: "text",

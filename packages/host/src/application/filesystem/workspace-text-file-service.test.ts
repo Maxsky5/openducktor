@@ -122,7 +122,7 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("external");
   });
 
-  test("rejects same-content regular-file and symbolic-link swaps at the commit point", async () => {
+  test("rejects same-content regular-file and symbolic-link swaps at final validation", async () => {
     for (const swapType of ["regular", "symlink"] as const) {
       const rootPath = await createRoot();
       const outsideRoot = await createRoot();
@@ -184,7 +184,7 @@ describe("createWorkspaceTextFileService", () => {
     }
   });
 
-  test("rejects a parent-directory pivot to the original file at the commit point", async () => {
+  test("rejects a parent-directory pivot to the original file at final validation", async () => {
     const rootPath = await createRoot();
     const outsideRoot = await createRoot();
     const parentPath = path.join(rootPath, "nested");
@@ -401,7 +401,7 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(movedPath, "utf8")).toBe("before");
   });
 
-  test("maps commit-point permission failures without changing the draft baseline", async () => {
+  test("maps write permission failures without changing the draft baseline", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");
     await writeFile(filePath, "before");
@@ -439,7 +439,7 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("before");
   });
 
-  test("maps commit-point I/O failures without reporting success", async () => {
+  test("maps write I/O failures without reporting success", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");
     await writeFile(filePath, "before");

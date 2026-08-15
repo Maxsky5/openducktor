@@ -218,14 +218,6 @@ function FileConflictReviewDialog({
 
 type FilePreviewSaveState = "unavailable" | "clean" | "dirty" | "saving" | "blocked";
 
-const FILE_PREVIEW_STATUS_LABEL: Record<FilePreviewSaveState, string> = {
-  unavailable: "",
-  clean: "Saved",
-  dirty: "Unsaved changes",
-  saving: "Saving",
-  blocked: "Unsaved changes",
-};
-
 const resolveFilePreviewSaveState = ({
   hasSession,
   isSwitchingFiles,
@@ -260,32 +252,21 @@ function FilePreviewHeader({
   onClose: () => void;
 }): ReactElement {
   const isAvailable = saveState !== "unavailable";
-  const showsUnsavedIndicator = saveState !== "clean" && isAvailable;
+  const showsUnsavedIndicator = isAvailable && saveState !== "clean";
   const isSaving = saveState === "saving";
   const saveLabel = isSaving ? "Saving file" : "Save file";
-  const statusLabel = FILE_PREVIEW_STATUS_LABEL[saveState];
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
       <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-medium">{relativePath}</span>
-        {isAvailable ? (
+        {showsUnsavedIndicator ? (
           <span
-            className="flex size-2 shrink-0 items-center justify-center"
+            className="size-2 shrink-0 rounded-full bg-foreground"
             role="status"
-            aria-label={statusLabel}
-            title={showsUnsavedIndicator ? statusLabel : undefined}
-          >
-            <span
-              aria-hidden="true"
-              className={
-                showsUnsavedIndicator
-                  ? "size-2 rounded-full bg-foreground"
-                  : "size-2 rounded-full bg-foreground opacity-0"
-              }
-            />
-            <span className="sr-only">{statusLabel}</span>
-          </span>
+            aria-label="Unsaved changes"
+            title="Unsaved changes"
+          />
         ) : null}
       </div>
       {isSwitchingFiles ? (
@@ -298,6 +279,7 @@ function FilePreviewHeader({
           size="icon"
           className="size-7 shrink-0"
           aria-label={saveLabel}
+          aria-busy={isSaving || undefined}
           title={saveLabel}
           disabled={saveState !== "dirty"}
           onMouseDown={(event) => event.preventDefault()}

@@ -16,7 +16,7 @@ const snapshot = (contents: string, revision: string): FilesystemFileSnapshot =>
 });
 
 describe("conditionallyReplaceOpenFile", () => {
-  test("rejects a revision change between validation and the first destructive write", async () => {
+  test("rejects a revision change visible to the final best-effort validation", async () => {
     let snapshotCount = 0;
     let truncateCount = 0;
 
@@ -44,7 +44,7 @@ describe("conditionallyReplaceOpenFile", () => {
     expect(truncateCount).toBe(0);
   });
 
-  test("rejects a path move between validation and the first destructive write", async () => {
+  test("rejects a path move visible to the final best-effort validation", async () => {
     let verifyCount = 0;
     let truncateCount = 0;
 
@@ -75,5 +75,35 @@ describe("conditionallyReplaceOpenFile", () => {
     await expect(replacement).rejects.toMatchObject({ code: "unavailable_file" });
     expect(verifyCount).toBe(2);
     expect(truncateCount).toBe(0);
+  });
+
+  test("documents that a change after final validation can be overwritten", async () => {
+    let currentContents = "original";
+    let externalChangeOccurred = false;
+    let truncateCount = 0;
+
+    const replacement = await conditionallyReplaceOpenFile({
+      inputPath: "/repo/file.txt",
+      expectedRevision: "original",
+      bytes: encoder.encode("draft"),
+      maxCurrentBytes: 1024,
+      verifyEntry: async () => undefined,
+      snapshot: async () => snapshot(currentContents, currentContents),
+      truncate: async () => {
+        externalChangeOccurred = true;
+        currentContents = "external change after final validation";
+        truncateCount += 1;
+        currentContents = "";
+      },
+      write: async (bytes) => {
+        currentContents = new TextDecoder().decode(bytes);
+      },
+      sync: async () => undefined,
+    });
+
+    expect(externalChangeOccurred).toBe(true);
+    expect(truncateCount).toBe(1);
+    expect(currentContents).toBe("draft");
+    expect(new TextDecoder().decode(replacement.bytes)).toBe("draft");
   });
 });

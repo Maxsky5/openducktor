@@ -55,6 +55,7 @@ export const conditionallyReplaceOpenFile = async (
 
   await verifyExpectedState();
   await verifyExpectedState();
+  // This is the final best-effort validation; the filesystem cannot bind it atomically to truncate.
   await input.truncate();
   await input.write(input.bytes);
   await input.sync();
