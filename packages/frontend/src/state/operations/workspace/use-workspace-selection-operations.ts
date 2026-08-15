@@ -297,6 +297,7 @@ export function useWorkspaceSelectionOperations({
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
+        ...(input.defaultRuntimeKind ? { defaultRuntimeKind: input.defaultRuntimeKind } : {}),
       });
       await Promise.all([refreshWorkspaceCachesAfterMutation(), refreshWorkspaces()]);
       toast.success("Repository added", {

@@ -90,6 +90,7 @@ export type WorkspaceCreateInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
+  defaultRuntimeKind?: RuntimeKind;
 };
 
 const workspaceAdd = async (

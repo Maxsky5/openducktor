@@ -56,7 +56,7 @@ const createHarness = () => {
     { open: true },
     { wrapper },
   );
-  return { ...harness, appliedRuntimes };
+  return { ...harness, appliedRuntimes, applyUpdate };
 };
 
 const discoveredRuntimes = (prefix: string): RuntimeExecutableCheck => ({
@@ -100,6 +100,33 @@ describe("useSettingsRuntimeExecutableSetup", () => {
       await harness.waitFor((state) => state.discoveryError === null);
 
       expect(harness.appliedRuntimes.at(-1)?.opencode.executablePath).toBe("/new/opencode");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves executable paths edited while rediscovery is pending", async () => {
+    const discovery = createDeferred<RuntimeExecutableCheck>();
+    host.runtimeExecutablesCheck = mock(async () => discovery.promise);
+    const harness = createHarness();
+
+    try {
+      await harness.mount();
+      let request = Promise.resolve();
+      await harness.run((state) => {
+        request = state.checkAgain();
+      });
+      await harness.waitFor((state) => state.isCheckingDiscovery);
+
+      harness.applyUpdate((current) => ({
+        ...current,
+        opencode: { ...current.opencode, executablePath: "/typed/opencode" },
+      }));
+      await harness.run(() => discovery.resolve(discoveredRuntimes("discovered")));
+      await request;
+
+      expect(harness.appliedRuntimes.at(-1)?.opencode.executablePath).toBe("/typed/opencode");
+      expect(harness.appliedRuntimes.at(-1)?.codex.executablePath).toBe("/discovered/codex");
     } finally {
       await harness.unmount();
     }

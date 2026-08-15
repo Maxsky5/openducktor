@@ -15,6 +15,7 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
 describe("createWorkspaceSettingsCommandHandlers", () => {
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
+    const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
     const service = {
       listWorkspaces() {
         return Effect.tryPromise({
@@ -30,7 +31,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-      addWorkspace() {
+      addWorkspace(input: Parameters<WorkspaceSettingsService["addWorkspace"]>[0]) {
+        addedWorkspaceInputs.push(input);
         return Effect.tryPromise({
           try: async () => {
             calls.push("addWorkspace");
@@ -266,8 +268,15 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         workspaceId: "repo",
         workspaceName: "repo",
         repoPath: "/repo",
+        defaultRuntimeKind: "claude",
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
+    expect(addedWorkspaceInputs.at(-1)).toEqual({
+      workspaceId: "repo",
+      workspaceName: "repo",
+      repoPath: "/repo",
+      defaultRuntimeKind: "claude",
+    });
     await expect(router.invoke("workspace_select", { workspaceId: "repo" })).resolves.toMatchObject(
       { workspaceId: "repo" },
     );
@@ -509,5 +518,13 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(router.invoke("workspace_select")).rejects.toThrow(
       "workspace_select expects argument 'workspaceId'.",
     );
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "unknown",
+      }),
+    ).rejects.toThrow("defaultRuntimeKind must be a supported runtime kind.");
   });
 });

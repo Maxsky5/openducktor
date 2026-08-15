@@ -220,8 +220,10 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "repo-b",
         workspaceName: "Repo B",
         repoPath: "/repos/b",
+        defaultRuntimeKind: "codex",
       }),
     );
+    const addedRepoConfig = await Effect.runPromise(service.getRepoConfig("repo-b"));
     const selected = await Effect.runPromise(service.selectWorkspace("repo-a"));
     const reordered = await Effect.runPromise(service.reorderWorkspaces(["repo-b", "repo-a"]));
     expect(added).toMatchObject({
@@ -229,6 +231,7 @@ describe("createWorkspaceSettingsService", () => {
       repoPath: "/canonical/b",
       isActive: true,
     });
+    expect(addedRepoConfig.defaultRuntimeKind).toBe("codex");
     expect(selected).toMatchObject({
       workspaceId: "repo-a",
       isActive: true,

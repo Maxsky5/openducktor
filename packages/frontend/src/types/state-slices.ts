@@ -43,6 +43,7 @@ export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
+  defaultRuntimeKind?: RuntimeKind;
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;

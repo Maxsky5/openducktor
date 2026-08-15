@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { knownRuntimeKindValues, type SettingsSnapshot } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -18,12 +18,17 @@ export const useOnboardingWorkspaceCompletion = ({
 
   const addFirstWorkspace = useCallback(
     async (input: Parameters<typeof addWorkspace>[0]): Promise<void> => {
-      await addWorkspace(input);
-      setCompletionRepoPath(input.repoPath);
-
       if (!settingsSnapshot) {
         throw new Error("Settings must be loaded before opening the first workspace.");
       }
+      const defaultRuntimeKind = knownRuntimeKindValues.find(
+        (kind) => settingsSnapshot.agentRuntimes[kind].enabled,
+      );
+      await addWorkspace({
+        ...input,
+        ...(defaultRuntimeKind ? { defaultRuntimeKind } : {}),
+      });
+      setCompletionRepoPath(input.repoPath);
 
       const destinationQueries: Promise<unknown>[] = [
         queryClient.fetchQuery(

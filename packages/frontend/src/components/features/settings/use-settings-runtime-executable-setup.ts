@@ -1,4 +1,4 @@
-import type { AgentRuntimes } from "@openducktor/contracts";
+import { type AgentRuntimes, knownRuntimeKindValues } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -10,6 +10,23 @@ import {
 } from "@/state/queries/use-runtime-executable-validation";
 
 type UpdateAgentRuntimes = (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
+
+const replaceUneditedRuntimeExecutablePaths = (
+  current: AgentRuntimes,
+  pathsAtDiscoveryStart: AgentRuntimes,
+  discovered: Parameters<typeof replaceRuntimeExecutablePaths>[1],
+): AgentRuntimes => {
+  let next = replaceRuntimeExecutablePaths(current, discovered);
+  for (const kind of knownRuntimeKindValues) {
+    if (current[kind].executablePath === pathsAtDiscoveryStart[kind].executablePath) continue;
+    if (next[kind].executablePath === current[kind].executablePath) continue;
+    next = {
+      ...next,
+      [kind]: { ...next[kind], executablePath: current[kind].executablePath },
+    };
+  }
+  return next;
+};
 
 export type SettingsRuntimeExecutableSetup = {
   validation: RuntimeExecutableValidationState;
@@ -55,16 +72,21 @@ export const useSettingsRuntimeExecutableSetup = ({
 
   const checkAgain = useCallback(
     async (updateAgentRuntimes: UpdateAgentRuntimes): Promise<void> => {
-      if (discoveryInFlight.current) return;
+      if (discoveryInFlight.current || !runtimes) return;
 
       const currentVisit = visit.current;
+      const pathsAtDiscoveryStart = runtimes;
       discoveryInFlight.current = true;
       setIsCheckingDiscovery(true);
       try {
         const discovered = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
         if (visit.current !== currentVisit) return;
         updateAgentRuntimes((current) =>
-          replaceRuntimeExecutablePaths(current, discovered.runtimes),
+          replaceUneditedRuntimeExecutablePaths(
+            current,
+            pathsAtDiscoveryStart,
+            discovered.runtimes,
+          ),
         );
         setDiscoveryError(null);
       } catch (cause) {
@@ -78,7 +100,7 @@ export const useSettingsRuntimeExecutableSetup = ({
         }
       }
     },
-    [queryClient],
+    [queryClient, runtimes],
   );
 
   const validationError = validation.error ? errorMessage(validation.error) : null;
