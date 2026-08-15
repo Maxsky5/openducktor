@@ -73,8 +73,8 @@ import {
   adoptPreparedOpencodeSessionPolicy,
   applyRuntimeContextToSession,
   applySessionPolicy,
-  assertRuntimeContextCompatibleWithSession,
   requireOpencodeSessionPolicyRuntime,
+  resolveOpencodePolicyBoundSession,
   synchronizeOpencodeSessionPolicy,
 } from "./opencode-session-binding";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
@@ -379,17 +379,19 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
-  private retainedPolicyBoundSessionState(input: PolicyBoundSessionRef): SessionRecord | undefined {
-    const retained = this.sessions.get(input.externalSessionId);
-    if (retained?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      return undefined;
-    }
-    return retained;
-  }
-
-  private async bindPolicyBoundSessionState(input: PolicyBoundSessionRef): Promise<SessionRecord> {
-    await this.ensureSessionState(input);
-    return requireSession(this.sessions, input.externalSessionId);
+  private policyBoundSessionState(
+    input: PolicyBoundSessionRef,
+    action: string,
+  ): SessionRecord | Promise<SessionRecord> {
+    return resolveOpencodePolicyBoundSession({
+      request: input,
+      action,
+      retainedSession: this.sessions.get(input.externalSessionId),
+      bindSession: async () => {
+        await this.ensureSessionState(input);
+        return requireSession(this.sessions, input.externalSessionId);
+      },
+    });
   }
 
   async releaseSession(input: SessionRef): Promise<void> {
@@ -709,16 +711,19 @@ export class OpencodeSdkAdapter
     } catch (error) {
       throw toOpenCodeRequestError("compact session", error);
     }
-    const session =
-      this.retainedPolicyBoundSessionState(input) ??
-      (await this.bindPolicyBoundSessionState(input));
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot send OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    applyRuntimeContextToSession(session, input, "send user message");
+    const session = this.policyBoundSessionState(input, "send");
+    return session instanceof Promise
+      ? session.then((boundSession) =>
+          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation),
+        )
+      : this.sendUserMessageFromBoundSession(input, session, systemInvocation);
+  }
+
+  private async sendUserMessageFromBoundSession(
+    input: SendAgentUserMessageInput,
+    session: SessionRecord,
+    systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
+  ): Promise<AcceptedAgentUserMessage> {
     const preserveActiveTurnOnFailure =
       systemInvocation.kind === "manual_session_compaction" &&
       session.streamTurnStatus === "active";
@@ -786,34 +791,22 @@ export class OpencodeSdkAdapter
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode approval");
-    const session =
-      this.retainedPolicyBoundSessionState(input) ??
-      (await this.bindPolicyBoundSessionState(input));
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot reply to OpenCode approval for session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    applyRuntimeContextToSession(session, input, "reply to approval");
-    await replyApproval(session, input);
-    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    const reply = async (session: SessionRecord) => {
+      await replyApproval(session, input);
+      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    };
+    const session = this.policyBoundSessionState(input, "reply to approval for");
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode question");
-    const session =
-      this.retainedPolicyBoundSessionState(input) ??
-      (await this.bindPolicyBoundSessionState(input));
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot reply to OpenCode question for session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    applyRuntimeContextToSession(session, input, "reply to question");
-    await replyQuestion(session, input);
-    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    const reply = async (session: SessionRecord) => {
+      await replyQuestion(session, input);
+      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    };
+    const session = this.policyBoundSessionState(input, "reply to question for");
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async subscribeEvents(
@@ -821,17 +814,10 @@ export class OpencodeSdkAdapter
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
-    const session =
-      this.retainedPolicyBoundSessionState(input) ??
-      (await this.bindPolicyBoundSessionState(input));
-    assertRuntimeContextCompatibleWithSession(session, input, "subscribe to events");
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot subscribe OpenCode session events for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    return subscribeSessionEvents(this.listeners, registeredSessionRef, listener);
+    const subscribe = (session: SessionRecord) =>
+      subscribeSessionEvents(this.listeners, opencodeSessionRef(session), listener);
+    const session = this.policyBoundSessionState(input, "subscribe to events for");
+    return session instanceof Promise ? session.then(subscribe) : subscribe(session);
   }
 
   async stopSession(input: SessionRef): Promise<void> {

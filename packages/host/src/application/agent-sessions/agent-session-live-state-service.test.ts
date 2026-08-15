@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
+  RuntimeKind,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -15,7 +16,7 @@ import { createAgentSessionLiveStateService } from "./agent-session-live-state-s
 
 const sessionRef = (
   externalSessionId: string,
-  runtimeKind: "codex" | "opencode" = "codex",
+  runtimeKind: RuntimeKind = "codex",
 ): AgentSessionLiveRef => ({
   repoPath: "/repo",
   runtimeKind,
@@ -25,7 +26,7 @@ const sessionRef = (
 
 const liveSnapshot = (
   externalSessionId: string,
-  runtimeKind: "codex" | "opencode" = "codex",
+  runtimeKind: RuntimeKind = "codex",
 ): AgentSessionLiveSnapshot => ({
   ref: sessionRef(externalSessionId, runtimeKind),
   sessionAssociation: { kind: "unbound" },
@@ -39,7 +40,7 @@ const liveSnapshot = (
 
 const fakeAdapter = (input: {
   runtimeId: string;
-  runtimeKind?: "codex" | "opencode";
+  runtimeKind?: RuntimeKind;
   snapshots: () => ReadonlyArray<AgentSessionLiveSnapshot>;
   listEffect?: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   contextEffect?: AgentSessionLiveAdapterPort["loadContext"];
@@ -97,6 +98,75 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  for (const runtimeKind of ["codex", "opencode", "claude"] as const) {
+    test(`retains ${runtimeKind} binding on unbound observations and rejects scope drift`, async () => {
+      const { events, service } = createHarness();
+      const bound = {
+        ...liveSnapshot("session-1", runtimeKind),
+        sessionAssociation: { kind: "repository" } as const,
+      };
+      await Effect.runPromise(
+        service.registerRuntimeAdapter(
+          fakeAdapter({
+            runtimeId: `${runtimeKind}-runtime`,
+            runtimeKind,
+            snapshots: () => [bound],
+          }),
+        ),
+      );
+      events.length = 0;
+
+      await Effect.runPromise(
+        service.runAdapterMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [
+              {
+                type: "session_upsert" as const,
+                snapshot: { ...bound, sessionAssociation: { kind: "unbound" as const } },
+              },
+            ],
+          }),
+        ),
+      );
+
+      expect(events).toEqual([
+        {
+          type: "session_upsert",
+          session: expect.objectContaining({ sessionAssociation: { kind: "repository" } }),
+        },
+      ]);
+      events.length = 0;
+
+      const failure = await expectHostFailure(
+        service.runAdapterMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [
+              {
+                type: "session_upsert" as const,
+                snapshot: {
+                  ...bound,
+                  sessionAssociation: {
+                    kind: "workflow" as const,
+                    taskId: "task-1",
+                    role: "build" as const,
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
+
+      expect(failure).toMatchObject({
+        _tag: "HostInvariantError",
+        invariant: "agent_session_live_association_is_stable",
+      });
+      expect(events).toEqual([]);
+    });
+  }
+
   test("preserves repository association across snapshots, list, read, and events", async () => {
     const { events, service } = createHarness();
     const snapshot = {

@@ -17,7 +17,9 @@ import {
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { SessionRuntimeDataTarget } from "@/state/operations/agent-orchestrator/support/session-runtime-data-refs";
+import { toAgentTaskSessionBinding } from "@/state/operations/agent-orchestrator/support/workflow-session";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioRouteSessionResolution,
@@ -48,6 +50,23 @@ export type AgentStudioSelectedSessionView = {
   selectedSession: AgentStudioSelectedSessionState;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
+};
+
+const toSessionRuntimeDataTarget = (
+  session: AgentSessionState | null,
+  identity: AgentSessionIdentity | null,
+): SessionRuntimeDataTarget | null => {
+  if (session) {
+    return {
+      identity: session,
+      taskBinding: toAgentTaskSessionBinding(session),
+      selectedModel: session.selectedModel,
+    };
+  }
+  if (identity) {
+    return { identity, taskBinding: null, selectedModel: null };
+  }
+  return null;
 };
 
 export function useAgentStudioSelectedSessionView({
@@ -196,7 +215,7 @@ export function useAgentStudioSelectedSessionView({
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
-    selectedSessionIdentity: session ?? selectedSessionIdentity,
+    selectedSession: toSessionRuntimeDataTarget(session, selectedSessionIdentity),
     runtimeDefinitions,
     repoReadinessState,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,

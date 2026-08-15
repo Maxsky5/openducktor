@@ -2,12 +2,18 @@ import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  AgentTaskSessionBinding,
+} from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
 
-type SessionRuntimeDataSource =
-  | AgentSessionIdentity
-  | (AgentSessionIdentity & Pick<AgentSessionState, "selectedModel" | "taskId" | "role">);
+export type SessionRuntimeDataTarget = {
+  identity: AgentSessionIdentity;
+  selectedModel: AgentSessionState["selectedModel"];
+  taskBinding: AgentTaskSessionBinding | null;
+};
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
@@ -16,7 +22,7 @@ export type SessionRuntimeDataRefs =
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
-  selectedSessionIdentity: SessionRuntimeDataSource | null;
+  selectedSession: SessionRuntimeDataTarget | null;
   runtimePolicy: AgentSessionRuntimePolicy | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
@@ -40,11 +46,11 @@ const runtimeSupportsTodos = (
 
 export const resolveSessionRuntimeDataRefs = ({
   repoPath,
-  selectedSessionIdentity,
+  selectedSession,
   runtimePolicy,
   runtimeDefinitions,
 }: ResolveSessionRuntimeDataRefsInput): SessionRuntimeDataRefs => {
-  if (!selectedSessionIdentity) {
+  if (!selectedSession) {
     return emptySessionRuntimeDataRefs;
   }
 
@@ -57,10 +63,10 @@ export const resolveSessionRuntimeDataRefs = ({
 
   const catalogRef: RepoRuntimeRef = {
     repoPath,
-    runtimeKind: selectedSessionIdentity.runtimeKind,
+    runtimeKind: selectedSession.identity.runtimeKind,
   };
 
-  if (!runtimeSupportsTodos(runtimeDefinitions, selectedSessionIdentity)) {
+  if (!runtimeSupportsTodos(runtimeDefinitions, selectedSession.identity)) {
     return {
       kind: "available",
       catalogRef,
@@ -76,11 +82,17 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
-  const todosRef = toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy);
-  const sessionScope =
-    "role" in selectedSessionIdentity && selectedSessionIdentity.role
-      ? workflowAgentSessionScope(selectedSessionIdentity.taskId, selectedSessionIdentity.role)
-      : null;
+  const todosRef = toRuntimeSessionRefWithPolicy(
+    repoPath,
+    { ...selectedSession.identity, selectedModel: selectedSession.selectedModel },
+    runtimePolicy,
+  );
+  const sessionScope = selectedSession.taskBinding
+    ? workflowAgentSessionScope(
+        selectedSession.taskBinding.taskId,
+        selectedSession.taskBinding.role,
+      )
+    : null;
   return {
     kind: "available",
     catalogRef,

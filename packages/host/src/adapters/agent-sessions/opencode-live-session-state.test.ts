@@ -113,7 +113,7 @@ describe("OpenCode host live-session state", () => {
     });
   });
 
-  test("keeps a retained repository association across runtime discovery refreshes", () => {
+  test("reports the association from the latest runtime observation", () => {
     const state = createState();
     state.initialize([source("session-1", "request-1")], new Map());
     state.retainControlSummary({
@@ -138,7 +138,7 @@ describe("OpenCode host live-session state", () => {
       expect.arrayContaining([
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-1" }),
-          sessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "unbound" },
         }),
         expect.objectContaining({
           ref: expect.objectContaining({ externalSessionId: "session-2" }),
@@ -152,7 +152,7 @@ describe("OpenCode host live-session state", () => {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: expect.objectContaining({ externalSessionId: "session-1" }),
-            sessionAssociation: { kind: "repository" },
+            sessionAssociation: { kind: "unbound" },
           }),
         },
       ]),

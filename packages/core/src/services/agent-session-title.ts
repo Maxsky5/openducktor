@@ -12,23 +12,3 @@ export const formatAgentSessionTitle = (scope: AgentSessionScope): string => {
   }
   return formatWorkflowAgentSessionTitle(scope.role, scope.taskId);
 };
-
-export const agentSessionScopesEqual = (
-  left: AgentSessionScope,
-  right: AgentSessionScope,
-): boolean => {
-  if (left.kind !== right.kind) {
-    return false;
-  }
-  if (left.kind === "repository") {
-    return true;
-  }
-  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
-};
-
-export const describeAgentSessionScope = (scope: AgentSessionScope): string => {
-  if (scope.kind === "repository") {
-    return "repository scope";
-  }
-  return `workflow scope for task '${scope.taskId}' and role '${scope.role}'`;
-};

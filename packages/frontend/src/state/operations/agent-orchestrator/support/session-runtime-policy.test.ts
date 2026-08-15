@@ -48,9 +48,13 @@ describe("session runtime policy", () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",
       {
-        externalSessionId: "unbound-session",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
+        identity: {
+          externalSessionId: "unbound-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+        taskBinding: null,
+        selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
     );

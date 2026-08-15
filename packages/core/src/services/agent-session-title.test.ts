@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   AGENT_REPOSITORY_SESSION_TITLE,
-  agentSessionScopesEqual,
-  describeAgentSessionScope,
   formatAgentSessionTitle,
   formatWorkflowAgentSessionTitle,
 } from "./agent-session-title";
@@ -29,41 +27,6 @@ describe("Agent Session scope presentation", () => {
     expect(formatAgentSessionTitle({ kind: "repository" })).toBe(AGENT_REPOSITORY_SESSION_TITLE);
     expect(formatAgentSessionTitle({ kind: "workflow", taskId: "task-1", role: "build" })).toBe(
       "BUILD task-1",
-    );
-  });
-
-  test("compares exact workflow identity and repository scope", () => {
-    expect(agentSessionScopesEqual({ kind: "repository" }, { kind: "repository" })).toBe(true);
-    expect(
-      agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-1", role: "build" },
-      ),
-    ).toBe(true);
-    expect(
-      agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-2", role: "build" },
-      ),
-    ).toBe(false);
-    expect(
-      agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "workflow", taskId: "task-1", role: "qa" },
-      ),
-    ).toBe(false);
-    expect(
-      agentSessionScopesEqual(
-        { kind: "workflow", taskId: "task-1", role: "build" },
-        { kind: "repository" },
-      ),
-    ).toBe(false);
-  });
-
-  test("describes repository and workflow scopes", () => {
-    expect(describeAgentSessionScope({ kind: "repository" })).toBe("repository scope");
-    expect(describeAgentSessionScope({ kind: "workflow", taskId: "task-1", role: "qa" })).toBe(
-      "workflow scope for task 'task-1' and role 'qa'",
     );
   });
 });

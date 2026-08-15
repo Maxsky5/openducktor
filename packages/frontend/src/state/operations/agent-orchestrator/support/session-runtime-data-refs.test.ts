@@ -34,13 +34,23 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   selectedModel: null,
   ...overrides,
 });
+const identityTarget = (identity = sessionIdentity()) => ({
+  identity,
+  taskBinding: null,
+  selectedModel: null,
+});
+const stateTarget = (state = sessionState()) => ({
+  identity: sessionIdentity(state),
+  taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
+  selectedModel: state.selectedModel,
+});
 
 describe("resolveSessionRuntimeDataRefs", () => {
   test("returns no refs without a selected session", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: null,
+        selectedSession: null,
         runtimePolicy: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
@@ -53,7 +63,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: null,
-        selectedSessionIdentity: sessionState(),
+        selectedSession: stateTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
@@ -67,7 +77,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: stateTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
@@ -92,7 +102,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSession: identityTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
       }),
@@ -110,7 +120,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSession: identityTarget(),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
@@ -134,7 +144,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState({ role: null }),
+        selectedSession: stateTarget(sessionState({ role: null })),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),
@@ -158,7 +168,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
     expect(() =>
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState({ workingDirectory: "" }),
+        selectedSession: stateTarget(sessionState({ workingDirectory: "" })),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),

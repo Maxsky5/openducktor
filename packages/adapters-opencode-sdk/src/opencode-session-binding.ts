@@ -1,10 +1,13 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef } from "@openducktor/core";
-import { agentSessionScopesEqual, describeAgentSessionScope } from "@openducktor/core";
+import {
+  agentSessionRefsEqual,
+  describeAgentSessionScope,
+  resolveAgentSessionAssociationTransition,
+} from "@openducktor/core";
 import type { OpencodeSessionPolicy } from "./opencode-session-policy";
-import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { toOpenCodeRequestError } from "./request-errors";
-import type { SessionInput, SessionRecord } from "./types";
+import { opencodeSessionRef } from "./session-ref";
+import type { SessionRecord } from "./types";
 import { ensureTrustedOdtMcpServerConnected } from "./workflow-tool-selection";
 
 export const requireOpencodeSessionPolicyRuntime = async (input: {
@@ -47,14 +50,13 @@ export const assertRuntimeContextCompatibleWithSession = (
   input: PolicyBoundSessionRef,
   action: string,
 ): void => {
-  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
-  if (!sessionScope) {
-    return;
-  }
-  const registeredScope = session.input.sessionScope;
-  if (registeredScope && !agentSessionScopesEqual(registeredScope, sessionScope)) {
+  const transition = resolveAgentSessionAssociationTransition(
+    session.summary.sessionAssociation,
+    input.sessionScope ?? { kind: "unbound" },
+  );
+  if (transition.kind === "conflict") {
     throw new Error(
-      `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(registeredScope)} does not match the requested ${describeAgentSessionScope(sessionScope)}.`,
+      `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
     );
   }
 };
@@ -66,13 +68,11 @@ export const applyRuntimeContextToSession = (
 ): void => {
   assertRuntimeContextCompatibleWithSession(session, input, action);
   session.input = { ...session.input };
-  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
+  const sessionScope = input.sessionScope;
   if (sessionScope) {
     session.input.sessionScope = sessionScope;
-    const policy = resolveOpencodeSessionPolicy(sessionScope, OPENCODE_RUNTIME_DESCRIPTOR, action);
     session.summary = {
       ...session.summary,
-      title: policy.title,
       sessionAssociation: sessionScope,
     };
   }
@@ -108,6 +108,7 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
     workingDirectory: input.request.workingDirectory,
   });
   applyRuntimeContextToSession(input.session, input.request, input.action);
+  input.session.summary = { ...input.session.summary, title: input.policy.title };
 };
 
 export const adoptPreparedOpencodeSessionPolicy = async (input: {
@@ -126,4 +127,28 @@ export const adoptPreparedOpencodeSessionPolicy = async (input: {
     });
   }
   applyRuntimeContextToSession(input.session, input.request, input.action);
+  input.session.summary = { ...input.session.summary, title: input.policy.title };
+};
+
+export const resolveOpencodePolicyBoundSession = (input: {
+  action: string;
+  bindSession: () => Promise<SessionRecord>;
+  request: PolicyBoundSessionRef;
+  retainedSession: SessionRecord | undefined;
+}): SessionRecord | Promise<SessionRecord> => {
+  const { request, retainedSession } = input;
+  if (
+    !retainedSession ||
+    (retainedSession.summary.sessionAssociation.kind === "unbound" && request.sessionScope)
+  ) {
+    return input.bindSession();
+  }
+  const registeredSessionRef = opencodeSessionRef(retainedSession);
+  if (!agentSessionRefsEqual(registeredSessionRef, request)) {
+    throw new Error(
+      `Cannot ${input.action} OpenCode session '${request.externalSessionId}' from repo '${request.repoPath}' and working directory '${request.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+    );
+  }
+  applyRuntimeContextToSession(retainedSession, request, input.action);
+  return retainedSession;
 };

@@ -67,9 +67,9 @@ import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
-  applyRuntimeContextToSession,
   assertRuntimeContextCompatibleWithSession,
   preserveRuntimeContextForExistingThread,
+  resolveCodexPolicyBoundSession,
   sessionStateFromExistingThread,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
@@ -119,11 +119,6 @@ import type {
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
-
-type RetainedSessionPolicyPreparation = {
-  binding: Promise<CodexSessionState> | undefined;
-  session: CodexSessionState | undefined;
-};
 
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
@@ -477,17 +472,23 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "not_system") {
       assertCodexUserMessagePartsSupported(input.parts);
     }
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "send",
-      context: "send user message",
-    });
-    let session = preparation.session;
-    if (preparation.binding) {
-      session = await preparation.binding;
-    }
-    if (!session) {
-      session = await this.requireMissingPolicyBoundSession(input, "send user message");
-    }
+    const session = this.policyBoundSession(
+      input,
+      { lookup: "send", context: "send user message" },
+      true,
+    );
+    return session instanceof Promise
+      ? session.then((boundSession) =>
+          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation),
+        )
+      : this.sendUserMessageFromBoundSession(input, session, systemInvocation);
+  }
+
+  private async sendUserMessageFromBoundSession(
+    input: SendAgentUserMessageInput,
+    session: CodexSessionState,
+    systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
+  ): Promise<AcceptedAgentUserMessage> {
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
@@ -549,11 +550,11 @@ export class CodexAppServerAdapter
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session history");
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "load history for",
-      context: "load session history",
-    });
-    const session = preparation.binding ? await preparation.binding : preparation.session;
+    const session = await this.policyBoundSession(
+      input,
+      { lookup: "load history for", context: "load session history" },
+      false,
+    );
     const runtime = session
       ? {
           client: this.runtimeClients.clientForRuntime(session.runtimeId),
@@ -572,13 +573,11 @@ export class CodexAppServerAdapter
     input: PolicyBoundSessionRef,
   ): Promise<CodexSessionContextUsage | null> {
     assertCodexRuntimePolicyBinding(input, "load Codex session context usage");
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "load context usage for",
-      context: "load session context usage",
-    });
-    if (preparation.binding) {
-      await preparation.binding;
-    }
+    await this.policyBoundSession(
+      input,
+      { lookup: "load context usage for", context: "load session context usage" },
+      false,
+    );
     return this.contextUsageLoader.loadSession(input);
   }
 
@@ -616,11 +615,11 @@ export class CodexAppServerAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session todos");
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "load todos for",
-      context: "load Codex session todos",
-    });
-    const session = preparation.binding ? await preparation.binding : preparation.session;
+    const session = await this.policyBoundSession(
+      input,
+      { lookup: "load todos for", context: "load Codex session todos" },
+      false,
+    );
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
     if (liveTodos) {
       return liveTodos;
@@ -663,64 +662,37 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
-  private retainedSessionForOperation(
-    input: PolicyBoundSessionRef,
-    action: string,
-  ): CodexSessionState | undefined {
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) {
-      return undefined;
-    }
-    const registeredSessionRef = codexSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot ${action} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    assertRuntimeContextCompatibleWithSession(session, input, action);
-    return session;
-  }
-
-  private async bindRetainedSessionPolicy(
-    input: PolicyBoundSessionRef,
-  ): Promise<CodexSessionState> {
-    await this.ensureSessionState(input);
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    }
-    return session;
-  }
-
-  private prepareRetainedSessionPolicy(
+  private policyBoundSession(
     input: PolicyBoundSessionRef,
     actions: { context: string; lookup: string },
-  ): RetainedSessionPolicyPreparation {
-    const session = this.retainedSessionForOperation(input, actions.lookup);
-    if (session?.summary.sessionAssociation.kind === "unbound" && input.sessionScope) {
-      const binding = this.bindRetainedSessionPolicy(input).then((boundSession) => {
-        applyRuntimeContextToSession(boundSession, input, actions.context);
-        return boundSession;
-      });
-      return { binding, session: undefined };
-    }
-    if (session) {
-      applyRuntimeContextToSession(session, input, actions.context);
-    }
-    return { binding: undefined, session };
-  }
-
-  private async requireMissingPolicyBoundSession(
+    bindMissing: true,
+  ): CodexSessionState | Promise<CodexSessionState>;
+  private policyBoundSession(
     input: PolicyBoundSessionRef,
-    context: string,
-  ): Promise<CodexSessionState> {
-    await this.ensureSessionState(input);
-    const session = this.localSessions.get(input.externalSessionId);
-    if (!session) {
-      throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    }
-    applyRuntimeContextToSession(session, input, context);
-    return session;
+    actions: { context: string; lookup: string },
+    bindMissing: false,
+  ): CodexSessionState | undefined | Promise<CodexSessionState>;
+  private policyBoundSession(
+    input: PolicyBoundSessionRef,
+    actions: { context: string; lookup: string },
+    bindMissing: boolean,
+  ): CodexSessionState | undefined | Promise<CodexSessionState> {
+    const resolution = {
+      input,
+      actions,
+      getSession: (externalSessionId: string) => this.localSessions.get(externalSessionId),
+      bindSession: async () => {
+        await this.ensureSessionState(input);
+        const session = this.localSessions.get(input.externalSessionId);
+        if (!session) {
+          throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+        }
+        return session;
+      },
+    };
+    return bindMissing
+      ? resolveCodexPolicyBoundSession({ ...resolution, bindMissing: true })
+      : resolveCodexPolicyBoundSession({ ...resolution, bindMissing: false });
   }
 
   private async ensureSessionState(input: PolicyBoundSessionRef): Promise<AgentSessionSummary> {
@@ -800,24 +772,20 @@ export class CodexAppServerAdapter
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex approval");
     requireCodexPendingRequestKey(input.requestId, "approval");
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "reply to approval for",
-      context: "reply to approval",
-    });
-    let session = preparation.session;
-    if (preparation.binding) {
-      session = await preparation.binding;
-    }
-    if (!session) {
-      session = await this.requireMissingPolicyBoundSession(input, "reply to approval");
-    }
-    await this.replyLiveApproval({
-      runtimeId: session.runtimeId,
-      externalSessionId: input.externalSessionId,
-      requestId: input.requestId,
-      outcome: input.outcome,
-      ...(input.message !== undefined ? { message: input.message } : {}),
-    });
+    const session = this.policyBoundSession(
+      input,
+      { lookup: "reply to approval for", context: "reply to approval" },
+      true,
+    );
+    const reply = (boundSession: CodexSessionState) =>
+      this.replyLiveApproval({
+        runtimeId: boundSession.runtimeId,
+        externalSessionId: input.externalSessionId,
+        requestId: input.requestId,
+        outcome: input.outcome,
+        ...(input.message !== undefined ? { message: input.message } : {}),
+      });
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async replyLiveApproval(input: CodexLiveApprovalReplyInput): Promise<void> {
@@ -866,23 +834,20 @@ export class CodexAppServerAdapter
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertCodexRuntimePolicyBinding(input, "reply to Codex question");
     requireCodexPendingRequestKey(input.requestId, "question");
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "reply to question for",
-      context: "reply to question",
-    });
-    let session = preparation.session;
-    if (preparation.binding) {
-      session = await preparation.binding;
-    }
-    if (!session) {
-      session = await this.requireMissingPolicyBoundSession(input, "reply to question");
-    }
-    await this.replyLiveQuestion({
-      runtimeId: session.runtimeId,
-      externalSessionId: input.externalSessionId,
-      requestId: input.requestId,
-      answers: input.answers,
-    });
+    const session = this.policyBoundSession(
+      input,
+      { lookup: "reply to question for", context: "reply to question" },
+      true,
+    );
+    const reply = async (boundSession: CodexSessionState): Promise<void> => {
+      await this.replyLiveQuestion({
+        runtimeId: boundSession.runtimeId,
+        externalSessionId: input.externalSessionId,
+        requestId: input.requestId,
+        answers: input.answers,
+      });
+    };
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async replyLiveQuestion(input: CodexLiveQuestionReplyInput): Promise<AgentEvent> {
@@ -1030,43 +995,45 @@ export class CodexAppServerAdapter
       ? await this.prepareLiveSessionSubscription(input)
       : undefined;
 
-    const preparation = this.prepareRetainedSessionPolicy(input, {
-      lookup: "subscribe to events for",
-      context: "subscribe session events",
-    });
-    const session = preparation.binding ? await preparation.binding : preparation.session;
-    const registeredSessionRef = session ? codexSessionRef(session) : input;
-
-    const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
-    for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
-      externalSessionId,
-      session?.runtimeId ?? preparedRuntimeId,
-    )) {
-      listener(
-        withAgentSessionRef(registeredSessionRef, {
-          ...approval,
-          type: "approval_required",
-          externalSessionId,
-          timestamp: new Date().toISOString(),
-          ...codexSubagentRouteEventFields(route),
-        }),
-      );
-    }
-    for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
-      externalSessionId,
-      session?.runtimeId ?? preparedRuntimeId,
-    )) {
-      listener(
-        withAgentSessionRef(registeredSessionRef, {
-          ...question,
-          type: "question_required",
-          externalSessionId,
-          timestamp: new Date().toISOString(),
-          ...codexSubagentRouteEventFields(route),
-        }),
-      );
-    }
-    return unsubscribe;
+    const session = this.policyBoundSession(
+      input,
+      { lookup: "subscribe to events for", context: "subscribe session events" },
+      false,
+    );
+    const subscribe = (boundSession: CodexSessionState | undefined) => {
+      const registeredSessionRef = boundSession ? codexSessionRef(boundSession) : input;
+      const unsubscribe = this.sessionEvents.subscribe(registeredSessionRef, listener);
+      for (const { request: approval, route } of this.pendingInput.pendingApprovalEventsForSession(
+        externalSessionId,
+        boundSession?.runtimeId ?? preparedRuntimeId,
+      )) {
+        listener(
+          withAgentSessionRef(registeredSessionRef, {
+            ...approval,
+            type: "approval_required",
+            externalSessionId,
+            timestamp: new Date().toISOString(),
+            ...codexSubagentRouteEventFields(route),
+          }),
+        );
+      }
+      for (const { request: question, route } of this.pendingInput.pendingQuestionEventsForSession(
+        externalSessionId,
+        boundSession?.runtimeId ?? preparedRuntimeId,
+      )) {
+        listener(
+          withAgentSessionRef(registeredSessionRef, {
+            ...question,
+            type: "question_required",
+            externalSessionId,
+            timestamp: new Date().toISOString(),
+            ...codexSubagentRouteEventFields(route),
+          }),
+        );
+      }
+      return unsubscribe;
+    };
+    return session instanceof Promise ? session.then(subscribe) : subscribe(session);
   }
 
   private async prepareLiveSessionSubscription(input: PolicyBoundSessionRef): Promise<string> {

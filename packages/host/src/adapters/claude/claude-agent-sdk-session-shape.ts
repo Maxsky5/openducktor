@@ -1,6 +1,5 @@
 import type {
   AgentSessionRuntimeSnapshot,
-  AgentSessionScope,
   AgentSessionSummary,
   AgentUserMessageDisplayPart,
   SendAgentUserMessageInput,
@@ -8,8 +7,8 @@ import type {
 } from "@openducktor/core";
 import {
   agentSessionRefsEqual,
-  agentSessionScopesEqual,
   describeAgentSessionScope,
+  resolveAgentSessionAssociationTransition,
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -23,13 +22,6 @@ export const createClaudeSessionSummary = (
   startedAt: string,
 ): AgentSessionSummary => {
   const sessionAssociation = claudeSessionScope(input);
-  if (!sessionAssociation) {
-    throw new HostValidationError({
-      field: "sessionScope",
-      message: "Cannot create a Claude session summary without session context.",
-      details: { externalSessionId: sessionInput.externalSessionId },
-    });
-  }
   return {
     externalSessionId: sessionInput.externalSessionId,
     runtimeKind: "claude",
@@ -164,7 +156,7 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
 
 export const assertClaudeSessionRef = (
   session: ClaudeSession,
-  ref: SessionRef & { sessionScope?: AgentSessionScope },
+  ref: SessionRef & { sessionScope?: ClaudeSessionInput["sessionScope"] },
   action: string,
 ): void => {
   const expected = claudeSessionRef(session);
@@ -175,19 +167,17 @@ export const assertClaudeSessionRef = (
       details: { requested: ref, actual: expected },
     });
   }
-  if (!ref.sessionScope) {
-    return;
-  }
   const registeredScope = claudeSessionScope(session.input);
-  if (registeredScope && agentSessionScopesEqual(registeredScope, ref.sessionScope)) {
+  const transition = resolveAgentSessionAssociationTransition(
+    registeredScope,
+    ref.sessionScope ?? { kind: "unbound" },
+  );
+  if (transition.kind === "accepted") {
     return;
   }
-  const registeredDescription = registeredScope
-    ? describeAgentSessionScope(registeredScope)
-    : "no registered scope";
   throw new HostValidationError({
     field: "sessionScope",
-    message: `Cannot ${action} Claude session '${ref.externalSessionId}' because its registered ${registeredDescription} does not match requested ${describeAgentSessionScope(ref.sessionScope)}.`,
-    details: { requested: ref.sessionScope, actual: registeredScope },
+    message: `Cannot ${action} Claude session '${ref.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match requested ${describeAgentSessionScope(transition.incoming)}.`,
+    details: { requested: transition.incoming, actual: transition.previous },
   });
 };

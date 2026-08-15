@@ -9,6 +9,7 @@ import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
+import { toAgentTaskSessionBinding } from "../support/workflow-session";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
@@ -209,7 +210,11 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
     const sessionRef = await resolveRuntimeSessionContextRef(
       repoPath,
-      sessionForHistory,
+      {
+        identity: sessionForHistory,
+        taskBinding: toAgentTaskSessionBinding(sessionForHistory),
+        selectedModel: sessionForHistory.selectedModel,
+      },
       loadSettingsSnapshot ??
         (() => {
           throw new Error(

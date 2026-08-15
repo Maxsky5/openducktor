@@ -25,6 +25,7 @@ import {
   agentSessionLiveRefSchema,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
 import { Cause, Effect, Exit } from "effect";
 import {
   type HostError,
@@ -38,6 +39,7 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
+import { createAgentSessionLiveAssociationRetention } from "./agent-session-live-association-retention";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
@@ -97,9 +99,6 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
 };
-
-const sessionRefKey = (ref: AgentSessionLiveRef): string =>
-  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 
 const parseAdapterOutput = <Output>(
   schema: { parse(value: unknown): Output },
@@ -187,6 +186,8 @@ export const createAgentSessionLiveStateService = ({
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
+  const associationRetention = createAgentSessionLiveAssociationRetention();
+
   const validateEnvelope = (envelope: AgentSessionLiveEnvelope) =>
     Effect.try({
       try: () => agentSessionLiveEnvelopeSchema.parse(envelope),
@@ -196,12 +197,13 @@ export const createAgentSessionLiveStateService = ({
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
       const validatedEnvelope = yield* validateEnvelope(envelope);
-      if (validatedEnvelope.type === "fault") {
-        const faultLogResult = yield* Effect.either(faultLog(formatFaultLog(validatedEnvelope)));
+      const retainedEnvelope = yield* associationRetention.retainEnvelope(validatedEnvelope);
+      if (retainedEnvelope.type === "fault") {
+        const faultLogResult = yield* Effect.either(faultLog(formatFaultLog(retainedEnvelope)));
         const publishResult = yield* Effect.either(
           Effect.try({
-            try: () => publish(validatedEnvelope),
-            catch: (cause) => toEnvelopePublishError(cause, validatedEnvelope.type),
+            try: () => publish(retainedEnvelope),
+            catch: (cause) => toEnvelopePublishError(cause, retainedEnvelope.type),
           }),
         );
         if (faultLogResult._tag === "Left" && publishResult._tag === "Left") {
@@ -214,7 +216,7 @@ export const createAgentSessionLiveStateService = ({
                 publishFailure: publishResult.left,
               },
               details: {
-                eventType: validatedEnvelope.type,
+                eventType: retainedEnvelope.type,
                 faultLogFailure: faultLogResult.left,
                 publishFailure: publishResult.left,
               },
@@ -230,8 +232,8 @@ export const createAgentSessionLiveStateService = ({
         return null;
       }
       yield* Effect.try({
-        try: () => publish(validatedEnvelope),
-        catch: (cause) => toEnvelopePublishError(cause, validatedEnvelope.type),
+        try: () => publish(retainedEnvelope),
+        catch: (cause) => toEnvelopePublishError(cause, retainedEnvelope.type),
       });
       return null;
     });
@@ -271,7 +273,7 @@ export const createAgentSessionLiveStateService = ({
       );
       const seen = new Set<string>();
       for (const snapshot of flattened) {
-        const key = sessionRefKey(snapshot.ref);
+        const key = agentSessionRefKey(snapshot.ref);
         if (seen.has(key)) {
           return yield* Effect.fail(
             new HostInvariantError({
@@ -283,7 +285,7 @@ export const createAgentSessionLiveStateService = ({
         }
         seen.add(key);
       }
-      return flattened;
+      return yield* associationRetention.retainSnapshots(flattened, repoPath);
     });
 
   const service: AgentSessionLiveStateService = {
@@ -304,14 +306,21 @@ export const createAgentSessionLiveStateService = ({
         Effect.gen(function* () {
           const adapter = yield* adapterRegistry.find(input);
           if (!adapter) {
+            associationRetention.forget(input);
             return { type: "missing", ref: input } satisfies AgentSessionLiveReadResult;
           }
           const result = yield* adapter.readRetainedSnapshot(input);
-          return yield* parseAdapterOutput(
+          const parsed = yield* parseAdapterOutput(
             agentSessionLiveReadResultSchema,
             result,
             "agent-session-live.read-retained",
           );
+          if (parsed.type === "missing") {
+            associationRetention.forget(parsed.ref);
+            return parsed;
+          }
+          const session = yield* associationRetention.retainSnapshot(parsed.session);
+          return { type: "live", session };
         }),
       ),
     loadContext: (input) =>
