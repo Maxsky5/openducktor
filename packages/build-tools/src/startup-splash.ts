@@ -4,9 +4,7 @@ const STARTUP_SPLASH_STYLES = `
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-foreground: #5100ff;
-  --odt-startup-muted: rgba(81, 0, 255, 0.68);
-  --odt-startup-line: rgba(81, 0, 255, 0.18);
-  --odt-startup-surface: rgba(81, 0, 255, 0.06);
+  --odt-startup-line: rgba(81, 0, 255, 0.16);
 }
 
 html,
@@ -33,26 +31,6 @@ body {
   transition: opacity 160ms ease-out;
 }
 
-.odt-startup::before,
-.odt-startup::after {
-  position: absolute;
-  width: min(70vw, 52rem);
-  aspect-ratio: 1;
-  border: 1px solid rgba(81, 0, 255, 0.08);
-  border-radius: 50%;
-  content: "";
-}
-
-.odt-startup::before {
-  top: -48%;
-  right: -18%;
-}
-
-.odt-startup::after {
-  bottom: -55%;
-  left: -20%;
-}
-
 .odt-startup--leaving {
   pointer-events: none;
   opacity: 0;
@@ -63,7 +41,7 @@ body {
   z-index: 1;
   display: grid;
   justify-items: center;
-  gap: 1.75rem;
+  gap: 3rem;
   padding: 2rem;
   text-align: center;
 }
@@ -71,44 +49,75 @@ body {
 .odt-startup__stage {
   position: relative;
   display: grid;
-  width: 9rem;
-  height: 9rem;
+  width: 5rem;
+  height: 5rem;
   place-items: center;
 }
 
-.odt-startup__orbit {
+.odt-startup__stage::before {
   position: absolute;
-  inset: 0;
-  border: 1px solid var(--odt-startup-line);
+  width: 12.5rem;
+  height: 12.5rem;
   border-radius: 50%;
-  animation: odt-startup-spin 5s linear infinite;
+  background: rgba(81, 0, 255, 0.025);
+  content: "";
 }
 
-.odt-startup__orbit::before {
+.odt-startup__ring,
+.odt-startup__orbit {
   position: absolute;
-  top: 50%;
-  left: -0.25rem;
+  width: 8rem;
+  height: 8rem;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+
+.odt-startup__ring {
+  border: 1px solid var(--odt-startup-line);
+}
+
+.odt-startup__ring--outer {
+  width: 10rem;
+  height: 10rem;
+  border-color: rgba(81, 0, 255, 0.08);
+}
+
+.odt-startup__orbit {
+  animation: odt-startup-spin 8s linear infinite;
+}
+
+.odt-startup__orbit::after {
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
   background: var(--odt-startup-foreground);
   content: "";
-  transform: translateY(-50%);
+  transform: translateX(-50%);
 }
 
-.odt-startup__orbit--inner {
-  inset: 1rem;
-  border-color: rgba(81, 0, 255, 0.28);
-  animation-direction: reverse;
-  animation-duration: 3.5s;
+.odt-startup__orbit--second {
+  animation-delay: -2.67s;
 }
 
-.odt-startup__orbit--inner::before {
-  right: -0.1875rem;
-  left: auto;
+.odt-startup__orbit--second::after {
+  top: -0.21875rem;
   width: 0.375rem;
   height: 0.375rem;
-  background: rgba(81, 0, 255, 0.7);
+  background: rgba(81, 0, 255, 0.72);
+}
+
+.odt-startup__orbit--third {
+  animation-delay: -5.33s;
+}
+
+.odt-startup__orbit--third::after {
+  top: -0.1875rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  background: rgba(81, 0, 255, 0.48);
 }
 
 .odt-startup__mark {
@@ -117,74 +126,42 @@ body {
   width: 4.5rem;
   height: 4.5rem;
   place-items: center;
-  border: 1px solid rgba(81, 0, 255, 0.2);
-  border-radius: 1.5rem;
-  background: var(--odt-startup-surface);
-  box-shadow: 0 1.25rem 3rem rgba(81, 0, 255, 0.12);
+  animation: odt-startup-breathe 3s ease-in-out infinite;
+  border-radius: 1.125rem;
+  box-shadow: 0 1.25rem 3rem rgba(81, 0, 255, 0.16);
 }
 
 .odt-startup__mark img {
   display: block;
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: 1rem;
-}
-
-.odt-startup__copy {
-  display: grid;
-  justify-items: center;
-  gap: 0.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 1.125rem;
 }
 
 .odt-startup__title {
   margin: 0;
-  font-size: clamp(1.65rem, 4vw, 2rem);
+  font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 1;
 }
 
-.odt-startup__status {
-  margin: 0;
-  color: var(--odt-startup-muted);
-  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.12em;
+.odt-startup__failure {
+  display: none;
+  max-width: 24rem;
+  margin: -1.75rem 0 0;
+  color: rgba(81, 0, 255, 0.72);
+  font-size: 0.875rem;
   line-height: 1.5;
-  text-transform: uppercase;
-}
-
-.odt-startup__dots {
-  display: flex;
-  gap: 0.35rem;
-  height: 0.4rem;
-  align-items: center;
-}
-
-.odt-startup__dots span {
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 50%;
-  background: var(--odt-startup-foreground);
-  animation: odt-startup-dot 1.2s ease-in-out infinite;
-}
-
-.odt-startup__dots span:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.odt-startup__dots span:nth-child(3) {
-  animation-delay: 240ms;
 }
 
 .odt-startup--failed .odt-startup__orbit,
-.odt-startup--failed .odt-startup__dots span {
+.odt-startup--failed .odt-startup__mark {
   animation: none;
 }
 
-.odt-startup--failed .odt-startup__dots {
-  display: none;
+.odt-startup--failed .odt-startup__failure {
+  display: block;
 }
 
 @keyframes odt-startup-spin {
@@ -193,16 +170,14 @@ body {
   }
 }
 
-@keyframes odt-startup-dot {
+@keyframes odt-startup-breathe {
   0%,
   100% {
-    opacity: 0.35;
-    transform: translateY(0);
+    transform: scale(1);
   }
 
   50% {
-    opacity: 1;
-    transform: translateY(-0.18rem);
+    transform: scale(1.045);
   }
 }
 
@@ -212,7 +187,7 @@ body {
   }
 
   .odt-startup__orbit,
-  .odt-startup__dots span {
+  .odt-startup__mark {
     animation: none;
   }
 }
@@ -221,17 +196,17 @@ body {
 const STARTUP_SPLASH_MARKUP = `
 <div class="odt-startup__content">
   <div class="odt-startup__stage" aria-hidden="true">
+    <div class="odt-startup__ring"></div>
+    <div class="odt-startup__ring odt-startup__ring--outer"></div>
     <div class="odt-startup__orbit"></div>
-    <div class="odt-startup__orbit odt-startup__orbit--inner"></div>
+    <div class="odt-startup__orbit odt-startup__orbit--second"></div>
+    <div class="odt-startup__orbit odt-startup__orbit--third"></div>
     <div class="odt-startup__mark">
-      <img src="./favicon.svg" alt="" width="52" height="52" />
+      <img src="./favicon.svg" alt="" width="72" height="72" />
     </div>
   </div>
-  <div class="odt-startup__copy">
-    <p class="odt-startup__title">OpenDucktor</p>
-    <p class="odt-startup__status" data-odt-startup-status>Preparing your workspace</p>
-    <div class="odt-startup__dots" aria-hidden="true"><span></span><span></span><span></span></div>
-  </div>
+  <p class="odt-startup__title">OpenDucktor</p>
+  <p class="odt-startup__failure" data-odt-startup-status></p>
 </div>
 `;
 
