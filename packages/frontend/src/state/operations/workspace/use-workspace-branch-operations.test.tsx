@@ -278,6 +278,64 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
+  test("revalidates each partial branch cache independently", async () => {
+    const gitGetCurrentBranch = mock(
+      async (repoPath: string): Promise<GitCurrentBranch> => ({
+        name: repoPath === "/repo-a" ? "develop" : "release",
+        detached: false,
+      }),
+    );
+    const gitGetBranches = mock(
+      async (repoPath: string): Promise<GitBranch[]> => [
+        {
+          name: repoPath === "/repo-a" ? "develop" : "release",
+          isCurrent: true,
+          isRemote: false,
+        },
+      ],
+    );
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getQueryClient().setQueryData(gitQueryKeys.currentBranch("/repo-a"), {
+          name: "main",
+          detached: false,
+        });
+      });
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.waitFor((value) => value.activeBranch?.name === "develop");
+
+      expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
+      expect(harness.getLatest().activeBranch?.name).toBe("develop");
+
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.run(() => {
+        harness
+          .getQueryClient()
+          .setQueryData(gitQueryKeys.branches("/repo-b"), [
+            { name: "main", isCurrent: true, isRemote: false },
+          ]);
+      });
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.waitFor((value) => value.branches[0]?.name === "release");
+
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-b");
+      expect(harness.getLatest().branches).toEqual([
+        { name: "release", isCurrent: true, isRemote: false },
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refreshes cached branches when repository reactivation finds a branch change", async () => {
     const currentBranches = new Map<string, GitCurrentBranch>([
       ["/repo-a", { name: "main", detached: false, revision: "abc123" }],

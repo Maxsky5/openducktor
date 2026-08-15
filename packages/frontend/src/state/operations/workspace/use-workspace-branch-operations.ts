@@ -81,17 +81,20 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
-      const hasCachedBranchData =
+      const hasCachedCurrentBranch =
         queryClient.getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch(repoPath)) !==
-          undefined &&
+        undefined;
+      const hasCachedBranches =
         queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(repoPath)) !== undefined;
+      const invalidations: Promise<void>[] = [];
 
-      if (force || hasCachedBranchData) {
-        await Promise.all([
-          invalidateCurrentBranchQuery(queryClient, repoPath),
-          invalidateRepoBranchesQuery(queryClient, repoPath),
-        ]);
+      if (force || hasCachedCurrentBranch) {
+        invalidations.push(invalidateCurrentBranchQuery(queryClient, repoPath));
       }
+      if (force || hasCachedBranches) {
+        invalidations.push(invalidateRepoBranchesQuery(queryClient, repoPath));
+      }
+      await Promise.all(invalidations);
 
       try {
         await Promise.all([
