@@ -128,14 +128,22 @@ describe("BranchSwitcher", () => {
       BranchSelector: ({
         value,
         disabled,
+        placeholder,
         onValueChange,
       }: {
         value: string;
         disabled?: boolean;
+        placeholder?: string;
         onValueChange?: (value: string) => void;
       }) => {
         latestOnValueChange = onValueChange;
-        return <div data-branch-value={value} data-disabled={disabled ? "true" : "false"} />;
+        return (
+          <div
+            data-branch-value={value}
+            data-disabled={disabled ? "true" : "false"}
+            data-placeholder={placeholder}
+          />
+        );
       },
     }));
   });
@@ -179,9 +187,8 @@ describe("BranchSwitcher", () => {
       </BranchStateProvider>,
     );
     const expectStableBranchSelector = (branchName: string): void => {
-      const markup = rendered.container.innerHTML;
-      expect(markup).toContain(`data-branch-value="${branchName}"`);
-      expect(markup).toContain('data-disabled="false"');
+      const selector = rendered.container.querySelector(`[data-branch-value="${branchName}"]`);
+      expect(selector?.getAttribute("data-disabled")).toBe("false");
     };
 
     expectStableBranchSelector("main");
@@ -203,6 +210,28 @@ describe("BranchSwitcher", () => {
     });
 
     expectStableBranchSelector("develop");
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("disables the selector and shows loading on an uncached first load", async () => {
+    resetBranchState();
+    updateBranchState({
+      branches: [],
+      activeBranch: null,
+      isLoadingBranches: true,
+    });
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    const selector = rendered.container.querySelector('[data-disabled="true"]');
+    expect(selector?.getAttribute("data-placeholder")).toBe("Loading branches...");
 
     await act(async () => {
       rendered.unmount();
@@ -270,6 +299,37 @@ describe("BranchSwitcher", () => {
     });
 
     expect(rendered.container.innerHTML).toContain('data-branch-value="release"');
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("restores the active branch after a switch fails", async () => {
+    const deferred = createDeferred<void>();
+    switchBranch.mockImplementationOnce(() => deferred.promise);
+    resetBranchState();
+    const BranchSwitcher = await importBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
+
+    await act(async () => {
+      latestOnValueChange?.("feature/desloppify");
+      updateBranchState({ isSwitchingBranch: true });
+    });
+    expect(
+      rendered.container.querySelector('[data-branch-value="feature/desloppify"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      deferred.reject(new Error("checkout failed"));
+      updateBranchState({ isSwitchingBranch: false });
+      await flush();
+    });
+    expect(rendered.container.querySelector('[data-branch-value="main"]')).not.toBeNull();
 
     await act(async () => {
       rendered.unmount();

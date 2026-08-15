@@ -161,8 +161,10 @@ export function useWorkspaceBranchProbe({
         previousBranch?.detached ?? null,
         previousBranch?.revision ?? null,
       );
+      const branchListHasError =
+        queryClient.getQueryState(gitQueryKeys.branches(repoPath))?.status === "error";
 
-      if (!hasChanged) {
+      if (!hasChanged && !branchListHasError) {
         return { status: "unchanged" };
       }
 
@@ -197,6 +199,10 @@ export function useWorkspaceBranchProbe({
     }
 
     const outcome = await probeExternalBranchChange();
+
+    if (activeRepoPathRef.current !== repoPath) {
+      return;
+    }
 
     if (outcome.status === "degraded") {
       setBranchSyncDegraded(repoPath, true);

@@ -84,6 +84,45 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 };
 
 describe("use-workspace-branch-operations", () => {
+  test("shows loading only while an uncached first load is pending", async () => {
+    const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
+    const branchesDeferred = createDeferred<GitBranch[]>();
+    workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
+    workspaceHost.gitGetBranches = mock(async () => branchesDeferred.promise);
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        refreshPromise = value.refreshBranches();
+      });
+      await harness.run(flush);
+
+      expect(harness.getLatest().activeBranch).toBeNull();
+      expect(harness.getLatest().branches).toHaveLength(0);
+      expect(harness.getLatest().isLoadingBranches).toBe(true);
+
+      if (!refreshPromise) {
+        throw new Error("refreshBranches promise was not captured");
+      }
+
+      const pendingRefresh = refreshPromise;
+      await harness.run(async () => {
+        currentBranchDeferred.resolve({ name: "main", detached: false });
+        branchesDeferred.resolve([{ name: "main", isCurrent: true, isRemote: false }]);
+        await pendingRefresh;
+        await flush();
+      });
+
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
+    } finally {
+      currentBranchDeferred.resolve({ name: "main", detached: false });
+      branchesDeferred.resolve([]);
+      await harness.unmount();
+    }
+  });
+
   test("clears branch state on real repository transitions", async () => {
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -365,6 +404,118 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
+  test("clears switching state when a cached refresh overlaps a branch switch", async () => {
+    const switchDeferred = createDeferred<GitCurrentBranch>();
+    const mainBranches: GitBranch[] = [
+      { name: "main", isCurrent: true, isRemote: false },
+      { name: "feature", isCurrent: false, isRemote: false },
+    ];
+    const featureBranches: GitBranch[] = [
+      { name: "main", isCurrent: false, isRemote: false },
+      { name: "feature", isCurrent: true, isRemote: false },
+    ];
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
+    const gitGetBranches = mock(async () => featureBranches);
+    gitGetBranches.mockImplementationOnce(async () => mainBranches);
+    workspaceHost.gitGetBranches = gitGetBranches;
+    workspaceHost.gitSwitchBranch = mock(async () => switchDeferred.promise);
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      let switchPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        switchPromise = value.switchBranch("feature");
+      });
+      await harness.run(flush);
+      expect(harness.getLatest().isSwitchingBranch).toBe(true);
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      if (!switchPromise) {
+        throw new Error("switchBranch promise was not captured");
+      }
+
+      const pendingSwitch = switchPromise;
+      await harness.run(async () => {
+        switchDeferred.resolve({ name: "feature", detached: false });
+        await pendingSwitch;
+        await flush();
+      });
+
+      expect(harness.getLatest().isSwitchingBranch).toBe(false);
+      expect(
+        harness
+          .getQueryClient()
+          .getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch("/repo-a")),
+      ).toEqual({ name: "feature", detached: false });
+    } finally {
+      switchDeferred.resolve({ name: "feature", detached: false });
+      await harness.unmount();
+    }
+  });
+
+  test("updates an inactive repository cache after its branch switch succeeds", async () => {
+    const switchDeferred = createDeferred<GitCurrentBranch>();
+    const mainBranches: GitBranch[] = [
+      { name: "main", isCurrent: true, isRemote: false },
+      { name: "feature", isCurrent: false, isRemote: false },
+    ];
+    const featureBranches: GitBranch[] = [
+      { name: "main", isCurrent: false, isRemote: false },
+      { name: "feature", isCurrent: true, isRemote: false },
+    ];
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({ name: "main", detached: false }));
+    const gitGetBranches = mock(async () => featureBranches);
+    gitGetBranches.mockImplementationOnce(async () => mainBranches);
+    workspaceHost.gitGetBranches = gitGetBranches;
+    workspaceHost.gitSwitchBranch = mock(async () => switchDeferred.promise);
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+
+      let switchPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        switchPromise = value.switchBranch("feature");
+        value.clearBranchData("/repo-a");
+      });
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+
+      if (!switchPromise) {
+        throw new Error("switchBranch promise was not captured");
+      }
+
+      const pendingSwitch = switchPromise;
+      await harness.run(async () => {
+        switchDeferred.resolve({ name: "feature", detached: false });
+        await pendingSwitch;
+        await flush();
+      });
+
+      expect(
+        harness
+          .getQueryClient()
+          .getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch("/repo-a")),
+      ).toEqual({ name: "feature", detached: false });
+      expect(
+        harness.getQueryClient().getQueryData<GitBranch[]>(gitQueryKeys.branches("/repo-a")),
+      ).toEqual(featureBranches);
+    } finally {
+      switchDeferred.resolve({ name: "feature", detached: false });
+      await harness.unmount();
+    }
+  });
+
   test("ignores stale refresh results after the active repository changes", async () => {
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
     workspaceHost.gitGetCurrentBranch = mock(async (repoPath: string) => {
@@ -419,6 +570,44 @@ describe("use-workspace-branch-operations", () => {
       expect(harness.getLatest().branches).toHaveLength(0);
     } finally {
       currentBranchDeferred.resolve({ name: undefined, detached: false });
+      await harness.unmount();
+    }
+  });
+
+  test("propagates refresh failures after the active repository changes", async () => {
+    const currentBranchDeferred = createDeferred<GitCurrentBranch>();
+    const refreshError = new Error("branch read failed");
+    workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
+    workspaceHost.gitGetBranches = mock(async () => []);
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      let refreshPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        refreshPromise = value.refreshBranches();
+      });
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+
+      if (!refreshPromise) {
+        throw new Error("refreshBranches promise was not captured");
+      }
+
+      let caughtError: unknown = null;
+      const pendingRefresh = refreshPromise;
+      await harness.run(async () => {
+        currentBranchDeferred.reject(refreshError);
+        try {
+          await pendingRefresh;
+        } catch (error) {
+          caughtError = error;
+        }
+        await flush();
+      });
+
+      expect(caughtError).toBe(refreshError);
+    } finally {
+      currentBranchDeferred.resolve({ name: "main", detached: false });
       await harness.unmount();
     }
   });

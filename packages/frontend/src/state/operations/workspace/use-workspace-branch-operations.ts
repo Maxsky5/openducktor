@@ -1,5 +1,5 @@
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CancelledError, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -31,6 +31,11 @@ type UseWorkspaceBranchOperationsResult = {
   clearBranchData: (repoPath?: string | null) => void;
 };
 
+type SwitchingBranchRequest = {
+  repoPath: string;
+  requestVersion: number;
+};
+
 export function useWorkspaceBranchOperations({
   activeRepo,
   hostClient,
@@ -46,8 +51,10 @@ export function useWorkspaceBranchOperations({
     ...currentBranchQueryOptions(queryRepoPath, hostClient),
     enabled: false,
   });
-  const [switchingBranchRepoPath, setSwitchingBranchRepoPath] = useState<string | null>(null);
+  const [switchingBranchRequest, setSwitchingBranchRequest] =
+    useState<SwitchingBranchRequest | null>(null);
   const branchRequestVersionRef = useRef(0);
+  const latestSwitchRequestVersionByRepoRef = useRef(new Map<string, number>());
   const currentWorkspaceRepoPathRef = useRef(activeRepo);
 
   useLayoutEffect(() => {
@@ -61,10 +68,16 @@ export function useWorkspaceBranchOperations({
     [],
   );
 
+  const isLatestSwitchRequest = useCallback(
+    (repoPath: string, requestVersion: number): boolean =>
+      latestSwitchRequestVersionByRepoRef.current.get(repoPath) === requestVersion,
+    [],
+  );
+
   const clearBranchData = useCallback(
     (repoPath = currentWorkspaceRepoPathRef.current): void => {
       branchRequestVersionRef.current += 1;
-      setSwitchingBranchRepoPath(null);
+      setSwitchingBranchRequest(null);
       updateBranchSyncDegradedForRepo(repoPath, false);
     },
     [updateBranchSyncDegradedForRepo],
@@ -74,26 +87,28 @@ export function useWorkspaceBranchOperations({
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
 
-      try {
-        if (force) {
-          await Promise.all([
-            invalidateCurrentBranchQuery(queryClient, repoPath),
-            invalidateRepoBranchesQuery(queryClient, repoPath),
-          ]);
-        }
+      if (force) {
+        await Promise.all([
+          invalidateCurrentBranchQuery(queryClient, repoPath),
+          invalidateRepoBranchesQuery(queryClient, repoPath),
+        ]);
+      }
 
+      try {
         await Promise.all([
           loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
           loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
         ]);
-
-        if (isCurrentBranchRequest(repoPath, requestVersion)) {
-          updateBranchSyncDegradedForRepo(repoPath, false);
-        }
       } catch (error) {
-        if (isCurrentBranchRequest(repoPath, requestVersion)) {
-          throw error;
+        if (error instanceof CancelledError) {
+          return;
         }
+
+        throw error;
+      }
+
+      if (isCurrentBranchRequest(repoPath, requestVersion)) {
+        updateBranchSyncDegradedForRepo(repoPath, false);
       }
     },
     [hostClient, isCurrentBranchRequest, queryClient, updateBranchSyncDegradedForRepo],
@@ -125,7 +140,7 @@ export function useWorkspaceBranchOperations({
   const hasBranchData = branchesQuery.data !== undefined && currentBranchQuery.data !== undefined;
   const isLoadingBranches =
     !hasBranchData && (branchesQuery.isFetching || currentBranchQuery.isFetching);
-  const isSwitchingBranch = switchingBranchRepoPath === activeRepo;
+  const isSwitchingBranch = switchingBranchRequest?.repoPath === activeRepo;
 
   const switchBranch = useCallback(
     async (branchName: string): Promise<void> => {
@@ -156,7 +171,8 @@ export function useWorkspaceBranchOperations({
           ),
         ]);
       };
-      setSwitchingBranchRepoPath(repoPath);
+      latestSwitchRequestVersionByRepoRef.current.set(repoPath, requestVersion);
+      setSwitchingBranchRequest({ repoPath, requestVersion });
 
       try {
         await cancelBranchQueries();
@@ -166,7 +182,10 @@ export function useWorkspaceBranchOperations({
         try {
           current = await hostClient.gitSwitchBranch(repoPath, branchName);
         } catch (error) {
-          if (isCurrentBranchRequest(repoPath, requestVersion)) {
+          if (
+            isLatestSwitchRequest(repoPath, requestVersion) &&
+            currentWorkspaceRepoPathRef.current === repoPath
+          ) {
             queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), previousBranch);
 
             toast.error("Failed to switch branch", {
@@ -176,40 +195,51 @@ export function useWorkspaceBranchOperations({
           return;
         }
 
-        if (isCurrentBranchRequest(repoPath, requestVersion)) {
-          await cancelBranchQueries();
+        if (!isLatestSwitchRequest(repoPath, requestVersion)) {
+          return;
+        }
 
-          if (!isCurrentBranchRequest(repoPath, requestVersion)) {
-            return;
-          }
+        await cancelBranchQueries();
 
-          queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
+        if (!isLatestSwitchRequest(repoPath, requestVersion)) {
+          return;
+        }
+
+        queryClient.setQueryData(gitQueryKeys.currentBranch(repoPath), current);
+        if (currentWorkspaceRepoPathRef.current === repoPath) {
           updateBranchSyncDegradedForRepo(repoPath, false);
+        }
 
-          try {
-            await invalidateRepoBranchesQuery(queryClient, repoPath);
-            await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
-          } catch (error) {
-            if (isCurrentBranchRequest(repoPath, requestVersion)) {
+        try {
+          await invalidateRepoBranchesQuery(queryClient, repoPath);
+          await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
+        } catch (error) {
+          if (isLatestSwitchRequest(repoPath, requestVersion)) {
+            if (currentWorkspaceRepoPathRef.current === repoPath) {
               toast.error("Branch switched, but failed to refresh branch list", {
                 description: errorMessage(error),
               });
-
-              throw error;
             }
+
+            throw error;
           }
         }
       } finally {
-        if (branchRequestVersionRef.current === requestVersion) {
-          setSwitchingBranchRepoPath(null);
+        if (isLatestSwitchRequest(repoPath, requestVersion)) {
+          latestSwitchRequestVersionByRepoRef.current.delete(repoPath);
         }
+        setSwitchingBranchRequest((currentRequest) =>
+          currentRequest?.repoPath === repoPath && currentRequest.requestVersion === requestVersion
+            ? null
+            : currentRequest,
+        );
       }
     },
     [
       activeBranch,
       activeRepo,
       hostClient,
-      isCurrentBranchRequest,
+      isLatestSwitchRequest,
       queryClient,
       updateBranchSyncDegradedForRepo,
     ],

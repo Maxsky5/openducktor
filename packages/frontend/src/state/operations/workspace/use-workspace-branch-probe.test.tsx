@@ -95,6 +95,56 @@ describe("use-workspace-branch-probe", () => {
     }
   });
 
+  test("retries a failed branch-list refresh when the branch identity is unchanged", async () => {
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+    const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
+    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const gitGetBranches = mock(async () => []);
+    gitGetBranches.mockImplementationOnce(async () => {
+      throw new Error("branch list unavailable");
+    });
+    workspaceHost.gitGetCurrentBranch = mock(async () => ({
+      name: "feature",
+      detached: false,
+    }));
+    workspaceHost.gitGetBranches = gitGetBranches;
+
+    const rendered = render(
+      <ProbeHarness
+        activeRepoPath="/repo-a"
+        isSwitchingWorkspace={false}
+        isLoadingBranches={false}
+        isSwitchingBranch={false}
+        setBranchSyncDegraded={setBranchSyncDegraded}
+        captureQueryClient={(client) => {
+          queryClientCapture.current = client;
+        }}
+      />,
+      { wrapper: IsolatedQueryWrapper },
+    );
+
+    try {
+      const queryClient = queryClientCapture.current;
+      if (!queryClient) {
+        throw new Error("Query client was not captured");
+      }
+
+      queryClient.setQueryData(gitQueryKeys.currentBranch("/repo-a"), {
+        name: "main",
+        detached: false,
+      });
+      await triggerFocus();
+      await triggerFocus();
+
+      expect(gitGetBranches).toHaveBeenCalledTimes(2);
+      expect(setBranchSyncDegraded).toHaveBeenCalledWith("/repo-a", true);
+      expect(setBranchSyncDegraded).toHaveBeenLastCalledWith("/repo-a", false);
+    } finally {
+      rendered.unmount();
+      restoreBrowserGlobals();
+    }
+  });
+
   test("does not report degradation when a branch switch cancels the current branch probe", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
@@ -277,7 +327,7 @@ describe("use-workspace-branch-probe", () => {
       branchProbeDeferred.reject(new Error("permission denied while reading branch"));
       await flush();
 
-      expect(setBranchSyncDegraded).not.toHaveBeenCalledWith("/repo-b", true);
+      expect(setBranchSyncDegraded).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
       restoreBrowserGlobals();
