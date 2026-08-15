@@ -1,12 +1,16 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
-import { type ReactElement, type ReactNode, useMemo, useReducer, useRef } from "react";
+import { type ReactElement, useMemo, useReducer, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
-import { FolderPickerDialog, InlineFolderPicker } from "./folder-picker-dialog";
+import {
+  FolderPickerDialog,
+  InlineFolderPicker,
+  type InlineFolderPickerProps,
+} from "./folder-picker-dialog";
 
 const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -82,10 +86,7 @@ type WorkspaceCreationFormProps = {
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
   repositoryPicker?: "dialog" | "inline";
-  renderActions?: (actions: {
-    primaryAction: ReactElement;
-    secondaryAction: ReactElement | null;
-  }) => ReactNode;
+  renderActions?: InlineFolderPickerProps["renderActions"];
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
 };
@@ -187,12 +188,7 @@ export function WorkspaceCreationForm({
           confirmLabel="Choose This Folder"
           requireGitRepo
           onConfirm={confirmRepo}
-          {...(renderActions
-            ? {
-                renderActions: ({ primaryAction, secondaryAction }) =>
-                  renderActions({ primaryAction, secondaryAction }),
-              }
-            : {})}
+          {...(renderActions ? { renderActions } : {})}
           {...(state.repoPath
             ? {
                 initialPath: state.repoPath,
