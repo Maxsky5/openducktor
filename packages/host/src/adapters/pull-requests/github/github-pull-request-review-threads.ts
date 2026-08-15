@@ -149,6 +149,7 @@ const toReviewThreadComment = (
       body: content.body,
       patch,
       suggestionPatches: content.suggestionPatches,
+      suggestionWarning: content.suggestionWarning,
       url: toNullableGithubString(payload.url),
       createdAt: toNullableGithubString(payload.createdAt),
       updatedAt: toNullableGithubString(payload.updatedAt),

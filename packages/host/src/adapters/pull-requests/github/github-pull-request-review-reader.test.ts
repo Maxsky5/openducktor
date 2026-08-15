@@ -767,6 +767,63 @@ describe("createGithubPullRequestReviewReader", () => {
     expect(suggestionComment?.suggestionPatches).toEqual([]);
   });
 
+  test("keeps CI data and attaches a warning when stale line metadata cannot build a suggestion patch", async () => {
+    const suggestionBody = [
+      "Use the current session identity.",
+      "",
+      "```suggestion",
+      "const matches = agentSessionRefsEqual(expected, actual);",
+      "```",
+    ].join("\n");
+    const provider = createGithubPullRequestReviewReader();
+    const context = await Effect.runPromise(
+      provider.read({
+        dependencies: createDependencies({
+          pullRequestViewResponse: fairnestPullRequestViewResponse,
+          reviewThreadNodes: [
+            {
+              id: "thread-stale-suggestion",
+              isResolved: true,
+              comments: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: "thread-comment-stale-suggestion",
+                    author: { login: "reviewer" },
+                    body: suggestionBody,
+                    diffHunk: "@@ -1,1 +1,1 @@\n const enabled = false;",
+                    url: "https://github.com/Maxsky5/openducktor/pull/820#discussion-stale",
+                    createdAt: "2026-08-15T20:19:39Z",
+                    updatedAt: "2026-08-15T20:19:39Z",
+                    path: "packages/host/src/example.ts",
+                    startLine: 20,
+                    line: 20,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        repoPath: "/repo",
+        repository: { host: "github.com", owner: "Maxsky5", name: "openducktor" },
+        pullRequestNumber: 820,
+      }),
+    );
+
+    expect(context.status).toBe("loaded");
+    if (context.status !== "loaded") {
+      return;
+    }
+    expect(context.checks).toHaveLength(2);
+    expect(context.comments).toHaveLength(3);
+    expect(context.comments[2]).toMatchObject({
+      id: "thread-comment-stale-suggestion",
+      body: suggestionBody,
+      suggestionPatches: [],
+      suggestionWarning: "GitHub suggestion lines could not be located in the review diff hunk.",
+    });
+  });
+
   test("loads every review thread and comment page", async () => {
     const commands: string[][] = [];
     const provider = createGithubPullRequestReviewReader();

@@ -63,6 +63,7 @@ const loadedContext = {
       suggestionPatches: [
         "@@ -12,1 +12,1 @@\n-const isAnyLoading = isGoogleLoading || isFacebookLoading || isLoading;\n+const isAnyLoading = auth.isLoading;",
       ],
+      suggestionWarning: null,
       url: "https://github.com/openai/openducktor/pull/42#discussion_r1",
       createdAt: "2026-07-08T10:06:00Z",
       updatedAt: "2026-07-08T10:07:00Z",

@@ -144,6 +144,7 @@ const parseComment = (payloadValue: unknown, field: string): PullRequestReviewAc
     body,
     patch: null,
     suggestionPatches: [],
+    suggestionWarning: null,
     url: toNullableGithubString(payload.url),
     createdAt: toNullableGithubString(payload.createdAt),
     updatedAt: toNullableGithubString(payload.updatedAt),
@@ -204,6 +205,7 @@ const parseReview = (payloadValue: unknown, field: string): PullRequestReviewAct
     body: payload.body,
     patch: null,
     suggestionPatches: [],
+    suggestionWarning: null,
     url: toNullableGithubString(payload.url),
     createdAt:
       toNullableGithubString(payload.submittedAt) ?? toNullableGithubString(payload.createdAt),

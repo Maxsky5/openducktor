@@ -83,6 +83,7 @@ const makeLoadedContext = (providerId: GitProviderId): PullRequestReviewContext 
       body: "",
       patch: null,
       suggestionPatches: [],
+      suggestionWarning: null,
       url: null,
       createdAt: "2026-07-10T08:00:00.000Z",
       updatedAt: null,

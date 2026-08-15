@@ -1,5 +1,5 @@
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
-import { ChevronRight, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
+import { ChevronRight, CircleAlert, ExternalLink, Lightbulb, MessageSquare } from "lucide-react";
 import type { ComponentProps, MouseEvent, ReactElement } from "react";
 import { memo, useState } from "react";
 import type { Components, ExtraProps } from "react-markdown";
@@ -149,6 +149,15 @@ const TaskExecutionCiCommentBody = memo(function TaskExecutionCiCommentBody({
             components={CI_COMMENT_MARKDOWN_COMPONENTS}
             className="min-w-0 break-words prose-p:break-words prose-li:break-words prose-code:break-words prose-pre:max-w-full prose-pre:whitespace-pre-wrap prose-pre:break-words prose-blockquote:break-words [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-words"
           />
+        </div>
+      ) : null}
+      {comment.suggestionWarning ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 border-warning-border border-t bg-warning-surface px-3 py-2 text-sm text-warning-surface-foreground"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning-muted" aria-hidden="true" />
+          <span>{comment.suggestionWarning}</span>
         </div>
       ) : null}
       {hasSuggestionPatches && filePath
