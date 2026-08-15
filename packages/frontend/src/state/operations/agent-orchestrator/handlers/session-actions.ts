@@ -97,7 +97,6 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     adapter,
     readSessionSnapshot,
-    taskRef,
     updateSession,
     prepareSessionSend,
     turnMetadata: sessionTurnState.metadata,

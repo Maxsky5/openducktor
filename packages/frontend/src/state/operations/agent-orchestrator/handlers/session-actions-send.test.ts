@@ -592,7 +592,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("rejects send when role is unavailable for the current task", async () => {
+  test("sends to an existing QA session after the task status changes", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
@@ -602,7 +602,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ status: "idle", role: "build", taskId: "task-1" }),
+      buildSession({ status: "idle", role: "qa", taskId: "task-1" }),
     ]);
 
     const actions = createSessionActions({
@@ -612,11 +612,11 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         current: [
           createTaskCardFixture({
             id: "task-1",
-            status: "open",
+            status: "in_progress",
             agentWorkflows: {
-              spec: { required: true, canSkip: false, available: true, completed: false },
-              planner: { required: true, canSkip: false, available: false, completed: false },
-              builder: { required: true, canSkip: false, available: false, completed: false },
+              spec: { required: false, canSkip: true, available: true, completed: false },
+              planner: { required: false, canSkip: true, available: true, completed: false },
+              builder: { required: true, canSkip: false, available: true, completed: false },
               qa: { required: true, canSkip: false, available: false, completed: false },
             },
           }),
@@ -626,10 +626,15 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await expect(
-        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
-      ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
-      expect(sendCalls).toBe(0);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+
+      expect(sendCalls).toBe(1);
+      expect(sessionMessagesToArray(getSession(sessionsRef))).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "hello",
+        }),
+      ]);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }

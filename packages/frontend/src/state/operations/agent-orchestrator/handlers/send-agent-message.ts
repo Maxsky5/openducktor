@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import {
   type AgentEnginePort,
   type AgentUserMessagePart,
@@ -9,7 +8,6 @@ import {
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
-import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -34,7 +32,6 @@ export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "sendUserMessage">;
   readSessionSnapshot: ReadSessionSnapshot;
-  taskRef: { current: TaskCard[] };
   updateSession: UpdateSession;
   prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
   turnMetadata: SessionTurnMetadata;
@@ -170,10 +167,6 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const externalSessionId = currentSession.externalSessionId;
     if (!isWorkflowAgentSession(currentSession)) {
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
-    }
-    const task = dependencies.taskRef.current.find((entry) => entry.id === currentSession.taskId);
-    if (task && !isRoleAvailableForTask(task, currentSession.role)) {
-      throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
     }
     if (isAgentSessionWaitingInput(currentSession)) {
       settleStartingSession(
