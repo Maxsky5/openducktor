@@ -64,12 +64,14 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
   taskBinding: null,
+  liveSessionAssociation: null,
   selectedModel: null,
 });
 
 const sessionTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
   taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
+  liveSessionAssociation: null,
   selectedModel: state.selectedModel,
 });
 

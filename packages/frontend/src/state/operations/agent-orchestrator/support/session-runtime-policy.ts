@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { AgentSessionAssociation, SettingsSnapshot } from "@openducktor/contracts";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import type {
   AgentSessionRuntimePolicy,
@@ -6,18 +6,19 @@ import type {
   PolicyBoundSessionRef,
   RuntimeKind,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
   AgentTaskSessionBinding,
 } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
+import { resolveSessionRuntimeScope } from "./session-runtime-scope";
 
 type RuntimeSessionContextSource = {
   identity: AgentSessionIdentity;
   selectedModel: AgentSessionState["selectedModel"];
   taskBinding: AgentTaskSessionBinding | null;
+  liveSessionAssociation: AgentSessionAssociation | null;
 };
 
 export type LoadSettingsSnapshotForRuntimePolicy = () => Promise<SettingsSnapshot>;
@@ -82,9 +83,7 @@ export const resolveRuntimeSessionContextRef = async (
   session: RuntimeSessionContextSource,
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy,
 ): Promise<PolicyBoundSessionRef> => {
-  const sessionScope = session.taskBinding
-    ? workflowAgentSessionScope(session.taskBinding.taskId, session.taskBinding.role)
-    : null;
+  const sessionScope = resolveSessionRuntimeScope(session);
   const runtimePolicy = await resolveAgentSessionRuntimePolicy({
     runtimeKind: session.identity.runtimeKind,
     sessionScope,

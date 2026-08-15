@@ -573,12 +573,14 @@ export class CodexAppServerAdapter
     input: PolicyBoundSessionRef,
   ): Promise<CodexSessionContextUsage | null> {
     assertCodexRuntimePolicyBinding(input, "load Codex session context usage");
-    await this.policyBoundSession(
+    const session = this.policyBoundSession(
       input,
       { lookup: "load context usage for", context: "load session context usage" },
       false,
     );
-    return this.contextUsageLoader.loadSession(input);
+    return session instanceof Promise
+      ? session.then(() => this.contextUsageLoader.loadSession(input))
+      : this.contextUsageLoader.loadSession(input);
   }
 
   async loadLiveSessionContextUsage(

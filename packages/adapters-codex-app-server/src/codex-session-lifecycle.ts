@@ -73,7 +73,7 @@ export const assertRuntimeContextCompatibleWithSession = (
   }
 };
 
-export const applyRuntimeContextToSession = (
+const applyRuntimeContextToSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
   action = "apply runtime context",

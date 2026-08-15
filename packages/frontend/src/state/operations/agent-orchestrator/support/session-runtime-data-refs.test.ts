@@ -37,11 +37,13 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
   taskBinding: null,
+  liveSessionAssociation: null,
   selectedModel: null,
 });
 const stateTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
   taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
+  liveSessionAssociation: null,
   selectedModel: state.selectedModel,
 });
 
@@ -136,6 +138,34 @@ describe("resolveSessionRuntimeDataRefs", () => {
         workingDirectory: "/repo",
         externalSessionId: "external-1",
         runtimePolicy: { kind: "opencode" },
+      },
+    });
+  });
+
+  test("forwards repository scope from the live policy association", () => {
+    expect(
+      resolveSessionRuntimeDataRefs({
+        repoPath: "/repo",
+        selectedSession: {
+          ...identityTarget(),
+          liveSessionAssociation: { kind: "repository" },
+        },
+        runtimePolicy: { kind: "opencode" },
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      }),
+    ).toEqual({
+      kind: "available",
+      catalogRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      },
+      todosRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        externalSessionId: "external-1",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "repository" },
       },
     });
   });

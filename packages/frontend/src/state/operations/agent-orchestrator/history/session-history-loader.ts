@@ -1,4 +1,9 @@
-import type { RepoPromptOverrides, SessionHistoryFailure, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionAssociation,
+  RepoPromptOverrides,
+  SessionHistoryFailure,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
@@ -35,6 +40,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   readSessionSnapshot: ReadSessionSnapshot;
+  readLiveSessionAssociation: (identity: AgentSessionIdentity) => AgentSessionAssociation | null;
   updateSession: UpdateSession;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -150,6 +156,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   readSessionSnapshot: ReadSessionSnapshot;
+  readLiveSessionAssociation: (identity: AgentSessionIdentity) => AgentSessionAssociation | null;
   updateSession: UpdateSession;
   identity: AgentSessionIdentity;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
@@ -163,6 +170,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   readSessionSnapshot,
   updateSession,
   identity,
+  readLiveSessionAssociation,
   policy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
@@ -213,6 +221,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       {
         identity: sessionForHistory,
         taskBinding: toAgentTaskSessionBinding(sessionForHistory),
+        liveSessionAssociation: readLiveSessionAssociation(identity),
         selectedModel: sessionForHistory.selectedModel,
       },
       loadSettingsSnapshot ??
@@ -284,6 +293,7 @@ const createLoadSessionHistoryWithPolicy = ({
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   readSessionSnapshot,
+  readLiveSessionAssociation,
   updateSession,
   taskRef,
   loadRepoPromptOverrides,
@@ -317,6 +327,7 @@ const createLoadSessionHistoryWithPolicy = ({
       repoPath,
       adapter,
       readSessionSnapshot,
+      readLiveSessionAssociation,
       updateSession,
       identity: sessionIdentity,
       policy,

@@ -45,7 +45,7 @@ export const applySessionPolicy = async (input: {
   }
 };
 
-export const assertRuntimeContextCompatibleWithSession = (
+const assertRuntimeContextCompatibleWithSession = (
   session: SessionRecord,
   input: PolicyBoundSessionRef,
   action: string,

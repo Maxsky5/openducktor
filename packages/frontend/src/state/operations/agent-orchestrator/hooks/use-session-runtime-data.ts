@@ -4,7 +4,6 @@ import type {
   AgentSessionTodoItem,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
@@ -32,6 +31,7 @@ import {
   resolveAgentSessionRuntimePolicyFromSnapshot,
   resolveSettingsIndependentAgentSessionRuntimePolicy,
 } from "../support/session-runtime-policy";
+import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
@@ -68,26 +68,33 @@ export const useSessionRuntimeData = ({
   const selectedTaskId = selectedSession?.taskBinding?.taskId ?? null;
   const selectedRole = selectedSession?.taskBinding?.role ?? null;
   const selectedModel = selectedSession?.selectedModel ?? null;
+  const liveSessionAssociation = selectedSession?.liveSessionAssociation ?? null;
   const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
     if (!stableSelectedSessionIdentity) {
       return null;
     }
     const taskBinding: AgentTaskSessionBinding | null =
       selectedTaskId && selectedRole ? { taskId: selectedTaskId, role: selectedRole } : null;
-    return { identity: stableSelectedSessionIdentity, taskBinding, selectedModel };
-  }, [stableSelectedSessionIdentity, selectedModel, selectedRole, selectedTaskId]);
+    return {
+      identity: stableSelectedSessionIdentity,
+      taskBinding,
+      liveSessionAssociation,
+      selectedModel,
+    };
+  }, [
+    liveSessionAssociation,
+    stableSelectedSessionIdentity,
+    selectedModel,
+    selectedRole,
+    selectedTaskId,
+  ]);
   const runtimePolicyTarget = useMemo(() => {
     if (stableSelectedSession === null) {
       return null;
     }
     return {
       runtimeKind: stableSelectedSession.identity.runtimeKind,
-      sessionScope: stableSelectedSession.taskBinding
-        ? workflowAgentSessionScope(
-            stableSelectedSession.taskBinding.taskId,
-            stableSelectedSession.taskBinding.role,
-          )
-        : null,
+      sessionScope: resolveSessionRuntimeScope(stableSelectedSession),
     };
   }, [stableSelectedSession]);
   const settingsSnapshotQuery = useQuery({

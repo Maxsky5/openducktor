@@ -85,12 +85,17 @@ const createActivityStore = (
         listeners.delete(listener);
       };
     },
+    subscribeLiveAssociations: () => () => {},
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
+    getLiveAssociationSnapshot: () => null,
     listSessionSnapshots: (): AgentSessionState[] => [],
     getVisiblePendingInputSnapshot: () => EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT,
     commitSessionCollection: () => {
       throw new Error("commitSessionCollection is not used in this test");
+    },
+    setLiveAssociations: (): void => {
+      throw new Error("setLiveAssociations is not used in this test");
     },
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");

@@ -54,11 +54,50 @@ describe("session runtime policy", () => {
           workingDirectory: "/repo",
         },
         taskBinding: null,
+        liveSessionAssociation: null,
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
     );
 
     expect(ref).not.toHaveProperty("sessionScope");
+  });
+
+  test("forwards repository scope from a live policy association", async () => {
+    const ref = await resolveRuntimeSessionContextRef(
+      "/repo",
+      {
+        identity: {
+          externalSessionId: "repository-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+        taskBinding: null,
+        liveSessionAssociation: { kind: "repository" },
+        selectedModel: null,
+      },
+      async () => createSettingsSnapshotFixture(),
+    );
+
+    expect(ref.sessionScope).toEqual({ kind: "repository" });
+  });
+
+  test("keeps task binding authoritative over live policy association", async () => {
+    const ref = await resolveRuntimeSessionContextRef(
+      "/repo",
+      {
+        identity: {
+          externalSessionId: "workflow-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
+        taskBinding: { taskId: "task-1", role: "build" },
+        liveSessionAssociation: { kind: "repository" },
+        selectedModel: null,
+      },
+      async () => createSettingsSnapshotFixture(),
+    );
+
+    expect(ref.sessionScope).toEqual({ kind: "workflow", taskId: "task-1", role: "build" });
   });
 });

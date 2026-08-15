@@ -211,6 +211,33 @@ describe("createAgentSessionsStore session snapshots", () => {
     expect(store.getSessionSnapshot(session)).toBe(session);
   });
 
+  test("keeps live policy association updates out of session activity notifications", () => {
+    const store = createAgentSessionsStore();
+    const identity = {
+      externalSessionId: "repository-session",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+    let sessionNotificationCount = 0;
+    let associationNotificationCount = 0;
+    const unsubscribeSession = store.subscribe(() => {
+      sessionNotificationCount += 1;
+    });
+    const unsubscribeAssociation = store.subscribeLiveAssociations(() => {
+      associationNotificationCount += 1;
+    });
+
+    store.setLiveAssociations(
+      () => new Map([[agentSessionIdentityKey(identity), { kind: "repository" }]]),
+    );
+    unsubscribeSession();
+    unsubscribeAssociation();
+
+    expect(store.getLiveAssociationSnapshot(identity)).toEqual({ kind: "repository" });
+    expect(sessionNotificationCount).toBe(0);
+    expect(associationNotificationCount).toBe(1);
+  });
+
   test("commits a collection update and returns the result from the same current collection", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
