@@ -85,7 +85,9 @@ import {
   resolveOpencodeRuntimeClientInput,
 } from "./runtime-connection";
 import {
+  clearAwaitingRuntimeTurnStart,
   finishUserMessageSend,
+  isStreamTurnIdle,
   markStreamTurnIdle,
   startUserMessageSend,
 } from "./session-activity";
@@ -730,9 +732,12 @@ export class OpencodeSdkAdapter
     const preserveActiveTurnOnFailure =
       systemInvocation.kind === "manual_session_compaction" &&
       session.streamTurnStatus === "active";
+    const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
+    if (!expectsPromptTurnStart) {
+      clearAwaitingRuntimeTurnStart(session);
+    }
     startUserMessageSend(session, {
-      expectRuntimeTurnStart:
-        session.activeAssistantMessageId === null && usesPromptAsyncTransport(input.parts),
+      expectRuntimeTurnStart: isStreamTurnIdle(session) && expectsPromptTurnStart,
     });
     this.emit(input.externalSessionId, {
       type: "session_status",

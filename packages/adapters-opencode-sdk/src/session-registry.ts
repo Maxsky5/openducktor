@@ -394,7 +394,7 @@ export const registerSession = (
     runtimeId: input.runtimeId,
     streamTurnStatus: startsActive ? "active" : "idle",
     isSendingUserMessage: false,
-    isAwaitingRuntimeTurnStart: false,
+    isAwaitingRuntimeTurnStart: startsActive,
     activeAssistantMessageId: null,
     completedAssistantMessageIds: new Set<string>(),
     emittedAssistantMessageIds: new Set<string>(),

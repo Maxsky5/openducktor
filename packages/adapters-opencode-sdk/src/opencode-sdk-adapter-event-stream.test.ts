@@ -217,6 +217,13 @@ describe("OpencodeSdkAdapter event stream", () => {
         type: "session.status",
         properties: {
           sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
           status: {
             type: "idle",
           },
@@ -277,7 +284,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
     await flushAsync();
 
-    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
+    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
     expect(events.filter((entry) => entry.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
@@ -286,6 +293,13 @@ describe("OpencodeSdkAdapter event stream", () => {
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
     const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
       {
         type: "session.status",
         properties: {
@@ -343,7 +357,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
     await flushAsync();
 
-    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
+    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
 
