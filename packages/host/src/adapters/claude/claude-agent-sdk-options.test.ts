@@ -431,24 +431,36 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
-  test("leaves approval decisions to Claude for permitted workflow tools and safe reads", async () => {
+  test("leaves approval decisions to Claude for permitted safe reads", async () => {
     const session = createSession("spec");
     const options = await buildOptions(session);
 
-    for (const tool of [
-      {
+    expect(
+      await preToolUseHook(options, {
         permissionMode: "dontAsk",
         toolName: "Read",
         toolInput: { file_path: session.input.workingDirectory },
-      },
-      {
-        permissionMode: "default",
+      }),
+    ).toEqual({});
+  });
+
+  test("auto-approves permitted workflow ODT tools before dontAsk can deny them", async () => {
+    const session = createSession("spec");
+    const options = await buildOptions(session);
+
+    expect(
+      await preToolUseHook(options, {
+        permissionMode: "dontAsk",
         toolName: "mcp__openducktor__odt_read_task",
         toolInput: { taskId: "task-1" },
+      }),
+    ).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
       },
-    ]) {
-      expect(await preToolUseHook(options, tool)).toEqual({});
-    }
+    });
   });
 
   test("keeps worktree path routing active in inherited bypass mode", async () => {
