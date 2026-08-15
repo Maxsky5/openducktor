@@ -4,6 +4,7 @@ const STARTUP_SPLASH_STYLES = `
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-primary: #5100ff;
+  --odt-startup-title: #18181b;
 }
 
 html,
@@ -25,7 +26,7 @@ body {
   overflow: hidden;
   background: var(--odt-startup-background);
   color: var(--odt-startup-primary);
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   opacity: 1;
   transition: opacity 160ms ease-out;
 }
@@ -114,6 +115,7 @@ body {
 
 .odt-startup__title {
   margin: 0;
+  color: var(--odt-startup-title);
   font-size: 1.875rem;
   font-weight: 600;
   letter-spacing: -0.045em;

@@ -75,6 +75,8 @@ describe("build tools", () => {
     expect(styles?.injectTo).toBe("head-prepend");
     expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_BACKGROUND);
     expect(styles?.children).not.toContain("gradient");
+    expect(styles?.children).not.toContain("Space Grotesk");
+    expect(styles?.children).toContain("--odt-startup-title: #18181b");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
     expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
