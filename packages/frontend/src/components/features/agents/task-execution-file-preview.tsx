@@ -465,8 +465,21 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     ) {
       return readyCurrentSnapshot;
     }
+    const mustKeepDraft = editor.isDirty || editor.isSaving;
+    const refreshedFileCannotStayEditable =
+      isFileError || readyCurrentSnapshot?.result.kind === "unsupported";
+    if (!mustKeepDraft && refreshedFileCannotStayEditable) {
+      return readyCurrentSnapshot;
+    }
     return createFilePreviewSnapshot(selectedFile, editor.session.source);
-  }, [editor.session, readyCurrentSnapshot, selectedFile]);
+  }, [
+    editor.isDirty,
+    editor.isSaving,
+    editor.session,
+    isFileError,
+    readyCurrentSnapshot,
+    selectedFile,
+  ]);
   const visibleSnapshot =
     currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
@@ -510,7 +523,10 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewRenderKey =
     codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
   const hasActiveEditorSession =
-    codeViewFileId !== null && editor.session?.id === codeViewFileId && !isSwitchingFiles;
+    codeViewFileId !== null &&
+    editor.session?.id === codeViewFileId &&
+    !isSwitchingFiles &&
+    (!isFileError || editor.isDirty || editor.isSaving);
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];

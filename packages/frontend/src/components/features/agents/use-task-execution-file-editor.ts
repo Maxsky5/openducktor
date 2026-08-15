@@ -57,8 +57,18 @@ type EditorAction =
       failure: SaveFailure;
     }
   | { type: "conflict_review_started" }
-  | { type: "conflict_review_loaded"; result: TextFileResult }
-  | { type: "conflict_review_failed"; message: string }
+  | {
+      type: "conflict_review_loaded";
+      sessionId: string;
+      baselineRevision: string;
+      result: TextFileResult;
+    }
+  | {
+      type: "conflict_review_failed";
+      sessionId: string;
+      baselineRevision: string;
+      message: string;
+    }
   | { type: "conflict_review_closed" }
   | { type: "conflict_baseline_accepted"; result: TextFileResult; isDirty: boolean };
 
@@ -134,8 +144,22 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
     case "conflict_review_started":
       return { ...state, isReviewingConflict: true, conflictReview: null };
     case "conflict_review_loaded":
+      if (
+        !state.session ||
+        state.session.id !== action.sessionId ||
+        state.session.baseline.revision !== action.baselineRevision
+      ) {
+        return state;
+      }
       return { ...state, isReviewingConflict: false, conflictReview: action.result };
     case "conflict_review_failed":
+      if (
+        !state.session ||
+        state.session.id !== action.sessionId ||
+        state.session.baseline.revision !== action.baselineRevision
+      ) {
+        return state;
+      }
       return {
         ...state,
         isReviewingConflict: false,
@@ -200,10 +224,17 @@ export const useTaskExecutionFileEditor = ({
       dispatch({ type: "seed", id, result: readyResult });
       return;
     }
-    if (state.session.baseline.revision === readyResult.revision || state.isDirty) return;
+    if (
+      state.session.baseline.revision === readyResult.revision ||
+      state.isDirty ||
+      state.isSaving ||
+      saveInFlightRef.current
+    ) {
+      return;
+    }
     draftRef.current = readyResult.contents;
     dispatch({ type: "adopt_clean_result", result: readyResult });
-  }, [readyResult, selectedFile, state.isDirty, state.session]);
+  }, [readyResult, selectedFile, state.isDirty, state.isSaving, state.session]);
 
   const onItemEditChange = useCallback(
     (item: CodeViewItem<undefined>, file: FileContents) => {
@@ -303,6 +334,7 @@ export const useTaskExecutionFileEditor = ({
     if (!session || state.saveFailure?.code !== "stale_revision" || state.isReviewingConflict) {
       return;
     }
+    const baselineRevision = session.baseline.revision;
     dispatch({ type: "conflict_review_started" });
     try {
       const result = await queryClient.fetchQuery({
@@ -312,9 +344,19 @@ export const useTaskExecutionFileEditor = ({
       if (result.kind !== "text") {
         throw new Error(result.message);
       }
-      dispatch({ type: "conflict_review_loaded", result });
+      dispatch({
+        type: "conflict_review_loaded",
+        sessionId: session.id,
+        baselineRevision,
+        result,
+      });
     } catch (cause) {
-      dispatch({ type: "conflict_review_failed", message: errorMessage(cause) });
+      dispatch({
+        type: "conflict_review_failed",
+        sessionId: session.id,
+        baselineRevision,
+        message: errorMessage(cause),
+      });
     }
   }, [queryClient, state.isReviewingConflict, state.saveFailure?.code, state.session]);
 

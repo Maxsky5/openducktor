@@ -26,7 +26,7 @@ import {
 import { requireRelativePath } from "./workspace-files-paths";
 
 export const MAX_WORKSPACE_TEXT_FILE_BYTES = 1024 * 1024;
-const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true });
+const TEXT_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const TEXT_ENCODER = new TextEncoder();
 
 export class WorkspaceTextFileWriteError extends Data.TaggedError("WorkspaceTextFileWriteError")<{

@@ -16,6 +16,7 @@ import {
 } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
@@ -544,6 +545,46 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
   });
 
+  test("shows a clean file's refreshed unsupported state", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    readTextFileMock.mockImplementationOnce(async () => ({
+      kind: "unsupported",
+      rootPath: firstFile.rootPath,
+      relativePath: firstFile.relativePath,
+      reason: "binary",
+      message: "Binary files cannot be previewed as text.",
+      size: 3,
+      mtimeMs: 2,
+    }));
+
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+
+    await screen.findByText("Binary files cannot be previewed as text.");
+    expect(screen.queryByTestId("mock-code-view")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
+  });
+
+  test("shows a clean file's background refresh error", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Refresh failed.");
+    });
+
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+
+    await screen.findByText("Refresh failed.");
+    expect(screen.queryByTestId("mock-code-view")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
+  });
+
   test("opens in edit mode and saves without replacing Pierre's editor document", async () => {
     const onClose = mock(() => {});
     const onLeavePolicyChange = mock(() => {});
@@ -760,6 +801,49 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
   });
 
+  test("ignores a conflict review that resolves after another file is selected", async () => {
+    const pendingReview = createDeferred<WorkspaceTextFileReadResult>();
+    writeTextFileMock.mockImplementationOnce(async () => {
+      throw new HostInvokeError("The file changed after it was loaded.", {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: {
+          code: "stale_revision",
+          message: "The file changed after it was loaded.",
+          rootPath: firstFile.rootPath,
+          relativePath: firstFile.relativePath,
+        },
+      });
+    });
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "local draft" });
+    });
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
+    await screen.findByText("The file changed after it was loaded.");
+    readTextFileMock.mockImplementationOnce(() => pendingReview.promise);
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
+    );
+
+    secondFileReadMode = "resolve";
+    view.rerender(renderPreview({ selectedFile: secondFile, onClose }));
+    await screen.findByText("const second = true;");
+    await act(async () => {
+      pendingReview.resolve(textFileResult(firstFile, "const external = true;"));
+      await pendingReview.promise;
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull();
+    expect(latestCodeViewProps?.items[0]?.id).toBe(
+      `${secondFile.rootPath}:${secondFile.relativePath}`,
+    );
+  });
+
   test("clears dirty state when the draft returns to the saved baseline", async () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
@@ -846,6 +930,20 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const duplicateSaveEvent = await dispatchPreviewSaveShortcut();
     expect(duplicateSaveEvent.defaultPrevented).toBe(true);
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      latestQueryClient?.setQueryData(
+        filesystemQueryKeys.textFile(firstFile.rootPath, firstFile.relativePath),
+        textFileResult(firstFile, "draft"),
+      );
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    });
+    await waitFor(() =>
+      expect(latestCodeViewProps?.items[0]).toMatchObject({
+        file: { contents: "const first = true;" },
+        version: item?.version,
+      }),
+    );
 
     await act(async () => {
       pendingWrite.resolve(textFileWriteResult(firstFile, "draft", "revision-2"));

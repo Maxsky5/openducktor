@@ -75,6 +75,35 @@ describe("createWorkspaceTextFileService", () => {
     expect(saved.revision).not.toBe(loaded.revision);
   });
 
+  test("preserves a UTF-8 BOM when saving edited contents", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+    await writeFile(filePath, new Uint8Array([...bom, ...new TextEncoder().encode("before")]));
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["file.txt"]),
+    );
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    const saved = await Effect.runPromise(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: loaded.contents.replace("before", "after"),
+        revision: loaded.revision,
+      }),
+    );
+
+    expect(new Uint8Array(await readFile(filePath))).toEqual(
+      new Uint8Array([...bom, ...new TextEncoder().encode("after")]),
+    );
+    expect(saved.contents).toBe("\ufeffafter");
+  });
+
   test("accepts an exact one MiB draft", async () => {
     const rootPath = await createRoot();
     await writeFile(path.join(rootPath, "file.txt"), "before");
