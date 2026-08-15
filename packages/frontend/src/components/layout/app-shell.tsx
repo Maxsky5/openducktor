@@ -229,19 +229,22 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 export const AppShell = memo(function AppShell(): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
+  const onboardingStartedWithoutWorkspaceRef = useRef(false);
   const { hasWorkspaces, isLoadingWorkspaces, workspaceLoadError, retryWorkspaces } =
     useWorkspacePresence();
-  const shouldFinishOnboarding =
-    hasWorkspaces &&
-    !isLoadingWorkspaces &&
-    !workspaceLoadError &&
-    location.pathname === "/onboarding";
+  const isOnboardingRoute = location.pathname === "/onboarding";
 
   useEffect(() => {
-    if (shouldFinishOnboarding) {
-      navigate("/kanban", { replace: true });
+    if (!isOnboardingRoute) {
+      onboardingStartedWithoutWorkspaceRef.current = false;
+    } else if (!isLoadingWorkspaces && !workspaceLoadError && !hasWorkspaces) {
+      onboardingStartedWithoutWorkspaceRef.current = true;
     }
-  }, [navigate, shouldFinishOnboarding]);
+  }, [hasWorkspaces, isLoadingWorkspaces, isOnboardingRoute, workspaceLoadError]);
+
+  const completeOnboarding = useCallback((): void => {
+    navigate("/kanban", { replace: true, flushSync: true });
+  }, [navigate]);
 
   if (isLoadingWorkspaces) {
     return (
@@ -271,8 +274,11 @@ export const AppShell = memo(function AppShell(): ReactElement {
     );
   }
 
-  if (location.pathname === "/onboarding") {
-    return <OnboardingPage />;
+  if (isOnboardingRoute) {
+    if (hasWorkspaces && !onboardingStartedWithoutWorkspaceRef.current) {
+      return <Navigate to="/kanban" replace />;
+    }
+    return <OnboardingPage onComplete={completeOnboarding} />;
   }
 
   if (!hasWorkspaces) {

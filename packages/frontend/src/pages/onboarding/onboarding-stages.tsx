@@ -4,7 +4,7 @@ import type {
   RuntimeExecutableCheckResult,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, LoaderCircle } from "lucide-react";
 import { type ReactElement, type RefObject, useState } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
@@ -252,12 +252,14 @@ export function RuntimeStage({
 type WorkspaceStageProps = {
   workspaces: WorkspaceStateContextValue["workspaces"];
   addWorkspace: WorkspaceStateContextValue["addWorkspace"];
+  isFinalizing: boolean;
   onBack: () => void;
 };
 
 export function WorkspaceStage({
   workspaces,
   addWorkspace,
+  isFinalizing,
   onBack,
 }: WorkspaceStageProps): ReactElement {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
@@ -273,17 +275,29 @@ export function WorkspaceStage({
       </CardHeader>
 
       <CardContent className="bg-muted/20 px-6 py-6 sm:px-9 sm:py-8">
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+        <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationForm
             workspaces={workspaces}
             addWorkspace={addWorkspace}
+            disabled={isFinalizing}
             repositoryPicker="inline"
             onSubmittingChange={setIsCreatingWorkspace}
           />
+          {isFinalizing ? (
+            <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-card/95 p-6">
+              <div
+                className="flex items-center gap-3 text-sm font-medium text-foreground"
+                role="status"
+              >
+                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+                Preparing your workspace…
+              </div>
+            </div>
+          ) : null}
         </div>
       </CardContent>
       <div className="flex justify-start border-t border-border bg-card px-6 py-4 sm:px-9">
-        <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace}>
+        <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace || isFinalizing}>
           <ArrowLeft data-icon="inline-start" />
           Back to runtimes
         </Button>

@@ -5,8 +5,8 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -28,6 +28,8 @@ import {
   runtimeDefinitionsQueryOptions,
   runtimeExecutableQueryOptions,
 } from "@/state/queries/runtime";
+import { platformQueryOptions } from "@/state/queries/system";
+import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
@@ -160,6 +162,7 @@ type RenderAppShellForTestOptions = {
     input: Parameters<WorkspaceStateContextValue["addWorkspace"]>[0],
   ) => Promise<WorkspaceRecord>;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
+  prepareQueryClient?: (queryClient: QueryClient) => void;
 };
 
 function CurrentRoute(): ReactElement {
@@ -233,7 +236,7 @@ function AppShellTestEnvironment({
   };
 
   return (
-    <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions>
+    <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
       <CurrentRoute />
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -348,6 +351,7 @@ const renderAppShellForTest = (
     homePath: "/repo",
     entries: [],
   });
+  options.prepareQueryClient?.(queryClient);
 
   return render(
     <AppShellTestEnvironment
@@ -404,6 +408,8 @@ describe("AppShell", () => {
 
   test("exits onboarding only after workspace creation publishes the active workspace", async () => {
     const workspaceAddResult = createDeferred<WorkspaceRecord>();
+    const initialTaskLoad = createDeferred<void>();
+    const platformLoad = createDeferred<void>();
     const workspaceAdd = mock(async () => workspaceAddResult.promise);
     const createdWorkspace = {
       ...activeWorkspace,
@@ -413,6 +419,25 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: { hasWorkspaces: false },
       workspaceAdd,
+      prepareQueryClient: (queryClient) => {
+        void queryClient.fetchQuery({
+          ...repoTaskDataQueryOptions(
+            createdWorkspace.repoPath,
+            createSettingsSnapshotFixture().kanban.doneVisibleDays,
+          ),
+          queryFn: async () => {
+            await initialTaskLoad.promise;
+            return { tasks: [] };
+          },
+        });
+        void queryClient.fetchQuery({
+          ...platformQueryOptions(),
+          queryFn: async () => {
+            await platformLoad.promise;
+            return "darwin" as const;
+          },
+        });
+      },
     });
 
     await waitFor(() =>
@@ -444,7 +469,24 @@ describe("AppShell", () => {
     });
     frameObserver.observe(document.body, { childList: true, subtree: true });
 
-    workspaceAddResult.resolve(createdWorkspace);
+    await act(async () => {
+      workspaceAddResult.resolve(createdWorkspace);
+      await workspaceAddResult.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect(screen.getByText("Preparing your workspace…")).toBeTruthy();
+
+    await act(async () => {
+      initialTaskLoad.resolve();
+      await initialTaskLoad.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+
+    platformLoad.resolve();
 
     await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
     frameObserver.disconnect();

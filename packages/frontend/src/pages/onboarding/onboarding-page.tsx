@@ -13,12 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
-import { preloadKanbanPage } from "@/pages";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
 } from "@/state/queries/runtime";
+import { platformQueryOptions } from "@/state/queries/system";
+import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
@@ -30,6 +31,10 @@ import {
 } from "./onboarding-stages";
 
 const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
+
+type OnboardingPageProps = {
+  onComplete: () => void;
+};
 
 function runtimeStageActivity({
   isLoading,
@@ -49,7 +54,7 @@ function runtimeStageActivity({
   return "idle";
 }
 
-export function OnboardingPage(): ReactElement {
+export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElement {
   const queryClient = useQueryClient();
   const { workspaces, addWorkspace, saveSettingsSnapshot } = useWorkspaceState();
   const [stage, setStage] = useState<OnboardingStage>("welcome");
@@ -59,6 +64,7 @@ export function OnboardingPage(): ReactElement {
   const [stageError, setStageError] = useState<string | null>(null);
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
+  const [completionRepoPath, setCompletionRepoPath] = useState<string | null>(null);
   const saveInFlight = useRef(false);
   const stageErrorRef = useRef<HTMLParagraphElement>(null);
   const focusStageError = useRef(false);
@@ -77,11 +83,6 @@ export function OnboardingPage(): ReactElement {
   const checkResults = runtimeValidation.results;
   const checkingRuntimeKinds = runtimeValidation.checkingRuntimeKinds;
   const runtimeValidationError = runtimeValidation.error;
-
-  useEffect(() => {
-    preloadKanbanPage();
-  }, []);
-
   useEffect(() => {
     if (checkResults.length === 0) return;
     const resultsByKind = new Map(checkResults.map((row) => [row.kind, row]));
@@ -248,6 +249,29 @@ export function OnboardingPage(): ReactElement {
     }
   };
 
+  const addFirstWorkspace = async (input: Parameters<typeof addWorkspace>[0]): Promise<void> => {
+    await addWorkspace(input);
+    setCompletionRepoPath(input.repoPath);
+
+    const settings = settingsQuery.data;
+    if (!settings) {
+      throw new Error("Settings must be loaded before opening the first workspace.");
+    }
+
+    const destinationQueries: Promise<unknown>[] = [
+      queryClient.fetchQuery(
+        repoTaskDataQueryOptions(input.repoPath, settings.kanban.doneVisibleDays),
+      ),
+    ];
+    if (settings.appearance.horizontalScrollbarVisibility === "system") {
+      destinationQueries.push(queryClient.fetchQuery(platformQueryOptions()));
+    }
+
+    // Query keeps failed reads as errors for Kanban to report after the workspace already exists.
+    await Promise.allSettled(destinationQueries);
+    onComplete();
+  };
+
   return (
     <OnboardingLayout stage={stage}>
       {stage === "welcome" ? <WelcomeStage onContinue={() => setStage("runtimes")} /> : null}
@@ -274,7 +298,8 @@ export function OnboardingPage(): ReactElement {
       {stage === "workspace" ? (
         <WorkspaceStage
           workspaces={workspaces}
-          addWorkspace={addWorkspace}
+          addWorkspace={addFirstWorkspace}
+          isFinalizing={completionRepoPath !== null}
           onBack={() => setStage("runtimes")}
         />
       ) : null}

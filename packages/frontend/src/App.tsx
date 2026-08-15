@@ -5,13 +5,12 @@ import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-provider";
-import { loadAgentsPage, loadKanbanPage, loadNotFoundPage } from "@/pages";
+import { loadAgentsPage, loadNotFoundPage } from "@/pages";
+import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
 
 const AgentsPage = lazy(loadAgentsPage);
-
-const KanbanPage = lazy(loadKanbanPage);
 
 const NotFoundPage = lazy(loadNotFoundPage);
 
@@ -60,7 +59,7 @@ export function App({ routerMode = "browser" }: AppProps): ReactElement {
   const Router = ROUTERS[routerMode];
 
   return (
-    <Router useTransitions>
+    <Router useTransitions={false}>
       <QueryProvider>
         <ThemeProvider>
           <AppStateProvider>
