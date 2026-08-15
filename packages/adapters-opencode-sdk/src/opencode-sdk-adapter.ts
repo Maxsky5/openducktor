@@ -789,6 +789,12 @@ export class OpencodeSdkAdapter
     const session =
       this.retainedPolicyBoundSessionState(input) ??
       (await this.bindPolicyBoundSessionState(input));
+    const registeredSessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot reply to OpenCode approval for session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input, "reply to approval");
     await replyApproval(session, input);
     this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
@@ -799,6 +805,12 @@ export class OpencodeSdkAdapter
     const session =
       this.retainedPolicyBoundSessionState(input) ??
       (await this.bindPolicyBoundSessionState(input));
+    const registeredSessionRef = opencodeSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot reply to OpenCode question for session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
     applyRuntimeContextToSession(session, input, "reply to question");
     await replyQuestion(session, input);
     this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);

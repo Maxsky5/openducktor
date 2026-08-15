@@ -272,6 +272,58 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
+  test("rejects a stale working directory before replying to a retained repository approval", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: repositoryScope,
+      runtimePolicy,
+      systemPrompt: "repository system",
+    });
+
+    await expect(
+      adapter.replyApproval({
+        ...sessionRuntimeRef(started.externalSessionId, {
+          sessionScope: repositoryScope,
+          workingDirectory: "/repo/worktrees/stale",
+        }),
+        requestId: "permission-1",
+        outcome: "approve_once",
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(mock.permission.replyCalls).toHaveLength(0);
+  });
+
+  test("rejects a stale repository before replying to a retained repository question", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const started = await adapter.startSession({
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      runtimeKind: "opencode",
+      sessionScope: repositoryScope,
+      runtimePolicy,
+      systemPrompt: "repository system",
+    });
+
+    await expect(
+      adapter.replyQuestion({
+        ...sessionRuntimeRef(started.externalSessionId, {
+          repoPath: "/other-repo",
+          sessionScope: repositoryScope,
+        }),
+        requestId: "question-1",
+        answers: [["Continue"]],
+      }),
+    ).rejects.toThrow("registered session belongs");
+
+    expect(mock.question.replyCalls).toHaveLength(0);
+  });
+
   test("fails before starting a repository session when the trusted MCP stays disconnected", async () => {
     const mock = makeMockClient({
       mcpStatusResponse: { openducktor: { status: "failed", error: "connection closed" } },
