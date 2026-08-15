@@ -43,7 +43,6 @@ const resetBranchState = (): void => {
       name: activeBranchName,
       detached: false,
     },
-    isSwitchingWorkspace: false,
     isLoadingBranches: false,
     isSwitchingBranch,
     branchSyncDegraded,
@@ -172,7 +171,7 @@ describe("BranchSwitcher", () => {
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
-  test("changes only the cached branch value while switching repositories", async () => {
+  test("keeps the selector enabled while the cached repository branch changes", async () => {
     const BranchSwitcher = await importBranchSwitcher();
     const rendered = render(
       <BranchStateProvider>
@@ -184,12 +183,6 @@ describe("BranchSwitcher", () => {
       expect(markup).toContain(`data-branch-value="${branchName}"`);
       expect(markup).toContain('data-disabled="false"');
     };
-
-    expectStableBranchSelector("main");
-
-    await act(async () => {
-      updateBranchState({ isSwitchingWorkspace: true });
-    });
 
     expectStableBranchSelector("main");
 
@@ -207,12 +200,6 @@ describe("BranchSwitcher", () => {
           detached: false,
         },
       });
-    });
-
-    expectStableBranchSelector("develop");
-
-    await act(async () => {
-      updateBranchState({ isSwitchingWorkspace: false });
     });
 
     expectStableBranchSelector("develop");

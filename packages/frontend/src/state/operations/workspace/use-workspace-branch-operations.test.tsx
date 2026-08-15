@@ -269,7 +269,7 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
-  test("keeps a successful branch switch authoritative over an older probe refresh", async () => {
+  test("keeps a successful branch switch authoritative over an older forced refresh", async () => {
     const currentBranchDeferred = createDeferred<{ name: string; detached: boolean }>();
     const branchesDeferred =
       createDeferred<Array<{ name: string; isCurrent: boolean; isRemote: boolean }>>();
@@ -321,7 +321,7 @@ describe("use-workspace-branch-operations", () => {
 
       let refreshPromise: Promise<void> | null = null;
       await harness.run((value) => {
-        refreshPromise = value.branchProbeController.refreshBranchesForRepo("/repo-a");
+        refreshPromise = value.refreshBranches(true);
       });
       await harness.run(flush);
 

@@ -1,6 +1,6 @@
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -13,10 +13,7 @@ import {
   repoBranchesQueryOptions,
 } from "../../queries/git";
 import { shouldSkipBranchSwitch } from "./workspace-operations-model";
-import type {
-  WorkspaceBranchOperationsHostClient,
-  WorkspaceBranchProbeController,
-} from "./workspace-operations-types";
+import type { WorkspaceBranchOperationsHostClient } from "./workspace-operations-types";
 
 type UseWorkspaceBranchOperationsArgs = {
   activeRepo: string | null;
@@ -32,7 +29,6 @@ type UseWorkspaceBranchOperationsResult = {
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
   clearBranchData: (repoPath?: string | null) => void;
-  branchProbeController: WorkspaceBranchProbeController;
 };
 
 export function useWorkspaceBranchOperations({
@@ -219,14 +215,6 @@ export function useWorkspaceBranchOperations({
     ],
   );
 
-  const branchProbeController = useMemo<WorkspaceBranchProbeController>(
-    () => ({
-      currentWorkspaceRepoPathRef,
-      refreshBranchesForRepo: (repoPath) => refreshBranchesForRepo(repoPath, true),
-    }),
-    [refreshBranchesForRepo],
-  );
-
   return {
     branches,
     activeBranch,
@@ -235,6 +223,5 @@ export function useWorkspaceBranchOperations({
     refreshBranches,
     switchBranch,
     clearBranchData,
-    branchProbeController,
   };
 }

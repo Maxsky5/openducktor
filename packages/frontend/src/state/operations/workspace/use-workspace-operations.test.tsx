@@ -1364,6 +1364,64 @@ describe("use-workspace-operations", () => {
     }
   });
 
+  test("refreshes the branch list without rereading the detected current branch", async () => {
+    const setActiveRepo = mock(() => {});
+    let currentBranchCallCount = 0;
+    let branchesCallCount = 0;
+    const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
+
+    const gitGetCurrentBranch = mock(async () => {
+      currentBranchCallCount += 1;
+      return {
+        name: currentBranchCallCount === 1 ? "main" : "feature/probe",
+        detached: false,
+      };
+    });
+    const gitGetBranches = mock(async () => {
+      branchesCallCount += 1;
+      const branchName = branchesCallCount === 1 ? "main" : "feature/probe";
+      return [
+        {
+          name: branchName,
+          isCurrent: true,
+          isRemote: false,
+        },
+      ];
+    });
+
+    const original = {
+      gitGetCurrentBranch: workspaceHost.gitGetCurrentBranch,
+      gitGetBranches: workspaceHost.gitGetBranches,
+    };
+    workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = gitGetBranches;
+
+    const harness = createHookHarness({
+      activeRepo: "/repo-a",
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await triggerFocus();
+
+      expect(gitGetCurrentBranch).toHaveBeenCalledTimes(2);
+      expect(gitGetBranches).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().activeBranch?.name).toBe("feature/probe");
+      expect(harness.getLatest().branches[0]?.name).toBe("feature/probe");
+    } finally {
+      await harness.unmount();
+      workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      workspaceHost.gitGetBranches = original.gitGetBranches;
+      restoreBrowserGlobals();
+    }
+  });
+
   test("marks branch sync degraded when refresh after branch identity change fails", async () => {
     const setActiveRepo = mock(() => {});
     let currentBranchCallCount = 0;

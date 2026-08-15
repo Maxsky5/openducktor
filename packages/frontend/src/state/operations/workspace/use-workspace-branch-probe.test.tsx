@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect } from "react";
 import { toast } from "sonner";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
@@ -10,7 +10,6 @@ import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-ho
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
-const noopRefreshBranchesForRepo = async (): Promise<void> => {};
 
 beforeEach(() => {
   workspaceHost = createWorkspaceHostClient();
@@ -22,7 +21,6 @@ type ProbeHarnessArgs = {
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
   setBranchSyncDegraded: (repoPath: string, value: boolean) => void;
-  refreshBranchesForRepo?: (repoPath: string) => Promise<void>;
   captureQueryClient?: (queryClient: QueryClient) => void;
 };
 
@@ -32,27 +30,13 @@ const ProbeHarness = ({
   isLoadingBranches,
   isSwitchingBranch,
   setBranchSyncDegraded,
-  refreshBranchesForRepo = noopRefreshBranchesForRepo,
   captureQueryClient,
 }: ProbeHarnessArgs) => {
   const queryClient = useQueryClient();
-  const currentWorkspaceRepoPathRef = useRef<string | null>(activeRepoPath);
-
-  useLayoutEffect(() => {
-    currentWorkspaceRepoPathRef.current = activeRepoPath;
-  }, [activeRepoPath]);
 
   useLayoutEffect(() => {
     captureQueryClient?.(queryClient);
   }, [captureQueryClient, queryClient]);
-
-  const branchProbeController = useMemo(
-    () => ({
-      currentWorkspaceRepoPathRef,
-      refreshBranchesForRepo,
-    }),
-    [refreshBranchesForRepo],
-  );
 
   useWorkspaceBranchProbe({
     activeRepoPath,
@@ -60,7 +44,6 @@ const ProbeHarness = ({
     isLoadingBranches,
     isSwitchingBranch,
     hostClient: workspaceHost,
-    branchProbeController,
     setBranchSyncDegraded,
   });
 
@@ -76,9 +59,10 @@ describe("use-workspace-branch-probe", () => {
       revision: "abc123",
     };
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const refreshBranchesForRepo = mock(async () => {});
+    const gitGetBranches = mock(async () => []);
     const queryClientCapture: { current: QueryClient | null } = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranch);
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const rendered = render(
       <ProbeHarness
@@ -87,7 +71,6 @@ describe("use-workspace-branch-probe", () => {
         isLoadingBranches={false}
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
-        refreshBranchesForRepo={refreshBranchesForRepo}
         captureQueryClient={(client) => {
           queryClientCapture.current = client;
         }}
@@ -104,7 +87,7 @@ describe("use-workspace-branch-probe", () => {
       queryClient.setQueryData(gitQueryKeys.currentBranch("/repo-a"), currentBranch);
       await triggerFocus();
 
-      expect(refreshBranchesForRepo).not.toHaveBeenCalled();
+      expect(gitGetBranches).not.toHaveBeenCalled();
       expect(setBranchSyncDegraded).toHaveBeenCalledWith("/repo-a", false);
     } finally {
       rendered.unmount();
@@ -165,13 +148,14 @@ describe("use-workspace-branch-probe", () => {
   test("does not report degradation when branch refresh is cancelled", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const refreshBranchesForRepo = mock(async () => {
+    const gitGetBranches = mock(async () => {
       throw new CancelledError({ silent: true });
     });
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
       detached: false,
     }));
+    workspaceHost.gitGetBranches = gitGetBranches;
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
@@ -184,7 +168,6 @@ describe("use-workspace-branch-probe", () => {
         isLoadingBranches={false}
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
-        refreshBranchesForRepo={refreshBranchesForRepo}
       />,
       { wrapper: IsolatedQueryWrapper },
     );
@@ -192,7 +175,7 @@ describe("use-workspace-branch-probe", () => {
     try {
       await triggerFocus();
 
-      expect(refreshBranchesForRepo).toHaveBeenCalledWith("/repo-a");
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(setBranchSyncDegraded).not.toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
     } finally {
@@ -315,6 +298,7 @@ describe("use-workspace-branch-probe", () => {
     });
 
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
+    workspaceHost.gitGetBranches = mock(async () => []);
 
     const rendered = render(
       <ProbeHarness
@@ -379,6 +363,10 @@ describe("use-workspace-branch-probe", () => {
       name: "main",
       detached: false,
     }));
+    workspaceHost.gitGetBranches = mock(async () => {
+      await refreshDeferred.promise;
+      return [];
+    });
 
     const rendered = render(
       <ProbeHarness
@@ -387,7 +375,6 @@ describe("use-workspace-branch-probe", () => {
         isLoadingBranches={false}
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
-        refreshBranchesForRepo={async () => refreshDeferred.promise}
       />,
       { wrapper: IsolatedQueryWrapper },
     );
@@ -401,7 +388,6 @@ describe("use-workspace-branch-probe", () => {
           isLoadingBranches={false}
           isSwitchingBranch={false}
           setBranchSyncDegraded={setBranchSyncDegraded}
-          refreshBranchesForRepo={async () => refreshDeferred.promise}
         />,
       );
 
@@ -424,6 +410,10 @@ describe("use-workspace-branch-probe", () => {
       name: "main",
       detached: false,
     }));
+    workspaceHost.gitGetBranches = mock(async () => {
+      await refreshDeferred.promise;
+      return [];
+    });
 
     const rendered = render(
       <ProbeHarness
@@ -432,7 +422,6 @@ describe("use-workspace-branch-probe", () => {
         isLoadingBranches={false}
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
-        refreshBranchesForRepo={async () => refreshDeferred.promise}
       />,
       { wrapper: IsolatedQueryWrapper },
     );
@@ -446,7 +435,6 @@ describe("use-workspace-branch-probe", () => {
           isLoadingBranches={false}
           isSwitchingBranch={false}
           setBranchSyncDegraded={setBranchSyncDegraded}
-          refreshBranchesForRepo={async () => refreshDeferred.promise}
         />,
       );
 
