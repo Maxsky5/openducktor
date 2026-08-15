@@ -164,6 +164,32 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
+  test("applies repository policy before reading todos from a retained unbound session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
+      () => {},
+    );
+
+    await adapter.loadSessionTodos(
+      sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+    );
+
+    expect(mock.session.updateCalls).toContainEqual(
+      expect.objectContaining({
+        sessionID: "session-opencode-1",
+        title: "Repository session",
+        permission: expect.arrayContaining([
+          { permission: "odt_create_task", pattern: "*", action: "ask" },
+          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
+        ]),
+      }),
+    );
+    expect(mock.session.todoCalls).toHaveLength(1);
+    unsubscribe();
+  });
+
   test("applies repository policy before subscribing to a retained unbound session", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
@@ -212,6 +238,28 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     );
 
     expect(mock.session.updateCalls).toHaveLength(updateCallCount);
+    unsubscribeWorkflow();
+  });
+
+  test("rejects a mismatched scope before reading todos from a retained session", async () => {
+    const mock = makeMockClient();
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const unsubscribeWorkflow = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", {
+        sessionScope: workflowAgentSessionScope("task-1", "build"),
+      }),
+      () => {},
+    );
+
+    await expect(
+      adapter.loadSessionTodos(
+        sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      ),
+    ).rejects.toThrow(
+      "registered workflow scope for task 'task-1' and role 'build' does not match the requested repository scope",
+    );
+
+    expect(mock.session.todoCalls).toHaveLength(0);
     unsubscribeWorkflow();
   });
 

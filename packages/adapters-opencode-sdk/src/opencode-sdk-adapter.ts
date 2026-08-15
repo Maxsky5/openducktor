@@ -645,6 +645,9 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
+    if (this.sessions.has(input.externalSessionId)) {
+      await this.policyBoundSessionState(input, "load todos for");
+    }
     return loadSessionTodos(this.createClient, {
       ...(await this.resolveRuntimeClientInput(input, "load session todos")),
       externalSessionId: input.externalSessionId,
