@@ -141,6 +141,43 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("keeps a successful workspace add when the list refresh fails", async () => {
+    const addedWorkspace = workspace("/repo-new", true);
+    const setActiveRepo = mock((_repoPath: string | null) => {});
+    let listCalls = 0;
+    workspaceHost.workspaceAdd = mock(async () => addedWorkspace);
+    workspaceHost.workspaceList = mock(async () => {
+      listCalls += 1;
+      if (listCalls === 1) return [];
+      throw new Error("Workspace refresh failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo,
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+      await harness.run((value) =>
+        value.addWorkspace({
+          workspaceId: "repo-new",
+          workspaceName: "Repo New",
+          repoPath: "/repo-new",
+        }),
+      );
+      await harness.waitFor((state) => state.workspaces.length === 1);
+
+      expect(harness.getLatest().workspaces).toEqual([addedWorkspace]);
+      expect(setActiveRepo).toHaveBeenCalledWith("/repo-new");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("clears dependent state before committing a successful repo switch", async () => {
     const callOrder: string[] = [];
     const setActiveRepo = mock((repoPath: string | null) => {

@@ -269,13 +269,17 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
-      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      });
       await screen.findByText("Runtime discovery failed");
 
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         true,
       );
-      fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
+      });
 
       await waitFor(() => expect(discoveryAttempts).toBe(2));
       await waitFor(() => expect(screen.queryByText("Runtime discovery failed")).toBeNull());
@@ -380,7 +384,7 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
-  test("validates the exact paths returned by explicit runtime discovery", async () => {
+  test("publishes exact-path results returned by explicit runtime discovery", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
@@ -410,11 +414,49 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       requests.length = 0;
 
-      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      });
 
-      await waitFor(() =>
-        expect(requests).toEqual(["discover", { opencodePath: "/discovered/opencode" }]),
-      );
+      await waitFor(() => expect(requests).toEqual(["discover"]));
+      expect(
+        (
+          screen.getByLabelText("Executable path", {
+            selector: "#runtime-executable-opencode",
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("/discovered/opencode");
+      await within(opencodeSection()).findByText("Available");
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
+  test("shows fresh discovery status when a runtime changes at the same path", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/tools/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) =>
+      input.mode === "discover" ? createCheck(runtimes, true) : createCheck(runtimes, false),
+    );
+
+    try {
+      renderOnboarding({ runtimes });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+      });
+
+      await screen.findByRole("heading", { name: "Configure coding agents" });
+      await within(opencodeSection()).findByText("Needs attention");
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      });
+
+      await within(opencodeSection()).findByText("Available");
+      expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }

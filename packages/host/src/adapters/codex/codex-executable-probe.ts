@@ -131,6 +131,8 @@ export const createCodexExecutableProbe = ({
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.spawn", { executablePath }),
         });
+        const handleEarlySpawnError = () => undefined;
+        child.once("error", handleEarlySpawnError);
         const pid = child.pid;
         if (!pid || pid <= 0) {
           return yield* Effect.fail(
@@ -151,6 +153,7 @@ export const createCodexExecutableProbe = ({
           requestTimeoutMs,
           () => undefined,
         );
+        child.off("error", handleEarlySpawnError);
         return { child, closed: () => closed, pid, transport };
       }),
       probe: ({ transport }) => verifyCodexAppServerProtocol(transport, clientVersion),

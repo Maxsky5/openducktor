@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
-import { verifyCodexAppServerProtocol } from "./codex-executable-probe";
+import { createCodexExecutableProbe, verifyCodexAppServerProtocol } from "./codex-executable-probe";
 
 type CodexProbeTransport = Pick<
   CodexAppServerChildTransport,
@@ -74,5 +74,17 @@ describe("verifyCodexAppServerProtocol", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(notified).toBe(false);
+  });
+});
+
+describe("createCodexExecutableProbe", () => {
+  test("returns a typed failure when the selected executable cannot spawn", async () => {
+    const probe = createCodexExecutableProbe();
+
+    const exit = await Effect.runPromiseExit(
+      probe.probeExecutable(`openducktor-missing-codex-probe-${process.pid}`),
+    );
+
+    expect(exit._tag).toBe("Failure");
   });
 });

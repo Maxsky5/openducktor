@@ -3,7 +3,7 @@ import type {
   RuntimeExecutableCheck,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { validateRuntimeDefinitionsForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "../operations/host";
 
@@ -57,3 +57,15 @@ export const runtimeExecutableQueryOptions = (kind: RuntimeKind, path: string) =
     },
     staleTime: 30_000,
   });
+
+export const writeRuntimeExecutableValidationCache = (
+  queryClient: QueryClient,
+  check: RuntimeExecutableCheck,
+): void => {
+  for (const result of check.runtimes) {
+    queryClient.setQueryData(
+      runtimeExecutableQueryOptions(result.kind, result.path).queryKey,
+      result,
+    );
+  }
+};

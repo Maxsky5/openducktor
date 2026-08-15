@@ -115,6 +115,10 @@ export const createOpenCodeExecutableProbe = ({
               port,
             }),
         });
+        let spawnError: Error | null = null;
+        child.once("error", (error) => {
+          spawnError = error;
+        });
         const pid = child.pid;
         if (!pid || pid <= 0) {
           return yield* Effect.fail(
@@ -126,7 +130,6 @@ export const createOpenCodeExecutableProbe = ({
           );
         }
         let closed = false;
-        let spawnError: Error | null = null;
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (chunk: Buffer) => {
@@ -134,9 +137,6 @@ export const createOpenCodeExecutableProbe = ({
         });
         child.stderr.on("data", (chunk: Buffer) => {
           stderr = appendOutput(stderr, chunk);
-        });
-        child.once("error", (error) => {
-          spawnError = error;
         });
         child.once("close", () => {
           closed = true;

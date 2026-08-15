@@ -48,6 +48,25 @@ describe("createOpenCodeExecutableProbe", () => {
     expect(readinessCalls).toEqual([[4567, 250]]);
     expect(stoppedPids).toEqual([42]);
   });
+
+  test("handles a spawn error after a child is returned without a pid", async () => {
+    const child = Object.assign(new EventEmitter(), {
+      pid: undefined,
+      stdin: null,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+    });
+    const probe = createOpenCodeExecutableProbe({
+      portAllocator: () => Effect.succeed(4567),
+      spawnProcess: () => child as never,
+    });
+
+    const exit = await Effect.runPromiseExit(probe.probeExecutable("/missing/opencode"));
+
+    expect(exit._tag).toBe("Failure");
+    expect(child.listenerCount("error")).toBe(1);
+    expect(() => child.emit("error", new Error("spawn failed"))).not.toThrow();
+  });
 });
 
 describe("buildOpenCodeExecutableProbeEnvironment", () => {

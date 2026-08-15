@@ -13,6 +13,7 @@ import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/ru
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
+  writeRuntimeExecutableValidationCache,
 } from "@/state/queries/runtime";
 import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -111,6 +112,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     setRuntimeDiscoveryError(null);
     try {
       const checked = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
+      writeRuntimeExecutableValidationCache(queryClient, checked);
       if (runtimeDraft) {
         const rows = new Map(checked.runtimes.map((row) => [row.kind, row]));
         let nextDraft = replaceRuntimeExecutablePaths(runtimeDraft, checked.runtimes);

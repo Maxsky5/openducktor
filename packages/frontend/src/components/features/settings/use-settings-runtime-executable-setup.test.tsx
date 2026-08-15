@@ -56,7 +56,7 @@ const createHarness = () => {
     { open: true },
     { wrapper },
   );
-  return { ...harness, appliedRuntimes, applyUpdate };
+  return { ...harness, appliedRuntimes, applyUpdate, queryClient };
 };
 
 const discoveredRuntimes = (prefix: string): RuntimeExecutableCheck => ({
@@ -127,6 +127,46 @@ describe("useSettingsRuntimeExecutableSetup", () => {
 
       expect(harness.appliedRuntimes.at(-1)?.opencode.executablePath).toBe("/typed/opencode");
       expect(harness.appliedRuntimes.at(-1)?.codex.executablePath).toBe("/discovered/codex");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("replaces cached exact-path validation with a fresh discovery result", async () => {
+    const harness = createHarness();
+    harness.queryClient.setQueryData(
+      runtimeExecutableQueryOptions("opencode", runtimes.opencode.executablePath).queryKey,
+      {
+        kind: "opencode",
+        path: runtimes.opencode.executablePath,
+        ok: false,
+        version: null,
+        error: "OpenCode executable is invalid.",
+      },
+    );
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "discover") throw new Error("Expected runtime discovery");
+      return {
+        runtimes: knownRuntimeKindValues.map((kind) => ({
+          kind,
+          path: runtimes[kind].executablePath,
+          ok: true,
+          version: "2.0.0",
+          error: null,
+        })),
+      };
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.validation.results.find((row) => row.kind === "opencode")?.ok === false,
+      );
+      await harness.run((state) => state.checkAgain());
+
+      await harness.waitFor(
+        (state) => state.validation.results.find((row) => row.kind === "opencode")?.ok === true,
+      );
     } finally {
       await harness.unmount();
     }

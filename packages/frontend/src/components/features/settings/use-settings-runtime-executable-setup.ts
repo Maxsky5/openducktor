@@ -3,7 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
 import { replaceRuntimeExecutablePaths } from "@/state/operations/runtime-executables/runtime-executable-draft";
-import { runtimeDiscoveryQueryOptions } from "@/state/queries/runtime";
+import {
+  runtimeDiscoveryQueryOptions,
+  writeRuntimeExecutableValidationCache,
+} from "@/state/queries/runtime";
 import {
   type RuntimeExecutableValidationState,
   useRuntimeExecutableValidation,
@@ -81,6 +84,7 @@ export const useSettingsRuntimeExecutableSetup = ({
       try {
         const discovered = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
         if (visit.current !== currentVisit) return;
+        writeRuntimeExecutableValidationCache(queryClient, discovered);
         updateAgentRuntimes((current) =>
           replaceUneditedRuntimeExecutablePaths(
             current,

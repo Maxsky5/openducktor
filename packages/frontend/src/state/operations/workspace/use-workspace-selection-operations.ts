@@ -299,12 +299,13 @@ export function useWorkspaceSelectionOperations({
         repoPath: normalizedRepoPath,
         ...(input.defaultRuntimeKind ? { defaultRuntimeKind: input.defaultRuntimeKind } : {}),
       });
-      await Promise.all([refreshWorkspaceCachesAfterMutation(), refreshWorkspaces()]);
+      applyWorkspaceRecord(workspace);
+      await refreshWorkspaceCachesAfterMutation();
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
     },
-    [hostClient, refreshWorkspaceCachesAfterMutation, refreshWorkspaces],
+    [applyWorkspaceRecord, hostClient, refreshWorkspaceCachesAfterMutation],
   );
 
   const selectWorkspace = useCallback(
