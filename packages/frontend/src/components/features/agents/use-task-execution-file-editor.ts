@@ -122,9 +122,9 @@ const editorStateReducer = (state: EditorState, action: EditorAction): EditorSta
         session: {
           ...state.session,
           baseline: action.result,
-          // Keep Pierre's live document unchanged. Publishing a new cache key or version here
-          // rebuilds its TextDocument and drops the user's focus, selection, and undo history.
-          source: state.session.source,
+          // Retain the saved contents for a later remount, but keep Pierre's live document
+          // identity stable so Save does not drop focus, selection, or undo history.
+          source: { ...action.result, revision: state.session.source.revision },
           version: state.session.version,
         },
         isDirty: action.isDirty,

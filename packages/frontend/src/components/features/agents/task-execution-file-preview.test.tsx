@@ -5,16 +5,10 @@ import type {
 } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import { getFiletypeFromFileName } from "@pierre/diffs";
-import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import {
-  createElement,
-  type PropsWithChildren,
-  type ReactElement,
-  useEffect,
-  useState,
-} from "react";
-import { createQueryClient } from "@/lib/query-client";
+import { createElement, type PropsWithChildren, type ReactElement, useEffect } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -152,11 +146,18 @@ const textFileWriteResult = (
   revision,
 });
 
-function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
-  const [queryClient] = useState(createQueryClient);
-  latestQueryClient = queryClient;
+function CaptureQueryClient(): null {
+  latestQueryClient = useQueryClient();
+  return null;
+}
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
+  return (
+    <QueryProvider useIsolatedClient>
+      <CaptureQueryClient />
+      {children}
+    </QueryProvider>
+  );
 }
 
 const renderPreview = (
@@ -641,7 +642,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       version: firstItem?.version,
       file: {
         cacheKey: firstItem?.file.cacheKey,
-        contents: firstItem?.file.contents,
+        contents: "const first = false;\n",
       },
     });
     expect(editProviderFactories.at(-1)).toBe(providerFactory);
@@ -651,6 +652,50 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
     expect(onLeavePolicyChange).toHaveBeenCalledWith("defer");
     expect(onLeavePolicyChange).toHaveBeenLastCalledWith("allow");
+  });
+
+  test("restores saved contents after a clean editor remount", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const firstItem = latestCodeViewProps?.items[0];
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(firstItem, {
+        ...firstItem?.file,
+        contents: "const first = false;",
+      });
+    });
+    await runAsyncUiAction(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Save file" })),
+    );
+    await waitForCleanFile();
+
+    readTextFileMock.mockImplementationOnce(async () => {
+      throw new Error("Refresh failed.");
+    });
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+    await screen.findByText("Refresh failed.");
+    expect(screen.queryByTestId("mock-code-view")).toBeNull();
+
+    readTextFileMock.mockImplementationOnce(async () =>
+      textFileWriteResult(firstFile, "const first = false;", "revision:const first = true;:saved"),
+    );
+    await act(async () => {
+      await latestQueryClient?.invalidateQueries();
+    });
+
+    await screen.findByText("const first = false;");
+    expect(latestCodeViewProps?.items[0]).toMatchObject({
+      version: firstItem?.version,
+      file: {
+        cacheKey: firstItem?.file.cacheKey,
+        contents: "const first = false;",
+      },
+    });
+    expect(codeViewMountCount).toBe(2);
   });
 
   test("uses the saved revision for a second edit and Cmd/Ctrl+S", async () => {
