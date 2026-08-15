@@ -51,7 +51,7 @@ const ProbeHarness = ({
 };
 
 describe("use-workspace-branch-probe", () => {
-  test("does not refresh branches when the cached branch identity is unchanged", async () => {
+  test("refreshes branch membership when the cached branch identity is unchanged", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranch = {
       name: "main",
@@ -87,7 +87,7 @@ describe("use-workspace-branch-probe", () => {
       queryClient.setQueryData(gitQueryKeys.currentBranch("/repo-a"), currentBranch);
       await triggerFocus();
 
-      expect(gitGetBranches).not.toHaveBeenCalled();
+      expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(setBranchSyncDegraded).toHaveBeenCalledWith("/repo-a", false);
     } finally {
       rendered.unmount();

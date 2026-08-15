@@ -163,7 +163,7 @@ describe("use-workspace-branch-operations", () => {
     }
   });
 
-  test("restores cached branch data and revalidates only the current branch", async () => {
+  test("restores cached branch data while revalidating the repository", async () => {
     const currentBranches = new Map([
       ["/repo-a", { name: "main", detached: false }],
       ["/repo-b", { name: "develop", detached: false }],
@@ -233,6 +233,45 @@ describe("use-workspace-branch-operations", () => {
       });
 
       expect(gitGetCurrentBranch).toHaveBeenCalledTimes(3);
+      expect(gitGetBranches).toHaveBeenCalledTimes(3);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes cached branch membership when the current branch is unchanged", async () => {
+    const currentBranch: GitCurrentBranch = {
+      name: "main",
+      detached: false,
+      revision: "abc123",
+    };
+    const initialBranches: GitBranch[] = [{ name: "main", isCurrent: true, isRemote: false }];
+    const changedBranches: GitBranch[] = [
+      { name: "main", isCurrent: true, isRemote: false },
+      { name: "feature/external", isCurrent: false, isRemote: false },
+    ];
+    workspaceHost.gitGetCurrentBranch = mock(async () => currentBranch);
+    const gitGetBranches = mock(async () => changedBranches);
+    gitGetBranches.mockImplementationOnce(async () => initialBranches);
+    workspaceHost.gitGetBranches = gitGetBranches;
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.waitFor((value) => value.branches.length === initialBranches.length);
+
+      expect(harness.getLatest().branches).toEqual(initialBranches);
+
+      await harness.run(async (value) => {
+        await value.refreshBranches();
+      });
+      await harness.waitFor((value) => value.branches.length === changedBranches.length);
+
+      expect(harness.getLatest().activeBranch).toEqual(currentBranch);
+      expect(harness.getLatest().branches).toEqual(changedBranches);
       expect(gitGetBranches).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();
@@ -579,6 +618,66 @@ describe("use-workspace-branch-operations", () => {
       ).toEqual(featureBranches);
     } finally {
       switchDeferred.resolve({ name: "feature", detached: false });
+      await harness.unmount();
+    }
+  });
+
+  test("keeps each repository locked while its branch switch is pending", async () => {
+    const repoASwitch = createDeferred<GitCurrentBranch>();
+    const repoBSwitch = createDeferred<GitCurrentBranch>();
+    const gitSwitchBranch = mock(async (repoPath: string, branchName: string) => {
+      if (repoPath === "/repo-a") {
+        return repoASwitch.promise;
+      }
+
+      if (repoPath === "/repo-b") {
+        return repoBSwitch.promise;
+      }
+
+      throw new Error(`Unexpected repository ${repoPath} for ${branchName}`);
+    });
+    workspaceHost.gitSwitchBranch = gitSwitchBranch;
+    workspaceHost.gitGetBranches = mock(async () => []);
+    const harness = createBranchHarness({ activeRepo: "/repo-a" });
+
+    try {
+      await harness.mount();
+
+      let repoASwitchPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoASwitchPromise = value.switchBranch("feature/repo-a");
+      });
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+
+      let repoBSwitchPromise: Promise<void> | null = null;
+      await harness.run((value) => {
+        repoBSwitchPromise = value.switchBranch("feature/repo-b");
+      });
+      await harness.updateArgs({ activeRepo: "/repo-a" });
+
+      expect(harness.getLatest().isSwitchingBranch).toBe(true);
+      await harness.run(async (value) => {
+        await value.switchBranch("feature/repo-a-duplicate");
+      });
+      expect(gitSwitchBranch).toHaveBeenCalledTimes(2);
+
+      if (!repoASwitchPromise || !repoBSwitchPromise) {
+        throw new Error("Branch switch promises were not captured");
+      }
+
+      const pendingRepoASwitch = repoASwitchPromise;
+      const pendingRepoBSwitch = repoBSwitchPromise;
+      await harness.run(async () => {
+        repoASwitch.resolve({ name: "feature/repo-a", detached: false });
+        repoBSwitch.resolve({ name: "feature/repo-b", detached: false });
+        await Promise.all([pendingRepoASwitch, pendingRepoBSwitch]);
+        await flush();
+      });
+
+      expect(harness.getLatest().isSwitchingBranch).toBe(false);
+    } finally {
+      repoASwitch.resolve({ name: "feature/repo-a", detached: false });
+      repoBSwitch.resolve({ name: "feature/repo-b", detached: false });
       await harness.unmount();
     }
   });

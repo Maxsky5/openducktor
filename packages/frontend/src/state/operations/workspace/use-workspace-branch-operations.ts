@@ -12,7 +12,7 @@ import {
   loadRepoBranchesFromQuery,
   repoBranchesQueryOptions,
 } from "../../queries/git";
-import { hasBranchIdentityChanged, shouldSkipBranchSwitch } from "./workspace-operations-model";
+import { shouldSkipBranchSwitch } from "./workspace-operations-model";
 import type { WorkspaceBranchOperationsHostClient } from "./workspace-operations-types";
 
 type UseWorkspaceBranchOperationsArgs = {
@@ -31,11 +31,6 @@ type UseWorkspaceBranchOperationsResult = {
   clearBranchData: (repoPath?: string | null) => void;
 };
 
-type SwitchingBranchRequest = {
-  repoPath: string;
-  requestVersion: number;
-};
-
 export function useWorkspaceBranchOperations({
   activeRepo,
   hostClient,
@@ -51,8 +46,9 @@ export function useWorkspaceBranchOperations({
     ...currentBranchQueryOptions(queryRepoPath, hostClient),
     enabled: false,
   });
-  const [switchingBranchRequest, setSwitchingBranchRequest] =
-    useState<SwitchingBranchRequest | null>(null);
+  const [switchingBranchRepoPaths, setSwitchingBranchRepoPaths] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const branchRequestVersionRef = useRef(0);
   const latestSwitchRequestVersionByRepoRef = useRef(new Map<string, number>());
   const currentWorkspaceRepoPathRef = useRef(activeRepo);
@@ -77,7 +73,6 @@ export function useWorkspaceBranchOperations({
   const clearBranchData = useCallback(
     (repoPath = currentWorkspaceRepoPathRef.current): void => {
       branchRequestVersionRef.current += 1;
-      setSwitchingBranchRequest(null);
       updateBranchSyncDegradedForRepo(repoPath, false);
     },
     [updateBranchSyncDegradedForRepo],
@@ -86,44 +81,23 @@ export function useWorkspaceBranchOperations({
   const refreshBranchesForRepo = useCallback(
     async (repoPath: string, force = false): Promise<void> => {
       const requestVersion = ++branchRequestVersionRef.current;
-      const cachedCurrentBranch = queryClient.getQueryData<GitCurrentBranch>(
-        gitQueryKeys.currentBranch(repoPath),
-      );
-      const cachedBranches = queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(repoPath));
-      const canRevalidateCachedData =
-        !force && cachedCurrentBranch !== undefined && cachedBranches !== undefined;
-      const branchListHasError =
-        queryClient.getQueryState(gitQueryKeys.branches(repoPath))?.status === "error";
+      const hasCachedBranchData =
+        queryClient.getQueryData<GitCurrentBranch>(gitQueryKeys.currentBranch(repoPath)) !==
+          undefined &&
+        queryClient.getQueryData<GitBranch[]>(gitQueryKeys.branches(repoPath)) !== undefined;
 
-      if (force) {
+      if (force || hasCachedBranchData) {
         await Promise.all([
           invalidateCurrentBranchQuery(queryClient, repoPath),
           invalidateRepoBranchesQuery(queryClient, repoPath),
         ]);
-      } else if (canRevalidateCachedData) {
-        await invalidateCurrentBranchQuery(queryClient, repoPath);
       }
 
       try {
-        if (canRevalidateCachedData) {
-          const currentBranch = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
-          const branchIdentityChanged = hasBranchIdentityChanged(
-            currentBranch,
-            cachedCurrentBranch.name ?? null,
-            cachedCurrentBranch.detached,
-            cachedCurrentBranch.revision ?? null,
-          );
-
-          if (branchIdentityChanged || branchListHasError) {
-            await invalidateRepoBranchesQuery(queryClient, repoPath);
-            await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
-          }
-        } else {
-          await Promise.all([
-            loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
-            loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
-          ]);
-        }
+        await Promise.all([
+          loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
+          loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
+        ]);
       } catch (error) {
         if (error instanceof CancelledError) {
           return;
@@ -165,11 +139,15 @@ export function useWorkspaceBranchOperations({
   const hasBranchData = branchesQuery.data !== undefined && currentBranchQuery.data !== undefined;
   const isLoadingBranches =
     !hasBranchData && (branchesQuery.isFetching || currentBranchQuery.isFetching);
-  const isSwitchingBranch = switchingBranchRequest?.repoPath === activeRepo;
+  const isSwitchingBranch = activeRepo ? switchingBranchRepoPaths.has(activeRepo) : false;
 
   const switchBranch = useCallback(
     async (branchName: string): Promise<void> => {
       if (!activeRepo || !branchName) {
+        return;
+      }
+
+      if (latestSwitchRequestVersionByRepoRef.current.has(activeRepo)) {
         return;
       }
 
@@ -197,7 +175,11 @@ export function useWorkspaceBranchOperations({
         ]);
       };
       latestSwitchRequestVersionByRepoRef.current.set(repoPath, requestVersion);
-      setSwitchingBranchRequest({ repoPath, requestVersion });
+      setSwitchingBranchRepoPaths((currentRepoPaths) => {
+        const nextRepoPaths = new Set(currentRepoPaths);
+        nextRepoPaths.add(repoPath);
+        return nextRepoPaths;
+      });
 
       try {
         await cancelBranchQueries();
@@ -252,12 +234,12 @@ export function useWorkspaceBranchOperations({
       } finally {
         if (isLatestSwitchRequest(repoPath, requestVersion)) {
           latestSwitchRequestVersionByRepoRef.current.delete(repoPath);
+          setSwitchingBranchRepoPaths((currentRepoPaths) => {
+            const nextRepoPaths = new Set(currentRepoPaths);
+            nextRepoPaths.delete(repoPath);
+            return nextRepoPaths;
+          });
         }
-        setSwitchingBranchRequest((currentRequest) =>
-          currentRequest?.repoPath === repoPath && currentRequest.requestVersion === requestVersion
-            ? null
-            : currentRequest,
-        );
       }
     },
     [

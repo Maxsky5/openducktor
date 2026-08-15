@@ -1,9 +1,7 @@
-import type { GitCurrentBranch } from "@openducktor/contracts";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  gitQueryKeys,
   invalidateCurrentBranchQuery,
   invalidateRepoBranchesQuery,
   loadCurrentBranchFromQuery,
@@ -16,7 +14,6 @@ import {
   type BranchProbeOutcome,
   branchProbeErrorSignature,
   classifyBranchProbeError,
-  hasBranchIdentityChanged,
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
 } from "./workspace-operations-model";
@@ -37,7 +34,7 @@ type ProbeGates = {
   isSwitchingBranch: boolean;
 };
 
-const refreshChangedBranchList = async (
+const refreshBranchListForProbe = async (
   queryClient: QueryClient,
   repoPath: string,
   hostClient: WorkspaceBranchProbeHostClient,
@@ -143,32 +140,15 @@ export function useWorkspaceBranchProbe({
     }
 
     const probeToken = probeGate.begin();
-    const previousBranch = queryClient.getQueryData<GitCurrentBranch>(
-      gitQueryKeys.currentBranch(repoPath),
-    );
-
     try {
       await invalidateCurrentBranchQuery(queryClient, repoPath);
 
-      const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
+      await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
       if (activeRepoPathRef.current !== repoPath) {
         return { status: "skipped" };
       }
 
-      const hasChanged = hasBranchIdentityChanged(
-        current,
-        previousBranch?.name ?? null,
-        previousBranch?.detached ?? null,
-        previousBranch?.revision ?? null,
-      );
-      const branchListHasError =
-        queryClient.getQueryState(gitQueryKeys.branches(repoPath))?.status === "error";
-
-      if (!hasChanged && !branchListHasError) {
-        return { status: "unchanged" };
-      }
-
-      return refreshChangedBranchList(
+      return refreshBranchListForProbe(
         queryClient,
         repoPath,
         hostClient,
