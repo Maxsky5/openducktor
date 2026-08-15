@@ -525,17 +525,28 @@ pre {
   animation: rise-in 0.3s ease-out;
 }
 
-@keyframes onboarding-stage-enter {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.onboarding-stage-content {
+  view-transition-name: onboarding-stage-content;
 }
 
-.onboarding-stage-enter {
-  animation: onboarding-stage-enter 100ms ease-out;
+html.onboarding-stage-transition::view-transition-old(root),
+html.onboarding-stage-transition::view-transition-new(root) {
+  animation: none;
+}
+
+html.onboarding-stage-transition::view-transition-group(onboarding-stage-content),
+html.onboarding-stage-transition::view-transition-old(onboarding-stage-content),
+html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.onboarding-stage-transition::view-transition-group(onboarding-stage-content),
+  html.onboarding-stage-transition::view-transition-old(onboarding-stage-content),
+  html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) {
+    animation: none;
+  }
 }
 
 .electron-platform-darwin .onboarding-shell {

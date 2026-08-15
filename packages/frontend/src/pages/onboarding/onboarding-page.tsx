@@ -1,4 +1,5 @@
 import { type ReactElement, useCallback, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +20,22 @@ type OnboardingPageProps = {
 
 export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElement {
   const [stage, setStage] = useState<OnboardingStage>("welcome");
-  const openWorkspaceStage = useCallback((): void => setStage("workspace"), []);
+  const changeStage = useCallback((nextStage: OnboardingStage): void => {
+    if (!document.startViewTransition) {
+      setStage(nextStage);
+      return;
+    }
+
+    const root = document.documentElement;
+    root.classList.add("onboarding-stage-transition");
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setStage(nextStage));
+    });
+    void transition.finished.finally(() => {
+      root.classList.remove("onboarding-stage-transition");
+    });
+  }, []);
+  const openWorkspaceStage = useCallback((): void => changeStage("workspace"), [changeStage]);
   const runtimeSetup = useOnboardingRuntimeSetup({ onContinue: openWorkspaceStage });
   const workspaceCompletion = useOnboardingWorkspaceCompletion({
     settingsSnapshot: runtimeSetup.settingsSnapshot,
@@ -28,7 +44,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
 
   return (
     <OnboardingLayout stage={stage}>
-      {stage === "welcome" ? <WelcomeStage onContinue={() => setStage("runtimes")} /> : null}
+      {stage === "welcome" ? <WelcomeStage onContinue={() => changeStage("runtimes")} /> : null}
       {stage === "runtimes" ? (
         <RuntimeStage
           runtimeDraft={runtimeSetup.runtimeDraft}
@@ -45,7 +61,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
           onChange={runtimeSetup.updateDraft}
           onCheckAgain={() => void runtimeSetup.checkAgain()}
           onRetry={runtimeSetup.retryRuntimeRequests}
-          onBack={() => setStage("welcome")}
+          onBack={() => changeStage("welcome")}
           onContinue={() => void runtimeSetup.saveRuntimes()}
         />
       ) : null}
@@ -54,7 +70,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
           workspaces={workspaceCompletion.workspaces}
           addWorkspace={workspaceCompletion.addFirstWorkspace}
           isFinalizing={workspaceCompletion.isFinalizing}
-          onBack={() => setStage("runtimes")}
+          onBack={() => changeStage("runtimes")}
         />
       ) : null}
 

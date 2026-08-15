@@ -140,9 +140,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
         </nav>
 
         <section className="min-w-0 flex-1 pb-6 pt-5" aria-live="polite">
-          <div key={stage} className="onboarding-stage-enter motion-reduce:animate-none">
-            {children}
-          </div>
+          <div className="onboarding-stage-content">{children}</div>
         </section>
       </div>
     </main>

@@ -17,4 +17,13 @@ describe("global styles", () => {
     expect(selectionRule).toContain("var(--selected-surface)");
     expect(selectionRule).not.toContain("var(--primary)");
   });
+
+  test("crossfades onboarding stages without starting from a blank panel", () => {
+    const styles = readStyles();
+
+    expect(styles).toContain("view-transition-name: onboarding-stage-content");
+    expect(styles).toContain("::view-transition-old(onboarding-stage-content)");
+    expect(styles).toContain("::view-transition-new(onboarding-stage-content)");
+    expect(styles).not.toContain("@keyframes onboarding-stage-enter");
+  });
 });

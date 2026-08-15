@@ -214,6 +214,53 @@ describe("OnboardingPage runtime validation", () => {
     expect(onboardingShell.scrollTop).toBe(0);
   });
 
+  test("captures the current stage before replacing it with the next stage", async () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "startViewTransition");
+    const capturedHeadings: string[] = [];
+    const startViewTransition = mock((update: () => void) => {
+      const heading =
+        screen.queryByRole("heading", { name: "Set up your local coding workspace" }) ??
+        screen.queryByRole("heading", { name: "Configure coding agents" });
+      if (!heading) throw new Error("Current onboarding heading is missing");
+      capturedHeadings.push(heading.textContent ?? "");
+      update();
+      return { finished: Promise.resolve() };
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: startViewTransition,
+    });
+
+    try {
+      renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await screen.findByRole("heading", { name: "Configure coding agents" });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Back" }));
+        await Promise.resolve();
+      });
+      await screen.findByRole("heading", { name: "Set up your local coding workspace" });
+
+      expect(startViewTransition).toHaveBeenCalledTimes(2);
+      expect(capturedHeadings).toEqual([
+        "Set up your local coding workspace",
+        "Configure coding agents",
+      ]);
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(document, "startViewTransition", originalDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "startViewTransition");
+      }
+    }
+  });
+
   test("keeps coding-agent discovery in the compact stage header", async () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
     await act(async () => {
