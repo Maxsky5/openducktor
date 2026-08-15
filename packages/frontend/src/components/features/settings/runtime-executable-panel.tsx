@@ -23,7 +23,7 @@ type RuntimeExecutablePanelProps = {
   disabled?: boolean;
   isChecking?: boolean;
   checkingRuntimeKinds?: readonly RuntimeKind[];
-  checkAgainPlacement?: "panel" | "runtime-status";
+  checkAgainPlacement?: "panel" | "runtime-status" | "hidden";
   onChange: (next: AgentRuntimes) => void;
   onCheckAgain: () => void;
 };
@@ -262,7 +262,7 @@ export function RuntimeExecutablePanel({
         onOpenChange={(open) => {
           if (!open) setPickerRuntimeKind(null);
         }}
-        title="Choose runtime executable"
+        title="Choose coding agent executable"
         description="Select the exact executable file that OpenDucktor must use."
         confirmLabel="Use executable"
         selectionMode="file"

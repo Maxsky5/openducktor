@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
@@ -29,8 +29,10 @@ function SeedFilesystemDirectory(): ReactElement | null {
 
 function InlineWorkspaceCreationForm({
   addWorkspace,
+  composeActions = false,
 }: {
   addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
+  composeActions?: boolean;
 }): ReactElement | null {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
@@ -46,7 +48,23 @@ function InlineWorkspaceCreationForm({
   }, [queryClient]);
   if (!ready) return null;
   return (
-    <WorkspaceCreationForm workspaces={[]} addWorkspace={addWorkspace} repositoryPicker="inline" />
+    <WorkspaceCreationForm
+      workspaces={[]}
+      addWorkspace={addWorkspace}
+      repositoryPicker="inline"
+      {...(composeActions
+        ? {
+            renderActions: ({ primaryAction, secondaryAction, hint }) => (
+              <div data-testid="workspace-actions">
+                <button type="button">Back to coding agents</button>
+                {hint ? <p>{hint}</p> : null}
+                {secondaryAction}
+                {primaryAction}
+              </div>
+            ),
+          }
+        : {})}
+    />
   );
 }
 
@@ -108,6 +126,34 @@ describe("WorkspaceCreationForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
     expect(await screen.findByRole("button", { name: /^open repository$/i })).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("lets the onboarding host compose one action row across repository selection and submit", async () => {
+    const addWorkspace = mock(async () => {});
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} composeActions />
+      </QueryProvider>,
+    );
+    mountedViews.add(view);
+
+    const selectionActions = await screen.findByTestId("workspace-actions");
+    expect(
+      within(selectionActions).getByText("Choose a local Git repository to continue."),
+    ).toBeTruthy();
+    expect(
+      within(selectionActions).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    fireEvent.click(within(selectionActions).getByRole("button", { name: "Choose This Folder" }));
+
+    const submitActions = await screen.findByTestId("workspace-actions");
+    expect(
+      within(submitActions).queryByText("Choose a local Git repository to continue."),
+    ).toBeNull();
+    expect(
+      within(submitActions).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    expect(within(submitActions).getByRole("button", { name: "Open repository" })).toBeTruthy();
   });
 
   test("blocks a repository that is already configured", async () => {

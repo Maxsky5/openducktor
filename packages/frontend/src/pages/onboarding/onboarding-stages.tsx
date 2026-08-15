@@ -4,7 +4,15 @@ import type {
   RuntimeExecutableCheckResult,
   RuntimeKind,
 } from "@openducktor/contracts";
-import { ArrowLeft, ArrowRight, Bot, FolderGit2, ListChecks, LoaderCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  FolderGit2,
+  ListChecks,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import { type ReactElement, type RefObject, useState } from "react";
 import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
@@ -129,14 +137,26 @@ export function RuntimeStage({
   const isLoading = activity === "loading";
   const isRediscovering = activity === "rediscovering";
   const isSaving = activity === "saving";
+  const scanDisabled =
+    !runtimeDraft ||
+    isSaving ||
+    isRediscovering ||
+    activity === "validating" ||
+    checkingRuntimeKinds.length > 0;
 
   return (
     <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
-      <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
-        <CardTitle className="text-2xl sm:text-3xl">Configure agent runtimes</CardTitle>
+      <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-2xl sm:text-3xl">Configure coding agents</CardTitle>
+          <Button type="button" variant="outline" disabled={scanDisabled} onClick={onCheckAgain}>
+            <RefreshCw data-icon="inline-start" />
+            {isRediscovering ? "Scanning..." : "Scan for coding agents"}
+          </Button>
+        </div>
         <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
-          Choose which runtimes OpenDucktor can use. Every check and agent session will use the
-          exact path shown here.
+          Choose the coding agents OpenDucktor can use and confirm the exact executable path for
+          each one.
         </CardDescription>
       </CardHeader>
 
@@ -148,7 +168,7 @@ export function RuntimeStage({
           >
             <div>
               <p className="text-sm font-medium text-destructive-surface-foreground">
-                Runtime setup could not load
+                Coding agent setup could not load
               </p>
               <p className="mt-1 text-sm text-destructive-muted">{requestError}</p>
             </div>
@@ -157,7 +177,11 @@ export function RuntimeStage({
             </Button>
           </div>
         ) : isLoading ? (
-          <div className="flex flex-col gap-3" role="status" aria-label="Loading runtime settings">
+          <div
+            className="flex flex-col gap-3"
+            role="status"
+            aria-label="Loading coding agent settings"
+          >
             <div className="flex items-center gap-3 rounded-lg border border-border p-4">
               <Skeleton className="size-9 shrink-0" />
               <div className="flex flex-1 flex-col gap-2">
@@ -190,6 +214,7 @@ export function RuntimeStage({
             checkingRuntimeKinds={checkingRuntimeKinds}
             onChange={onChange}
             onCheckAgain={onCheckAgain}
+            checkAgainPlacement="hidden"
           />
         ) : null}
 
@@ -200,7 +225,7 @@ export function RuntimeStage({
           >
             <p className="text-sm text-destructive-muted">{discoveryError}</p>
             <Button variant="outline" onClick={onCheckAgain}>
-              Retry runtime detection
+              Scan again
             </Button>
           </div>
         ) : null}
@@ -213,10 +238,10 @@ export function RuntimeStage({
             <ListChecks className="mt-0.5 size-4 shrink-0 text-warning-muted" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-warning-surface-foreground">
-                No runtime is ready
+                No coding agent is ready
               </p>
               <p className="mt-1 text-sm text-warning-muted">
-                Agent sessions will not work until you configure and enable a valid runtime in
+                Agent sessions will not work until you configure and enable a valid coding agent in
                 Settings.
               </p>
             </div>
@@ -241,7 +266,7 @@ export function RuntimeStage({
           Back
         </Button>
         <Button size="lg" onClick={onContinue} disabled={continueDisabled}>
-          {isSaving ? "Saving runtime setup..." : "Continue to workspace"}
+          {isSaving ? "Saving coding agents..." : "Continue to workspace"}
           <ArrowRight data-icon="inline-end" />
         </Button>
       </div>
@@ -266,7 +291,7 @@ export function WorkspaceStage({
 
   return (
     <Card className="overflow-hidden shadow-sm">
-      <CardHeader className="gap-3 border-b border-border px-6 py-6 sm:px-9 sm:py-8">
+      <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
         <CardTitle className="text-2xl sm:text-3xl">Open your first workspace</CardTitle>
         <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
           Choose the local Git repository where OpenDucktor will keep tasks, agent sessions, and
@@ -274,7 +299,7 @@ export function WorkspaceStage({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="bg-muted/20 px-6 py-6 sm:px-9 sm:py-8">
+      <CardContent className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6">
         <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
           <WorkspaceCreationForm
             workspaces={workspaces}
@@ -282,6 +307,27 @@ export function WorkspaceStage({
             disabled={isFinalizing}
             repositoryPicker="inline"
             onSubmittingChange={setIsCreatingWorkspace}
+            renderActions={({ primaryAction, secondaryAction, hint }) => (
+              <div
+                data-testid="onboarding-workspace-actions"
+                className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isCreatingWorkspace || isFinalizing}
+                  onClick={onBack}
+                >
+                  <ArrowLeft data-icon="inline-start" />
+                  Back to coding agents
+                </Button>
+                <div className="flex min-w-0 flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end">
+                  {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
+                  {secondaryAction}
+                  {primaryAction}
+                </div>
+              </div>
+            )}
           />
           {isFinalizing ? (
             <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-card/95 p-6">
@@ -296,12 +342,6 @@ export function WorkspaceStage({
           ) : null}
         </div>
       </CardContent>
-      <div className="flex justify-start border-t border-border bg-card px-6 py-4 sm:px-9">
-        <Button variant="outline" onClick={onBack} disabled={isCreatingWorkspace || isFinalizing}>
-          <ArrowLeft data-icon="inline-start" />
-          Back to runtimes
-        </Button>
-      </div>
     </Card>
   );
 }

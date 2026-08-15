@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
-import { type ReactElement, useMemo, useReducer, useRef } from "react";
+import { type ReactElement, type ReactNode, useMemo, useReducer, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,6 +82,11 @@ type WorkspaceCreationFormProps = {
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
   repositoryPicker?: "dialog" | "inline";
+  renderActions?: (actions: {
+    primaryAction: ReactElement;
+    secondaryAction: ReactElement | null;
+    hint: string | null;
+  }) => ReactNode;
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
 };
@@ -91,6 +96,7 @@ export function WorkspaceCreationForm({
   addWorkspace,
   disabled = false,
   repositoryPicker = "dialog",
+  renderActions,
   onSubmittingChange,
   onSuccess,
 }: WorkspaceCreationFormProps): ReactElement {
@@ -116,6 +122,7 @@ export function WorkspaceCreationForm({
       validationError = `Workspace ID already exists: ${state.workspaceId.trim()}`;
   }
   const busy = disabled || state.submitting;
+  const selectionHint = "Choose a local Git repository to continue.";
 
   const confirmRepo = (repoPath: string): void => {
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);
@@ -149,6 +156,17 @@ export function WorkspaceCreationForm({
     }
   };
 
+  const submitAction =
+    state.repoPath && !state.pickerOpen ? (
+      <Button
+        type="button"
+        disabled={busy || validationError !== null}
+        onClick={() => void submit()}
+      >
+        {state.submitting ? "Opening repository..." : "Open repository"}
+      </Button>
+    ) : null;
+
   return (
     <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4">
       {repositoryPicker === "dialog" || (state.repoPath && !state.pickerOpen) ? (
@@ -171,6 +189,12 @@ export function WorkspaceCreationForm({
           confirmLabel="Choose This Folder"
           requireGitRepo
           onConfirm={confirmRepo}
+          {...(renderActions
+            ? {
+                renderActions: ({ primaryAction, secondaryAction }) =>
+                  renderActions({ primaryAction, secondaryAction, hint: selectionHint }),
+              }
+            : {})}
           {...(state.repoPath
             ? {
                 initialPath: state.repoPath,
@@ -215,8 +239,8 @@ export function WorkspaceCreationForm({
             />
           </div>
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">Choose a local Git repository to continue.</p>
+      ) : renderActions ? null : (
+        <p className="text-sm text-muted-foreground">{selectionHint}</p>
       )}
 
       {state.error || validationError ? (
@@ -225,15 +249,10 @@ export function WorkspaceCreationForm({
         </p>
       ) : null}
 
-      {state.repoPath && !state.pickerOpen ? (
-        <Button
-          type="button"
-          disabled={busy || validationError !== null}
-          onClick={() => void submit()}
-        >
-          {state.submitting ? "Opening repository..." : "Open repository"}
-        </Button>
-      ) : null}
+      {submitAction
+        ? (renderActions?.({ primaryAction: submitAction, secondaryAction: null, hint: null }) ??
+          submitAction)
+        : null}
 
       {repositoryPicker === "dialog" && state.pickerOpen ? (
         <FolderPickerDialog

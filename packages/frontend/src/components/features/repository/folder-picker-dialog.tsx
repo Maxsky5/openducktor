@@ -1,7 +1,7 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronUp, File, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import { type ReactElement, useEffect, useId, useMemo, useReducer } from "react";
+import { type ReactElement, type ReactNode, useEffect, useId, useMemo, useReducer } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +27,10 @@ type FolderPickerCommonProps = {
   initialPath?: string;
   requireGitRepo?: boolean;
   selectionMode?: "directory" | "file";
+  renderActions?: (actions: {
+    primaryAction: ReactElement;
+    secondaryAction: ReactElement | null;
+  }) => ReactNode;
   onConfirm: (path: string) => Promise<void> | void;
 };
 
@@ -279,6 +283,7 @@ function FolderPickerDialogSession({
   initialPath,
   requireGitRepo = false,
   selectionMode = "directory",
+  renderActions,
   onConfirm,
 }: FolderPickerSessionProps): ReactElement {
   const inlineDescriptionId = useId();
@@ -441,27 +446,31 @@ function FolderPickerDialogSession({
     </>
   );
 
-  const pickerActions = (
+  const secondaryAction = showCancel ? (
+    <Button
+      type="button"
+      variant="secondary"
+      disabled={isSubmitting}
+      onClick={() => onOpenChange(false)}
+    >
+      Cancel
+    </Button>
+  ) : null;
+  const primaryAction = (
+    <Button
+      type="button"
+      disabled={!isCurrentPathSelectable || isSubmitting}
+      onClick={() => void handleConfirm()}
+    >
+      {isSubmitting ? "Confirming..." : confirmLabel}
+    </Button>
+  );
+  const pickerActions = renderActions ? (
+    renderActions({ primaryAction, secondaryAction })
+  ) : (
     <div className="flex flex-col-reverse justify-between gap-3 border-t border-border pt-4 sm:flex-row">
-      {showCancel ? (
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={isSubmitting}
-          onClick={() => onOpenChange(false)}
-        >
-          Cancel
-        </Button>
-      ) : (
-        <span aria-hidden="true" />
-      )}
-      <Button
-        type="button"
-        disabled={!isCurrentPathSelectable || isSubmitting}
-        onClick={() => void handleConfirm()}
-      >
-        {isSubmitting ? "Confirming..." : confirmLabel}
-      </Button>
+      {secondaryAction ?? <span aria-hidden="true" />}
+      {primaryAction}
     </div>
   );
 

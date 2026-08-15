@@ -312,9 +312,9 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Continue without an agent runtime?</DialogTitle>
+            <DialogTitle>Continue without a coding agent?</DialogTitle>
             <DialogDescription>
-              Agent sessions will not work until you configure and enable a valid runtime in
+              Agent sessions will not work until you configure and enable a valid coding agent in
               Settings.
             </DialogDescription>
           </DialogHeader>
@@ -327,7 +327,7 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
               Cancel
             </Button>
             <Button disabled={isSaving} onClick={() => void saveRuntimes(true)}>
-              {isSaving ? "Saving..." : "Continue without a runtime"}
+              {isSaving ? "Saving..." : "Continue without a coding agent"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -128,7 +128,7 @@ const enterRuntimeStage = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
   });
-  await screen.findByRole("heading", { name: "Configure agent runtimes" });
+  await screen.findByRole("heading", { name: "Configure coding agents" });
   await waitFor(() =>
     expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
       false,
@@ -209,9 +209,25 @@ describe("OnboardingPage runtime validation", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    await screen.findByRole("heading", { name: "Configure agent runtimes" });
+    await screen.findByRole("heading", { name: "Configure coding agents" });
 
     expect(onboardingShell.scrollTop).toBe(0);
+  });
+
+  test("keeps coding-agent discovery in the compact stage header", async () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const heading = await screen.findByRole("heading", { name: "Configure coding agents" });
+    const headerRow = heading.parentElement;
+    if (!headerRow) throw new Error("Coding-agent header row is missing");
+
+    expect(within(headerRow).getByRole("button", { name: "Scan for coding agents" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Scan for coding agents" })).toHaveLength(1);
   });
 
   test("keeps runtime cards neutral while exact paths are being checked", async () => {
@@ -236,7 +252,7 @@ describe("OnboardingPage runtime validation", () => {
       renderOnboarding({ runtimes });
       fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
 
-      await screen.findByRole("heading", { name: "Configure agent runtimes" });
+      await screen.findByRole("heading", { name: "Configure coding agents" });
       expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
       expect(screen.queryByText("Unavailable")).toBeNull();
       expect(screen.queryByText("Enter a path, then check it.")).toBeNull();
@@ -335,7 +351,7 @@ describe("OnboardingPage runtime validation", () => {
       });
 
       await screen.findByText("Settings snapshot failed");
-      expect(screen.queryByLabelText("Loading runtime settings")).toBeNull();
+      expect(screen.queryByLabelText("Loading coding agent settings")).toBeNull();
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -462,13 +478,13 @@ describe("OnboardingPage runtime validation", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
       await screen.findByText("Runtime discovery failed");
 
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         true,
       );
-      fireEvent.click(screen.getByRole("button", { name: "Retry runtime detection" }));
+      fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
 
       await waitFor(() => expect(discoveryAttempts).toBe(2));
       await waitFor(() => expect(screen.queryByText("Runtime discovery failed")).toBeNull());
@@ -497,7 +513,7 @@ describe("OnboardingPage runtime validation", () => {
       const queryClient = renderOnboarding({ runtimes });
       await enterRuntimeStage();
 
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
       await waitFor(() =>
         expect(
           queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus,
@@ -542,8 +558,8 @@ describe("OnboardingPage runtime validation", () => {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
 
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-      await screen.findByRole("button", { name: "Checking..." });
+      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      await screen.findByRole("button", { name: "Scanning..." });
 
       const pathInput = screen.getByLabelText("Executable path", {
         selector: "#runtime-executable-opencode",
@@ -603,7 +619,7 @@ describe("OnboardingPage runtime validation", () => {
       await enterRuntimeStage();
       requests.length = 0;
 
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
 
       await waitFor(() =>
         expect(requests).toEqual(["discover", { opencodePath: "/discovered/opencode" }]),
@@ -805,22 +821,20 @@ describe("OnboardingPage runtime validation", () => {
         ).toBe(false),
       );
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
-      fireEvent.click(screen.getByRole("button", { name: "Continue without a runtime" }));
+      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue without a coding agent" }));
       const saveError = await screen.findByText("Settings write failed");
-      expect(screen.getByText("Configure agent runtimes")).toBeTruthy();
-      expect(
-        screen.queryByRole("dialog", { name: "Continue without an agent runtime?" }),
-      ).toBeNull();
+      expect(screen.getByText("Configure coding agents")).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
       expect(document.activeElement).toBe(saveError);
 
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
-      fireEvent.click(screen.getByRole("button", { name: "Continue without a runtime" }));
+      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue without a coding agent" }));
       await screen.findByRole("heading", { name: "Open your first workspace" });
       expect(screen.queryByText("Repository boundary")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: /Back/ }));
-      expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
@@ -838,9 +852,11 @@ describe("OnboardingPage runtime validation", () => {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
+      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-      const confirmButton = screen.getByRole("button", { name: "Continue without a runtime" });
+      const confirmButton = screen.getByRole("button", {
+        name: "Continue without a coding agent",
+      });
       fireEvent.click(confirmButton);
       fireEvent.click(confirmButton);
 
@@ -868,16 +884,14 @@ describe("OnboardingPage runtime validation", () => {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
       fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without an agent runtime?" });
+      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      expect(
-        screen.queryByRole("dialog", { name: "Continue without an agent runtime?" }),
-      ).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
       expect(
         screen.getByText(
-          "Agent sessions will not work until you configure and enable a valid runtime in Settings.",
+          "Agent sessions will not work until you configure and enable a valid coding agent in Settings.",
         ),
       ).toBeTruthy();
     } finally {

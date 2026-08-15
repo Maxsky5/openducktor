@@ -6,7 +6,7 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -444,16 +444,28 @@ describe("AppShell", () => {
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
-    await screen.findByRole("heading", { name: "Configure agent runtimes" });
+    await screen.findByRole("heading", { name: "Configure coding agents" });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
-    fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    const selectionActions = await screen.findByTestId("onboarding-workspace-actions");
+    expect(
+      within(selectionActions).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    expect(
+      within(selectionActions).getByText("Choose a local Git repository to continue."),
+    ).toBeTruthy();
+    fireEvent.click(within(selectionActions).getByRole("button", { name: "Choose This Folder" }));
+    const submitActions = await screen.findByTestId("onboarding-workspace-actions");
+    expect(
+      within(submitActions).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    expect(within(submitActions).getByRole("button", { name: "Open repository" })).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Back to runtimes" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Back to coding agents" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
     expect(screen.queryByText("Kanban")).toBeNull();
@@ -507,14 +519,14 @@ describe("AppShell", () => {
       expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
     );
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
-    await screen.findByRole("heading", { name: "Configure agent runtimes" });
+    await screen.findByRole("heading", { name: "Configure coding agents" });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue without a runtime" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
-    const backButton = screen.getByRole("button", { name: "Back to runtimes" });
+    const backButton = screen.getByRole("button", { name: "Back to coding agents" });
     expect((backButton as HTMLButtonElement).disabled).toBe(true);
 
     workspaceAddResult.reject(new Error("Repository open failed"));
@@ -530,7 +542,7 @@ describe("AppShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
 
-    expect(screen.getByRole("heading", { name: "Configure agent runtimes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
     expect(screen.getAllByText("Executable path")).toHaveLength(3);
     expect(screen.queryByText("Kanban")).toBeNull();
   });
