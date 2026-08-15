@@ -20,6 +20,7 @@ import {
   canonicalizeContainedWorkspaceFile,
   canonicalizeWorkspaceRoot,
   loadWorkspaceFilePaths,
+  type WorkspaceFileAccessError,
   workspaceFileValidationError,
 } from "./workspace-file-access";
 import { requireRelativePath } from "./workspace-files-paths";
@@ -120,24 +121,23 @@ const invalidWriteInput = (input: unknown, cause: unknown): WorkspaceTextFileWri
   );
 };
 
-const mapAccessFailure = (
+const mapValidationFailure = (
   cause: HostValidationError,
   input: WorkspaceTextFileWriteInput,
-): WorkspaceTextFileWriteError => {
-  const message = cause.message;
-  if (message.includes("outside the selected workspace root")) {
-    return writeFailure("path_escape", message, input, cause);
-  }
-  if (
-    message.includes("not available in the workspace file tree") ||
-    message.includes("Unable to resolve file") ||
-    message.includes("target is not available") ||
-    message.includes("not a file")
-  ) {
-    return writeFailure("unavailable_file", message, input, cause);
-  }
-  return writeFailure("invalid_input", message, input, cause);
-};
+): WorkspaceTextFileWriteError => writeFailure("invalid_input", cause.message, input, cause);
+
+const mapAccessFailure = (
+  cause: WorkspaceFileAccessError,
+  input: WorkspaceTextFileWriteInput,
+): WorkspaceTextFileWriteError => writeFailure(cause.code, cause.message, input, cause);
+
+const mapReadAccessFailure = (cause: WorkspaceFileAccessError): HostValidationError =>
+  new HostValidationError({
+    message: cause.message,
+    field: cause.field,
+    details: cause.details,
+    cause,
+  });
 
 const mapFileOperationFailure = (
   cause: FilesystemFileOperationError,
@@ -184,7 +184,7 @@ export const createWorkspaceTextFileService = (
         canonicalRoot,
         relativePath,
         listedFilePaths,
-      );
+      ).pipe(Effect.mapError(mapReadAccessFailure));
       const snapshot = yield* filesystem
         .readFileSnapshot(canonicalPath, MAX_WORKSPACE_TEXT_FILE_BYTES + 1)
         .pipe(
@@ -255,14 +255,14 @@ export const createWorkspaceTextFileService = (
       }
 
       const canonicalRoot = yield* canonicalizeWorkspaceRoot(filesystem, input.rootPath).pipe(
-        Effect.mapError((cause) => mapAccessFailure(cause, input)),
+        Effect.mapError((cause) => mapValidationFailure(cause, input)),
       );
       const relativePath = yield* requireRelativePath(input.relativePath).pipe(
-        Effect.mapError((cause) => mapAccessFailure(cause, input)),
+        Effect.mapError((cause) => mapValidationFailure(cause, input)),
       );
       const canonicalInput = { ...input, rootPath: canonicalRoot, relativePath };
       const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot).pipe(
-        Effect.mapError((cause) => mapAccessFailure(cause, canonicalInput)),
+        Effect.mapError((cause) => mapValidationFailure(cause, canonicalInput)),
       );
       if (!listedFilePaths.includes(relativePath)) {
         return yield* Effect.fail(

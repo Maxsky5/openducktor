@@ -31,7 +31,10 @@ export type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
-export type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
+export type {
+  TaskExecutionFilePreviewLeavePolicy,
+  TaskExecutionSelectedFilePreviewModel,
+} from "./task-execution-file-preview";
 export type {
   TaskExecutionPanelModel,
   TaskExecutionPanelTab,

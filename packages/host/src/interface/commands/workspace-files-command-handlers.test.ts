@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
+import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createWorkspaceFilesCommandHandlers } from "./workspace-files-command-handlers";
 
@@ -121,11 +122,25 @@ describe("createWorkspaceFilesCommandHandlers", () => {
     expect(result).toMatchObject({ contents: "saved", revision: "revision-2" });
   });
 
-  test("rejects invalid write inputs with a structured write error", async () => {
+  test("delegates write validation to the service", async () => {
+    const received: unknown[] = [];
     const service: WorkspaceFilesService = {
       listTree: () => Effect.die("not used"),
       readTextFile: () => Effect.die("not used"),
-      writeTextFile: () => Effect.die("must not be called"),
+      writeTextFile: (input) => {
+        received.push(input);
+        return Effect.fail(
+          new WorkspaceTextFileWriteError({
+            message: "The workspace text file write input is invalid.",
+            failure: {
+              code: "invalid_input",
+              message: "The workspace text file write input is invalid.",
+              rootPath: "/repo",
+              relativePath: "file.txt",
+            },
+          }),
+        );
+      },
     };
     const router = createEffectHostCommandRouter({
       handlers: createWorkspaceFilesCommandHandlers(service),
@@ -140,6 +155,13 @@ describe("createWorkspaceFilesCommandHandlers", () => {
     );
 
     expect(exit._tag).toBe("Failure");
+    expect(received).toEqual([
+      {
+        rootPath: "/repo",
+        relativePath: "file.txt",
+        contents: "saved",
+      },
+    ]);
     expect(String(exit)).toContain("WorkspaceTextFileWriteError");
     expect(String(exit)).toContain("invalid_input");
   });

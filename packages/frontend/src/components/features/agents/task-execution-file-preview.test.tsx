@@ -74,7 +74,7 @@ const waitForCleanFile = async (): Promise<void> => {
   await waitFor(() => expect(screen.queryByRole("status", { name: "Unsaved changes" })).toBeNull());
 };
 
-const dispatchPreviewSaveShortcut = (modifier: "ctrlKey" | "metaKey" = "ctrlKey") => {
+const dispatchPreviewSaveShortcut = async (modifier: "ctrlKey" | "metaKey" = "ctrlKey") => {
   const event = new KeyboardEvent("keydown", {
     key: "s",
     code: "KeyS",
@@ -82,7 +82,7 @@ const dispatchPreviewSaveShortcut = (modifier: "ctrlKey" | "metaKey" = "ctrlKey"
     bubbles: true,
     cancelable: true,
   });
-  act(() => screen.getByLabelText("Selected file preview").dispatchEvent(event));
+  await runAsyncUiAction(() => screen.getByLabelText("Selected file preview").dispatchEvent(event));
   return event;
 };
 
@@ -167,7 +167,7 @@ const renderPreview = (
     previewSessionKey: model.previewSessionKey ?? 0,
     preservePreviousSnapshot: model.preservePreviousSnapshot ?? false,
     hasPendingDiscard: model.hasPendingDiscard ?? false,
-    onEditStateChange: model.onEditStateChange ?? (() => {}),
+    onLeavePolicyChange: model.onLeavePolicyChange ?? (() => {}),
     onKeepEditing: model.onKeepEditing ?? (() => {}),
     onDiscard: model.onDiscard ?? (() => {}),
   };
@@ -444,7 +444,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
 
-    const event = dispatchPreviewSaveShortcut();
+    const event = await dispatchPreviewSaveShortcut();
 
     expect(event.defaultPrevented).toBe(true);
     expect(writeTextFileMock).not.toHaveBeenCalled();
@@ -484,9 +484,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
   test("opens in edit mode and saves without replacing Pierre's editor document", async () => {
     const onClose = mock(() => {});
-    const onEditStateChange = mock(() => {});
+    const onLeavePolicyChange = mock(() => {});
 
-    render(renderPreview({ selectedFile: firstFile, onClose, onEditStateChange }));
+    render(renderPreview({ selectedFile: firstFile, onClose, onLeavePolicyChange }));
 
     await screen.findByText("const first = true;");
     await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
@@ -545,7 +545,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(latestCodeViewProps?.editorOptions).toBe(editorOptions);
     expect(attachedEditor.focus).toHaveBeenCalledTimes(1);
     expect(codeViewMountCount).toBe(1);
-    expect(onEditStateChange).toHaveBeenCalledWith({ isDirty: false, isSaving: false });
+    expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
+    expect(onLeavePolicyChange).toHaveBeenCalledWith("defer");
+    expect(onLeavePolicyChange).toHaveBeenLastCalledWith("allow");
   });
 
   test("uses the saved revision for a second edit and Cmd/Ctrl+S", async () => {
@@ -561,7 +563,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
         latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
       });
       await waitForDirtyFile();
-      const event = dispatchPreviewSaveShortcut();
+      const event = await dispatchPreviewSaveShortcut();
       expect(event.defaultPrevented).toBe(true);
       await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(expectedWriteCount));
       await waitForCleanFile();
@@ -636,7 +638,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save file" })),
     );
     await screen.findByText("The file changed after it was loaded.");
-    const blockedSaveEvent = dispatchPreviewSaveShortcut("metaKey");
+    const blockedSaveEvent = await dispatchPreviewSaveShortcut("metaKey");
     expect(blockedSaveEvent.defaultPrevented).toBe(true);
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     await runAsyncUiAction(() =>
@@ -701,7 +703,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const saveButton = await screen.findByRole<HTMLButtonElement>("button", { name: "Save file" });
 
     fireEvent.click(saveButton);
-    const pendingSaveEvent = dispatchPreviewSaveShortcut("metaKey");
+    const pendingSaveEvent = await dispatchPreviewSaveShortcut("metaKey");
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(pendingSaveEvent.defaultPrevented).toBe(true);
@@ -745,7 +747,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
     expect(pendingSaveButton.getAttribute("aria-busy")).toBe("true");
     expect(pendingSaveButton.disabled).toBe(true);
-    const duplicateSaveEvent = dispatchPreviewSaveShortcut();
+    const duplicateSaveEvent = await dispatchPreviewSaveShortcut();
     expect(duplicateSaveEvent.defaultPrevented).toBe(true);
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
 

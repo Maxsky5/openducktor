@@ -13,6 +13,7 @@ import {
   workspaceTextFileWriteMutationOptions,
 } from "@/state/queries/filesystem";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import type { TaskExecutionFilePreviewLeavePolicy } from "./task-execution-file-preview";
 
 type TextFileResult = Extract<WorkspaceTextFileReadResult, { kind: "text" }>;
 
@@ -152,13 +153,13 @@ const workspaceWriteFailure = (cause: unknown): WorkspaceTextFileWriteFailure | 
 type UseTaskExecutionFileEditorInput = {
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
-  onEditStateChange(editState: { isDirty: boolean; isSaving: boolean }): void;
+  onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
 
 export const useTaskExecutionFileEditor = ({
   selectedFile,
   readyResult,
-  onEditStateChange,
+  onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
   const queryClient = useQueryClient();
   const mutation = useMutation(workspaceTextFileWriteMutationOptions(queryClient));
@@ -183,9 +184,13 @@ export const useTaskExecutionFileEditor = ({
     (item: CodeViewItem<undefined>, file: FileContents) => {
       if (!state.session || item.id !== state.session.id) return;
       draftRef.current = file.contents;
-      dispatch({ type: "edit", isDirty: file.contents !== state.session.baseline.contents });
+      const isDirty = file.contents !== state.session.baseline.contents;
+      dispatch({ type: "edit", isDirty });
+      if (!saveInFlightRef.current) {
+        onLeavePolicyChange(isDirty ? "confirm" : "allow");
+      }
     },
-    [state.session],
+    [onLeavePolicyChange, state.session],
   );
 
   const save = useCallback(async (): Promise<void> => {
@@ -200,6 +205,7 @@ export const useTaskExecutionFileEditor = ({
     }
     saveInFlightRef.current = true;
     dispatch({ type: "save_started" });
+    onLeavePolicyChange("defer");
     const baselineRevision = session.baseline.revision;
     const contentsToSave = draftRef.current;
     try {
@@ -219,16 +225,18 @@ export const useTaskExecutionFileEditor = ({
         result: saved,
         isDirty: hasNewerDraft && latestDraft !== saved.contents,
       });
+      onLeavePolicyChange(hasNewerDraft && latestDraft !== saved.contents ? "confirm" : "allow");
     } catch (cause) {
       const failure = workspaceWriteFailure(cause);
       dispatch({
         type: "save_failed",
         failure: { code: failure?.code ?? null, message: failure?.message ?? errorMessage(cause) },
       });
+      onLeavePolicyChange(draftRef.current !== session.baseline.contents ? "confirm" : "allow");
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [mutation, state.isDirty, state.saveFailure?.code, state.session]);
+  }, [mutation, onLeavePolicyChange, state.isDirty, state.saveFailure?.code, state.session]);
 
   const reviewLatestVersion = useCallback(async (): Promise<void> => {
     const session = state.session;
@@ -255,16 +263,14 @@ export const useTaskExecutionFileEditor = ({
   }, []);
   const acceptLatestBaseline = useCallback(() => {
     if (!state.conflictReview) return;
+    const isDirty = draftRef.current !== state.conflictReview.contents;
     dispatch({
       type: "conflict_baseline_accepted",
       result: state.conflictReview,
-      isDirty: draftRef.current !== state.conflictReview.contents,
+      isDirty,
     });
-  }, [state.conflictReview]);
-
-  useLayoutEffect(() => {
-    onEditStateChange({ isDirty: state.isDirty, isSaving: state.isSaving });
-  }, [onEditStateChange, state.isDirty, state.isSaving]);
+    onLeavePolicyChange(isDirty ? "confirm" : "allow");
+  }, [onLeavePolicyChange, state.conflictReview]);
 
   return useMemo(
     () => ({

@@ -16,7 +16,7 @@ const snapshot = (contents: string, revision: string): FilesystemFileSnapshot =>
 });
 
 describe("conditionallyReplaceOpenFile", () => {
-  test("rejects a revision change visible to the final best-effort validation", async () => {
+  test("rejects a stale revision at the final best-effort validation", async () => {
     let snapshotCount = 0;
     let truncateCount = 0;
 
@@ -28,9 +28,7 @@ describe("conditionallyReplaceOpenFile", () => {
       verifyEntry: async () => undefined,
       snapshot: async () => {
         snapshotCount += 1;
-        return snapshotCount === 1
-          ? snapshot("original", "original")
-          : snapshot("external change", "changed");
+        return snapshot("external change", "changed");
       },
       truncate: async () => {
         truncateCount += 1;
@@ -40,11 +38,11 @@ describe("conditionallyReplaceOpenFile", () => {
     });
 
     await expect(replacement).rejects.toMatchObject({ code: "stale_revision" });
-    expect(snapshotCount).toBe(2);
+    expect(snapshotCount).toBe(1);
     expect(truncateCount).toBe(0);
   });
 
-  test("rejects a path move visible to the final best-effort validation", async () => {
+  test("rejects a path move at the final best-effort validation", async () => {
     let verifyCount = 0;
     let truncateCount = 0;
 
@@ -55,14 +53,12 @@ describe("conditionallyReplaceOpenFile", () => {
       maxCurrentBytes: 1024,
       verifyEntry: async () => {
         verifyCount += 1;
-        if (verifyCount === 2) {
-          throw new FilesystemFileOperationError({
-            code: "unavailable_file",
-            operation: "replace",
-            path: "/repo/file.txt",
-            message: "The selected file moved.",
-          });
-        }
+        throw new FilesystemFileOperationError({
+          code: "unavailable_file",
+          operation: "replace",
+          path: "/repo/file.txt",
+          message: "The selected file moved.",
+        });
       },
       snapshot: async () => snapshot("original", "original"),
       truncate: async () => {
@@ -73,22 +69,29 @@ describe("conditionallyReplaceOpenFile", () => {
     });
 
     await expect(replacement).rejects.toMatchObject({ code: "unavailable_file" });
-    expect(verifyCount).toBe(2);
+    expect(verifyCount).toBe(1);
     expect(truncateCount).toBe(0);
   });
 
   test("documents that a change after final validation can be overwritten", async () => {
     let currentContents = "original";
     let externalChangeOccurred = false;
+    let snapshotCount = 0;
     let truncateCount = 0;
+    let verifyCount = 0;
 
     const replacement = await conditionallyReplaceOpenFile({
       inputPath: "/repo/file.txt",
       expectedRevision: "original",
       bytes: encoder.encode("draft"),
       maxCurrentBytes: 1024,
-      verifyEntry: async () => undefined,
-      snapshot: async () => snapshot(currentContents, currentContents),
+      verifyEntry: async () => {
+        verifyCount += 1;
+      },
+      snapshot: async () => {
+        snapshotCount += 1;
+        return snapshot(currentContents, currentContents);
+      },
       truncate: async () => {
         externalChangeOccurred = true;
         currentContents = "external change after final validation";
@@ -102,6 +105,8 @@ describe("conditionallyReplaceOpenFile", () => {
     });
 
     expect(externalChangeOccurred).toBe(true);
+    expect(verifyCount).toBe(1);
+    expect(snapshotCount).toBe(2);
     expect(truncateCount).toBe(1);
     expect(currentContents).toBe("draft");
     expect(new TextDecoder().decode(replacement.bytes)).toBe("draft");

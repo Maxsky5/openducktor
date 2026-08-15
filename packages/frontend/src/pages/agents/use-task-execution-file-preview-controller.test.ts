@@ -15,7 +15,7 @@ describe("useTaskExecutionFilePreviewController", () => {
       selectedRoot = "/other";
     });
     act(() => view.result.current.onSelectFile(firstFile));
-    act(() => view.result.current.model.onEditStateChange({ isDirty: true, isSaving: false }));
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
 
     act(() => view.result.current.requestContextTransition(applyContextTransition));
 
@@ -45,7 +45,7 @@ describe("useTaskExecutionFilePreviewController", () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     const applyContextTransition = mock(() => {});
     act(() => view.result.current.onSelectFile(firstFile));
-    act(() => view.result.current.model.onEditStateChange({ isDirty: true, isSaving: true }));
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
 
     act(() => view.result.current.requestContextTransition(applyContextTransition));
 
@@ -55,7 +55,7 @@ describe("useTaskExecutionFilePreviewController", () => {
       hasPendingDiscard: false,
     });
 
-    act(() => view.result.current.model.onEditStateChange({ isDirty: false, isSaving: false }));
+    act(() => view.result.current.model.onLeavePolicyChange("allow"));
 
     await waitFor(() => expect(applyContextTransition).toHaveBeenCalledTimes(1));
     expect(view.result.current.model.selectedFile).toBeNull();
@@ -65,10 +65,10 @@ describe("useTaskExecutionFilePreviewController", () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     const applyContextTransition = mock(() => {});
     act(() => view.result.current.onSelectFile(firstFile));
-    act(() => view.result.current.model.onEditStateChange({ isDirty: true, isSaving: true }));
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
     act(() => view.result.current.requestContextTransition(applyContextTransition));
 
-    act(() => view.result.current.model.onEditStateChange({ isDirty: true, isSaving: false }));
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
 
     await waitFor(() => expect(view.result.current.model.hasPendingDiscard).toBe(true));
     expect(applyContextTransition).not.toHaveBeenCalled();

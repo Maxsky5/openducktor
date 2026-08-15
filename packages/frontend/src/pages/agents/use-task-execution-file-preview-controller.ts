@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type {
+  TaskExecutionFilePreviewLeavePolicy,
   TaskExecutionSelectedFile,
   TaskExecutionSelectedFilePreviewModel,
 } from "@/components/features/agents";
@@ -34,14 +35,14 @@ export const useTaskExecutionFilePreviewController =
     }, [state]);
 
     useEffect(() => {
-      if (state.pendingIntent?.type !== "leave_context" || state.isDirty || state.isSaving) {
+      if (state.pendingIntent?.type !== "leave_context" || state.leavePolicy !== "allow") {
         return;
       }
       const transition = pendingContextTransitionRef.current;
       pendingContextTransitionRef.current = null;
       dispatch({ type: "discard" });
       transition?.apply();
-    }, [state.isDirty, state.isSaving, state.pendingIntent]);
+    }, [state.leavePolicy, state.pendingIntent]);
 
     const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
       dispatch({ type: "request", intent: { type: "select", file } });
@@ -49,8 +50,8 @@ export const useTaskExecutionFilePreviewController =
     const onClose = useCallback(() => {
       dispatch({ type: "request", intent: { type: "close" } });
     }, []);
-    const onEditStateChange = useCallback((editState: { isDirty: boolean; isSaving: boolean }) => {
-      dispatch({ type: "report_edit_state", ...editState });
+    const onLeavePolicyChange = useCallback((policy: TaskExecutionFilePreviewLeavePolicy) => {
+      dispatch({ type: "report_leave_policy", policy });
     }, []);
     const onKeepEditing = useCallback(() => {
       const transition = pendingContextTransitionRef.current;
@@ -77,7 +78,7 @@ export const useTaskExecutionFilePreviewController =
         if (currentState.pendingIntent !== null || pendingContextTransitionRef.current !== null) {
           return;
         }
-        if (!currentState.isDirty && !currentState.isSaving) {
+        if (currentState.leavePolicy === "allow") {
           dispatch({ type: "request", intent: { type: "leave_context" } });
           applyTransition();
           return;
@@ -95,13 +96,13 @@ export const useTaskExecutionFilePreviewController =
         selectedFile: state.selectedFile,
         previewSessionKey: state.previewSessionKey,
         preservePreviousSnapshot: state.preservePreviousSnapshot,
-        hasPendingDiscard: state.pendingIntent !== null && state.isDirty && !state.isSaving,
+        hasPendingDiscard: state.pendingIntent !== null && state.leavePolicy === "confirm",
         onClose,
-        onEditStateChange,
+        onLeavePolicyChange,
         onKeepEditing,
         onDiscard,
       }),
-      [onClose, onDiscard, onEditStateChange, onKeepEditing, state],
+      [onClose, onDiscard, onKeepEditing, onLeavePolicyChange, state],
     );
 
     return useMemo(

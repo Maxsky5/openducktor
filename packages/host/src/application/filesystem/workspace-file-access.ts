@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
@@ -14,6 +14,14 @@ export const workspaceFileValidationError = (
     cause,
     ...(details ? { details } : {}),
   });
+
+export class WorkspaceFileAccessError extends Data.TaggedError("WorkspaceFileAccessError")<{
+  readonly code: "path_escape" | "unavailable_file";
+  readonly message: string;
+  readonly field: "relativePath";
+  readonly details: { rootPath: string; relativePath: string };
+  readonly cause?: unknown;
+}> {}
 
 export const canonicalizeWorkspaceRoot = (filesystem: FilesystemPort, rootPath: string) =>
   Effect.gen(function* () {
@@ -88,16 +96,21 @@ export const canonicalizeContainedWorkspaceFile = (
   Effect.gen(function* () {
     const requestedPath = filesystem.join(canonicalRoot, relativePath);
     const canonicalPath = yield* filesystem.canonicalize(requestedPath).pipe(
-      Effect.mapError((cause) =>
-        workspaceFileValidationError(cause, `Unable to resolve file '${relativePath}'.`, {
-          rootPath: canonicalRoot,
-          relativePath,
-        }),
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceFileAccessError({
+            code: "unavailable_file",
+            field: "relativePath",
+            message: `Unable to resolve file '${relativePath}'.`,
+            details: { rootPath: canonicalRoot, relativePath },
+            cause,
+          }),
       ),
     );
     if (!isContainedPath(filesystem, canonicalRoot, canonicalPath)) {
       return yield* Effect.fail(
-        new HostValidationError({
+        new WorkspaceFileAccessError({
+          code: "path_escape",
           field: "relativePath",
           message: `File '${relativePath}' is outside the selected workspace root.`,
           details: { rootPath: canonicalRoot, relativePath },
@@ -110,7 +123,8 @@ export const canonicalizeContainedWorkspaceFile = (
     );
     if (!canonicalTargetIsListed) {
       return yield* Effect.fail(
-        new HostValidationError({
+        new WorkspaceFileAccessError({
+          code: "unavailable_file",
           field: "relativePath",
           message: `File '${relativePath}' target is not available in the workspace file tree.`,
           details: { rootPath: canonicalRoot, relativePath },

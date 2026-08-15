@@ -44,10 +44,12 @@ export type TaskExecutionSelectedFilePreviewModel = {
   preservePreviousSnapshot: boolean;
   hasPendingDiscard: boolean;
   onClose: () => void;
-  onEditStateChange(editState: { isDirty: boolean; isSaving: boolean }): void;
+  onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
   onKeepEditing: () => void;
   onDiscard: () => void;
 };
+
+export type TaskExecutionFilePreviewLeavePolicy = "allow" | "confirm" | "defer";
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const CODE_VIEW_THEME_BACKGROUND = { dark: "#0a0a0a", light: "#ffffff" } as const;
@@ -409,7 +411,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     preservePreviousSnapshot,
     hasPendingDiscard,
     onClose,
-    onEditStateChange,
+    onLeavePolicyChange,
     onKeepEditing,
     onDiscard,
   },
@@ -451,7 +453,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editor = useTaskExecutionFileEditor({
     selectedFile,
     readyResult: readyTextResult,
-    onEditStateChange,
+    onLeavePolicyChange,
   });
   const retainedSnapshot =
     committedSnapshot?.sessionKey === previewSessionKey ? committedSnapshot.snapshot : null;

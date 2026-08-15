@@ -4,7 +4,7 @@ import {
   createTaskExecutionFilePreviewState,
   discardTaskExecutionFilePreviewDraft,
   keepEditingTaskExecutionFilePreview,
-  reportTaskExecutionFilePreviewEditState,
+  reportTaskExecutionFilePreviewLeavePolicy,
   requestTaskExecutionFilePreviewIntent,
 } from "./task-execution-file-preview-state";
 
@@ -35,10 +35,7 @@ describe("task execution file preview state", () => {
       type: "select",
       file: firstFile,
     });
-    const dirty = reportTaskExecutionFilePreviewEditState(opened, {
-      isDirty: true,
-      isSaving: false,
-    });
+    const dirty = reportTaskExecutionFilePreviewLeavePolicy(opened, "confirm");
     const pending = requestTaskExecutionFilePreviewIntent(dirty, {
       type: "select",
       file: secondFile,
@@ -50,12 +47,12 @@ describe("task execution file preview state", () => {
     expect(ignoredClose).toBe(pending);
     expect(keepEditingTaskExecutionFilePreview(pending)).toMatchObject({
       selectedFile: firstFile,
-      isDirty: true,
+      leavePolicy: "confirm",
       pendingIntent: null,
     });
     expect(discardTaskExecutionFilePreviewDraft(pending)).toMatchObject({
       selectedFile: secondFile,
-      isDirty: false,
+      leavePolicy: "allow",
       pendingIntent: null,
     });
   });
@@ -65,10 +62,7 @@ describe("task execution file preview state", () => {
       type: "select",
       file: firstFile,
     });
-    const saving = reportTaskExecutionFilePreviewEditState(opened, {
-      isDirty: true,
-      isSaving: true,
-    });
+    const saving = reportTaskExecutionFilePreviewLeavePolicy(opened, "defer");
 
     expect(requestTaskExecutionFilePreviewIntent(saving, { type: "close" })).toBe(saving);
     expect(
@@ -81,24 +75,18 @@ describe("task execution file preview state", () => {
       type: "select",
       file: firstFile,
     });
-    const dirty = reportTaskExecutionFilePreviewEditState(opened, {
-      isDirty: true,
-      isSaving: false,
-    });
+    const dirty = reportTaskExecutionFilePreviewLeavePolicy(opened, "confirm");
     const pending = requestTaskExecutionFilePreviewIntent(dirty, { type: "leave_context" });
-    const saving = reportTaskExecutionFilePreviewEditState(dirty, {
-      isDirty: true,
-      isSaving: true,
-    });
+    const saving = reportTaskExecutionFilePreviewLeavePolicy(dirty, "defer");
 
     expect(pending).toMatchObject({
       selectedFile: firstFile,
-      isDirty: true,
+      leavePolicy: "confirm",
       pendingIntent: { type: "leave_context" },
     });
     expect(requestTaskExecutionFilePreviewIntent(saving, { type: "leave_context" })).toMatchObject({
       selectedFile: firstFile,
-      isSaving: true,
+      leavePolicy: "defer",
       pendingIntent: { type: "leave_context" },
     });
     expect(clearTaskExecutionFilePreviewState(saving)).toBe(saving);

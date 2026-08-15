@@ -1,4 +1,7 @@
-import type { TaskExecutionSelectedFile } from "@/components/features/agents";
+import type {
+  TaskExecutionFilePreviewLeavePolicy,
+  TaskExecutionSelectedFile,
+} from "@/components/features/agents";
 
 export type TaskExecutionFilePreviewIntent =
   | { type: "close" }
@@ -9,15 +12,14 @@ export type TaskExecutionFilePreviewState = {
   selectedFile: TaskExecutionSelectedFile | null;
   previewSessionKey: number;
   preservePreviousSnapshot: boolean;
-  isDirty: boolean;
-  isSaving: boolean;
+  leavePolicy: TaskExecutionFilePreviewLeavePolicy;
   pendingIntent: TaskExecutionFilePreviewIntent | null;
 };
 
 export type TaskExecutionFilePreviewAction =
   | { type: "request"; intent: TaskExecutionFilePreviewIntent }
   | { type: "clear" }
-  | { type: "report_edit_state"; isDirty: boolean; isSaving: boolean }
+  | { type: "report_leave_policy"; policy: TaskExecutionFilePreviewLeavePolicy }
   | { type: "keep_editing" }
   | { type: "discard" };
 
@@ -25,8 +27,7 @@ export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewS
   selectedFile: null,
   previewSessionKey: 0,
   preservePreviousSnapshot: false,
-  isDirty: false,
-  isSaving: false,
+  leavePolicy: "allow",
   pendingIntent: null,
 });
 
@@ -41,8 +42,7 @@ const applyPreviewIntent = (
       selectedFile: null,
       previewSessionKey: state.previewSessionKey + 1,
       preservePreviousSnapshot: false,
-      isDirty: false,
-      isSaving: false,
+      leavePolicy: "allow",
       pendingIntent: null,
     };
   }
@@ -53,8 +53,7 @@ const applyPreviewIntent = (
     previewSessionKey:
       state.selectedFile === null ? state.previewSessionKey + 1 : state.previewSessionKey,
     preservePreviousSnapshot: state.selectedFile !== null,
-    isDirty: false,
-    isSaving: false,
+    leavePolicy: "allow",
     pendingIntent: null,
   };
 };
@@ -64,10 +63,10 @@ export const requestTaskExecutionFilePreviewIntent = (
   intent: TaskExecutionFilePreviewIntent,
 ): TaskExecutionFilePreviewState => {
   if (state.pendingIntent !== null) return state;
-  if (state.isSaving) {
+  if (state.leavePolicy === "defer") {
     return intent.type === "leave_context" ? { ...state, pendingIntent: intent } : state;
   }
-  if (state.isDirty) return { ...state, pendingIntent: intent };
+  if (state.leavePolicy === "confirm") return { ...state, pendingIntent: intent };
   return applyPreviewIntent(state, intent);
 };
 
@@ -75,17 +74,14 @@ export const clearTaskExecutionFilePreviewState = (
   state: TaskExecutionFilePreviewState,
 ): TaskExecutionFilePreviewState => requestTaskExecutionFilePreviewIntent(state, { type: "close" });
 
-export const reportTaskExecutionFilePreviewEditState = (
+export const reportTaskExecutionFilePreviewLeavePolicy = (
   state: TaskExecutionFilePreviewState,
-  editState: { isDirty: boolean; isSaving: boolean },
+  policy: TaskExecutionFilePreviewLeavePolicy,
 ): TaskExecutionFilePreviewState => {
-  if (
-    state.selectedFile === null ||
-    (state.isDirty === editState.isDirty && state.isSaving === editState.isSaving)
-  ) {
+  if (state.selectedFile === null || state.leavePolicy === policy) {
     return state;
   }
-  return { ...state, ...editState };
+  return { ...state, leavePolicy: policy };
 };
 
 export const keepEditingTaskExecutionFilePreview = (
@@ -107,8 +103,8 @@ export const taskExecutionFilePreviewReducer = (
       return requestTaskExecutionFilePreviewIntent(state, action.intent);
     case "clear":
       return clearTaskExecutionFilePreviewState(state);
-    case "report_edit_state":
-      return reportTaskExecutionFilePreviewEditState(state, action);
+    case "report_leave_policy":
+      return reportTaskExecutionFilePreviewLeavePolicy(state, action.policy);
     case "keep_editing":
       return keepEditingTaskExecutionFilePreview(state);
     case "discard":
