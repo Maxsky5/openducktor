@@ -18,6 +18,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -232,8 +233,8 @@ const resolveFilePreviewSaveState = ({
   hasStaleConflict: boolean;
 }): FilePreviewSaveState => {
   if (!hasSession || isSwitchingFiles) return "unavailable";
-  if (!isDirty) return "clean";
   if (isSaving) return "saving";
+  if (!isDirty) return "clean";
   if (hasStaleConflict) return "blocked";
   return "dirty";
 };
@@ -342,14 +343,34 @@ function FileDiscardDialog({
   open,
   onKeepEditing,
   onDiscard,
+  onReturnFocus,
 }: {
   open: boolean;
   onKeepEditing: () => void;
   onDiscard: () => void;
+  onReturnFocus: () => void;
 }): ReactElement {
+  const shouldReturnFocusRef = useRef(false);
+  const keepEditing = useCallback(() => {
+    shouldReturnFocusRef.current = true;
+    onKeepEditing();
+  }, [onKeepEditing]);
+  const discard = useCallback(() => {
+    shouldReturnFocusRef.current = false;
+    onDiscard();
+  }, [onDiscard]);
+
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onKeepEditing()}>
-      <DialogContent closeButton={null}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && keepEditing()}>
+      <DialogContent
+        closeButton={null}
+        onCloseAutoFocus={(event) => {
+          if (!shouldReturnFocusRef.current) return;
+          shouldReturnFocusRef.current = false;
+          event.preventDefault();
+          onReturnFocus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Discard unsaved changes?</DialogTitle>
           <DialogDescription>
@@ -357,10 +378,10 @@ function FileDiscardDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onKeepEditing}>
+          <Button type="button" variant="outline" onClick={keepEditing}>
             Keep editing
           </Button>
-          <Button type="button" variant="destructive" onClick={onDiscard}>
+          <Button type="button" variant="destructive" onClick={discard}>
             Discard
           </Button>
         </DialogFooter>
@@ -398,6 +419,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
+  const attachedEditorRef = useRef<Editor<undefined> | null>(null);
   const {
     data: fileData,
     error: fileError,
@@ -510,6 +532,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     return {
       ...(clipboard ? { clipboard } : {}),
       onAttach(attachedEditor) {
+        attachedEditorRef.current = attachedEditor;
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });
       },
     };
@@ -538,15 +561,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const handlePreviewShortcut = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>) => {
       const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
-      if (
-        isSave &&
-        editor.session &&
-        editor.isDirty &&
-        !editor.isSaving &&
-        !editor.hasStaleConflict
-      ) {
+      if (isSave) {
         event.preventDefault();
-        void editor.save();
+        if (editor.session && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict) {
+          void editor.save();
+        }
         return;
       }
       if (event.key !== "Escape" || event.defaultPrevented || hasPendingDiscard) {
@@ -625,6 +644,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         open={hasPendingDiscard}
         onKeepEditing={onKeepEditing}
         onDiscard={onDiscard}
+        onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}
       />
       <FileConflictReviewDialog
         result={editor.conflictReview}

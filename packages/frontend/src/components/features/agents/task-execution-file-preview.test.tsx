@@ -70,6 +70,18 @@ const waitForCleanFile = async (): Promise<void> => {
   await waitFor(() => expect(screen.queryByRole("status", { name: "Unsaved changes" })).toBeNull());
 };
 
+const dispatchPreviewSaveShortcut = (modifier: "ctrlKey" | "metaKey" = "ctrlKey") => {
+  const event = new KeyboardEvent("keydown", {
+    key: "s",
+    code: "KeyS",
+    [modifier]: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => screen.getByLabelText("Selected file preview").dispatchEvent(event));
+  return event;
+};
+
 const previewWorkerPool = {
   isWorkingPool: () => false,
   getFileResultCache: (file: { cacheKey?: string }) =>
@@ -222,7 +234,7 @@ beforeEach(async () => {
       }, []);
       return createElement(
         "pre",
-        { "data-testid": "mock-code-view" },
+        { "aria-label": "Code editor", "data-testid": "mock-code-view", tabIndex: -1 },
         props.items[0]?.file.contents ?? "",
       );
     },
@@ -409,6 +421,17 @@ describe("TaskExecutionSelectedFilePreview", () => {
     outsideInput.remove();
   });
 
+  test("captures Cmd/Ctrl+S for a clean preview without writing", async () => {
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+
+    const event = dispatchPreviewSaveShortcut();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(writeTextFileMock).not.toHaveBeenCalled();
+  });
+
   test("keeps unsupported files read-only and shows the host message", async () => {
     readTextFileMock.mockImplementationOnce(async () => ({
       kind: "unsupported",
@@ -520,13 +543,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
         latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents });
       });
       await waitForDirtyFile();
-      await runAsyncUiAction(() =>
-        fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
-          key: "s",
-          code: "KeyS",
-          ctrlKey: true,
-        }),
-      );
+      const event = dispatchPreviewSaveShortcut();
+      expect(event.defaultPrevented).toBe(true);
       await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(expectedWriteCount));
       await waitForCleanFile();
     };
@@ -600,6 +618,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save file" })),
     );
     await screen.findByText("The file changed after it was loaded.");
+    const blockedSaveEvent = dispatchPreviewSaveShortcut("metaKey");
+    expect(blockedSaveEvent.defaultPrevented).toBe(true);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
     await runAsyncUiAction(() =>
       fireEvent.click(screen.getByRole("button", { name: "Review latest version" })),
     );
@@ -665,12 +686,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     const saveButton = await screen.findByRole<HTMLButtonElement>("button", { name: "Save file" });
 
     fireEvent.click(saveButton);
-    fireEvent.keyDown(screen.getByLabelText("Selected file preview"), {
-      key: "s",
-      metaKey: true,
-    });
+    const pendingSaveEvent = dispatchPreviewSaveShortcut("metaKey");
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+    expect(pendingSaveEvent.defaultPrevented).toBe(true);
     const pendingSaveButton = await screen.findByRole<HTMLButtonElement>("button", {
       name: "Saving file",
     });
@@ -690,6 +709,99 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await pendingWrite;
     });
     await waitForCleanFile();
+  });
+
+  test("keeps pending Save feedback when the draft returns to the old baseline", async () => {
+    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
+    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
+      resolveWrite = resolve;
+    });
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Save file" }));
+    await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, {
+        ...item?.file,
+        contents: "const first = true;",
+      });
+    });
+
+    const pendingSaveButton = await screen.findByRole<HTMLButtonElement>("button", {
+      name: "Saving file",
+    });
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+    expect(pendingSaveButton.getAttribute("aria-busy")).toBe("true");
+    expect(pendingSaveButton.disabled).toBe(true);
+    const duplicateSaveEvent = dispatchPreviewSaveShortcut();
+    expect(duplicateSaveEvent.defaultPrevented).toBe(true);
+    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveWrite({
+        kind: "text",
+        rootPath: "/repo",
+        relativePath: "src/first.ts",
+        contents: "draft",
+        size: 5,
+        mtimeMs: 1_760_000_000_001,
+        revision: "revision-2",
+      });
+      await pendingWrite;
+    });
+
+    await waitForDirtyFile();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      false,
+    );
+  });
+
+  test("clears pending Save feedback after a failed write at the old baseline", async () => {
+    let rejectWrite!: (cause: Error) => void;
+    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>(
+      (_resolve, reject) => {
+        rejectWrite = reject;
+      },
+    );
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const onClose = mock(() => {});
+    render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "draft" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Save file" }));
+    await screen.findByRole("button", { name: "Saving file" });
+
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, {
+        ...item?.file,
+        contents: "const first = true;",
+      });
+    });
+    expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
+
+    await act(async () => {
+      rejectWrite(new Error("Permission denied while saving this file."));
+      await pendingWrite.catch(() => undefined);
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Permission denied");
+    expect(screen.queryByRole("status", { name: "Unsaved changes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Saving file" })).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
   });
 
   test("keeps text entered during Save dirty against the returned revision", async () => {
@@ -769,11 +881,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(focus).toHaveBeenCalledWith({ lineNumber: "first-visible", preventScroll: true });
   });
 
-  test("renders the discard guard and routes both decisions", async () => {
+  test("returns focus to Pierre after Keep editing and routes both decisions", async () => {
     const onClose = mock(() => {});
     const onKeepEditing = mock(() => {});
     const onDiscard = mock(() => {});
-    render(
+    const view = render(
       renderPreview({
         selectedFile: firstFile,
         onClose,
@@ -785,11 +897,38 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await screen.findByRole("dialog");
     await screen.findByText("const first = true;");
+    const editorSurface = screen.getByLabelText("Code editor");
+    const focus = mock(() => editorSurface.focus());
+    const editorOptions = latestCodeViewProps?.editorOptions as
+      | { onAttach?: (editor: { focus(options?: unknown): void }) => void }
+      | undefined;
+    editorOptions?.onAttach?.({ focus });
     fireEvent.keyDown(screen.getByLabelText("Selected file preview"), { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
     expect(onKeepEditing).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(onKeepEditing).toHaveBeenCalledTimes(2);
+    view.rerender(
+      renderPreview({
+        selectedFile: firstFile,
+        onClose,
+        hasPendingDiscard: false,
+        onKeepEditing,
+        onDiscard,
+      }),
+    );
+    await waitFor(() => expect(focus).toHaveBeenCalledTimes(2));
+    expect(document.activeElement).toBe(editorSurface);
+
+    view.rerender(
+      renderPreview({
+        selectedFile: firstFile,
+        onClose,
+        hasPendingDiscard: true,
+        onKeepEditing,
+        onDiscard,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
