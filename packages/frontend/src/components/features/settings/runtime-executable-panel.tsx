@@ -162,7 +162,7 @@ export function RuntimeExecutablePanel({
             <section
               key={kind}
               className={cn(
-                "flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors duration-150 motion-reduce:transition-none",
+                "flex flex-col gap-3 rounded-lg border bg-card p-4",
                 inputInvalid ? "border-destructive-border" : "border-border",
               )}
               aria-labelledby={`${inputId}-title`}

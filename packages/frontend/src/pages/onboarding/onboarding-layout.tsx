@@ -111,7 +111,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
                   <div className="relative flex min-w-0 flex-col items-center">
                     <span
                       className={cn(
-                        "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border bg-card ring-4 ring-card transition-colors duration-150 motion-reduce:transition-none",
+                        "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border bg-card ring-4 ring-card",
                         complete && "border-primary bg-primary text-primary-foreground",
                         current && "border-primary bg-primary text-primary-foreground shadow-sm",
                         !complete && !current && "border-input bg-card text-muted-foreground",
