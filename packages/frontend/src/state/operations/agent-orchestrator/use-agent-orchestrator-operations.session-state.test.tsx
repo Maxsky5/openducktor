@@ -368,7 +368,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("uses latest tasks after args update when validating send permissions", async () => {
+  test("keeps an existing session sendable after task workflow availability changes", async () => {
     let sendCalls = 0;
 
     const originalSpecGet = host.specGet;
@@ -420,14 +420,12 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.updateArgs({ tasks: [unavailableTask] });
 
       await harness.run(async () => {
-        await expect(
-          harness
-            .getLatest()
-            .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
-        ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
+        await harness
+          .getLatest()
+          .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
-      expect(sendCalls).toBe(0);
+      expect(sendCalls).toBe(1);
     } finally {
       await harness.unmount();
 

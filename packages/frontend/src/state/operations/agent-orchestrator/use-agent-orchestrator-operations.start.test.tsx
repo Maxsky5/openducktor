@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -16,7 +16,6 @@ import {
   persistedSessionFixture,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
-  toast,
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 describe("use-agent-orchestrator-operations start and send", () => {
@@ -191,11 +190,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("shows error toast when send is rejected for an unavailable role", async () => {
+  test("sends to an existing session when its role is unavailable for new sessions", async () => {
     let sendCalls = 0;
-    const toastError = mock(() => "");
 
-    const originalToastError = toast.error;
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
@@ -207,7 +204,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
-    toast.error = toastError;
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
@@ -258,20 +254,14 @@ describe("use-agent-orchestrator-operations start and send", () => {
       }
 
       await harness.run(async () => {
-        await expect(
-          harness
-            .getLatest()
-            .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
-        ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
+        await harness
+          .getLatest()
+          .operations.sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
-      expect(sendCalls).toBe(0);
-      expect(toastError).toHaveBeenCalledWith("Failed to send message", {
-        description: "Role 'build' is unavailable for task 'task-1' in status 'open'.",
-      });
+      expect(sendCalls).toBe(1);
     } finally {
       await harness.unmount();
-      toast.error = originalToastError;
       host.agentSessionsList = originalAgentSessionsList;
       host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
