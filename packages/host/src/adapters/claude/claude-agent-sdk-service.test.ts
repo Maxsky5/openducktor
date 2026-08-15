@@ -314,6 +314,7 @@ describe("createClaudeAgentSdkService", () => {
         sessionStore,
         settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
         toolDiscovery: {
+          discoverTool: () => Effect.die("unused"),
           resolveTool: () => {
             throw new Error("unused");
           },
@@ -555,6 +556,7 @@ describe("createClaudeAgentSdkService", () => {
       settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
       sessionStore,
       toolDiscovery: {
+        discoverTool: () => Effect.die("unused"),
         resolveTool: () => Effect.die("unused"),
         resolveToolPath: (toolId) =>
           toolId === "claude"

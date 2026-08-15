@@ -14,10 +14,7 @@ import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
 } from "@/state/queries/runtime";
-import {
-  type RuntimeExecutableValidationResult,
-  useRuntimeExecutableValidation,
-} from "@/state/queries/use-runtime-executable-validation";
+import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { RuntimeStageActivity } from "./onboarding-stages";
 
@@ -36,14 +33,6 @@ const runtimeStageActivity = ({
   return "idle";
 };
 
-type SavingStageSnapshot = {
-  checkResults: RuntimeExecutableValidationResult[];
-  checkingRuntimeKinds: RuntimeKind[];
-  activity: RuntimeStageActivity;
-  showNoRuntimeWarning: boolean;
-  continueDisabled: boolean;
-};
-
 export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => void }) => {
   const queryClient = useQueryClient();
   const { saveSettingsSnapshot } = useWorkspaceState();
@@ -54,7 +43,6 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
   const saveInFlight = useRef(false);
-  const savingStageSnapshotRef = useRef<SavingStageSnapshot>(null);
   const stageErrorRef = useRef<HTMLParagraphElement>(null);
   const focusStageError = useRef(false);
   const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
@@ -190,13 +178,6 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     }
 
     saveInFlight.current = true;
-    savingStageSnapshotRef.current = {
-      checkResults,
-      checkingRuntimeKinds,
-      activity,
-      showNoRuntimeWarning,
-      continueDisabled,
-    };
     setIsSaving(true);
     setStageError(null);
     try {
@@ -212,11 +193,8 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     } finally {
       saveInFlight.current = false;
       setIsSaving(false);
-      savingStageSnapshotRef.current = null;
     }
   };
-
-  const visibleStageSnapshot = isSaving ? savingStageSnapshotRef.current : null;
 
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
@@ -230,15 +208,15 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     settingsSnapshot: settingsQuery.data,
     runtimeDraft,
     definitions: definitionsQuery.data ?? [],
-    checkResults: visibleStageSnapshot?.checkResults ?? checkResults,
-    checkingRuntimeKinds: visibleStageSnapshot?.checkingRuntimeKinds ?? checkingRuntimeKinds,
+    checkResults,
+    checkingRuntimeKinds,
     requestError: runtimeRequestError ? errorMessage(runtimeRequestError) : null,
     discoveryError: runtimeDiscoveryError,
     stageError,
     stageErrorRef,
-    activity: visibleStageSnapshot?.activity ?? activity,
-    showNoRuntimeWarning: visibleStageSnapshot?.showNoRuntimeWarning ?? showNoRuntimeWarning,
-    continueDisabled: visibleStageSnapshot?.continueDisabled ?? continueDisabled,
+    activity,
+    showNoRuntimeWarning,
+    continueDisabled,
     confirmNoRuntime,
     isSaving,
     updateDraft,

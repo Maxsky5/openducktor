@@ -37,16 +37,6 @@ export const preloadAgentsPage = (): void => {
   preloadRoutePage("Agent Studio", loadAgentsPage);
 };
 
-export const loadKanbanPage = createCachedPageLoader(() =>
-  import("./kanban/kanban-page").then((module) => ({
-    default: module.KanbanPage,
-  })),
-);
-
-export const preloadKanbanPage = (): void => {
-  preloadRoutePage("Kanban", loadKanbanPage);
-};
-
 export const loadNotFoundPage = createCachedPageLoader(() =>
   import("./not-found-page").then((module) => ({
     default: module.NotFoundPage,

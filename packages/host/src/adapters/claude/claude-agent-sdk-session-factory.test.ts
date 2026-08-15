@@ -15,6 +15,13 @@ const deferred = <Value>() => {
   return { promise, resolve };
 };
 
+const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"] => ({
+  discoverTool: () => Effect.die("unused"),
+  resolveTool: () => Effect.die("unused"),
+  resolveToolPath: () => Effect.succeed(process.execPath),
+  validateToolPath: () => Effect.die("unused"),
+});
+
 describe("createClaudeAgentSdkSession", () => {
   test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
     const streamFinished = deferred<void>();
@@ -143,10 +150,7 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        toolDiscovery: createToolDiscovery(),
       };
 
       await expect(
@@ -236,10 +240,7 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        toolDiscovery: createToolDiscovery(),
       };
 
       await createClaudeAgentSdkSession({
@@ -338,10 +339,7 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        toolDiscovery: createToolDiscovery(),
       };
       const createPromise = createClaudeAgentSdkSession({
         emit: (_session, event) => events.push(event),
@@ -437,10 +435,7 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        toolDiscovery: createToolDiscovery(),
       };
 
       const summary = await createClaudeAgentSdkSession({
@@ -542,10 +537,7 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        toolDiscovery: createToolDiscovery(),
       };
 
       const creation = createClaudeAgentSdkSession({

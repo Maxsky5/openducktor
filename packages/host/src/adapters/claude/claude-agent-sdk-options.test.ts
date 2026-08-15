@@ -122,8 +122,10 @@ const createServiceInput = (events?: {
     },
   }),
   toolDiscovery: {
+    discoverTool: () => Effect.die("unused"),
     resolveTool: () => Effect.die("unused"),
     resolveToolPath: () => Effect.succeed(process.execPath),
+    validateToolPath: () => Effect.die("unused"),
   },
 });
 

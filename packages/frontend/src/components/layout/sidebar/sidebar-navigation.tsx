@@ -1,7 +1,7 @@
 import { Bot, Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { preloadAgentsPage, preloadKanbanPage } from "@/pages";
+import { preloadAgentsPage } from "@/pages";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
 const NAV_ITEMS = [
@@ -21,9 +21,8 @@ type SidebarNavigationState = {
   committedLocationKey: string;
 };
 
-const ROUTE_PRELOADERS: Record<NavigationRoute, () => void> = {
+const ROUTE_PRELOADERS: Partial<Record<NavigationRoute, () => void>> = {
   "/agents": preloadAgentsPage,
-  "/kanban": preloadKanbanPage,
 };
 
 type SidebarNavigationProps = {

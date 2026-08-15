@@ -649,7 +649,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("starts runtime and diagnostic refreshes without blocking a saved settings snapshot", async () => {
+  test("keeps exact runtime validation data and refreshes diagnostics after saving settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const snapshot = createSettingsSnapshot();
@@ -675,10 +675,7 @@ describe("use-repo-settings-operations", () => {
       const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
         async (filters, options) => {
           await originalInvalidateQueries(filters, options);
-          if (
-            filters?.queryKey === runtimeQueryKeys.all ||
-            filters?.queryKey === checksQueryKeys.all
-          ) {
+          if (filters?.queryKey === checksQueryKeys.all) {
             await refreshResult.promise;
           }
         },
@@ -690,11 +687,9 @@ describe("use-repo-settings-operations", () => {
 
       await harness.getLatest().saveSettingsSnapshot(snapshot);
 
-      expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
       expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: runtimeQueryKeys.all,
-      });
+      expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: checksQueryKeys.all,
       });
