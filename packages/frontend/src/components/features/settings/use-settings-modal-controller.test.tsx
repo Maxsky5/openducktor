@@ -3,6 +3,7 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   createDefaultAutopilotSettings,
   DEFAULT_AGENT_RUNTIMES,
+  knownRuntimeKindValues,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoRuntimeRef,
   type RuntimeExecutableCheck,
@@ -21,10 +22,7 @@ import {
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
-import {
-  runtimeDiscoveryQueryOptions,
-  runtimeExecutableQueryOptions,
-} from "@/state/queries/runtime";
+import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
@@ -124,7 +122,7 @@ const createHookHarness = (
   queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);
   queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, EMPTY_BRANCHES);
   if (options?.prefillExecutableCheck !== false) {
-    for (const kind of ["opencode", "codex", "claude"] as const) {
+    for (const kind of knownRuntimeKindValues) {
       const path = initialSnapshot.agentRuntimes[kind].executablePath;
       queryClient.setQueryData(runtimeExecutableQueryOptions(kind, path).queryKey, {
         kind,
@@ -417,234 +415,6 @@ describe("useSettingsModalController", () => {
       expect(didSave).toBe(false);
       expect(harness.getLatest().saveError).toContain("Executable validation failed");
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-      await harness.unmount();
-    }
-  });
-
-  test("fails closed for rediscovery failure and clears the error only after a successful retry", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    const failedRediscovery = createDeferred<RuntimeExecutableCheck>();
-    const successfulRediscovery = createDeferred<RuntimeExecutableCheck>();
-    let discoveryAttempts = 0;
-    host.runtimeExecutablesCheck = mock(async (input) => {
-      if (input.mode === "validate") {
-        return {
-          runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
-            kind,
-            path: input.paths[kind],
-            ok: true,
-            version: "1.0.0",
-            error: null,
-          })),
-        };
-      }
-      discoveryAttempts += 1;
-      return discoveryAttempts === 1 ? failedRediscovery.promise : successfulRediscovery.promise;
-    });
-    saveSettingsSnapshot = mock(async () => {});
-    const harness = createHookHarness(true);
-    let rediscoveryRequest: Promise<void> | null = null;
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-
-      await harness.run((state) => {
-        rediscoveryRequest = state.checkRuntimeExecutablesAgain();
-      });
-      await harness.waitFor((state) => state.isLoadingRuntimeExecutables);
-      expect(
-        harness.queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus,
-      ).toBe("fetching");
-
-      let didSaveWhilePending = true;
-      await harness.run(async (state) => {
-        didSaveWhilePending = await state.submit();
-      });
-      expect(didSaveWhilePending).toBe(false);
-      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
-
-      await harness.run(() => {
-        failedRediscovery.reject(new Error("Runtime rediscovery failed"));
-      });
-      await rediscoveryRequest;
-      await harness.waitFor(
-        (state) => state.runtimeExecutablesError === "Runtime rediscovery failed",
-      );
-      expect(
-        harness.queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.status,
-      ).toBe("error");
-
-      let didSaveAfterFailure = true;
-      await harness.run(async (state) => {
-        didSaveAfterFailure = await state.submit();
-      });
-      expect(didSaveAfterFailure).toBe(false);
-      expect(harness.getLatest().saveError).toContain("Runtime rediscovery failed");
-      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
-
-      let retryRequest: Promise<void> | null = null;
-      await harness.run((state) => {
-        retryRequest = state.checkRuntimeExecutablesAgain();
-      });
-      await harness.waitFor((state) => state.isCheckingRuntimeExecutables);
-      expect(harness.getLatest().runtimeDiscoveryError).toBe("Runtime rediscovery failed");
-
-      await harness.run(() => {
-        successfulRediscovery.resolve({
-          runtimes: [
-            {
-              kind: "opencode",
-              path: "/new/opencode",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-            {
-              kind: "codex",
-              path: "/new/codex",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-            {
-              kind: "claude",
-              path: "/new/claude",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-          ],
-        });
-      });
-      await retryRequest;
-      await harness.waitFor(
-        (state) =>
-          state.runtimeExecutablesError === null &&
-          state.snapshotDraft?.agentRuntimes.opencode.executablePath === "/new/opencode",
-      );
-      expect(
-        harness.queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.status,
-      ).toBe("success");
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-      await harness.unmount();
-    }
-  });
-
-  test("ignores a rediscovery success from a closed Settings visit", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    const staleRediscovery = createDeferred<RuntimeExecutableCheck>();
-    host.runtimeExecutablesCheck = mock(async (input) => {
-      if (input.mode === "discover") return staleRediscovery.promise;
-      return {
-        runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
-          kind,
-          path: input.paths[kind],
-          ok: true,
-          version: "1.0.0",
-          error: null,
-        })),
-      };
-    });
-    const harness = createHookHarness(true);
-    let rediscoveryRequest: Promise<void> = Promise.resolve();
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-      await harness.run((state) => {
-        rediscoveryRequest = state.checkRuntimeExecutablesAgain();
-      });
-      await harness.waitFor((state) => state.isCheckingRuntimeExecutables);
-
-      await harness.update({ isOpen: false, shouldLoad: false });
-      await harness.update({ isOpen: true, shouldLoad: false });
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-      const wasCheckingInNewVisit = harness.getLatest().isCheckingRuntimeExecutables;
-
-      await harness.run(() => {
-        staleRediscovery.resolve({
-          runtimes: [
-            {
-              kind: "opencode",
-              path: "/stale/opencode",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-            {
-              kind: "codex",
-              path: "/stale/codex",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-            {
-              kind: "claude",
-              path: "/stale/claude",
-              ok: true,
-              version: "2.0.0",
-              error: null,
-            },
-          ],
-        });
-      });
-      await rediscoveryRequest;
-      await harness.waitFor((state) => !state.isCheckingRuntimeExecutables);
-
-      expect(harness.getLatest().snapshotDraft?.agentRuntimes.opencode.executablePath).toBe(
-        "/tools/opencode",
-      );
-      expect(wasCheckingInNewVisit).toBe(false);
-      expect(harness.getLatest().runtimeDiscoveryError).toBeNull();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-      await harness.unmount();
-    }
-  });
-
-  test("ignores a rediscovery failure from a closed Settings visit", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    const staleRediscovery = createDeferred<RuntimeExecutableCheck>();
-    host.runtimeExecutablesCheck = mock(async (input) => {
-      if (input.mode === "discover") return staleRediscovery.promise;
-      return {
-        runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
-          kind,
-          path: input.paths[kind],
-          ok: true,
-          version: "1.0.0",
-          error: null,
-        })),
-      };
-    });
-    const harness = createHookHarness(true);
-    let rediscoveryRequest: Promise<void> = Promise.resolve();
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-      await harness.run((state) => {
-        rediscoveryRequest = state.checkRuntimeExecutablesAgain();
-      });
-      await harness.waitFor((state) => state.isCheckingRuntimeExecutables);
-
-      await harness.update({ isOpen: false, shouldLoad: false });
-      await harness.update({ isOpen: true, shouldLoad: false });
-      await harness.waitFor((state) => state.snapshotDraft !== null);
-      const wasCheckingInNewVisit = harness.getLatest().isCheckingRuntimeExecutables;
-
-      await harness.run(() => {
-        staleRediscovery.reject(new Error("Stale runtime discovery failed"));
-      });
-      await rediscoveryRequest;
-
-      expect(harness.getLatest().runtimeDiscoveryError).toBeNull();
-      expect(harness.getLatest().runtimeExecutablesError).toBeNull();
-      expect(wasCheckingInNewVisit).toBe(false);
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();

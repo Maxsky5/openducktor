@@ -1,9 +1,4 @@
-import type {
-  AgentRuntimes,
-  RuntimeDescriptor,
-  RuntimeExecutableCheckResult,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,13 +8,25 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import { type ReactElement, type RefObject, useState } from "react";
-import { createPortal } from "react-dom";
-import { WorkspaceCreationForm } from "@/components/features/repository/workspace-creation-form";
+import type { ReactElement, RefObject } from "react";
+import {
+  FolderPickerCancelAction,
+  FolderPickerConfirmAction,
+} from "@/components/features/repository/folder-picker-actions";
+import {
+  InlineFolderPickerContent,
+  useInlineFolderPickerController,
+} from "@/components/features/repository/inline-folder-picker";
+import {
+  useWorkspaceCreation,
+  WorkspaceCreationFields,
+  WorkspaceCreationSubmitAction,
+} from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 const SETUP_STEPS = [
@@ -99,7 +106,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
 type RuntimeStageProps = {
   runtimeDraft: AgentRuntimes | null;
   definitions: RuntimeDescriptor[];
-  results: RuntimeExecutableCheckResult[];
+  results: RuntimeExecutableValidationResult[];
   requestError: string | null;
   discoveryError: string | null;
   stageError: string | null;
@@ -288,8 +295,18 @@ export function WorkspaceStage({
   isFinalizing,
   onBack,
 }: WorkspaceStageProps): ReactElement {
-  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
-  const [footerElement, setFooterElement] = useState<HTMLDivElement | null>(null);
+  const workspaceCreation = useWorkspaceCreation({
+    workspaces,
+    addWorkspace,
+    disabled: isFinalizing,
+    initialPickerOpen: true,
+  });
+  const folderPicker = useInlineFolderPickerController({
+    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : {}),
+    requireGitRepo: true,
+    onCancel: workspaceCreation.closePicker,
+    onConfirm: workspaceCreation.confirmRepo,
+  });
 
   return (
     <Card className="overflow-hidden shadow-sm">
@@ -306,25 +323,14 @@ export function WorkspaceStage({
         className="bg-muted/20 px-6 py-5 sm:px-9 sm:py-6"
       >
         <div className="relative rounded-xl border border-border bg-card p-4 sm:p-5">
-          <WorkspaceCreationForm
-            workspaces={workspaces}
-            addWorkspace={addWorkspace}
-            disabled={isFinalizing}
-            repositoryPicker="inline"
-            onSubmittingChange={setIsCreatingWorkspace}
-            renderActions={({ primaryAction, secondaryAction }) =>
-              footerElement
-                ? createPortal(
-                    <div
-                      data-testid="onboarding-workspace-actions"
-                      className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end"
-                    >
-                      {secondaryAction}
-                      {primaryAction}
-                    </div>,
-                    footerElement,
-                  )
-                : null
+          <WorkspaceCreationFields
+            controller={workspaceCreation}
+            picker={
+              <InlineFolderPickerContent
+                controller={folderPicker}
+                title="Repository browser"
+                description="Choose an existing Git repository on disk."
+              />
             }
           />
           {isFinalizing ? (
@@ -341,19 +347,36 @@ export function WorkspaceStage({
         </div>
       </CardContent>
       <div
-        ref={setFooterElement}
         data-testid="onboarding-workspace-footer"
         className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:items-center sm:px-9"
       >
         <Button
           type="button"
           variant="outline"
-          disabled={isCreatingWorkspace || isFinalizing}
+          disabled={workspaceCreation.submitting || isFinalizing}
           onClick={onBack}
         >
           <ArrowLeft data-icon="inline-start" />
           Back to coding agents
         </Button>
+        <div
+          data-testid="onboarding-workspace-actions"
+          className="flex flex-col gap-3 sm:ml-auto sm:flex-row sm:items-center sm:justify-end"
+        >
+          {workspaceCreation.pickerOpen ? (
+            <>
+              {workspaceCreation.repoPath ? (
+                <FolderPickerCancelAction controller={folderPicker} />
+              ) : null}
+              <FolderPickerConfirmAction
+                controller={folderPicker}
+                confirmLabel="Choose This Folder"
+              />
+            </>
+          ) : (
+            <WorkspaceCreationSubmitAction controller={workspaceCreation} />
+          )}
+        </div>
       </div>
     </Card>
   );

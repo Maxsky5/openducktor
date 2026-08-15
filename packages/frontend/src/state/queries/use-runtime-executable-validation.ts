@@ -3,14 +3,16 @@ import type {
   RuntimeExecutableCheckResult,
   RuntimeKind,
 } from "@openducktor/contracts";
+import { knownRuntimeKindValues } from "@openducktor/contracts";
 import { useQueries } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { runtimeExecutableQueryOptions } from "./runtime";
 
-const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
+export type RuntimeExecutableValidationResult = RuntimeExecutableCheckResult & {
+  requestedPath: string;
+};
 
 export type RuntimeExecutableValidationState = {
-  results: RuntimeExecutableCheckResult[];
+  results: RuntimeExecutableValidationResult[];
   checkingRuntimeKinds: RuntimeKind[];
   error: Error | null;
   refetch: () => Promise<void>;
@@ -20,23 +22,21 @@ export const useRuntimeExecutableValidation = (
   runtimes: AgentRuntimes | null,
   enabled: boolean,
 ): RuntimeExecutableValidationState => {
+  const inputs = knownRuntimeKindValues.map((kind) => ({
+    kind,
+    path: runtimes?.[kind].executablePath ?? "",
+  }));
   const queries = useQueries({
-    queries: RUNTIME_KINDS.map((kind) => ({
-      ...runtimeExecutableQueryOptions(kind, runtimes?.[kind].executablePath ?? ""),
+    queries: inputs.map(({ kind, path }) => ({
+      ...runtimeExecutableQueryOptions(kind, path),
       enabled: enabled && runtimes !== null,
     })),
   });
-  const opencodeResult = queries[0]?.data;
-  const codexResult = queries[1]?.data;
-  const claudeResult = queries[2]?.data;
-  const results = useMemo(
-    () =>
-      [opencodeResult, codexResult, claudeResult].filter(
-        (result): result is RuntimeExecutableCheckResult => result !== undefined,
-      ),
-    [claudeResult, codexResult, opencodeResult],
-  );
-  const checkingRuntimeKinds = RUNTIME_KINDS.filter((_, index) => {
+  const results = inputs.flatMap(({ path }, index) => {
+    const result = queries[index]?.data;
+    return result ? [{ ...result, requestedPath: path }] : [];
+  });
+  const checkingRuntimeKinds = knownRuntimeKindValues.filter((_, index) => {
     const query = queries[index];
     return query?.isPending || query?.isFetching;
   });

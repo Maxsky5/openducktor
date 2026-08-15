@@ -1,11 +1,15 @@
-import type { AgentRuntimes, RuntimeKind } from "@openducktor/contracts";
+import {
+  type AgentRuntimes,
+  knownRuntimeKindValues,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { replaceRuntimeExecutablePaths } from "@/components/features/settings/runtime-executable-draft";
-import { invalidEnabledRuntime } from "@/components/features/settings/runtime-executable-validation";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { replaceRuntimeExecutablePaths } from "@/state/operations/runtime-executables/runtime-executable-draft";
+import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
@@ -13,8 +17,6 @@ import {
 import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { RuntimeStageActivity } from "./onboarding-stages";
-
-const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
 
 const runtimeStageActivity = ({
   isLoading,
@@ -69,7 +71,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
       const current = currentOverride ?? savedAgentRuntimes;
       if (!current) return currentOverride;
       let next = current;
-      for (const kind of RUNTIME_KINDS) {
+      for (const kind of knownRuntimeKindValues) {
         const result = resultsByKind.get(kind);
         if (result?.ok !== true) continue;
         const shouldEnable =
@@ -94,7 +96,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
 
   const updateDraft = (next: AgentRuntimes): void => {
     if (runtimeDraft) {
-      for (const kind of RUNTIME_KINDS) {
+      for (const kind of knownRuntimeKindValues) {
         if (next[kind].enabled !== runtimeDraft[kind].enabled) {
           explicitRuntimeChoices.current.add(kind);
         }
@@ -115,7 +117,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
       if (runtimeDraft) {
         const rows = new Map(checked.runtimes.map((row) => [row.kind, row]));
         let nextDraft = replaceRuntimeExecutablePaths(runtimeDraft, checked.runtimes);
-        for (const kind of RUNTIME_KINDS) {
+        for (const kind of knownRuntimeKindValues) {
           if (explicitRuntimeChoices.current.has(kind)) continue;
           nextDraft = {
             ...nextDraft,
@@ -185,7 +187,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
     : 0;
   const showNoRuntimeWarning =
-    checkResults.length === RUNTIME_KINDS.length &&
+    checkResults.length === knownRuntimeKindValues.length &&
     !validationPending &&
     validEnabledRuntimeCount === 0;
   const continueDisabled =

@@ -13,21 +13,17 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
-import { errorMessage } from "@/lib/errors";
 import {
   ChecksStateContext,
   useRequiredContext,
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { runtimeDiscoveryQueryOptions } from "@/state/queries/runtime";
-import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
-import { replaceRuntimeExecutablePaths } from "./runtime-executable-draft";
-import { invalidEnabledRuntime } from "./runtime-executable-validation";
+import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
+import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -46,6 +42,7 @@ import type { RuntimeAvailabilityValidationState } from "./use-settings-modal-ru
 import { useSettingsModalRuntimeValidation } from "./use-settings-modal-runtime-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
+import { useSettingsRuntimeExecutableSetup } from "./use-settings-runtime-executable-setup";
 
 export type SettingsModalController = {
   isLoadingSettings: boolean;
@@ -58,6 +55,7 @@ export type SettingsModalController = {
   runtimeDefinitionsError: string | null;
   runtimeExecutablesError: string | null;
   runtimeDiscoveryError: string | null;
+  runtimeExecutableValidation: RuntimeExecutableValidationState;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -153,7 +151,6 @@ export const useSettingsModalController = ({
   workspaceSelectionPolicy,
   onRuntimeAvailabilityError,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
-  const queryClient = useQueryClient();
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
   const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
   const {
@@ -231,40 +228,15 @@ export const useSettingsModalController = ({
         : [],
     [runtimeDefinitions, snapshotDraft],
   );
-  const runtimeExecutableValidation = useRuntimeExecutableValidation(
-    snapshotDraft?.agentRuntimes ?? null,
+  const runtimeExecutableSetup = useSettingsRuntimeExecutableSetup({
     open,
-  );
-  const runtimeDiscoveryInFlight = useRef(false);
-  const runtimeDiscoveryVisit = useRef(0);
-  const [isCheckingRuntimeExecutables, setIsCheckingRuntimeExecutables] = useState(false);
-  const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
-  useEffect(() => {
-    const visit = runtimeDiscoveryVisit.current + 1;
-    runtimeDiscoveryVisit.current = visit;
-    if (!open) {
-      runtimeDiscoveryInFlight.current = false;
-      setIsCheckingRuntimeExecutables(false);
-      setRuntimeDiscoveryError(null);
-      void queryClient.cancelQueries({
-        queryKey: runtimeDiscoveryQueryOptions().queryKey,
-        exact: true,
-      });
-    }
-    return () => {
-      if (runtimeDiscoveryVisit.current === visit) {
-        runtimeDiscoveryVisit.current += 1;
-      }
-    };
-  }, [open, queryClient]);
-  const isLoadingRuntimeExecutables =
-    open &&
-    snapshotDraft !== null &&
-    (runtimeExecutableValidation.checkingRuntimeKinds.length > 0 || isCheckingRuntimeExecutables);
-  const runtimeExecutableValidationError = runtimeExecutableValidation.error
-    ? errorMessage(runtimeExecutableValidation.error)
-    : null;
-  const runtimeExecutablesError = runtimeDiscoveryError ?? runtimeExecutableValidationError;
+    runtimes: snapshotDraft?.agentRuntimes ?? null,
+  });
+  const runtimeExecutableValidation = runtimeExecutableSetup.validation;
+  const isLoadingRuntimeExecutables = runtimeExecutableSetup.isLoading;
+  const isCheckingRuntimeExecutables = runtimeExecutableSetup.isCheckingDiscovery;
+  const runtimeDiscoveryError = runtimeExecutableSetup.discoveryError;
+  const runtimeExecutablesError = runtimeExecutableSetup.error;
   const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
   const catalogRuntimeKinds = useMemo(
     () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
@@ -475,32 +447,10 @@ export const useSettingsModalController = ({
     markDirty,
     draftActions,
   });
-  const checkRuntimeExecutablesAgain = useCallback(async (): Promise<void> => {
-    if (runtimeDiscoveryInFlight.current) {
-      return;
-    }
-
-    const visit = runtimeDiscoveryVisit.current;
-    runtimeDiscoveryInFlight.current = true;
-    setIsCheckingRuntimeExecutables(true);
-    try {
-      const discovered = await queryClient.fetchQuery(runtimeDiscoveryQueryOptions());
-      if (runtimeDiscoveryVisit.current !== visit) {
-        return;
-      }
-      updateAgentRuntimes((current) => replaceRuntimeExecutablePaths(current, discovered.runtimes));
-      setRuntimeDiscoveryError(null);
-    } catch (error) {
-      if (runtimeDiscoveryVisit.current === visit) {
-        setRuntimeDiscoveryError(errorMessage(error));
-      }
-    } finally {
-      if (runtimeDiscoveryVisit.current === visit) {
-        runtimeDiscoveryInFlight.current = false;
-        setIsCheckingRuntimeExecutables(false);
-      }
-    }
-  }, [queryClient, updateAgentRuntimes]);
+  const checkRuntimeExecutablesAgain = useCallback(
+    () => runtimeExecutableSetup.checkAgain(updateAgentRuntimes),
+    [runtimeExecutableSetup.checkAgain, updateAgentRuntimes],
+  );
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
     selectedRepoPath: selectedWorkspaceRepoPath,
@@ -523,6 +473,7 @@ export const useSettingsModalController = ({
     runtimeDefinitionsError,
     runtimeExecutablesError,
     runtimeDiscoveryError,
+    runtimeExecutableValidation,
     saveError,
     snapshotDraft,
     runtimeDefinitions,

@@ -96,6 +96,7 @@ describe("settings runtime availability validation", () => {
         {
           kind: "opencode",
           path: "/bin/opencode",
+          requestedPath: "/bin/opencode",
           ok: false,
           version: null,
           error: "Executable does not exist: /bin/opencode",
@@ -103,6 +104,7 @@ describe("settings runtime availability validation", () => {
         {
           kind: "codex",
           path: "",
+          requestedPath: "",
           ok: false,
           version: null,
           error: "Executable path is empty.",
@@ -124,6 +126,7 @@ describe("settings runtime availability validation", () => {
         {
           kind: "opencode",
           path: "/previous/opencode",
+          requestedPath: "/previous/opencode",
           ok: true,
           version: "1.0.0",
           error: null,

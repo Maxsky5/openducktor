@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber, Option } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -128,5 +128,58 @@ describe("runtime executable check service", () => {
         error: null,
       },
     ]);
+  });
+
+  test("checks independent runtimes concurrently and preserves definition order", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const allStarted = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const startedKinds: RuntimeKind[] = [];
+        const concurrentRuntimeHealth: RuntimeHealthPort = {
+          getRuntimeHealth(kind, executablePath) {
+            return Effect.gen(function* () {
+              startedKinds.push(kind);
+              if (startedKinds.length === 3) {
+                yield* Deferred.succeed(allStarted, undefined);
+              }
+              yield* Deferred.await(release);
+              return {
+                kind,
+                enabled: true,
+                ok: true,
+                executablePath,
+                version: `${kind} 1.0.0`,
+                error: null,
+              } satisfies RuntimeHealth;
+            });
+          },
+        };
+        const concurrentService = createRuntimeExecutableCheckService({
+          runtimeDefinitionsService: createRuntimeDefinitionsService(),
+          runtimeHealth: concurrentRuntimeHealth,
+          toolDiscovery: {
+            ...toolDiscovery,
+            discoverTool(toolId) {
+              return Effect.succeed({
+                displayLabel: "System PATH",
+                path: paths[toolId as RuntimeKind],
+                sourceCategory: "system_path",
+              });
+            },
+          },
+        });
+        const checkFiber = yield* Effect.fork(concurrentService.check({ mode: "discover" }));
+        const startedTogether = yield* Deferred.await(allStarted).pipe(
+          Effect.timeoutOption("250 millis"),
+        );
+        yield* Deferred.succeed(release, undefined);
+        const checked = yield* Fiber.join(checkFiber);
+        return { checked, startedTogether };
+      }),
+    );
+
+    expect(Option.isSome(result.startedTogether)).toBeTrue();
+    expect(result.checked.runtimes.map((row) => row.kind)).toEqual(["opencode", "codex", "claude"]);
   });
 });

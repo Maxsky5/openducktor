@@ -53,7 +53,7 @@ export const runtimeExecutableQueryOptions = (kind: RuntimeKind, path: string) =
       });
       const result = checked.runtimes.find((row) => row.kind === kind);
       if (!result) throw new Error(`Runtime executable check did not return ${kind}.`);
-      return { ...result, path };
+      return result;
     },
     staleTime: 30_000,
   });

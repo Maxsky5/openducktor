@@ -24,6 +24,12 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   runtimeDefinitionsError: null,
   runtimeExecutablesError: null,
   runtimeDiscoveryError: null,
+  runtimeExecutableValidation: {
+    results: [],
+    checkingRuntimeKinds: [],
+    error: null,
+    refetch: async () => {},
+  },
   saveError: null,
   snapshotDraft: snapshot,
   runtimeDefinitions: [],

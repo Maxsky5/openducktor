@@ -25,7 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
-import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { RuntimeExecutablePanel } from "./runtime-executable-panel";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
@@ -42,6 +42,7 @@ type AgentRuntimesSectionProps = {
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   runtimeDiscoveryError: string | null;
+  executableValidation: RuntimeExecutableValidationState;
   onRetryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   onCheckAgain: () => Promise<void>;
   isCheckingExecutables: boolean;
@@ -713,6 +714,7 @@ export function AgentRuntimesSection({
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
   runtimeDiscoveryError,
+  executableValidation,
   onRetryRuntimeDefinitions,
   onCheckAgain,
   isCheckingExecutables,
@@ -730,7 +732,6 @@ export function AgentRuntimesSection({
   const requestedRuntimeKind = focusRequest?.runtimeKind ?? null;
   const effectiveSelectedRuntimeKind =
     requestedRuntimeKind ?? (selectedRuntimeKind || lastFocusedRuntimeKind.current);
-  const executableValidation = useRuntimeExecutableValidation(agentRuntimes, true);
   const executableQueryError = executableValidation.error
     ? errorMessage(executableValidation.error)
     : null;

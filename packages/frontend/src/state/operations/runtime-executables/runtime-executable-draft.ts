@@ -1,10 +1,9 @@
-import type {
-  AgentRuntimes,
-  RuntimeExecutableCheckResult,
-  RuntimeKind,
+import {
+  type AgentRuntimes,
+  knownRuntimeKindValues,
+  type RuntimeExecutableCheckResult,
+  type RuntimeKind,
 } from "@openducktor/contracts";
-
-const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
 
 export const replaceRuntimeExecutablePaths = (
   runtimes: AgentRuntimes,
@@ -15,7 +14,7 @@ export const replaceRuntimeExecutablePaths = (
   );
   let next = runtimes;
 
-  for (const kind of RUNTIME_KINDS) {
+  for (const kind of knownRuntimeKindValues) {
     const executablePath = resultsByKind.get(kind)?.path ?? "";
     if (next[kind].executablePath === executablePath) continue;
     next = {

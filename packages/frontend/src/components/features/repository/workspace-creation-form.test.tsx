@@ -5,7 +5,14 @@ import { type ReactElement, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
-import { WorkspaceCreationForm } from "./workspace-creation-form";
+import { FolderPickerCancelAction, FolderPickerConfirmAction } from "./folder-picker-actions";
+import { InlineFolderPickerContent, useInlineFolderPickerController } from "./inline-folder-picker";
+import {
+  useWorkspaceCreation,
+  WorkspaceCreationFields,
+  WorkspaceCreationForm,
+  WorkspaceCreationSubmitAction,
+} from "./workspace-creation-form";
 
 const mountedViews = new Set<ReturnType<typeof render>>();
 afterEach(() => {
@@ -29,10 +36,8 @@ function SeedFilesystemDirectory(): ReactElement | null {
 
 function InlineWorkspaceCreationForm({
   addWorkspace,
-  composeActions = false,
 }: {
   addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
-  composeActions?: boolean;
 }): ReactElement | null {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
@@ -47,23 +52,54 @@ function InlineWorkspaceCreationForm({
     setReady(true);
   }, [queryClient]);
   if (!ready) return null;
+  return <ReadyInlineWorkspaceCreationForm addWorkspace={addWorkspace} />;
+}
+
+function ReadyInlineWorkspaceCreationForm({
+  addWorkspace,
+}: {
+  addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
+}): ReactElement {
+  const workspaceCreation = useWorkspaceCreation({
+    workspaces: [],
+    addWorkspace,
+    initialPickerOpen: true,
+  });
+  const folderPicker = useInlineFolderPickerController({
+    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : {}),
+    requireGitRepo: true,
+    onCancel: workspaceCreation.closePicker,
+    onConfirm: workspaceCreation.confirmRepo,
+  });
   return (
-    <WorkspaceCreationForm
-      workspaces={[]}
-      addWorkspace={addWorkspace}
-      repositoryPicker="inline"
-      {...(composeActions
-        ? {
-            renderActions: ({ primaryAction, secondaryAction }) => (
-              <div data-testid="workspace-actions">
-                <button type="button">Back to coding agents</button>
-                {secondaryAction}
-                {primaryAction}
-              </div>
-            ),
-          }
-        : {})}
-    />
+    <>
+      <WorkspaceCreationFields
+        controller={workspaceCreation}
+        picker={
+          <InlineFolderPickerContent
+            controller={folderPicker}
+            title="Repository browser"
+            description="Choose an existing Git repository on disk."
+          />
+        }
+      />
+      <div data-testid="workspace-actions">
+        <button type="button">Back to coding agents</button>
+        {workspaceCreation.pickerOpen ? (
+          <>
+            {workspaceCreation.repoPath ? (
+              <FolderPickerCancelAction controller={folderPicker} />
+            ) : null}
+            <FolderPickerConfirmAction
+              controller={folderPicker}
+              confirmLabel="Choose This Folder"
+            />
+          </>
+        ) : (
+          <WorkspaceCreationSubmitAction controller={workspaceCreation} />
+        )}
+      </div>
+    </>
   );
 }
 
@@ -132,7 +168,7 @@ describe("WorkspaceCreationForm", () => {
     const addWorkspace = mock(async () => {});
     const view = render(
       <QueryProvider useIsolatedClient>
-        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} composeActions />
+        <InlineWorkspaceCreationForm addWorkspace={addWorkspace} />
       </QueryProvider>,
     );
     mountedViews.add(view);

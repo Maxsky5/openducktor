@@ -11,7 +11,6 @@ import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { host } from "@/state/operations/host";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
 enableReactActEnvironment();
@@ -35,6 +34,12 @@ const runtimeDefinitionRequestProps = {
   onRetryRuntimeDefinitions: async () => [],
   onCheckAgain: async () => {},
   isCheckingExecutables: false,
+  executableValidation: {
+    results: [],
+    checkingRuntimeKinds: [],
+    error: null,
+    refetch: async () => {},
+  },
 };
 
 const createSection = (
@@ -100,31 +105,33 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("shows runtime executable request failures and retries them", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    let attempts = 0;
-    host.runtimeExecutablesCheck = mock(async (input) => {
-      attempts += 1;
-      if (attempts === 1) throw new Error("Executable request failed");
-      if (input.mode !== "validate") throw new Error("Expected path validation");
-      return {
-        runtimes: (["opencode", "codex", "claude"] as const).map((kind) => ({
-          kind,
-          path: input.paths[kind],
-          ok: false,
-          version: null,
-          error: `${kind} is unavailable`,
-        })),
-      };
-    });
-    const renderer = render(createSection());
+    const refetch = mock(async () => {});
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        executableValidation: {
+          results: [],
+          checkingRuntimeKinds: [],
+          error: new Error("Executable request failed"),
+          refetch,
+        },
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
 
     try {
-      await screen.findByText(/Failed to check runtime executables: Executable request failed/i);
+      expect(
+        screen.getByText(/Failed to check runtime executables: Executable request failed/i),
+      ).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Retry executable check" }));
-      await waitFor(() => expect(attempts).toBe(4));
-      await waitFor(() => expect(screen.queryByText(/Executable request failed/i)).toBeNull());
+      await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
     } finally {
-      host.runtimeExecutablesCheck = originalCheck;
       renderer.unmount();
     }
   });
@@ -271,21 +278,22 @@ describe("AgentRuntimesSection", () => {
   });
 
   test("shows only the version and aligns Check again with the runtime status", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => ({
-      runtimes: [
-        {
-          kind: "opencode" as const,
-          path: "/opt/homebrew/bin/opencode",
-          ok: true,
-          version: "1.18.9",
-          error: null,
-        },
-      ],
-    }));
     const renderer = render(
       createElement(AgentRuntimesSection, {
         ...runtimeDefinitionRequestProps,
+        executableValidation: {
+          ...runtimeDefinitionRequestProps.executableValidation,
+          results: [
+            {
+              kind: "opencode" as const,
+              path: "/opt/homebrew/bin/opencode",
+              requestedPath: "/opt/homebrew/bin/opencode",
+              ok: true,
+              version: "1.18.9",
+              error: null,
+            },
+          ],
+        },
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
           opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
@@ -306,7 +314,6 @@ describe("AgentRuntimesSection", () => {
       expect(statusRow).toBeTruthy();
       expect(statusRow?.contains(screen.getByRole("button", { name: "Check again" }))).toBe(true);
     } finally {
-      host.runtimeExecutablesCheck = originalCheck;
       renderer.unmount();
     }
   });

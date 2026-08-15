@@ -32,6 +32,39 @@ const invalidRow = (
   error: errorMessage(error),
 });
 
+const checkRuntimeExecutable = ({
+  input,
+  kind,
+  runtimeHealth,
+  toolDiscovery,
+}: {
+  input: RuntimeExecutableCheckInput;
+  kind: RuntimeKind;
+  runtimeHealth: RuntimeHealthPort;
+  toolDiscovery: ToolDiscoveryPort;
+}) =>
+  Effect.gen(function* () {
+    const suppliedPath = input.mode === "validate" ? (input.paths[kind] ?? "") : "";
+    const resolution = yield* Effect.either(
+      input.mode === "discover"
+        ? discoverToolFresh(toolDiscovery, kind)
+        : validateExactToolPath(toolDiscovery, kind, suppliedPath),
+    );
+    if (resolution._tag === "Left") {
+      return invalidRow(kind, suppliedPath, resolution.left);
+    }
+
+    const executablePath = resolution.right.path;
+    const health = yield* runtimeHealth.getRuntimeHealth(kind, executablePath);
+    return {
+      kind,
+      path: health.executablePath ?? executablePath,
+      ok: health.ok,
+      version: health.version,
+      error: health.error ?? null,
+    } satisfies RuntimeExecutableCheckResult;
+  });
+
 export const createRuntimeExecutableCheckService = ({
   runtimeDefinitionsService,
   runtimeHealth,
@@ -52,31 +85,20 @@ export const createRuntimeExecutableCheckService = ({
             cause,
           }),
       });
-      const runtimes: RuntimeExecutableCheckResult[] = [];
-      for (const definition of definitions) {
-        const kind = definition.kind;
-        if (input.mode === "validate" && !Object.hasOwn(input.paths, kind)) continue;
-        const suppliedPath = input.mode === "validate" ? (input.paths[kind] ?? "") : "";
-        const resolution = yield* Effect.either(
-          input.mode === "discover"
-            ? discoverToolFresh(toolDiscovery, kind)
-            : validateExactToolPath(toolDiscovery, kind, suppliedPath),
-        );
-        if (resolution._tag === "Left") {
-          runtimes.push(invalidRow(kind, suppliedPath, resolution.left));
-          continue;
-        }
-
-        const executablePath = resolution.right.path;
-        const health = yield* runtimeHealth.getRuntimeHealth(kind, executablePath);
-        runtimes.push({
-          kind,
-          path: health.executablePath ?? executablePath,
-          ok: health.ok,
-          version: health.version,
-          error: health.error ?? null,
-        });
-      }
+      const definitionsToCheck = definitions.filter(
+        (definition) => input.mode === "discover" || Object.hasOwn(input.paths, definition.kind),
+      );
+      const runtimes = yield* Effect.forEach(
+        definitionsToCheck,
+        (definition) =>
+          checkRuntimeExecutable({
+            input,
+            kind: definition.kind,
+            runtimeHealth,
+            toolDiscovery,
+          }),
+        { concurrency: 3 },
+      );
       return { runtimes };
     });
   },

@@ -56,6 +56,7 @@ export function SettingsModalContent({
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
     runtimeDiscoveryError,
+    runtimeExecutableValidation,
     retryRuntimeDefinitions,
     checkRuntimeExecutablesAgain,
     isCheckingRuntimeExecutables,
@@ -146,6 +147,7 @@ export function SettingsModalContent({
         isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
         runtimeDefinitionsError={runtimeDefinitionsError}
         runtimeDiscoveryError={runtimeDiscoveryError}
+        executableValidation={runtimeExecutableValidation}
         onRetryRuntimeDefinitions={retryRuntimeDefinitions}
         onCheckAgain={checkRuntimeExecutablesAgain}
         isCheckingExecutables={isCheckingRuntimeExecutables}

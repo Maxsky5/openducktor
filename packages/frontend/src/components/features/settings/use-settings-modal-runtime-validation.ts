@@ -1,10 +1,7 @@
-import type {
-  RuntimeDescriptor,
-  RuntimeExecutableCheckResult,
-  SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { RuntimeDescriptor, SettingsSnapshot } from "@openducktor/contracts";
 import { useMemo } from "react";
-import { runtimeExecutableResultForPath } from "./runtime-executable-validation";
+import { runtimeExecutableResultForPath } from "@/state/operations/runtime-executables/runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 
 export type RuntimeAvailabilityValidationState = {
   runtimeExecutableErrors: string[];
@@ -23,7 +20,7 @@ export const buildRuntimeAvailabilityValidationState = ({
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot;
-  runtimeExecutableResults?: RuntimeExecutableCheckResult[];
+  runtimeExecutableResults?: RuntimeExecutableValidationResult[];
 }): RuntimeAvailabilityValidationState => {
   if (runtimeDefinitions.length === 0) {
     return EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE;
@@ -54,7 +51,7 @@ export const useSettingsModalRuntimeValidation = ({
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot | null;
-  runtimeExecutableResults?: RuntimeExecutableCheckResult[];
+  runtimeExecutableResults?: RuntimeExecutableValidationResult[];
 }): RuntimeAvailabilityValidationState => {
   return useMemo(() => {
     if (!snapshotDraft) {

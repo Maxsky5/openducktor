@@ -1,9 +1,4 @@
-import type {
-  AgentRuntimes,
-  RuntimeDescriptor,
-  RuntimeExecutableCheckResult,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
@@ -14,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { runtimeExecutableResultForPath } from "./runtime-executable-validation";
+import { runtimeExecutableResultForPath } from "@/state/operations/runtime-executables/runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 
 type RuntimeExecutablePanelProps = {
   runtimes: AgentRuntimes;
   definitions: RuntimeDescriptor[];
-  results: RuntimeExecutableCheckResult[];
+  results: RuntimeExecutableValidationResult[];
   disabled?: boolean;
   isChecking?: boolean;
   checkingRuntimeKinds?: readonly RuntimeKind[];
@@ -42,7 +38,7 @@ const executableDirectory = (executablePath: string): string | undefined => {
 };
 
 type RuntimeStatusProps = {
-  result: RuntimeExecutableCheckResult | undefined;
+  result: RuntimeExecutableValidationResult | undefined;
   isChecking: boolean;
   showInvalidState: boolean;
   enabled: boolean;
