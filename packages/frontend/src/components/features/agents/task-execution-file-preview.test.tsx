@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
+import type {
+  WorkspaceTextFileReadResult,
+  WorkspaceTextFileWriteResult,
+} from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import { getFiletypeFromFileName } from "@pierre/diffs";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -14,6 +17,7 @@ import {
 import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
 
@@ -130,6 +134,20 @@ const textFileResult = (
   size: contents.length,
   mtimeMs: 1_760_000_000_000,
   revision: `revision:${contents}`,
+});
+
+const textFileWriteResult = (
+  selectedFile: TaskExecutionSelectedFile,
+  contents: string,
+  revision: string,
+): WorkspaceTextFileWriteResult => ({
+  kind: "text",
+  rootPath: selectedFile.rootPath,
+  relativePath: selectedFile.relativePath,
+  contents,
+  size: contents.length,
+  mtimeMs: 1_760_000_000_001,
+  revision,
 });
 
 function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
@@ -670,11 +688,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
   });
 
   test("suppresses duplicate Save input while one write is pending", async () => {
-    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
-    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
-      resolveWrite = resolve;
-    });
-    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const pendingWrite = createDeferred<WorkspaceTextFileWriteResult>();
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite.promise);
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
@@ -697,26 +712,15 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(pendingSaveButton.getAttribute("aria-busy")).toBe("true");
     expect(pendingSaveButton.disabled).toBe(true);
     await act(async () => {
-      resolveWrite({
-        kind: "text",
-        rootPath: "/repo",
-        relativePath: "src/first.ts",
-        contents: "draft",
-        size: 5,
-        mtimeMs: 1_760_000_000_001,
-        revision: "revision-2",
-      });
-      await pendingWrite;
+      pendingWrite.resolve(textFileWriteResult(firstFile, "draft", "revision-2"));
+      await pendingWrite.promise;
     });
     await waitForCleanFile();
   });
 
   test("keeps pending Save feedback when the draft returns to the old baseline", async () => {
-    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
-    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
-      resolveWrite = resolve;
-    });
-    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const pendingWrite = createDeferred<WorkspaceTextFileWriteResult>();
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite.promise);
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
@@ -746,16 +750,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(writeTextFileMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      resolveWrite({
-        kind: "text",
-        rootPath: "/repo",
-        relativePath: "src/first.ts",
-        contents: "draft",
-        size: 5,
-        mtimeMs: 1_760_000_000_001,
-        revision: "revision-2",
-      });
-      await pendingWrite;
+      pendingWrite.resolve(textFileWriteResult(firstFile, "draft", "revision-2"));
+      await pendingWrite.promise;
     });
 
     await waitForDirtyFile();
@@ -765,13 +761,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
   });
 
   test("clears pending Save feedback after a failed write at the old baseline", async () => {
-    let rejectWrite!: (cause: Error) => void;
-    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>(
-      (_resolve, reject) => {
-        rejectWrite = reject;
-      },
-    );
-    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const pendingWrite = createDeferred<WorkspaceTextFileWriteResult>();
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite.promise);
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
@@ -792,8 +783,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.getByRole("status", { name: "Unsaved changes" })).toBeTruthy();
 
     await act(async () => {
-      rejectWrite(new Error("Permission denied while saving this file."));
-      await pendingWrite.catch(() => undefined);
+      pendingWrite.reject(new Error("Permission denied while saving this file."));
+      await pendingWrite.promise.catch(() => undefined);
     });
 
     expect((await screen.findByRole("alert")).textContent).toContain("Permission denied");
@@ -805,11 +796,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
   });
 
   test("keeps text entered during Save dirty against the returned revision", async () => {
-    let resolveWrite!: (value: Awaited<ReturnType<typeof writeTextFileMock>>) => void;
-    const pendingWrite = new Promise<Awaited<ReturnType<typeof writeTextFileMock>>>((resolve) => {
-      resolveWrite = resolve;
-    });
-    writeTextFileMock.mockImplementationOnce(() => pendingWrite);
+    const pendingWrite = createDeferred<WorkspaceTextFileWriteResult>();
+    writeTextFileMock.mockImplementationOnce(() => pendingWrite.promise);
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
@@ -825,16 +813,8 @@ describe("TaskExecutionSelectedFilePreview", () => {
       latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "newer draft" });
     });
     await act(async () => {
-      resolveWrite({
-        kind: "text",
-        rootPath: "/repo",
-        relativePath: "src/first.ts",
-        contents: "first draft",
-        size: 11,
-        mtimeMs: 1_760_000_000_001,
-        revision: "revision-2",
-      });
-      await pendingWrite;
+      pendingWrite.resolve(textFileWriteResult(firstFile, "first draft", "revision-2"));
+      await pendingWrite.promise;
     });
 
     await waitForDirtyFile();

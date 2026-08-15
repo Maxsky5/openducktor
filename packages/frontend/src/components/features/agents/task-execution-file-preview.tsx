@@ -350,23 +350,23 @@ function FileDiscardDialog({
   onDiscard: () => void;
   onReturnFocus: () => void;
 }): ReactElement {
-  const shouldReturnFocusRef = useRef(false);
-  const keepEditing = useCallback(() => {
-    shouldReturnFocusRef.current = true;
+  const shouldRestoreEditorFocusRef = useRef(false);
+  const keepEditing = (): void => {
+    shouldRestoreEditorFocusRef.current = true;
     onKeepEditing();
-  }, [onKeepEditing]);
-  const discard = useCallback(() => {
-    shouldReturnFocusRef.current = false;
+  };
+  const discard = (): void => {
+    shouldRestoreEditorFocusRef.current = false;
     onDiscard();
-  }, [onDiscard]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && keepEditing()}>
       <DialogContent
         closeButton={null}
         onCloseAutoFocus={(event) => {
-          if (!shouldReturnFocusRef.current) return;
-          shouldReturnFocusRef.current = false;
+          if (!shouldRestoreEditorFocusRef.current) return;
+          shouldRestoreEditorFocusRef.current = false;
           event.preventDefault();
           onReturnFocus();
         }}
@@ -563,7 +563,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
       if (isSave) {
         event.preventDefault();
-        if (editor.session && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict) {
+        const canSave =
+          editor.session !== null && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict;
+        if (canSave) {
           void editor.save();
         }
         return;

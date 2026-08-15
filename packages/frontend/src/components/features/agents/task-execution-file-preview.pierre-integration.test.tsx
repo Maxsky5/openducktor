@@ -8,17 +8,16 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 
 enableReactActEnvironment();
 
-function PierreSaveContinuityHarness({
-  onAttach,
-}: {
+type PierreSaveContinuityHarnessProps = {
   onAttach: (editor: Editor<undefined>) => void;
-}): ReactElement {
+};
+
+const createPierreEditor = (options: EditorOptions<undefined>): Editor<undefined> =>
+  new Editor<undefined>(options);
+
+function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessProps): ReactElement {
   const [draft, setDraft] = useState("one");
   const [savedContents, setSavedContents] = useState("one");
-  const createEditor = useCallback(
-    (options: EditorOptions<undefined>) => new Editor<undefined>(options),
-    [],
-  );
   const editorOptions = useMemo<EditorOptions<undefined>>(() => ({ onAttach }), [onAttach]);
   const handleEditChange = useCallback((_item: CodeViewFileItem, file: { contents: string }) => {
     setDraft(file.contents);
@@ -46,7 +45,7 @@ function PierreSaveContinuityHarness({
       <button type="button" onClick={() => setSavedContents(draft)}>
         Save snapshot {savedContents}
       </button>
-      <EditProvider createEditor={createEditor}>
+      <EditProvider createEditor={createPierreEditor}>
         <CodeView
           items={items}
           options={{ disableFileHeader: true }}
