@@ -9,7 +9,6 @@ import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
 
 let branchSyncDegraded = false;
-let isSwitchingWorkspace = false;
 let isSwitchingBranch = false;
 let activeBranchName = "main";
 let latestOnValueChange: ((value: string) => void) | undefined;
@@ -44,7 +43,7 @@ const resetBranchState = (): void => {
       name: activeBranchName,
       detached: false,
     },
-    isSwitchingWorkspace,
+    isSwitchingWorkspace: false,
     isLoadingBranches: false,
     isSwitchingBranch,
     branchSyncDegraded,
@@ -144,7 +143,6 @@ describe("BranchSwitcher", () => {
 
   beforeEach(() => {
     branchSyncDegraded = false;
-    isSwitchingWorkspace = false;
     isSwitchingBranch = false;
     activeBranchName = "main";
     latestOnValueChange = undefined;
@@ -174,13 +172,63 @@ describe("BranchSwitcher", () => {
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
-  test("disables branch selection while switching repositories", async () => {
-    isSwitchingWorkspace = true;
-    resetBranchState();
+  test("changes only the cached branch value while switching repositories", async () => {
     const BranchSwitcher = await importBranchSwitcher();
-    const html = renderBranchSwitcherMarkup(BranchSwitcher);
+    const rendered = render(
+      <BranchStateProvider>
+        <BranchSwitcher />
+      </BranchStateProvider>,
+    );
 
-    expect(html).toContain('data-disabled="true"');
+    expect(rendered.container.innerHTML).toContain('data-branch-value="main"');
+    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+
+    await act(async () => {
+      updateBranchState({ isSwitchingWorkspace: true });
+    });
+
+    expect(rendered.container.innerHTML).toContain('data-branch-value="main"');
+    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+
+    await act(async () => {
+      updateBranchState({
+        activeWorkspace: {
+          workspaceId: "workspace-repo-b",
+          workspaceName: "Repo B",
+          repoPath: "/repo-b",
+          isActive: true,
+          hasConfig: true,
+          configuredWorktreeBasePath: null,
+          defaultWorktreeBasePath: "/tmp/default-worktrees",
+          effectiveWorktreeBasePath: "/tmp/default-worktrees",
+        },
+        branches: [
+          {
+            name: "develop",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+        activeBranch: {
+          name: "develop",
+          detached: false,
+        },
+      });
+    });
+
+    expect(rendered.container.innerHTML).toContain('data-branch-value="develop"');
+    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+
+    await act(async () => {
+      updateBranchState({ isSwitchingWorkspace: false });
+    });
+
+    expect(rendered.container.innerHTML).toContain('data-branch-value="develop"');
+    expect(rendered.container.innerHTML).toContain('data-disabled="false"');
+
+    await act(async () => {
+      rendered.unmount();
+    });
   });
 
   test("uses the active branch name on the first render", async () => {

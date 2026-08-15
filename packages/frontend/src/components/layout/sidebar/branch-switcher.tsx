@@ -8,7 +8,6 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
     activeWorkspace,
     branches,
     activeBranch,
-    isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
     branchSyncDegraded,
@@ -28,7 +27,7 @@ export const BranchSwitcher = memo(function BranchSwitcher(): ReactElement | nul
   }
 
   const isBranchPickerDisabled =
-    isSwitchingWorkspace || isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
+    isLoadingBranches || isSwitchingBranch || branchOptions.length === 0;
   const branchPlaceholder = activeBranch?.detached
     ? "Detached HEAD"
     : isLoadingBranches
