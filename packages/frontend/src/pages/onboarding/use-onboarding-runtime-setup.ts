@@ -50,11 +50,11 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
   const [runtimeDraftOverride, setRuntimeDraftOverride] = useState<AgentRuntimes | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [savingStageSnapshot, setSavingStageSnapshot] = useState<SavingStageSnapshot | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
   const [runtimeDiscoveryError, setRuntimeDiscoveryError] = useState<string | null>(null);
   const [confirmNoRuntime, setConfirmNoRuntime] = useState(false);
   const saveInFlight = useRef(false);
+  const savingStageSnapshotRef = useRef<SavingStageSnapshot>(null);
   const stageErrorRef = useRef<HTMLParagraphElement>(null);
   const focusStageError = useRef(false);
   const explicitRuntimeChoices = useRef(new Set<RuntimeKind>());
@@ -184,22 +184,19 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
       document.getElementById(`runtime-executable-${invalid.kind}`)?.focus();
       return;
     }
-    const validEnabledCount = checkResults.filter(
-      (result) => result.ok && runtimeDraft[result.kind].enabled,
-    ).length;
-    if (validEnabledCount === 0 && !allowNoRuntime) {
+    if (validEnabledRuntimeCount === 0 && !allowNoRuntime) {
       setConfirmNoRuntime(true);
       return;
     }
 
     saveInFlight.current = true;
-    setSavingStageSnapshot({
+    savingStageSnapshotRef.current = {
       checkResults,
       checkingRuntimeKinds,
       activity,
       showNoRuntimeWarning,
       continueDisabled,
-    });
+    };
     setIsSaving(true);
     setStageError(null);
     try {
@@ -215,11 +212,11 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     } finally {
       saveInFlight.current = false;
       setIsSaving(false);
-      setSavingStageSnapshot(null);
+      savingStageSnapshotRef.current = null;
     }
   };
 
-  const visibleStageSnapshot = isSaving ? savingStageSnapshot : null;
+  const visibleStageSnapshot = isSaving ? savingStageSnapshotRef.current : null;
 
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
