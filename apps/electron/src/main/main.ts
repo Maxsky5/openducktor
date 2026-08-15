@@ -52,8 +52,8 @@ import {
 } from "./app-updates/electron-app-update-service";
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
-import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { resolveElectronAppVersion } from "./electron-app-version";
+import { prepareElectronDevelopmentInstanceEffect } from "./electron-development-instance";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
@@ -287,19 +287,14 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronLifecycleError | ElectronOperationError | ElectronValidationError
 > =>
   Effect.gen(function* () {
-    yield* Effect.try({
-      try: () =>
-        configureElectronAppIdentity(app, {
-          appName: APPLICATION_NAME,
-          profileKind: resolveElectronProfileKind(app.isPackaged),
-        }),
-      catch: (cause) =>
-        mapStartupPreparationError(
-          cause,
-          "electron.main.configure-app-identity",
-          errorMessage(cause),
-        ),
+    const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
+      app,
+      appName: APPLICATION_NAME,
+      logger: electronMainLogger,
     });
+    if (developmentInstanceClaim === "duplicate") {
+      return process.exit(0);
+    }
     yield* Effect.try({
       try: () => disableElectronKeychainStorage(app.commandLine),
       catch: (cause) =>

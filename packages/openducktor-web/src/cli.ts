@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -10,7 +11,7 @@ import {
   WebResourceError,
   WebValidationError,
 } from "./effect/web-errors";
-import { runLauncherEffect } from "./launcher";
+import { type LauncherOptions, runLauncherEffect } from "./launcher";
 import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
 
 type CliOptions = {
@@ -28,13 +29,13 @@ const DEFAULT_BACKEND_PORT = 14327;
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend Vite port (default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local TypeScript host port (default ${DEFAULT_BACKEND_PORT})\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
   );
 };
 
 const invalidPortError = (raw: string, flag: string): WebValidationError =>
   new WebValidationError({
-    message: `Invalid ${flag} value: ${raw}. Expected a TCP port between 1 and 65535.`,
+    message: `Invalid ${flag} value: ${raw}. Expected an integer between 0 and 65535.`,
     field: flag,
     details: { raw },
   });
@@ -62,7 +63,7 @@ const parsePortEffect = (
       return yield* invalidPortError(raw, flag);
     }
     const parsed = Number(trimmed);
-    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
       return yield* invalidPortError(raw, flag);
     }
     return parsed;
@@ -72,16 +73,16 @@ export const parseCliArgsEffect = (
   args: string[],
 ): Effect.Effect<CliInvocation, WebValidationError> =>
   Effect.gen(function* () {
+    const workspaceMode = args.includes("--workspace");
     const options: CliOptions = {
-      workspaceMode: false,
-      frontendPort: DEFAULT_FRONTEND_PORT,
-      backendPort: DEFAULT_BACKEND_PORT,
+      workspaceMode,
+      frontendPort: workspaceMode ? 0 : DEFAULT_FRONTEND_PORT,
+      backendPort: workspaceMode ? 0 : DEFAULT_BACKEND_PORT,
     };
 
     for (let index = 0; index < args.length; index += 1) {
       const arg = args[index];
       if (arg === "--workspace") {
-        options.workspaceMode = true;
         continue;
       }
       if (arg === "--port") {
@@ -126,13 +127,26 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
   Effect.gen(function* () {
     const __filename = fileURLToPath(import.meta.url);
     const packageRoot = path.resolve(path.dirname(__filename), "..");
-    const launcherOptions = {
+    const commonOptions = {
       packageRoot,
-      ...(cliOptions.workspaceMode ? { workspaceRoot: path.resolve(packageRoot, "../..") } : {}),
-      workspaceMode: cliOptions.workspaceMode,
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
     };
+    let launcherOptions: LauncherOptions;
+    if (cliOptions.workspaceMode) {
+      const workspaceRoot = path.resolve(packageRoot, "../..");
+      launcherOptions = {
+        ...commonOptions,
+        developmentInstanceId: resolveDevelopmentInstanceId("browser", workspaceRoot),
+        workspaceMode: true,
+        workspaceRoot,
+      };
+    } else {
+      launcherOptions = {
+        ...commonOptions,
+        workspaceMode: false,
+      };
+    }
     return yield* runLauncherEffect(launcherOptions, logger);
   });
 

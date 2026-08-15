@@ -144,15 +144,23 @@ const handleTestRequest = (
 describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
     const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const previousDevelopmentInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
     const consoleLines: string[] = [];
     const productionDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge.json");
-    const developmentDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge-dev.json");
+    const developmentDiscoveryPath = path.join(
+      tempConfigDir,
+      "runtime",
+      "dev-instances",
+      "browser-0123456789ab",
+      "mcp-bridge.json",
+    );
     const productionDiscovery = '{"hostUrl":"http://127.0.0.1:1","hostToken":"prod","pid":1}\n';
 
     try {
       process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+      process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
       await mkdir(path.dirname(productionDiscoveryPath), { recursive: true });
       await writeFile(productionDiscoveryPath, productionDiscovery, "utf8");
       const logger = await Effect.runPromise(
@@ -379,12 +387,18 @@ describe("TypeScript web host backend", () => {
       } else {
         process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
       }
+      if (previousDevelopmentInstance === undefined) {
+        delete process.env.OPENDUCKTOR_DEV_INSTANCE;
+      } else {
+        process.env.OPENDUCKTOR_DEV_INSTANCE = previousDevelopmentInstance;
+      }
       await rm(tempConfigDir, { force: true, recursive: true });
     }
   }, 10_000);
 
   test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
     const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+    const previousDevelopmentInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
     const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
     const configPath = path.join(tempConfigDir, "config.json");
@@ -393,6 +407,7 @@ describe("TypeScript web host backend", () => {
 
     try {
       process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
+      process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
       const logger = await Effect.runPromise(
         createWebLogger({
           console: { error: () => {}, log: () => {} },
@@ -462,6 +477,11 @@ describe("TypeScript web host backend", () => {
         delete process.env.OPENDUCKTOR_CONFIG_DIR;
       } else {
         process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
+      }
+      if (previousDevelopmentInstance === undefined) {
+        delete process.env.OPENDUCKTOR_DEV_INSTANCE;
+      } else {
+        process.env.OPENDUCKTOR_DEV_INSTANCE = previousDevelopmentInstance;
       }
       await rm(tempConfigDir, { force: true, recursive: true });
     }

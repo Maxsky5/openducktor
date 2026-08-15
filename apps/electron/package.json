@@ -19,7 +19,7 @@
     "builder": "electron-builder",
     "dev": "bun run scripts/dev.ts",
     "dev:electron": "bun run scripts/dev.ts",
-    "dev:renderer": "vite --host 127.0.0.1 --port 1430 --strictPort",
+    "dev:renderer": "vite --host 127.0.0.1 --port 0 --strictPort",
     "package": "bun run scripts/package-build.ts",
     "release:artifact": "bun run scripts/package-build.ts --stage-release-artifacts",
     "preview": "electron dist/main.js",

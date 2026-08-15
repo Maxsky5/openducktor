@@ -8,13 +8,18 @@ import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 const launchModes = {
   installed: {
-    descriptorName: "mcp-bridge.json",
-    oppositeDescriptorName: "mcp-bridge-dev.json",
+    descriptorRelativePath: ["runtime", "mcp-bridge.json"],
+    oppositeDescriptorRelativePath: [
+      "runtime",
+      "dev-instances",
+      "browser-0123456789ab",
+      "mcp-bridge.json",
+    ],
     workspaceMode: false,
   },
   workspace: {
-    descriptorName: "mcp-bridge-dev.json",
-    oppositeDescriptorName: "mcp-bridge.json",
+    descriptorRelativePath: ["runtime", "dev-instances", "browser-0123456789ab", "mcp-bridge.json"],
+    oppositeDescriptorRelativePath: ["runtime", "mcp-bridge.json"],
     workspaceMode: true,
   },
 } as const;
@@ -72,16 +77,25 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
   }
 
   const scenario = launchModes[launchMode];
-  const runtimeDirectory = path.join(configDirectory, "runtime");
-  const descriptorPath = path.join(runtimeDirectory, scenario.descriptorName);
-  const oppositeDescriptorPath = path.join(runtimeDirectory, scenario.oppositeDescriptorName);
+  const descriptorPath = path.join(configDirectory, ...scenario.descriptorRelativePath);
+  const oppositeDescriptorPath = path.join(
+    configDirectory,
+    ...scenario.oppositeDescriptorRelativePath,
+  );
   const runtimeDistribution = createSourceRuntimeDistribution(
     path.resolve(import.meta.dir, "../../.."),
   );
+  const discoveryOptions = scenario.workspaceMode
+    ? {
+        developmentInstanceId: "browser-0123456789ab",
+        workspaceMode: true as const,
+      }
+    : { workspaceMode: false as const };
   let backend: TypescriptHostBackend | null = null;
 
   try {
-    await mkdir(runtimeDirectory, { recursive: true });
+    await mkdir(path.dirname(descriptorPath), { recursive: true });
+    await mkdir(path.dirname(oppositeDescriptorPath), { recursive: true });
     await writeFile(oppositeDescriptorPath, oppositeDescriptor, "utf8");
     backend = await Effect.runPromise(
       startWebLauncherHostBackendEffect({
@@ -92,7 +106,7 @@ const runDiscoveryScenario = async (): Promise<DiscoveryScenarioResult> => {
         onBackgroundFailure: () => {},
         port: 0,
         runtimeDistribution,
-        workspaceMode: scenario.workspaceMode,
+        ...discoveryOptions,
       }),
     );
 

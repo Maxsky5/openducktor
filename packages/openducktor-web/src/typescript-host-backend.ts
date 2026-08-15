@@ -57,6 +57,7 @@ export type TypescriptHostBackendOptions = {
   logger: WebLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   onBackgroundFailure(failure: unknown): void;
+  processEnv?: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
 };
@@ -800,6 +801,7 @@ export const startTypescriptHostBackendEffect = ({
   logger,
   mcpBridgeDiscoveryMode,
   onBackgroundFailure,
+  processEnv,
   providedToolPaths,
   runtimeDistribution,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
@@ -852,6 +854,7 @@ export const startTypescriptHostBackendEffect = ({
             ),
           ),
       },
+      ...(processEnv ? { processEnv } : {}),
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),

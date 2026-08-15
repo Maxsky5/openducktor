@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { ElectronValidationError, errorMessage } from "./electron-errors";
 
-export const DEFAULT_RENDERER_DEV_PORT = 1430;
+export const DEFAULT_RENDERER_DEV_PORT = 0;
 
 export const resolveRendererDevPortEffect = (
   rawPort: string | undefined,
@@ -33,17 +33,17 @@ export const resolveRendererDevPort = (
   if (!/^\d+$/.test(trimmedPort)) {
     throw new ElectronValidationError({
       operation,
-      message: `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${rawPort}`,
+      message: `ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: ${rawPort}`,
       field: "ELECTRON_RENDERER_DEV_PORT",
       details: { rawPort },
     });
   }
 
   const port = Number(trimmedPort);
-  if (port <= 0 || port > 65_535) {
+  if (port < 0 || port > 65_535) {
     throw new ElectronValidationError({
       operation,
-      message: `ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: ${rawPort}`,
+      message: `ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: ${rawPort}`,
       field: "ELECTRON_RENDERER_DEV_PORT",
       details: { rawPort },
     });

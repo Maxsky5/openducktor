@@ -86,6 +86,7 @@ describe("createNodeEffectHostCommandRouter", () => {
       processEnv: {
         OPENDUCKTOR_CHANNEL: "production",
         OPENDUCKTOR_CONFIG_DIR: configDir,
+        OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
       },
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
@@ -98,7 +99,16 @@ describe("createNodeEffectHostCommandRouter", () => {
       await Effect.runPromise(router.initialize());
 
       const payload = JSON.parse(
-        await readFile(path.join(configDir, "runtime", "mcp-bridge-dev.json"), "utf8"),
+        await readFile(
+          path.join(
+            configDir,
+            "runtime",
+            "dev-instances",
+            "browser-0123456789ab",
+            "mcp-bridge.json",
+          ),
+          "utf8",
+        ),
       ) as Record<string, unknown>;
       expect(payload).toEqual({
         hostToken: expect.any(String),

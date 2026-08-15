@@ -1,11 +1,27 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseCliArgs } from "./cli";
 
 describe("web CLI argument parsing", () => {
+  test("uses OS-assigned ports for workspace development", () => {
+    expect(parseCliArgs(["--workspace"])).toMatchObject({
+      frontendPort: 0,
+      backendPort: 0,
+      workspaceMode: true,
+    });
+  });
+
+  test("keeps fixed defaults for installed static launches", () => {
+    expect(parseCliArgs([])).toMatchObject({
+      frontendPort: 1420,
+      backendPort: 14327,
+      workspaceMode: false,
+    });
+  });
+
   test("parses explicit frontend and backend ports", () => {
     expect(parseCliArgs(["--port", "1421", "--backend-port", "14328"])).toMatchObject({
       frontendPort: 1421,
@@ -23,11 +39,11 @@ describe("web CLI argument parsing", () => {
     expect(parseFrontendPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
-  test("rejects ports outside the TCP range", () => {
-    const parseZeroPort = () => parseCliArgs(["--port", "0"]);
-    expect(parseZeroPort).toThrow("Invalid --port value: 0");
-    expect(parseZeroPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
-
+  test("accepts OS-assigned ports and rejects ports outside the TCP range", () => {
+    expect(parseCliArgs(["--port", "0", "--backend-port", "0"])).toMatchObject({
+      frontendPort: 0,
+      backendPort: 0,
+    });
     const parseTooLargeBackendPort = () => parseCliArgs(["--backend-port", "65536"]);
     expect(parseTooLargeBackendPort).toThrow("Invalid --backend-port value: 65536");
     expect(parseTooLargeBackendPort).toThrow(
@@ -133,61 +149,19 @@ describe("web CLI argument parsing", () => {
     }
   }, 5_000);
 
-  test("persists real launcher and host lifecycle logs through readiness and shutdown", async () => {
+  test("runs the workspace CLI without a development instance environment variable", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-launcher-"));
-    const reserveDistinctPorts = (): readonly [number, number] => {
-      const frontendReservation = Bun.serve({
-        port: 0,
-        fetch: () => new Response("reserved"),
-      });
-      const backendReservation = Bun.serve({
-        port: 0,
-        fetch: () => new Response("reserved"),
-      });
-      try {
-        const frontendPort = frontendReservation.port;
-        const backendPort = backendReservation.port;
-        if (frontendPort === undefined || backendPort === undefined) {
-          throw new Error("Expected Bun to allocate distinct test ports.");
-        }
-        return [frontendPort, backendPort];
-      } finally {
-        frontendReservation.stop(true);
-        backendReservation.stop(true);
-      }
-    };
-    const [frontendPort, backendPort] = reserveDistinctPorts();
     const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
-    const webShellIndexPath = path.resolve(path.dirname(cliPath), "../dist/web-shell/index.html");
-    await mkdir(path.dirname(webShellIndexPath), { recursive: true });
-    const createdWebShellIndex = await writeFile(
-      webShellIndexPath,
-      "<!doctype html><html><body>OpenDucktor test shell</body></html>",
-      { flag: "wx" },
-    ).then(
-      () => true,
-      (cause: NodeJS.ErrnoException) => {
-        if (cause.code === "EEXIST") {
-          return false;
-        }
-        throw cause;
-      },
-    );
+    const subprocessEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      NO_COLOR: "1",
+      OPENDUCKTOR_CONFIG_DIR: configDirectory,
+    };
+    delete subprocessEnvironment.OPENDUCKTOR_DEV_INSTANCE;
     const subprocess = Bun.spawn(
-      [
-        process.execPath,
-        cliPath,
-        "--port",
-        String(frontendPort),
-        "--backend-port",
-        String(backendPort),
-      ],
+      [process.execPath, cliPath, "--workspace", "--port", "0", "--backend-port", "0"],
       {
-        env: {
-          ...process.env,
-          NO_COLOR: "1",
-          OPENDUCKTOR_CONFIG_DIR: configDirectory,
-        },
+        env: subprocessEnvironment,
         stderr: "pipe",
         stdout: "pipe",
       },
@@ -204,8 +178,7 @@ describe("web CLI argument parsing", () => {
         }
         const chunk = value;
         stdout += decoder.decode(chunk, { stream: true });
-        // The availability line is logged only after the readiness record has been persisted.
-        if (stdout.includes("Local:")) {
+        if (stdout.includes("Instance:")) {
           ready.resolve();
         }
       }
@@ -242,12 +215,29 @@ describe("web CLI argument parsing", () => {
       } finally {
         clearTimeout(readyTimeout);
       }
+      const instanceMatch = stdout.match(/Instance:\s+(browser-[a-f0-9]{12})/u);
+      expect(instanceMatch).not.toBeNull();
+      if (!instanceMatch) {
+        throw new Error("Expected the workspace CLI to print its development instance ID.");
+      }
+      const developmentInstanceId = instanceMatch[1];
+      if (!developmentInstanceId) {
+        throw new Error("Expected the workspace CLI instance log to contain an ID.");
+      }
+      const discoveryPath = path.join(
+        configDirectory,
+        "runtime",
+        "dev-instances",
+        developmentInstanceId,
+        "mcp-bridge.json",
+      );
+      await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
+
       subprocess.kill("SIGTERM");
       const { exitCode, stderr } = await exited;
       await stdoutPump;
 
-      const expectedExitCode = process.platform === "win32" ? 143 : 0;
-      expect(exitCode).toBe(expectedExitCode);
+      expect(exitCode).toBe(143);
       expect(stderr).not.toContain("log persistence failed");
       expect(stderr).not.toContain("OPENDUCKTOR_CONFIG_DIR");
       const logDirectory = path.join(configDirectory, "logs");
@@ -269,6 +259,13 @@ describe("web CLI argument parsing", () => {
         expect(stdout).toContain(message);
         expect(persisted).toContain(message);
       }
+      expect(stdout).toMatch(/Local:\s+http:\/\/localhost:\d+\//u);
+      expect(stdout).toMatch(/Backend:\s+http:\/\/127\.0\.0\.1:\d+/u);
+      expect(stdout).toMatch(/Instance:\s+browser-[a-f0-9]{12}/u);
+      expect(persisted).toMatch(/Local:\s+http:\/\/localhost:\d+\//u);
+      expect(persisted).toMatch(/Backend:\s+http:\/\/127\.0\.0\.1:\d+/u);
+      expect(persisted).toMatch(/Instance:\s+browser-[a-f0-9]{12}/u);
+      await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
       // Bun terminates Windows subprocesses without running this POSIX signal handler.
       if (process.platform !== "win32") {
         const shutdownConsoleMessages = [
@@ -278,6 +275,7 @@ describe("web CLI argument parsing", () => {
         for (const message of shutdownConsoleMessages) {
           expect(stdout).toContain(message);
         }
+        expect(stdout).not.toContain("shutdown is already in progress");
         for (const message of [
           ...shutdownConsoleMessages,
           "Shutting down OpenDucktor host services",
@@ -290,9 +288,6 @@ describe("web CLI argument parsing", () => {
     } finally {
       subprocess.kill("SIGKILL");
       await subprocess.exited;
-      if (createdWebShellIndex) {
-        await rm(webShellIndexPath, { force: true });
-      }
       await rm(configDirectory, { force: true, recursive: true });
     }
   }, 20_000);

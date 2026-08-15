@@ -39,8 +39,16 @@ describe("resolveElectronProfilePath", () => {
   });
 
   test("keeps development Chromium storage separate from the installed app profile", () => {
-    expect(resolveElectronProfilePath(defaultConfigPath, "development")).toBe(
-      path.join(defaultConfigPath, "electron-profile-dev"),
+    expect(
+      resolveElectronProfilePath(defaultConfigPath, "development", "electron-0123456789ab"),
+    ).toBe(
+      path.join(
+        defaultConfigPath,
+        "runtime",
+        "dev-instances",
+        "electron-0123456789ab",
+        "electron-profile",
+      ),
     );
     expect(resolveElectronProfilePath(defaultConfigPath, "production")).toBe(
       path.join(defaultConfigPath, "electron-profile"),
@@ -87,7 +95,13 @@ describe("configureElectronAppIdentity", () => {
 
   test("pins development Chromium storage to its dedicated profile", () => {
     const calls: Array<[string, string]> = [];
-    const expectedProfilePath = path.join(customConfigPath, "electron-profile-dev");
+    const expectedProfilePath = path.join(
+      customConfigPath,
+      "runtime",
+      "dev-instances",
+      "electron-0123456789ab",
+      "electron-profile",
+    );
 
     configureElectronAppIdentity(
       {
@@ -101,7 +115,10 @@ describe("configureElectronAppIdentity", () => {
       {
         appName: customAppName,
         profileKind: "development",
-        processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+        processEnv: {
+          OPENDUCKTOR_CONFIG_DIR: customConfigPath,
+          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+        },
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
         },
@@ -114,6 +131,21 @@ describe("configureElectronAppIdentity", () => {
       ["userData", expectedProfilePath],
       ["sessionData", expectedProfilePath],
     ]);
+  });
+
+  test("keeps development Chromium storage separate for each worktree instance", () => {
+    const first = resolveElectronProfilePath(
+      customConfigPath,
+      "development",
+      "electron-0123456789ab",
+    );
+    const second = resolveElectronProfilePath(
+      customConfigPath,
+      "development",
+      "electron-abcdef012345",
+    );
+
+    expect(first).not.toBe(second);
   });
 
   test("expands quoted home-relative config directories before selecting the profile", () => {

@@ -11,6 +11,7 @@ export * from "./claude-runtime-command-contracts";
 export * from "./codex-app-server-protocol";
 export * from "./config-schemas";
 export * from "./dev-server-schemas";
+export * from "./development-instance";
 export * from "./external-task-sync-schemas";
 export * from "./failure-schemas";
 export * from "./filesystem-schemas";

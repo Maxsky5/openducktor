@@ -32,6 +32,7 @@ describe("web launcher MCP discovery composition", () => {
               ...process.env,
               OPENDUCKTOR_CHANNEL: scenario.ambientChannel,
               OPENDUCKTOR_CONFIG_DIR: configDirectory,
+              OPENDUCKTOR_DEV_INSTANCE: "electron-fedcba987654",
             },
             stderr: "pipe",
             stdout: "pipe",

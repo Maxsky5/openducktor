@@ -5,12 +5,15 @@ import { resolveMcpBridgeDiscoveryPath } from "./path-utils";
 
 let previousConfigDir: string | undefined;
 let previousChannel: string | undefined;
+let previousDevInstance: string | undefined;
 
 beforeEach(() => {
   previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
   previousChannel = process.env.OPENDUCKTOR_CHANNEL;
+  previousDevInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
   delete process.env.OPENDUCKTOR_CONFIG_DIR;
   delete process.env.OPENDUCKTOR_CHANNEL;
+  delete process.env.OPENDUCKTOR_DEV_INSTANCE;
 });
 
 afterEach(() => {
@@ -24,6 +27,11 @@ afterEach(() => {
   } else {
     process.env.OPENDUCKTOR_CHANNEL = previousChannel;
   }
+  if (previousDevInstance === undefined) {
+    delete process.env.OPENDUCKTOR_DEV_INSTANCE;
+  } else {
+    process.env.OPENDUCKTOR_DEV_INSTANCE = previousDevInstance;
+  }
 });
 
 describe("MCP path utilities", () => {
@@ -35,10 +43,24 @@ describe("MCP path utilities", () => {
 
   test("selects the development descriptor for the dev channel", () => {
     process.env.OPENDUCKTOR_CHANNEL = "dev";
+    process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
 
     expect(resolveMcpBridgeDiscoveryPath()).toBe(
-      join(homedir(), ".openducktor", "runtime", "mcp-bridge-dev.json"),
+      join(
+        homedir(),
+        ".openducktor",
+        "runtime",
+        "dev-instances",
+        "browser-0123456789ab",
+        "mcp-bridge.json",
+      ),
     );
+  });
+
+  test("requires a development instance for the dev channel", () => {
+    process.env.OPENDUCKTOR_CHANNEL = "dev";
+
+    expect(() => resolveMcpBridgeDiscoveryPath()).toThrow("OPENDUCKTOR_DEV_INSTANCE is required");
   });
 
   test.each(["", "   ", "production", "preview"])(

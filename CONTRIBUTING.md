@@ -56,7 +56,7 @@ Notes:
 
 ## Main Development Commands
 
-The development commands need no channel or config-directory environment variable. Electron and browser workspace development publish `runtime/mcp-bridge-dev.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
+The development commands need no port, channel, or config-directory environment variable. The OS assigns unused ports, and each command prints its resolved URL and development instance ID. Development hosts publish `runtime/dev-instances/<instanceId>/mcp-bridge.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
 
 Electron desktop:
 
@@ -72,10 +72,10 @@ bun run browser:dev
 
 The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
 
-To connect a standalone external MCP client to either development command, select the development descriptor:
+To connect a standalone external MCP client, copy the instance ID from the dev-server output:
 
 ```sh
-OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
+OPENDUCKTOR_CHANNEL=dev OPENDUCKTOR_DEV_INSTANCE=<instance-id> bunx @openducktor/mcp@latest
 ```
 
 ## Verification Commands
@@ -131,7 +131,7 @@ Example commit messages:
 
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
 
-A separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` remains useful when you want to keep contributor settings, task-store databases, and runtime caches apart from your normal app data. It is not required solely to protect production MCP discovery because development hosts use `runtime/mcp-bridge-dev.json`.
+A separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` remains useful when you want to keep contributor settings, task-store databases, and runtime caches apart from your normal app data. It is not required for parallel development because transient profiles and MCP discovery use `runtime/dev-instances/<instanceId>/`.
 
 Important paths:
 

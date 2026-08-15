@@ -32,7 +32,7 @@ type FrontendServerWithHttpConnections = FrontendServer & {
 };
 type StopLauncherServicesInput = {
   frontendServer: FrontendServer | null;
-  hostBackend: TypescriptHostBackend;
+  hostBackend: TypescriptHostBackend | null;
   logger: WebLogger;
 };
 type LauncherShutdownDependencies = {
@@ -377,16 +377,18 @@ export const stopLauncherServicesEffect = (
           }),
         ),
         Effect.exit(
-          Effect.tryPromise({
-            try: () => stopHost(hostBackend),
-            catch: (cause) =>
-              new WebDependencyError({
-                dependency: "typescript-host-backend",
-                operation: "stop",
-                message: errorMessage(cause),
-                cause,
-              }),
-          }),
+          hostBackend
+            ? Effect.tryPromise({
+                try: () => stopHost(hostBackend),
+                catch: (cause) =>
+                  new WebDependencyError({
+                    dependency: "typescript-host-backend",
+                    operation: "stop",
+                    message: errorMessage(cause),
+                    cause,
+                  }),
+              })
+            : Effect.void,
         ),
       ],
       { concurrency: "unbounded" },
@@ -405,6 +407,18 @@ export const stopLauncherServicesEffect = (
     }
     shutdownFailures.push(...loggingFailures);
     if (hostStopExit._tag === "Failure") {
+      const failure = combineWebErrors(
+        "web.launcher.shutdown",
+        "OpenDucktor web shutdown failed.",
+        shutdownFailures,
+      );
+      if (failure) {
+        return yield* failure;
+      }
+      return;
+    }
+
+    if (!hostBackend) {
       const failure = combineWebErrors(
         "web.launcher.shutdown",
         "OpenDucktor web shutdown failed.",

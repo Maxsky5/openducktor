@@ -32,11 +32,15 @@ describe("Electron host MCP discovery composition", () => {
       descriptorName: "mcp-bridge.json",
       isPackaged: true,
       oppositeDescriptor: '{"hostUrl":"http://127.0.0.1:1","hostToken":"dev","pid":1}\n',
-      oppositeDescriptorName: "mcp-bridge-dev.json",
+      oppositeDescriptorName: path.join(
+        "dev-instances",
+        "electron-0123456789ab",
+        "mcp-bridge.json",
+      ),
       title: "packaged Electron owns only production discovery",
     },
     {
-      descriptorName: "mcp-bridge-dev.json",
+      descriptorName: path.join("dev-instances", "electron-0123456789ab", "mcp-bridge.json"),
       isPackaged: false,
       oppositeDescriptor: '{"hostUrl":"http://127.0.0.1:2","hostToken":"prod","pid":2}\n',
       oppositeDescriptorName: "mcp-bridge.json",
@@ -57,6 +61,7 @@ describe("Electron host MCP discovery composition", () => {
         onBackgroundFailure: () => Effect.void,
         processEnv: {
           OPENDUCKTOR_CONFIG_DIR: configDirectory,
+          ...(scenario.isPackaged ? {} : { OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab" }),
           PATH: "/usr/bin:/bin",
         },
         runtimeDistribution: testRuntimeDistribution,
@@ -65,7 +70,8 @@ describe("Electron host MCP discovery composition", () => {
       let disposed = false;
 
       try {
-        await mkdir(runtimeDirectory, { recursive: true });
+        await mkdir(path.dirname(descriptorPath), { recursive: true });
+        await mkdir(path.dirname(oppositeDescriptorPath), { recursive: true });
         await writeFile(oppositeDescriptorPath, scenario.oppositeDescriptor, "utf8");
 
         await router.initialize();
