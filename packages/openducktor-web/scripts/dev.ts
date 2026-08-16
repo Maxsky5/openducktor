@@ -53,6 +53,10 @@ export const shouldDetachWebProcessGroup = (
   platform: NodeJS.Platform = process.platform,
 ): boolean => platform !== "win32";
 
+export const resolveWebCliStopSignal = (
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.Signals => (platform === "win32" ? "SIGTERM" : "SIGINT");
+
 export const buildWebDevCommand = (
   args: readonly string[],
   bunExecutable = process.execPath,
@@ -131,15 +135,16 @@ const stopWebCliEffect = (
       return;
     }
 
+    const signal = resolveWebCliStopSignal();
     yield* Effect.try({
-      try: () => webCli.kill(),
+      try: () => webCli.kill(signal),
       catch: (cause) =>
         new WebDependencyError({
           dependency: "web-cli-process",
           operation: "terminate",
           message: errorMessage(cause),
           cause,
-          details: { signal: "SIGTERM" },
+          details: { signal },
         }),
     });
     if (yield* waitForProcessExitEffect(webCli, WEB_STOP_TIMEOUT_MS)) {

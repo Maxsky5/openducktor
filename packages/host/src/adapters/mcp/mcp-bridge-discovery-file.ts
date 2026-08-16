@@ -1,16 +1,16 @@
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
+  mcpBridgeDevelopmentDiscoveryPathSegments,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
+import { resolveDevelopmentInstanceIdFromEnvironment } from "../../config/development-instance";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostValidationError } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
-const DISCOVERY_RELATIVE_PATHS = {
-  development: "runtime/mcp-bridge-dev.json",
-  production: "runtime/mcp-bridge.json",
-} as const;
-
-export type McpBridgeDiscoveryMode = keyof typeof DISCOVERY_RELATIVE_PATHS;
+export type McpBridgeDiscoveryMode = "development" | "production";
 
 export type McpBridgeDiscoveryFile = {
   hostToken: string;
@@ -24,7 +24,17 @@ const isFsErrorCode = (error: unknown, code: string): boolean =>
 export const resolveMcpBridgeDiscoveryPath = (
   mode: McpBridgeDiscoveryMode,
   env: NodeJS.ProcessEnv = process.env,
-): string => path.resolve(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATHS[mode]);
+): string => {
+  const baseDirectory = resolveOpenDucktorBaseDir(env);
+  if (mode === "production") {
+    return path.resolve(baseDirectory, ...MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS);
+  }
+  const developmentInstanceId = resolveDevelopmentInstanceIdFromEnvironment(env);
+  return path.resolve(
+    baseDirectory,
+    ...mcpBridgeDevelopmentDiscoveryPathSegments(developmentInstanceId),
+  );
+};
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {
   const parsed = parseJson(payload);
@@ -123,7 +133,7 @@ export const removeMcpBridgeDiscoveryFile = (
       try: () => readFile(claimedPath, "utf8"),
       catch: (error) => error,
     }).pipe(
-      Effect.map((payload) => parseDiscoveryFile(payload, claimedPath)),
+      Effect.map((payload) => parseDiscoveryFile(payload, discoveryPath)),
       Effect.tapError(() => restoreClaimedDiscoveryUnlessReplaced(discoveryPath, claimedPath)),
     );
 

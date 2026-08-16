@@ -3,6 +3,7 @@ import {
   buildWebDevCommand,
   buildWebDevProcessEnvironment,
   keepWebDevProcessAliveDuring,
+  resolveWebCliStopSignal,
   shouldDetachWebProcessGroup,
 } from "./dev";
 
@@ -25,6 +26,12 @@ describe("web dev script", () => {
     expect(shouldDetachWebProcessGroup("darwin")).toBe(true);
     expect(shouldDetachWebProcessGroup("linux")).toBe(true);
     expect(shouldDetachWebProcessGroup("win32")).toBe(false);
+  });
+
+  test("uses OpenDucktor-owned shutdown signals for the managed CLI", () => {
+    expect(resolveWebCliStopSignal("darwin")).toBe("SIGINT");
+    expect(resolveWebCliStopSignal("linux")).toBe("SIGINT");
+    expect(resolveWebCliStopSignal("win32")).toBe("SIGTERM");
   });
 
   test("defaults child process color output while preserving explicit overrides", () => {

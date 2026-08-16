@@ -281,11 +281,12 @@ describe("shell entrypoints", () => {
     const source = readRepoFile("apps/electron/src/renderer/main.tsx");
 
     expect(source).toMatch(
-      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
+      /import\s*\{[^}]*\bbootstrapOpenDucktorShell\b[^}]*\}\s*from\s*"@openducktor\/frontend"/u,
     );
     expect(source).toMatch(
       /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*prepare:\s*initializeElectronWindowChrome,\s*routerMode:\s*"hash",?\s*\}\)/u,
     );
+    expect(source).toContain("showOpenDucktorStartupFailure();");
     expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
@@ -294,11 +295,12 @@ describe("shell entrypoints", () => {
     const source = readRepoFile("packages/openducktor-web/src/main.tsx");
 
     expect(source).toMatch(
-      /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
+      /import\s*\{[^}]*\bbootstrapOpenDucktorShell\b[^}]*\}\s*from\s*"@openducktor\/frontend"/u,
     );
     expect(source).toContain("bootstrapOpenDucktorShell(");
     expect(source).toContain("prepare: loadBrowserRuntimeConfig");
     expect(source).toContain("createShellBridge: createBrowserShellBridge");
+    expect(source).toContain("showOpenDucktorStartupFailure();");
     expect(source).toContain('console.error("Critical browser bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
@@ -307,6 +309,7 @@ describe("shell entrypoints", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 
     expect(source).toContain("kanbanLocationForRouter");
+    expect(source).toContain("<StartupSplashLifecycle />");
     expect(source).toContain(
       "<AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>",
     );

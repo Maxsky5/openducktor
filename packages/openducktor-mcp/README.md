@@ -55,11 +55,12 @@ Equivalent environment variables:
 - `ODT_WORKSPACE_ID` optional default workspace
 - `ODT_HOST_URL` optional override
 - `OPENDUCKTOR_CHANNEL=dev` selects development host discovery; leave it unset for production
+- `OPENDUCKTOR_DEV_INSTANCE` selects the exact development instance printed by its dev server
 
 Automatic discovery:
 
 - With `OPENDUCKTOR_CHANNEL` unset, the MCP reads `runtime/mcp-bridge.json` for the production host.
-- With `OPENDUCKTOR_CHANNEL=dev`, the MCP reads `runtime/mcp-bridge-dev.json` for a development host.
+- With `OPENDUCKTOR_CHANNEL=dev`, the MCP requires `OPENDUCKTOR_DEV_INSTANCE` and reads `runtime/dev-instances/<instanceId>/mcp-bridge.json`.
 - The MCP rejects empty or unknown channel values during automatic discovery. It never tries the other channel's descriptor.
 - The default config directory is `~/.openducktor`.
 - Set `OPENDUCKTOR_CONFIG_DIR` to change the config root for the selected descriptor.
@@ -67,7 +68,7 @@ Automatic discovery:
 Connect to a source development host with:
 
 ```sh
-OPENDUCKTOR_CHANNEL=dev bunx @openducktor/mcp@latest
+OPENDUCKTOR_CHANNEL=dev OPENDUCKTOR_DEV_INSTANCE=<instance-id> bunx @openducktor/mcp@latest
 ```
 
 Startup behavior:

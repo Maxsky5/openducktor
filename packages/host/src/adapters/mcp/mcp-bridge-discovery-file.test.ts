@@ -31,9 +31,26 @@ describe("MCP bridge discovery file", () => {
     );
   });
 
-  test("resolves development discovery under the same default config root", () => {
-    expect(resolveMcpBridgeDiscoveryPath("development", {})).toBe(
-      path.join(homedir(), ".openducktor", "runtime", "mcp-bridge-dev.json"),
+  test("resolves development discovery under its instance directory", () => {
+    expect(
+      resolveMcpBridgeDiscoveryPath("development", {
+        OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
+      }),
+    ).toBe(
+      path.join(
+        homedir(),
+        ".openducktor",
+        "runtime",
+        "dev-instances",
+        "browser-0123456789ab",
+        "mcp-bridge.json",
+      ),
+    );
+  });
+
+  test("rejects development discovery without an exact instance", () => {
+    expect(() => resolveMcpBridgeDiscoveryPath("development", {})).toThrow(
+      "OPENDUCKTOR_DEV_INSTANCE is required",
     );
   });
 
@@ -55,7 +72,10 @@ describe("MCP bridge discovery file", () => {
 
   test("publishing and removing development discovery preserves production discovery", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-modes-"));
-    const env = { OPENDUCKTOR_CONFIG_DIR: tempDir };
+    const env = {
+      OPENDUCKTOR_CONFIG_DIR: tempDir,
+      OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
+    };
     const productionPath = resolveMcpBridgeDiscoveryPath("production", env);
     const developmentPath = resolveMcpBridgeDiscoveryPath("development", env);
     const production = discovery({ hostToken: "production-token", pid: 123 });
@@ -76,7 +96,10 @@ describe("MCP bridge discovery file", () => {
 
   test("publishing and removing production discovery preserves development discovery", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-modes-"));
-    const env = { OPENDUCKTOR_CONFIG_DIR: tempDir };
+    const env = {
+      OPENDUCKTOR_CONFIG_DIR: tempDir,
+      OPENDUCKTOR_DEV_INSTANCE: "browser-0123456789ab",
+    };
     const productionPath = resolveMcpBridgeDiscoveryPath("production", env);
     const developmentPath = resolveMcpBridgeDiscoveryPath("development", env);
     const production = discovery({ hostToken: "production-token", pid: 123 });
@@ -140,6 +163,23 @@ describe("MCP bridge discovery file", () => {
       await expect(
         Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, discovery())),
       ).rejects.toThrow("JSON Parse error");
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("reports the stable discovery path when claimed content is invalid", async () => {
+    const { discoveryPath, tempDir } = await createTempDiscoveryPath();
+
+    try {
+      await mkdir(path.dirname(discoveryPath), { recursive: true });
+      await writeFile(discoveryPath, JSON.stringify({ hostToken: "token", hostUrl: "", pid: 123 }));
+
+      await expect(
+        Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, discovery())),
+      ).rejects.toThrow(
+        `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+      );
     } finally {
       await rm(tempDir, { force: true, recursive: true });
     }

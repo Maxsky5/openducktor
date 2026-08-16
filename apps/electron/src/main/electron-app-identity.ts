@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { resolveOpenDucktorBaseDir } from "@openducktor/host";
+import { resolveOpenDucktorBaseDir, validateDevelopmentInstanceId } from "@openducktor/host";
 import { ElectronOperationError, errorMessage } from "../effect/electron-errors";
 
 type ElectronAppIdentity = {
@@ -19,6 +19,7 @@ export const resolveElectronProfileKind = (isPackaged: boolean): ElectronProfile
 type ConfigureElectronAppIdentityOptions = {
   appName: string;
   createDirectory?: CreateProfileDirectory;
+  developmentInstanceId?: string;
   profileKind: ElectronProfileKind;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
@@ -28,21 +29,36 @@ const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
   mkdirSync(profilePath, { recursive: true });
 };
 
-const ELECTRON_PROFILE_DIRECTORY: Record<ElectronProfileKind, string> = {
-  development: "electron-profile-dev",
-  production: "electron-profile",
-};
-
 export const resolveElectronProfilePath = (
   configDirectory: string,
   profileKind: ElectronProfileKind,
-): string => path.resolve(configDirectory, ELECTRON_PROFILE_DIRECTORY[profileKind]);
+  developmentInstanceId?: string,
+): string => {
+  if (profileKind === "production") {
+    return path.resolve(configDirectory, "electron-profile");
+  }
+  if (!developmentInstanceId) {
+    throw new ElectronOperationError({
+      operation: "electron.app-identity.resolve-development-profile",
+      message: "A development instance is required for the Electron development profile.",
+    });
+  }
+  const validatedInstanceId = validateDevelopmentInstanceId(developmentInstanceId);
+  return path.resolve(
+    configDirectory,
+    "runtime",
+    "dev-instances",
+    validatedInstanceId,
+    "electron-profile",
+  );
+};
 
 export const configureElectronAppIdentity = (
   app: ElectronAppIdentity,
   {
     appName,
     createDirectory = createProfileDirectory,
+    developmentInstanceId,
     profileKind,
     processEnv = process.env,
     resolveConfigDirectory = resolveOpenDucktorBaseDir,
@@ -51,7 +67,11 @@ export const configureElectronAppIdentity = (
   app.setName(appName);
   let profilePath = "";
   try {
-    profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv), profileKind);
+    profilePath = resolveElectronProfilePath(
+      resolveConfigDirectory(processEnv),
+      profileKind,
+      developmentInstanceId,
+    );
     createDirectory(profilePath);
   } catch (cause) {
     const pathContext = profilePath.length > 0 ? ` at ${profilePath}` : "";

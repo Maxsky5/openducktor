@@ -108,6 +108,39 @@ describe("createWebLauncherLifecycle", () => {
     expect(closeCalls).toBe(1);
   });
 
+  test("stops a host that registers after launcher shutdown", async () => {
+    let hostStopCalls = 0;
+    const hostBackend = {
+      exited: Promise.resolve(0),
+      port: 14327,
+      stop: async () => {},
+    };
+    const lifecycle = await Effect.runPromise(
+      createWebLauncherLifecycle({
+        closeFrontend: () => Effect.void,
+        logger: {
+          error: () => Effect.void,
+          info: () => Effect.void,
+          success: () => Effect.void,
+        },
+        onSignalShutdownFailure: () => {},
+        reportFailure: () => {},
+        runSignalShutdown: async () => {},
+        stopResources: ({ hostBackend: registeredHost }) =>
+          Effect.sync(() => {
+            if (registeredHost) {
+              hostStopCalls += 1;
+            }
+          }),
+      }),
+    );
+
+    await Effect.runPromise(lifecycle.stop());
+    await Effect.runPromise(lifecycle.registerHost(hostBackend));
+
+    expect(hostStopCalls).toBe(1);
+  });
+
   test("admits one duplicate-signal log and closes admission before flush", async () => {
     const infos: string[] = [];
     const signalRequests: WebSignalShutdownRequest[] = [];

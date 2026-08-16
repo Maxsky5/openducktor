@@ -18,7 +18,7 @@ bun run browser:dev
 
 That workspace mode runs the TypeScript host in-process and serves the frontend with Vite. Published installs use bundled static frontend assets plus the TypeScript host bundled into `dist/cli.js`.
 
-Workspace mode publishes external MCP discovery to `runtime/mcp-bridge-dev.json`. Published installs use the production `runtime/mcp-bridge.json` descriptor. External MCP clients must set `OPENDUCKTOR_CHANNEL=dev` to connect to workspace mode.
+Workspace mode lets the OS assign frontend and backend ports, prints both resolved URLs, and publishes external MCP discovery to `runtime/dev-instances/<instanceId>/mcp-bridge.json`. Published installs keep fixed default ports and use `runtime/mcp-bridge.json`. For automatic development discovery, external MCP clients must set `OPENDUCKTOR_CHANNEL=dev` and the printed `OPENDUCKTOR_DEV_INSTANCE` value. Clients can instead use `ODT_HOST_URL` or `--host-url`.
 
 ## Options
 
@@ -26,8 +26,8 @@ Workspace mode publishes external MCP discovery to `runtime/mcp-bridge-dev.json`
 bunx @openducktor/web --port 1420 --backend-port 14327
 ```
 
-- `--port`: frontend server port
-- `--backend-port`: local TypeScript host port
+- `--port`: frontend server port; `0` lets the OS assign it
+- `--backend-port`: local TypeScript host port; `0` lets the OS assign it
 
 ## Release contents
 

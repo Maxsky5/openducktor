@@ -15,6 +15,7 @@ import {
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
+  resolveDevelopmentInstanceIdFromEnvironment,
   type TaskAssetReadService,
   type ToolDiscoveryId,
 } from "@openducktor/host";
@@ -57,6 +58,7 @@ export type TypescriptHostBackendOptions = {
   logger: WebLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   onBackgroundFailure(failure: unknown): void;
+  processEnv?: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
 };
@@ -95,10 +97,19 @@ const HOST_IDLE_TIMEOUT_SECONDS = 0;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 const HOST_EVENT_STREAM_PATH = "events";
 
+export const resolveAppSessionCookieName = (
+  mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode,
+  processEnv: NodeJS.ProcessEnv = process.env,
+): string =>
+  mcpBridgeDiscoveryMode === "development"
+    ? `${APP_SESSION_COOKIE_NAME}_${resolveDevelopmentInstanceIdFromEnvironment(processEnv)}`
+    : APP_SESSION_COOKIE_NAME;
+
 type TerminalUpgradeResult = { handled: false } | { handled: true; response: Response | undefined };
 
 const tryUpgradeTerminalWebSocket = ({
   allowedOrigins,
+  appSessionCookieName,
   appToken,
   hostCommandRouter,
   logger,
@@ -108,6 +119,7 @@ const tryUpgradeTerminalWebSocket = ({
   shutdownStarted,
 }: {
   allowedOrigins: Set<string>;
+  appSessionCookieName: string;
   appToken: string;
   hostCommandRouter: EffectNodeHostCommandRouter;
   logger: WebLogger;
@@ -127,7 +139,7 @@ const tryUpgradeTerminalWebSocket = ({
       response: new Response("Terminal origin is not allowed.", { status: 403 }),
     };
   }
-  if (readCookie(request, APP_SESSION_COOKIE_NAME) !== appToken) {
+  if (readCookie(request, appSessionCookieName) !== appToken) {
     return {
       handled: true,
       response: new Response("Terminal session is unauthorized.", { status: 401 }),
@@ -352,9 +364,10 @@ const validateAppTokenHeader = (
 const validateAppSessionCookie = (
   request: Request,
   expectedToken: string,
+  appSessionCookieName: string,
 ): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
-    readCookie(request, APP_SESSION_COOKIE_NAME),
+    readCookie(request, appSessionCookieName),
     expectedToken,
     "Missing OpenDucktor web host app token.",
     "Invalid OpenDucktor web host app token.",
@@ -363,9 +376,10 @@ const validateAppSessionCookie = (
 const validateAppCookieOrHeader = (
   request: Request,
   expectedToken: string,
+  appSessionCookieName: string,
 ): Effect.Effect<void, WebHostRequestError> =>
   validateExpectedToken(
-    readCookie(request, APP_SESSION_COOKIE_NAME) ?? request.headers.get(APP_TOKEN_HEADER),
+    readCookie(request, appSessionCookieName) ?? request.headers.get(APP_TOKEN_HEADER),
     expectedToken,
     "Missing OpenDucktor web host app token.",
     "Invalid OpenDucktor web host app token.",
@@ -530,14 +544,6 @@ const localAttachmentPreviewResponse = (
       return yield* rejectWebHostRequest("Local attachment preview path is required.", 400);
     }
 
-    const metadata = yield* statLocalAttachmentPreview(requestedPath);
-    if (!metadata.isFile()) {
-      return yield* rejectWebHostRequest(
-        "Local attachment preview path must reference a file",
-        400,
-      );
-    }
-
     const canonicalDirectory = yield* localAttachmentPort
       .canonicalizePath(localAttachmentPort.stageDirectory())
       .pipe(
@@ -565,7 +571,15 @@ const localAttachmentPreviewResponse = (
       );
     }
 
-    const file = Bun.file(requestedPath);
+    const metadata = yield* statLocalAttachmentPreview(canonicalPath);
+    if (!metadata.isFile()) {
+      return yield* rejectWebHostRequest(
+        "Local attachment preview path must reference a file",
+        400,
+      );
+    }
+
+    const file = Bun.file(canonicalPath);
     return new Response(file, {
       headers: {
         ...corsHeaders,
@@ -576,6 +590,7 @@ const localAttachmentPreviewResponse = (
   });
 
 const routeCorsRequest = ({
+  appSessionCookieName,
   appToken,
   controlToken,
   corsHeaders,
@@ -591,6 +606,7 @@ const routeCorsRequest = ({
   beginShutdown,
   stop,
 }: {
+  appSessionCookieName: string;
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
@@ -618,7 +634,7 @@ const routeCorsRequest = ({
         { ok: true },
         {
           headers: {
-            "set-cookie": `${APP_SESSION_COOKIE_NAME}=${appToken}; HttpOnly; SameSite=Strict; Path=/`,
+            "set-cookie": `${appSessionCookieName}=${appToken}; HttpOnly; SameSite=Strict; Path=/`,
           },
         },
         corsHeaders,
@@ -652,15 +668,17 @@ const routeCorsRequest = ({
       requestTimeouts,
       shutdownStarted,
       ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
-      validateAppCookieOrHeader,
-      validateAppSessionCookie,
+      validateAppCookieOrHeader: (sessionRequest, expectedToken) =>
+        validateAppCookieOrHeader(sessionRequest, expectedToken, appSessionCookieName),
+      validateAppSessionCookie: (sessionRequest, expectedToken) =>
+        validateAppSessionCookie(sessionRequest, expectedToken, appSessionCookieName),
     });
     if (taskEventResponse) {
       return taskEventResponse;
     }
 
     if (requestUrl.pathname === `/${HOST_EVENT_STREAM_PATH}` && request.method === "GET") {
-      yield* validateAppCookieOrHeader(request, appToken);
+      yield* validateAppCookieOrHeader(request, appToken, appSessionCookieName);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest(
           "Browser backend is shutting down and is no longer accepting new work.",
@@ -678,7 +696,7 @@ const routeCorsRequest = ({
     }
 
     if (requestUrl.pathname === "/local-attachment-preview" && request.method === "GET") {
-      yield* validateAppSessionCookie(request, appToken);
+      yield* validateAppSessionCookie(request, appToken, appSessionCookieName);
       return yield* localAttachmentPreviewResponse(request, localAttachments, corsHeaders);
     }
 
@@ -687,7 +705,8 @@ const routeCorsRequest = ({
       corsHeaders,
       request,
       taskAssetReadService,
-      validateAppSessionCookie,
+      validateAppSessionCookie: (sessionRequest, expectedToken) =>
+        validateAppSessionCookie(sessionRequest, expectedToken, appSessionCookieName),
     });
     if (taskAssetResponse) {
       return taskAssetResponse;
@@ -733,6 +752,7 @@ const routeCorsRequest = ({
 
 export const handleTypescriptHostBackendRequest = ({
   allowedOrigins,
+  appSessionCookieName,
   appToken,
   controlToken,
   eventBus,
@@ -748,6 +768,7 @@ export const handleTypescriptHostBackendRequest = ({
   stop,
 }: {
   allowedOrigins: Set<string>;
+  appSessionCookieName: string;
   appToken: string;
   controlToken: string;
   eventBus: BufferedHostEventBus;
@@ -773,6 +794,7 @@ export const handleTypescriptHostBackendRequest = ({
     }
 
     return yield* routeCorsRequest({
+      appSessionCookieName,
       appToken,
       controlToken,
       corsHeaders,
@@ -800,10 +822,12 @@ export const startTypescriptHostBackendEffect = ({
   logger,
   mcpBridgeDiscoveryMode,
   onBackgroundFailure,
+  processEnv,
   providedToolPaths,
   runtimeDistribution,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
+    const appSessionCookieName = resolveAppSessionCookieName(mcpBridgeDiscoveryMode, processEnv);
     const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
@@ -852,6 +876,7 @@ export const startTypescriptHostBackendEffect = ({
             ),
           ),
       },
+      ...(processEnv ? { processEnv } : {}),
       ...(providedToolPaths ? { providedToolPaths } : {}),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
@@ -916,6 +941,7 @@ export const startTypescriptHostBackendEffect = ({
               fetch(request, server) {
                 const terminalUpgrade = tryUpgradeTerminalWebSocket({
                   allowedOrigins,
+                  appSessionCookieName,
                   appToken,
                   hostCommandRouter,
                   logger,
@@ -928,6 +954,7 @@ export const startTypescriptHostBackendEffect = ({
                 return Effect.runPromise(
                   handleTypescriptHostBackendRequest({
                     allowedOrigins,
+                    appSessionCookieName,
                     appToken,
                     controlToken,
                     eventBus,

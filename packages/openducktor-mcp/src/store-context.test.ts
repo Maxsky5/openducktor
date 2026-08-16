@@ -15,6 +15,7 @@ const STORE_CONTEXT_ENV_KEYS = [
   "ODT_FORBID_WORKSPACE_ID_INPUT",
   "OPENDUCKTOR_CHANNEL",
   "OPENDUCKTOR_CONFIG_DIR",
+  "OPENDUCKTOR_DEV_INSTANCE",
 ] as const;
 type StoreContextEnvKey = (typeof STORE_CONTEXT_ENV_KEYS)[number];
 type StoreContextEnvSnapshot = Record<StoreContextEnvKey, string | undefined>;
@@ -367,8 +368,15 @@ describe("resolveStoreContext", () => {
       hostToken: "production-token",
       hostUrl: "http://127.0.0.1:14327",
     });
+    const developmentDirectory = join(
+      configDir,
+      "runtime",
+      "dev-instances",
+      "browser-0123456789ab",
+    );
+    await mkdir(developmentDirectory, { recursive: true });
     await writeFile(
-      join(configDir, "runtime", "mcp-bridge-dev.json"),
+      join(developmentDirectory, "mcp-bridge.json"),
       JSON.stringify(
         {
           hostToken: "development-token",
@@ -382,6 +390,7 @@ describe("resolveStoreContext", () => {
     );
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.OPENDUCKTOR_CHANNEL = "dev";
+    process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
 
     globalThis.fetch = (async (input) => {
       const url = String(input);
@@ -404,14 +413,24 @@ describe("resolveStoreContext", () => {
     const configDir = await createDiscoveryFile();
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
     process.env.OPENDUCKTOR_CHANNEL = "dev";
+    process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
 
-    await expect(resolveStoreContext({})).rejects.toThrow("mcp-bridge-dev.json");
+    await expect(resolveStoreContext({})).rejects.toThrow(
+      join("dev-instances", "browser-0123456789ab", "mcp-bridge.json"),
+    );
   });
 
   test("does not fall back from production discovery to development", async () => {
     const configDir = await createEmptyConfigDir();
+    const developmentDirectory = join(
+      configDir,
+      "runtime",
+      "dev-instances",
+      "browser-0123456789ab",
+    );
+    await mkdir(developmentDirectory, { recursive: true });
     await writeFile(
-      join(configDir, "runtime", "mcp-bridge-dev.json"),
+      join(developmentDirectory, "mcp-bridge.json"),
       JSON.stringify({
         hostToken: "development-token",
         hostUrl: "http://127.0.0.1:24327",

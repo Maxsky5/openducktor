@@ -9,6 +9,7 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
 } from "@openducktor/contracts";
+import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
   createHostEventBus,
   type EffectHostCommandRouter,
@@ -52,8 +53,8 @@ import {
 } from "./app-updates/electron-app-update-service";
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
-import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
 import { resolveElectronAppVersion } from "./electron-app-version";
+import { prepareElectronDevelopmentInstanceEffect } from "./electron-development-instance";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
@@ -287,19 +288,15 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronLifecycleError | ElectronOperationError | ElectronValidationError
 > =>
   Effect.gen(function* () {
-    yield* Effect.try({
-      try: () =>
-        configureElectronAppIdentity(app, {
-          appName: APPLICATION_NAME,
-          profileKind: resolveElectronProfileKind(app.isPackaged),
-        }),
-      catch: (cause) =>
-        mapStartupPreparationError(
-          cause,
-          "electron.main.configure-app-identity",
-          errorMessage(cause),
-        ),
+    const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
+      app,
+      appName: APPLICATION_NAME,
+      logger: electronMainLogger,
+      workspaceRoot,
     });
+    if (developmentInstanceClaim === "duplicate") {
+      return process.exit(0);
+    }
     yield* Effect.try({
       try: () => disableElectronKeychainStorage(app.commandLine),
       catch: (cause) =>
@@ -432,6 +429,7 @@ const createMainWindowEffect = (
           minWidth: 1024,
           minHeight: 720,
           autoHideMenuBar: process.platform !== "darwin",
+          backgroundColor: OPEN_DUCKTOR_STARTUP_BACKGROUND,
           title: "OpenDucktor",
           icon: resolveElectronWindowIcon(),
           ...resolveElectronWindowChromeOptions(electronAppPlatform),

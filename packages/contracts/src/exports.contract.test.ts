@@ -272,6 +272,9 @@ import type {
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "DEVELOPMENT_INSTANCE_ID_PATTERN",
+  "OPENDUCKTOR_DEV_INSTANCE_ENV",
+  "MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS",
   "acceptedAgentUserMessageSchema",
   "agentAttachmentReferenceSchema",
   "agentDescriptorSchema",
@@ -292,6 +295,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
+  "mcpBridgeDevelopmentDiscoveryPathSegments",
+  "isDevelopmentInstanceId",
   "taskSessionBootstrapSchema",
   "LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT",
   "LOCAL_ATTACHMENT_BYTE_LIMIT",

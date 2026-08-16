@@ -44,7 +44,10 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
   createProductionElectronHostCommandRouter({
     isPackaged: false,
     onBackgroundFailure: () => Effect.void,
-    processEnv: { PATH: "/usr/bin:/bin" },
+    processEnv: {
+      OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+      PATH: "/usr/bin:/bin",
+    },
     runtimeDistribution: testRuntimeDistribution,
     ...input,
   });

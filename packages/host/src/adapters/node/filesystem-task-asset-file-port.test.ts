@@ -431,7 +431,7 @@ describe("node task asset file port", () => {
     expect(await Effect.runPromise(port.clearStaging())).toBe(1);
     expect(await readdir(ownersRoot)).not.toContain(`${staleInstanceId}.json`);
     await Effect.runPromise(port.cleanupCurrentOwner());
-  }, 15_000);
+  }, 1_000);
 
   test("recovers legacy ownerless quarantine data and clears legacy staging", async () => {
     const { configDir, port } = await createHarness();

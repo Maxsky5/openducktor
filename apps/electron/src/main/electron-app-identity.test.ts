@@ -39,8 +39,16 @@ describe("resolveElectronProfilePath", () => {
   });
 
   test("keeps development Chromium storage separate from the installed app profile", () => {
-    expect(resolveElectronProfilePath(defaultConfigPath, "development")).toBe(
-      path.join(defaultConfigPath, "electron-profile-dev"),
+    expect(
+      resolveElectronProfilePath(defaultConfigPath, "development", "electron-0123456789ab"),
+    ).toBe(
+      path.join(
+        defaultConfigPath,
+        "runtime",
+        "dev-instances",
+        "electron-0123456789ab",
+        "electron-profile",
+      ),
     );
     expect(resolveElectronProfilePath(defaultConfigPath, "production")).toBe(
       path.join(defaultConfigPath, "electron-profile"),
@@ -51,6 +59,18 @@ describe("resolveElectronProfilePath", () => {
     expect(resolveElectronProfilePath("./.openducktor-local", "production")).toBe(
       path.resolve("./.openducktor-local", "electron-profile"),
     );
+  });
+
+  test("rejects a missing development instance", () => {
+    expect(() => resolveElectronProfilePath(defaultConfigPath, "development")).toThrow(
+      ElectronOperationError,
+    );
+  });
+
+  test("rejects a malformed development instance", () => {
+    expect(() =>
+      resolveElectronProfilePath(defaultConfigPath, "development", "electron-invalid"),
+    ).toThrow("OPENDUCKTOR_DEV_INSTANCE must match");
   });
 });
 
@@ -87,7 +107,13 @@ describe("configureElectronAppIdentity", () => {
 
   test("pins development Chromium storage to its dedicated profile", () => {
     const calls: Array<[string, string]> = [];
-    const expectedProfilePath = path.join(customConfigPath, "electron-profile-dev");
+    const expectedProfilePath = path.join(
+      customConfigPath,
+      "runtime",
+      "dev-instances",
+      "electron-0123456789ab",
+      "electron-profile",
+    );
 
     configureElectronAppIdentity(
       {
@@ -100,6 +126,7 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        developmentInstanceId: "electron-0123456789ab",
         profileKind: "development",
         processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
         createDirectory(profilePath) {
@@ -114,6 +141,46 @@ describe("configureElectronAppIdentity", () => {
       ["userData", expectedProfilePath],
       ["sessionData", expectedProfilePath],
     ]);
+  });
+
+  test("keeps development Chromium storage separate for each worktree instance", () => {
+    const first = resolveElectronProfilePath(
+      customConfigPath,
+      "development",
+      "electron-0123456789ab",
+    );
+    const second = resolveElectronProfilePath(
+      customConfigPath,
+      "development",
+      "electron-abcdef012345",
+    );
+
+    expect(first).not.toBe(second);
+  });
+
+  test.each([
+    ["missing", undefined],
+    ["malformed", "electron-invalid"],
+  ] as const)("wraps an invalid development instance: %s", (_caseName, developmentInstanceId) => {
+    expect(() =>
+      configureElectronAppIdentity(
+        {
+          setName() {},
+          setPath() {
+            throw new Error("setPath must not run for an invalid development instance");
+          },
+        },
+        {
+          appName: customAppName,
+          developmentInstanceId,
+          profileKind: "development",
+          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+          createDirectory() {
+            throw new Error("createDirectory must not run for an invalid development instance");
+          },
+        },
+      ),
+    ).toThrow(ElectronOperationError);
   });
 
   test("expands quoted home-relative config directories before selecting the profile", () => {

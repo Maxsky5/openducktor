@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { Cause, Chunk, Effect, Exit, Fiber } from "effect";
+import type { ElectronRendererDevServer } from "../src/development/electron-renderer-dev-server";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
-  closeRendererServer,
   type ElectronDevProcessHandlers,
+  electronDevServerLogLines,
   electronGracefulShutdownSignal,
   electronRuntimeEnv,
   mainEffect,
@@ -37,10 +38,21 @@ const createFakeProcessHandlers = () => {
   };
 };
 
+const createFakeRenderer = ({
+  close = () => Effect.void,
+  watcher = { add() {}, on() {} },
+}: Partial<
+  Pick<ElectronRendererDevServer, "close" | "watcher">
+> = {}): ElectronRendererDevServer => ({
+  close,
+  url: "http://127.0.0.1:1430",
+  watcher,
+});
+
 describe("electron dev script", () => {
   test("uses the default renderer dev server port", () => {
-    expect(resolveRendererDevPort(undefined)).toBe(1430);
-    expect(resolveRendererDevPort("   ")).toBe(1430);
+    expect(resolveRendererDevPort(undefined)).toBe(0);
+    expect(resolveRendererDevPort("   ")).toBe(0);
   });
 
   test("parses the explicit renderer dev server port", () => {
@@ -49,23 +61,30 @@ describe("electron dev script", () => {
 
   test("rejects malformed renderer dev server ports", () => {
     expect(() => resolveRendererDevPort("1430abc")).toThrow(
-      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 1430abc",
+      "ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: 1430abc",
     );
-    expect(() => resolveRendererDevPort("0")).toThrow(
-      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 0",
-    );
+    expect(resolveRendererDevPort("0")).toBe(0);
     expect(() => resolveRendererDevPort("-1")).toThrow(
-      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: -1",
+      "ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: -1",
     );
     expect(() => resolveRendererDevPort("70000")).toThrow(
-      "ELECTRON_RENDERER_DEV_PORT must be a TCP port between 1 and 65535: 70000",
+      "ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: 70000",
     );
+  });
+
+  test("reports the resolved renderer URL and development instance for copying", () => {
+    const rendererDevUrl = "http://127.0.0.1:49152";
+
+    expect(electronDevServerLogLines("electron-0123456789ab", rendererDevUrl)).toEqual([
+      "[electron:dev] Development instance: electron-0123456789ab",
+      "[electron:dev] Renderer URL: http://127.0.0.1:49152",
+    ]);
   });
 
   test("uses typed errors for malformed renderer dev server ports", () => {
     const error = (() => {
       try {
-        resolveRendererDevPort("0");
+        resolveRendererDevPort("invalid");
       } catch (caught) {
         return caught;
       }
@@ -81,7 +100,7 @@ describe("electron dev script", () => {
 
   test("keeps invalid renderer dev port in the main Effect failure channel", async () => {
     const originalPort = process.env.ELECTRON_RENDERER_DEV_PORT;
-    process.env.ELECTRON_RENDERER_DEV_PORT = "0";
+    process.env.ELECTRON_RENDERER_DEV_PORT = "invalid";
 
     try {
       const exit = await Effect.runPromiseExit(mainEffect());
@@ -216,70 +235,54 @@ describe("electron dev script", () => {
     ).toBe(false);
   });
 
-  test("forces open renderer connections while closing the Vite server", async () => {
-    let closeAllConnectionsCalls = 0;
-    let closeIdleConnectionsCalls = 0;
+  test("closes Electron and the renderer when the lifecycle receives SIGTERM", async () => {
+    const fakeProcessHandlers = createFakeProcessHandlers();
+    const killSignals: Array<NodeJS.Signals | number | undefined> = [];
     let closeCalls = 0;
-    let resolveClose: () => void = () => {};
-    const closePromise = new Promise<void>((resolve) => {
-      resolveClose = resolve;
+    let markStarted: () => void = () => {};
+    let resolveElectronExit: (exitCode: number) => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
     });
-    const rendererServer = {
-      httpServer: {
-        closeAllConnections: () => {
-          closeAllConnectionsCalls += 1;
-          resolveClose();
-        },
-        closeIdleConnections: () => {
-          closeIdleConnectionsCalls += 1;
-        },
-      },
-      close: () => {
-        closeCalls += 1;
-        return closePromise;
-      },
-    };
+    const electronExited = new Promise<number>((resolve) => {
+      resolveElectronExit = resolve;
+    });
+    const renderer = createFakeRenderer({
+      close: () =>
+        Effect.sync(() => {
+          closeCalls += 1;
+        }),
+    });
 
-    await closeRendererServer(rendererServer);
+    const lifecycle = runElectronEffect(
+      runElectronDevLifecycleEffect({
+        buildBundles: () => Effect.void,
+        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        processHandlers: fakeProcessHandlers.processHandlers,
+        renderer,
+        startElectronProcess: () => {
+          markStarted();
+          return {
+            exited: electronExited,
+            kill(signal?: NodeJS.Signals | number) {
+              killSignals.push(signal);
+              resolveElectronExit(0);
+            },
+          };
+        },
+      }),
+    );
+    await started;
 
+    const shutdownHandler = fakeProcessHandlers.registered.find(({ event }) => event === "SIGTERM");
+    if (!shutdownHandler) {
+      throw new Error("Expected the Electron dev lifecycle to register SIGTERM.");
+    }
+    shutdownHandler.listener();
+
+    expect(await lifecycle).toBe(143);
+    expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
     expect(closeCalls).toBe(1);
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
-  });
-
-  test("forces open renderer connections even when close throws synchronously", async () => {
-    let closeAllConnectionsCalls = 0;
-    let closeIdleConnectionsCalls = 0;
-    const rendererServer = {
-      httpServer: {
-        closeAllConnections: () => {
-          closeAllConnectionsCalls += 1;
-        },
-        closeIdleConnections: () => {
-          closeIdleConnectionsCalls += 1;
-        },
-      },
-      close: () => {
-        throw new Error("renderer close failed");
-      },
-    };
-
-    await expect(closeRendererServer(rendererServer)).rejects.toThrow("renderer close failed");
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
-  });
-
-  test("keeps renderer shutdown bounded when close never resolves", async () => {
-    let timeoutMs = 0;
-    const rendererServer = {
-      close: () => new Promise<void>(() => {}),
-    };
-
-    await closeRendererServer(rendererServer, async (durationMs) => {
-      timeoutMs = durationMs;
-    });
-
-    expect(timeoutMs).toBe(3_000);
   });
 
   test("fails when Electron does not exit after forced shutdown", async () => {
@@ -310,12 +313,11 @@ describe("electron dev script", () => {
     const fakeProcessHandlers = createFakeProcessHandlers();
     let buildCalls = 0;
     let closeCalls = 0;
-    const rendererServer = {
-      close: async () => {
-        closeCalls += 1;
-      },
-      config: { server: { port: 1430 } },
-      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
+    const renderer = createFakeRenderer({
+      close: () =>
+        Effect.sync(() => {
+          closeCalls += 1;
+        }),
       watcher: {
         add(roots: string[]) {
           watchedRoots.push(roots);
@@ -324,7 +326,7 @@ describe("electron dev script", () => {
           watchedEvents.push(event);
         },
       },
-    };
+    });
 
     const exitCode = await runElectronEffect(
       runElectronDevLifecycleEffect({
@@ -334,8 +336,7 @@ describe("electron dev script", () => {
           }),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
-        rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer,
+        renderer,
         startElectronProcess: (rendererDevUrl, electronExecutablePath) => {
           startCalls.push({ executablePath: electronExecutablePath, rendererDevUrl });
           return {
@@ -381,17 +382,12 @@ describe("electron dev script", () => {
     const electronExited = new Promise<number>((resolve) => {
       resolveElectronExit = resolve;
     });
-    const rendererServer = {
-      close: async () => {
-        closeCalls += 1;
-      },
-      config: { server: { port: 1430 } },
-      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
-      watcher: {
-        add() {},
-        on() {},
-      },
-    };
+    const renderer = createFakeRenderer({
+      close: () =>
+        Effect.sync(() => {
+          closeCalls += 1;
+        }),
+    });
 
     await Effect.runPromise(
       Effect.gen(function* () {
@@ -400,8 +396,7 @@ describe("electron dev script", () => {
             buildBundles: () => Effect.void,
             electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
             processHandlers: fakeProcessHandlers.processHandlers,
-            rendererDevUrl: "http://127.0.0.1:1430",
-            rendererServer,
+            renderer,
             startElectronProcess: () => {
               markStarted();
               return {
@@ -434,23 +429,14 @@ describe("electron dev script", () => {
       operation: "electron.dev.test-build",
       message: "build failed before launch",
     });
-    const rendererServer = {
-      close: async () => {},
-      config: { server: { port: 1430 } },
-      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
-      watcher: {
-        add() {},
-        on() {},
-      },
-    };
+    const renderer = createFakeRenderer();
 
     const exit = await Effect.runPromiseExit(
       runElectronDevLifecycleEffect({
         buildBundles: () => Effect.fail(setupError),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
-        rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer,
+        renderer,
         startElectronProcess: () => {
           throw new Error("Electron should not launch after setup failure.");
         },
@@ -474,15 +460,7 @@ describe("electron dev script", () => {
 
   test("does not launch Electron when shutdown starts during bundle build", async () => {
     const fakeProcessHandlers = createFakeProcessHandlers();
-    const rendererServer = {
-      close: async () => {},
-      config: { server: { port: 1430 } },
-      resolvedUrls: { local: ["http://127.0.0.1:1430/"] },
-      watcher: {
-        add() {},
-        on() {},
-      },
-    };
+    const renderer = createFakeRenderer();
     let startCalls = 0;
 
     const exitCode = await runElectronEffect(
@@ -508,8 +486,7 @@ describe("electron dev script", () => {
           }),
         electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
         processHandlers: fakeProcessHandlers.processHandlers,
-        rendererDevUrl: "http://127.0.0.1:1430",
-        rendererServer,
+        renderer,
         startElectronProcess: () => {
           startCalls += 1;
           return {

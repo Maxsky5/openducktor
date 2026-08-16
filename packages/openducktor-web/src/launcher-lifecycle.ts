@@ -7,6 +7,7 @@ import {
 } from "./effect/web-errors";
 import type { FrontendServer } from "./launcher-support";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 const DUPLICATE_TERMINATION_NOTICE =
   "OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.";
@@ -38,6 +39,7 @@ export type WebSignalShutdownRequest = {
 type StopResourcesInput = {
   closeFrontend(server: FrontendServer | null): Effect.Effect<void, WebError>;
   frontendServer: FrontendServer | null;
+  hostBackend: TypescriptHostBackend | null;
 };
 
 type WebLauncherLifecycleOptions = {
@@ -62,18 +64,25 @@ type FrontendState =
   | { readonly _tag: "open"; readonly server: FrontendServer }
   | { readonly _tag: "closed" };
 
+type HostState =
+  | { readonly _tag: "absent" }
+  | { readonly _tag: "open"; readonly backend: TypescriptHostBackend }
+  | { readonly _tag: "closed" };
+
 type TerminationState =
   | { readonly _tag: "idle" }
   | {
       readonly _tag: "active";
       admission: "closed" | "open";
       duplicateLog: Promise<boolean> | null;
+      shutdown: Promise<void>;
     };
 
 export type WebLauncherLifecycle = {
   completeAfterHostExit(): Effect.Effect<void, WebError>;
-  handleTermination(signal: NodeJS.Signals, exitCode: number): void;
+  handleTermination(signal: NodeJS.Signals, exitCode: number): Promise<void>;
   registerFrontend(server: FrontendServer): Effect.Effect<void, WebError>;
+  registerHost(backend: TypescriptHostBackend): Effect.Effect<void, WebError>;
   release(): Effect.Effect<void>;
   stop(): Effect.Effect<void, WebError>;
 };
@@ -85,6 +94,7 @@ export const createWebLauncherLifecycle = (
     const stopResult = yield* Deferred.make<void, WebError>();
     let stopState: StopState = { _tag: "running" };
     let frontendState: FrontendState = { _tag: "absent" };
+    let hostState: HostState = { _tag: "absent" };
     let terminationState: TerminationState = { _tag: "idle" };
 
     const closeFrontendOnce = (): Effect.Effect<void, WebError> =>
@@ -121,10 +131,13 @@ export const createWebLauncherLifecycle = (
         }
 
         const frontendServer = frontendState._tag === "open" ? frontendState.server : null;
+        const hostBackend = hostState._tag === "open" ? hostState.backend : null;
+        hostState = { _tag: "closed" };
         const stopExit = yield* Effect.exit(
           options.stopResources({
             closeFrontend: () => closeFrontendOnce(),
             frontendServer,
+            hostBackend,
           }),
         );
         if (stopExit._tag === "Failure") {
@@ -160,8 +173,13 @@ export const createWebLauncherLifecycle = (
 
     const completeAfterHostExit = (): Effect.Effect<void, WebError> =>
       Effect.suspend(() => {
+        hostState = { _tag: "closed" };
         if (stopState._tag !== "running") {
-          return Deferred.await(stopResult);
+          const activeShutdown =
+            terminationState._tag === "active" ? terminationState.shutdown : null;
+          return Deferred.await(stopResult).pipe(
+            Effect.zipRight(activeShutdown ? Effect.promise(() => activeShutdown) : Effect.void),
+          );
         }
         stopState = { _tag: "stopping" };
         return settleStop(
@@ -209,27 +227,41 @@ export const createWebLauncherLifecycle = (
       return terminationState.duplicateLog;
     };
 
-    const handleTermination = (signal: NodeJS.Signals, exitCode: number): void => {
+    const startTermination = (signal: NodeJS.Signals, exitCode: number): Promise<void> => {
+      if (terminationState._tag !== "idle") {
+        return terminationState.shutdown;
+      }
+      terminationState = {
+        _tag: "active",
+        admission: "open",
+        duplicateLog: null,
+        shutdown: Promise.resolve(),
+      };
+      const shutdown = options
+        .runSignalShutdown({
+          awaitDuplicateTerminationLog,
+          closeDuplicateTerminationLogAdmission,
+          exitCode,
+          logger: options.logger,
+          signal,
+          stop: stop(),
+        })
+        .catch(options.onSignalShutdownFailure);
+      terminationState.shutdown = shutdown;
+      return shutdown;
+    };
+
+    const handleTermination = (signal: NodeJS.Signals, exitCode: number): Promise<void> => {
       if (terminationState._tag === "idle") {
-        terminationState = { _tag: "active", admission: "open", duplicateLog: null };
-        void options
-          .runSignalShutdown({
-            awaitDuplicateTerminationLog,
-            closeDuplicateTerminationLogAdmission,
-            exitCode,
-            logger: options.logger,
-            signal,
-            stop: stop(),
-          })
-          .catch(options.onSignalShutdownFailure);
-        return;
+        return startTermination(signal, exitCode);
       }
       if (terminationState.admission === "closed" || terminationState.duplicateLog !== null) {
-        return;
+        return terminationState.shutdown;
       }
       terminationState.duplicateLog = runWebBoundary(
         logDuplicateWebTerminationNotice(options.logger, options.reportFailure),
       );
+      return terminationState.shutdown;
     };
 
     return {
@@ -241,6 +273,19 @@ export const createWebLauncherLifecycle = (
             return options.closeFrontend(server);
           }
           frontendState = { _tag: "open", server };
+          return Effect.void;
+        }),
+      registerHost: (backend) =>
+        Effect.suspend(() => {
+          if (stopState._tag !== "running") {
+            hostState = { _tag: "closed" };
+            return options.stopResources({
+              closeFrontend: () => Effect.void,
+              frontendServer: null,
+              hostBackend: backend,
+            });
+          }
+          hostState = { _tag: "open", backend };
           return Effect.void;
         }),
       release: () =>

@@ -23,16 +23,14 @@ type BackendReadinessDependencies = {
 export type FrontendServer = {
   close(): Promise<void>;
 };
-type ForceCloseableHttpServer = {
-  closeAllConnections?: () => void;
-  closeIdleConnections?: () => void;
-};
-type FrontendServerWithHttpConnections = FrontendServer & {
-  httpServer?: ForceCloseableHttpServer | null;
+type ViteFrontendServer = FrontendServer & {
+  httpServer: {
+    closeAllConnections(): void;
+  };
 };
 type StopLauncherServicesInput = {
   frontendServer: FrontendServer | null;
-  hostBackend: TypescriptHostBackend;
+  hostBackend: TypescriptHostBackend | null;
   logger: WebLogger;
 };
 type LauncherShutdownDependencies = {
@@ -48,7 +46,6 @@ type ProcessKeepAliveDependencies = {
 export const LOCALHOST = "127.0.0.1";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const FRONTEND_CLOSE_TIMEOUT_MS = 3_000;
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
 export const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -115,44 +112,21 @@ const verifyBackendReadinessEffect = (
     }
   });
 
-const forceCloseFrontendConnections = (server: FrontendServer): void => {
-  const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
-  httpServer?.closeIdleConnections?.();
-  httpServer?.closeAllConnections?.();
-};
-
 export const closeFrontendServerEffect = (
   server: FrontendServer | null,
-  sleep: SleepFunction = Bun.sleep,
 ): Effect.Effect<void, WebDependencyError> =>
-  Effect.gen(function* () {
-    if (!server) {
-      return;
-    }
-
-    // Capture only synchronous close-call failures here while preserving the
-    // close Promise for Promise.race; async rejections are handled below.
-    const closePromise = yield* Effect.try({
-      try: () => server.close(),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "frontend-server",
-          operation: "close",
-          message: errorMessage(cause),
-          cause,
-        }),
-    }).pipe(Effect.ensuring(Effect.sync(() => forceCloseFrontendConnections(server))));
-    yield* Effect.tryPromise({
-      try: () => Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "frontend-server",
-          operation: "close",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
-  });
+  server
+    ? Effect.tryPromise({
+        try: () => server.close(),
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "frontend-server",
+            operation: "close",
+            message: errorMessage(cause),
+            cause,
+          }),
+      })
+    : Effect.void;
 
 const verifyBackendReadinessAttemptEffect = (
   backendUrl: string,
@@ -171,10 +145,15 @@ const verifyBackendReadinessAttemptEffect = (
     ({ timeout }) => Effect.sync(() => clearTimeout(timeout)),
   );
 
-export const closeFrontendServer = (
-  server: FrontendServer | null,
-  sleep: SleepFunction = Bun.sleep,
-): Promise<void> => runWebBoundary(closeFrontendServerEffect(server, sleep));
+export const closeFrontendServer = (server: FrontendServer | null): Promise<void> =>
+  runWebBoundary(closeFrontendServerEffect(server));
+
+export const closeViteFrontendServer = (server: ViteFrontendServer): Promise<void> => {
+  // Bun 1.3.x can retain an upgraded HMR WebSocket after Vite closes its Node sockets.
+  // Stop Bun's native connections before Vite awaits http.Server.close().
+  server.httpServer.closeAllConnections();
+  return server.close();
+};
 
 export const waitForBackendEffect = (
   backendUrl: string,
@@ -377,16 +356,18 @@ export const stopLauncherServicesEffect = (
           }),
         ),
         Effect.exit(
-          Effect.tryPromise({
-            try: () => stopHost(hostBackend),
-            catch: (cause) =>
-              new WebDependencyError({
-                dependency: "typescript-host-backend",
-                operation: "stop",
-                message: errorMessage(cause),
-                cause,
-              }),
-          }),
+          hostBackend
+            ? Effect.tryPromise({
+                try: () => stopHost(hostBackend),
+                catch: (cause) =>
+                  new WebDependencyError({
+                    dependency: "typescript-host-backend",
+                    operation: "stop",
+                    message: errorMessage(cause),
+                    cause,
+                  }),
+              })
+            : Effect.void,
         ),
       ],
       { concurrency: "unbounded" },
@@ -405,6 +386,18 @@ export const stopLauncherServicesEffect = (
     }
     shutdownFailures.push(...loggingFailures);
     if (hostStopExit._tag === "Failure") {
+      const failure = combineWebErrors(
+        "web.launcher.shutdown",
+        "OpenDucktor web shutdown failed.",
+        shutdownFailures,
+      );
+      if (failure) {
+        return yield* failure;
+      }
+      return;
+    }
+
+    if (!hostBackend) {
       const failure = combineWebErrors(
         "web.launcher.shutdown",
         "OpenDucktor web shutdown failed.",

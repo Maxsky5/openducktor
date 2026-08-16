@@ -53,6 +53,13 @@ export {
   createNodeHostCommandRouter,
   type EffectNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
+export {
+  type DevelopmentInstanceMode,
+  OPENDUCKTOR_DEV_INSTANCE_ENV,
+  resolveDevelopmentInstanceId,
+  resolveDevelopmentInstanceIdFromEnvironment,
+  validateDevelopmentInstanceId,
+} from "./config/development-instance";
 export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {

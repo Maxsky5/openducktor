@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
@@ -27,7 +28,7 @@ const resolveRendererDevPort = (): number =>
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), tailwindcss()],
+  plugins: [createOpenDucktorStartupSplashPlugin(), react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),
   },
@@ -82,5 +83,8 @@ export default defineConfig({
       allow: [searchForWorkspaceRoot(__dirname)],
     },
     strictPort: true,
+    warmup: {
+      clientFiles: ["./src/renderer/main.tsx"],
+    },
   },
 });
