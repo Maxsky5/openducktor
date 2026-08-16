@@ -43,7 +43,7 @@ Unique ports remove the bind conflicts, but they do not give full instance isola
 3. Both dev wrappers derive `browser-<hash>` or `electron-<hash>` from the canonical worktree path. Electron passes it to the app process as `OPENDUCKTOR_DEV_INSTANCE`; Browser passes it through launcher options into the host process environment.
 4. Electron development profiles use `runtime/dev-instances/<instance-id>/electron-profile`, while settings and task stores remain under the shared config root.
 5. Development MCP discovery uses `runtime/dev-instances/<instance-id>/mcp-bridge.json`; missing or invalid development identity fails with an actionable error and never falls back to another instance.
-6. Electron development mode claims one application instance per worktree. A second launch in the same worktree exits, while Electron runs from different worktrees remain independent.
+6. Electron development mode allows one application instance per worktree. A second launch in the same worktree is a no-op and exits without focusing the existing window. Electron launches from different worktrees remain independent.
 
 ## External-tool comparison
 
