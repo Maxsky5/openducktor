@@ -102,7 +102,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       const childSession = createAgentSessionFixture({
         externalSessionId: "session-child-1",
         runtimeKind,
-        role: null,
+        sessionAssociation: { kind: "unbound" },
         status: "running",
         workingDirectory: "/repo-a",
         historyLoadState: "loaded",
@@ -458,7 +458,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const { AgentChatThread } = await import("./agent-chat-thread");
     let request: OpenAgentSessionTranscriptRequest | null = null;
     const plannerSession = buildSession({
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
       messages: [

@@ -49,8 +49,8 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
     {
       runtimeKind: "opencode",
       externalSessionId: "external-1",
-      taskId: "task-1",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+
       status: "running",
       runtimeStatusMessage: null,
       startedAt: "2026-02-22T12:00:00.000Z",

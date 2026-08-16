@@ -179,24 +179,24 @@ let currentSessionsFixture: AgentSessionState[] = [
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-spec",
-    taskId: "TASK-123",
-    role: "spec",
+    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+
     status: "running",
     startedAt: "2026-01-01T00:00:00.000Z",
   }),
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-older",
-    taskId: "TASK-123",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
     status: "running",
     startedAt: "2026-01-01T12:00:00.000Z",
   }),
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-latest",
-    taskId: "TASK-123",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
     status: "idle",
     startedAt: "2026-01-02T00:00:00.000Z",
   }),
@@ -772,24 +772,24 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-spec",
-        taskId: "TASK-123",
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+
         status: "running",
         startedAt: "2026-01-01T00:00:00.000Z",
       }),
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-older",
-        taskId: "TASK-123",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
         status: "running",
         startedAt: "2026-01-01T12:00:00.000Z",
       }),
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-latest",
-        taskId: "TASK-123",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
       }),
@@ -1475,16 +1475,16 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
-        taskId: "TASK-123",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
       }),
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-qa-stopped",
-        taskId: "TASK-123",
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "qa" },
+
         status: "stopped",
         startedAt: "2026-01-03T00:00:00.000Z",
       }),
@@ -1534,8 +1534,8 @@ describe("KanbanPage session start modal flow", () => {
         createAgentSessionFixture({
           runtimeKind: "opencode",
           externalSessionId: "session-build-waiting",
-          taskId: "TASK-123",
-          role: "spec",
+          sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+
           workingDirectory: "/tmp/default-worktrees/TASK-123",
           status: "idle",
           startedAt: "2026-01-02T00:00:00.000Z",
@@ -1589,8 +1589,8 @@ describe("KanbanPage session start modal flow", () => {
         createAgentSessionFixture({
           runtimeKind: "opencode",
           externalSessionId: "legacy-root-spec",
-          taskId: "TASK-123",
-          role: "spec",
+          sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
+
           workingDirectory: "/repo/",
           status: "idle",
           pendingQuestions: [
@@ -1636,8 +1636,8 @@ describe("KanbanPage session start modal flow", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
-        taskId: "TASK-123",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "build" },
+
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
       }),

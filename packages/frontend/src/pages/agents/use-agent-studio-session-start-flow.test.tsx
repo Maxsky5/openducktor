@@ -24,7 +24,10 @@ import {
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
@@ -54,7 +57,8 @@ const createPromptTask = (overrides = {}) =>
     ...overrides,
   });
 
-const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+const createSession = (overrides: AgentSessionFixtureOverrides = {}) =>
+  createAgentSessionFixture(overrides);
 const summarizeSessions = (sessions: ReturnType<typeof createSession>[]) =>
   sessions.map(toAgentSessionSummary);
 
@@ -450,9 +454,8 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startSession starts a fresh session even when another session is active", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const loadedSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-active",
-      role: "spec",
     });
 
     const harness = createHookHarness({
@@ -492,9 +495,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
     const loadedSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-active",
-      role: "spec",
     });
 
     const harness = createHookHarness({
@@ -638,7 +640,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       loadedSession: createSession({
         externalSessionId: "session-spec",
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       }),
       selectedTask: createPromptTask({
         agentWorkflows: {
@@ -730,7 +732,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       loadedSession: createSession({
         externalSessionId: "session-spec",
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       }),
       selectedTask: createPromptTask({
         agentWorkflows: {
@@ -799,7 +801,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       loadedSession: createSession({
         externalSessionId: "session-plan",
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         runtimeKind: "claude",
         selectedModel: null,
       }),
@@ -898,9 +900,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       loadedSession: createSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "session-spec",
-        role: "spec",
       }),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
@@ -1004,9 +1005,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         externalSessionId: "session-qa",
-        role: "qa",
       }),
       selectedTask: createTask({
         status: "in_progress",
@@ -1108,8 +1108,8 @@ describe("useAgentStudioSessionStartFlow", () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const existingSession = createSession({
       externalSessionId: "session-existing",
-      role: "build",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       startedAt: "2026-02-22T12:00:00.000Z",
       workingDirectory: "/repo/worktrees/session-existing",
     });
@@ -1118,9 +1118,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         externalSessionId: "session-qa",
-        role: "qa",
       }),
       selectedTask: createTask({
         status: "in_progress",
@@ -1208,9 +1207,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "qa",
       loadedSession: createSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         externalSessionId: "session-qa",
-        role: "qa",
       }),
       selectedTask: createTask({
         status: "in_progress",
@@ -1227,8 +1225,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-existing",
-          role: "build",
-          taskId: "task-1",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
           startedAt: "2026-02-22T12:00:00.000Z",
           workingDirectory: "/repo/worktrees/session-existing",
         }),
@@ -1286,7 +1284,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1328,7 +1326,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1371,7 +1369,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1408,7 +1406,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),
@@ -1439,12 +1437,12 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
         createSession({
           externalSessionId: "session-build-older",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
       ]),
@@ -1504,7 +1502,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
       ]),

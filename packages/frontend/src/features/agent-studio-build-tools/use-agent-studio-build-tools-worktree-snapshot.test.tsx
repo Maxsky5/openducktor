@@ -141,7 +141,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
     ...viewOverrides
   } = overrides;
   const defaultSession = createAgentSessionFixture({
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     status: "running",
     workingDirectory: "/repo",
   });
@@ -288,7 +288,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         selectedView: createSelectedView({
           loadedSession: createAgentSessionFixture({
-            role: "build",
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
             status: "running",
             workingDirectory: "/repo/.worktrees/task-24",
           }),
@@ -324,7 +324,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            role: "qa",
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
             status: "running",
             workingDirectory: "/repo/.worktrees/task-24",
           }),
@@ -364,7 +364,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            role: "qa",
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
             status: "running",
             workingDirectory: "/repo/",
           }),
@@ -398,7 +398,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "qa",
           loadedSession: createAgentSessionFixture({
-            role: "qa",
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
             status: "running",
             workingDirectory: "/repo/",
           }),
@@ -427,7 +427,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("uses the selected session summary while the full session is still loading", async () => {
     const selectedSessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         status: "running",
         workingDirectory: "/repo/.worktrees/task-24",
       }),
@@ -581,7 +581,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     "uses a fresh %s session worktree for Git context and Open In",
     async (role) => {
       const specSession = createAgentSessionFixture({
-        role,
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
         workingDirectory: "/repo/.worktrees/task-24",
       });
       const harness = createHookHarness(
@@ -614,7 +614,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   );
 
   test("keeps a legacy root-backed Spec session in repository context", async () => {
-    const specSession = createAgentSessionFixture({ role: "spec", workingDirectory: "/repo" });
+    const specSession = createAgentSessionFixture({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      workingDirectory: "/repo",
+    });
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({ role: "spec", loadedSession: specSession }),
@@ -638,7 +641,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         selectedView: createSelectedView({
           role: "spec",
           loadedSession: createAgentSessionFixture({
-            role: "spec",
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
             status: "running",
             workingDirectory: "/repo",
           }),

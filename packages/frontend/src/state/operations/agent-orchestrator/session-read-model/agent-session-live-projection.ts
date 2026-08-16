@@ -468,7 +468,7 @@ export const applyTaskSessionRecords = ({
       }),
     );
   }
-  return collection;
+  return rebuildProjectedPendingInput(collection);
 };
 
 export const applyAgentSessionLiveDelta = ({

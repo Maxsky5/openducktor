@@ -65,8 +65,8 @@ const createDefaultAgentSessions = () => [
   {
     ...createAgentSessionFixture({
       externalSessionId: "builder-session-old",
-      taskId: "TASK-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+
       workingDirectory: "/repo",
       startedAt: "2026-03-12T11:59:00Z",
     }),
@@ -74,8 +74,8 @@ const createDefaultAgentSessions = () => [
   {
     ...createAgentSessionFixture({
       externalSessionId: "builder-session",
-      taskId: "TASK-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+
       workingDirectory: "/repo",
       startedAt: "2026-03-12T12:00:00Z",
     }),

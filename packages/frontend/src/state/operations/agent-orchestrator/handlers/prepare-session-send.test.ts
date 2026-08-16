@@ -9,7 +9,9 @@ type BuildSessionOverrides = Parameters<typeof buildSession>[0];
 const buildWorkflowSession = (overrides: BuildSessionOverrides = {}): WorkflowAgentSessionState => {
   const session = buildSession({
     ...overrides,
-    role: overrides.role ?? "build",
+    sessionAssociation:
+      overrides.sessionAssociation ??
+      ({ kind: "workflow", taskId: "task-1", role: "build" } as const),
   });
   if (session.sessionAssociation.kind !== "workflow") {
     throw new Error("Workflow session fixtures require a workflow association.");

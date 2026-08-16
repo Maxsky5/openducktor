@@ -186,12 +186,12 @@ describe("useShellAgentActivity", () => {
     const harness = createHarness({ activeWorkspaceRepoPath: "/repo" }, [
       createActivitySession({
         externalSessionId: "session-1",
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
       createActivitySession({
         externalSessionId: "session-2",
-        taskId: "task-2",
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
         status: "stopped",
         startedAt: "2026-03-17T09:00:00.000Z",
       }),
@@ -221,7 +221,7 @@ describe("useShellAgentActivity", () => {
     const harness = createHarness({ activeWorkspaceRepoPath: "/repo" }, [
       createActivitySession({
         externalSessionId: "session-1",
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -261,7 +261,7 @@ describe("useShellAgentActivity", () => {
     const harness = createHarness({ activeWorkspaceRepoPath: "/repo-a" }, [
       createActivitySession({
         externalSessionId: "session-a",
-        taskId: "task-a",
+        sessionAssociation: { kind: "workflow", taskId: "task-a", role: "spec" },
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -286,7 +286,7 @@ describe("useShellAgentActivity", () => {
         const nextSessions = [
           createActivitySession({
             externalSessionId: "session-b",
-            taskId: "task-b",
+            sessionAssociation: { kind: "workflow", taskId: "task-b", role: "spec" },
             startedAt: "2026-03-17T11:00:00.000Z",
           }),
         ];

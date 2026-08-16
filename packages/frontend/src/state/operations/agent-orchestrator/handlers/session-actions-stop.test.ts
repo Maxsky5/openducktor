@@ -29,7 +29,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         workingDirectory: "/tmp/repo",
         runtimeStatusMessage: "Safety buffering",
         pendingApprovals: [
@@ -160,7 +160,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
     ]);
     const actions = createSessionActions({
@@ -197,7 +197,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         messages: [
           {
             id: "tool-running",
@@ -335,7 +335,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         runtimeKind: "codex",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         messages: [
           {
             id: "tool-running",
@@ -434,7 +434,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
       }),
     ]);
 
@@ -656,7 +656,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       stopCalls += 1;
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ status: "running", role: "build", taskId: "task-1" }),
+      buildSession({
+        status: "running",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
     ]);
 
     const actions = createSessionActions({

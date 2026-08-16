@@ -17,7 +17,7 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 const createSession = (taskId: string, externalSessionId: string) =>
   createAgentSessionSummaryFixture({
     externalSessionId: `ext-${externalSessionId}`,
-    taskId,
+    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
   });
 
 const sessionExternalIdParam = (
@@ -151,8 +151,7 @@ describe("resolveAgentStudioNavigationState", () => {
     const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
-      taskId: "task-1",
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
     });
 
     expect(
@@ -171,8 +170,8 @@ describe("resolveAgentStudioNavigationState", () => {
     const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "codex",
       externalSessionId: "session-1",
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       workingDirectory: "/repo/worktrees/authoritative",
     });
     const state = createNavigationState({

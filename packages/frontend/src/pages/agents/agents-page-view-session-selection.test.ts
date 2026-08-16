@@ -11,17 +11,17 @@ describe("Agent Studio view session selection", () => {
   test("groups sessions by task with newest sessions first", () => {
     const firstTaskOneOld = createAgentSessionFixture({
       externalSessionId: "session-old",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T10:00:00.000Z",
     });
     const firstTaskOneNew = createAgentSessionFixture({
       externalSessionId: "session-new",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T11:00:00.000Z",
     });
     const firstTaskTwo = createAgentSessionFixture({
       externalSessionId: "session-2-old",
-      taskId: "task-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
       startedAt: "2026-02-22T09:00:00.000Z",
     });
 
@@ -41,12 +41,12 @@ describe("Agent Studio view session selection", () => {
   test("keeps grouped session order stable when input order changes", () => {
     const sessionOld = createAgentSessionFixture({
       externalSessionId: "session-old",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T10:00:00.000Z",
     });
     const sessionNew = createAgentSessionFixture({
       externalSessionId: "session-new",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T11:00:00.000Z",
     });
 
@@ -68,8 +68,8 @@ describe("Agent Studio view session selection", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-reloaded",
-        taskId: "task-1",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
         status: "idle",
         startedAt: "2026-02-22T12:00:00.000Z",
         workingDirectory: "/repo/live",
@@ -139,8 +139,8 @@ describe("Agent Studio view session selection", () => {
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-summary",
-        taskId: "task-1",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
         status: "idle",
         startedAt: "2026-02-22T12:00:00.000Z",
         workingDirectory: "/repo/live",

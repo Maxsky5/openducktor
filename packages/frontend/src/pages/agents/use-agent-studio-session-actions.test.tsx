@@ -22,7 +22,10 @@ import {
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -118,7 +121,8 @@ const createAttachmentDraft = (input: {
   ],
 });
 
-const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+const createSession = (overrides: AgentSessionFixtureOverrides = {}) =>
+  createAgentSessionFixture(overrides);
 const summarizeSessions = (sessions: ReturnType<typeof createSession>[]) =>
   sessions.map(toAgentSessionSummary);
 
@@ -1373,12 +1377,12 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(() => sendDeferred.promise);
     const taskOneDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
-      taskId: "task-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
       externalSessionId: "session-task-2",
       status: "stopped",
     });
@@ -1424,12 +1428,12 @@ describe("useAgentStudioSessionActions", () => {
     const sendAgentMessage = mock(() => firstSendDeferred.promise);
     const firstDraft = createComposerDraft("  hello world  ");
     const taskOneSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
-      taskId: "task-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
       externalSessionId: "session-task-2",
       status: "stopped",
     });
@@ -1482,12 +1486,12 @@ describe("useAgentStudioSessionActions", () => {
     const firstDraft = createComposerDraft("  hello world  ");
     const secondDraft = createComposerDraft("second send");
     const taskOneSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-task-1",
       status: "stopped",
     });
     const taskTwoSession = createSession({
-      taskId: "task-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
       externalSessionId: "session-task-2",
       status: "stopped",
     });
@@ -1592,9 +1596,9 @@ describe("useAgentStudioSessionActions", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       ...sessionIdentity("session-new"),
-      role: "spec",
+
       status: "stopped",
     });
 
@@ -1645,7 +1649,7 @@ describe("useAgentStudioSessionActions", () => {
     const existingSpecSession = createSession({
       runtimeKind: "opencode",
       externalSessionId: "session-existing",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
     });
 
     const harness = createHookHarness({
@@ -1672,7 +1676,10 @@ describe("useAgentStudioSessionActions", () => {
 
   test("session selection and workflow selection publish selected session state", async () => {
     const selectAgentStudioSelection = mock(() => {});
-    const sessionTwo = createSession({ externalSessionId: "session-2", taskId: "task-2" });
+    const sessionTwo = createSession({
+      externalSessionId: "session-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+    });
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1806,7 +1813,10 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",
-      ...selectedSessionArgs({ externalSessionId: "session-spec", role: "spec" }),
+      ...selectedSessionArgs({
+        externalSessionId: "session-spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+      }),
       selectedTask: createTask(),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
@@ -1891,7 +1901,10 @@ describe("useAgentStudioSessionActions", () => {
 
   test("selection actions apply selected session identity", async () => {
     const selectAgentStudioSelection = mock(() => {});
-    const session = createSession({ externalSessionId: "session-1", role: "spec" });
+    const session = createSession({
+      externalSessionId: "session-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+    });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
       sessionsForTask: summarizeSessions([session]),
@@ -1918,7 +1931,10 @@ describe("useAgentStudioSessionActions", () => {
 
   test("selection actions publish local selection immediately", async () => {
     const selections: unknown[] = [];
-    const session = createSession({ externalSessionId: "session-1", role: "spec" });
+    const session = createSession({
+      externalSessionId: "session-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+    });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
       sessionsForTask: summarizeSessions([session]),

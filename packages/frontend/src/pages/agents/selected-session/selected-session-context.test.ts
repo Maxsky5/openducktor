@@ -30,8 +30,8 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
-    taskId: "task-1",
-    role: "spec",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+
     status: "idle",
     ...overrides,
   });
@@ -143,7 +143,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       AgentRole,
       string | null,
     ][]) {
-      const session = createSession({ role });
+      const session = createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
+      });
       const context = buildAgentStudioSelectedSessionContext(
         createInput({
           role,
@@ -160,12 +162,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("keeps selected-session identity authoritative when loaded session state is stale", () => {
     const selectedSession = createSession({
       externalSessionId: "shared-session",
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       workingDirectory: "/repo/selected-worktree",
     });
     const staleLoadedSession = createSession({
       externalSessionId: "shared-session",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       workingDirectory: "/repo/stale-worktree",
     });
     const context = buildAgentStudioSelectedSessionContext(
@@ -217,7 +219,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const qaSession = createSession({ role: "qa" });
+    const qaSession = createSession({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+    });
 
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
@@ -358,7 +362,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     });
     const subagentSession = createSession({
       externalSessionId: "session-sub",
-      taskId: "other-task",
+      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [
         {
           requestId: "approval-sub",

@@ -602,7 +602,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     };
 
     const sessionsRef = createSessionsRef([
-      buildSession({ status: "idle", role: "qa", taskId: "task-1" }),
+      buildSession({
+        status: "idle",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+      }),
     ]);
 
     const actions = createSessionActions({

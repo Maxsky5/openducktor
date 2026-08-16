@@ -18,7 +18,7 @@ const replaceStoreSessions = (
 describe("toAgentSessionSummary", () => {
   test("preserves session working directory for build-session consumers", () => {
     const session = createAgentSessionFixture({
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       workingDirectory: "/repo",
     });
 
@@ -80,7 +80,7 @@ describe("createAgentSessionsStore session snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
     });
@@ -152,7 +152,7 @@ describe("createAgentSessionsStore session snapshots", () => {
     const session = {
       ...createAgentSessionFixture({
         ...identity,
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         historyLoadState: "not_requested",
       }),
       messages: createSessionMessagesState(identity.externalSessionId),
@@ -268,7 +268,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const baseSession = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
     });
 
@@ -299,7 +299,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
       pendingApprovals: [],
     });
@@ -343,7 +343,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/opencode",
       status: "running",
@@ -374,14 +374,14 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const opencodeSession = createAgentSessionFixture({
       externalSessionId: "shared-session",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/opencode",
       status: "running",
     });
     const codexSession = createAgentSessionFixture({
       externalSessionId: "shared-session",
-      taskId: "task-2",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
       runtimeKind: "codex",
       workingDirectory: "/repo/codex",
       status: "running",
@@ -411,9 +411,8 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "unbound" },
       status: "running",
-      role: null,
     });
 
     replaceStoreSessions(store, [session]);
@@ -425,7 +424,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const store = createAgentSessionsStore("/repo-a");
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
-      taskId: "task-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       status: "running",
     });
 

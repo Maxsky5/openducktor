@@ -58,9 +58,9 @@ const sessionTarget = {
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
     externalSessionId: sessionTarget.externalSessionId,
-    taskId: "task-1",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     runtimeKind: "opencode",
-    role: "build",
+
     status: "running",
     startedAt: "2026-06-12T08:00:00.000Z",
     workingDirectory: sessionTarget.workingDirectory,

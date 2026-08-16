@@ -39,8 +39,8 @@ const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
   createAgentSessionFixture({
     externalSessionId: "session-1",
-    taskId: "task-1",
-    role: "planner",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+
     runtimeKind: "opencode",
   });
 type SessionFixture = ReturnType<typeof createSession>;

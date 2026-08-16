@@ -522,7 +522,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       current: createAgentSessionCollection([
         sessionFixture({
           externalSessionId: "existing-spec-ext",
-          role: "spec",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
           startedAt: "2026-02-22T08:10:00.000Z",
         }),
       ]),

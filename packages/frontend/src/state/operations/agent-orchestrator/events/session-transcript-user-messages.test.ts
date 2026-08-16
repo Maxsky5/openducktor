@@ -220,7 +220,7 @@ describe("agent-orchestrator session transcript events", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         messages: [previousMessage],
         ...protectedSessionState,
       }),

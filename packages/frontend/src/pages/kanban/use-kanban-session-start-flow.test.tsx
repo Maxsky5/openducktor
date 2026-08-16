@@ -246,10 +246,10 @@ const createBaseArgs = (): HookArgs => ({
   sessions: [
     createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
-      taskId: "TASK-1",
+      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/builder-session-2",
-      role: "build",
+
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -261,10 +261,10 @@ const createBaseArgs = (): HookArgs => ({
     }),
     createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
-      taskId: "TASK-1",
+      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/builder-session-1",
-      role: "build",
+
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -1091,19 +1091,19 @@ describe("useKanbanSessionStartFlow", () => {
     args.sessions = [
       createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-before-refresh",
-        taskId: "TASK-1",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/builder-session-before-refresh",
-        role: "build",
+
         startedAt: "2026-03-19T12:00:00.000Z",
       }),
     ];
     const nextSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-after-refresh",
-      taskId: "TASK-1",
+      sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/builder-session-after-refresh",
-      role: "build",
+
       startedAt: "2026-03-20T12:00:00.000Z",
     });
     const harness = createHookHarness(args);
@@ -1144,10 +1144,10 @@ describe("useKanbanSessionStartFlow", () => {
     args.sessions = [
       createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-new-running",
-        taskId: "TASK-1",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/builder-session-new-running",
-        role: "build",
+
         status: "running",
         pendingApprovals: [],
         pendingQuestions: [],
@@ -1155,10 +1155,10 @@ describe("useKanbanSessionStartFlow", () => {
       }),
       createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-old-waiting",
-        taskId: "TASK-1",
+        sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/builder-session-old-waiting",
-        role: "build",
+
         status: "idle",
         pendingApprovals: [],
         pendingQuestions: [

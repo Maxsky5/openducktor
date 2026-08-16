@@ -119,8 +119,7 @@ describe("createReadonlyTranscriptSession", () => {
       externalSessionId: "parent-thread",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "",
-      role: null,
+      sessionAssociation: { kind: "unbound" },
       historyLoadState: "loading",
       messages: createSessionMessagesState("parent-thread"),
     });

@@ -1,5 +1,10 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { formatWorkflowAgentSessionTitle, requireSessionWorkingDirectory } from "@openducktor/core";
+import {
+  describeAgentSessionScope,
+  formatWorkflowAgentSessionTitle,
+  requireSessionWorkingDirectory,
+  resolveAgentSessionAssociationTransition,
+} from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
 import { normalizePersistedSelection } from "./models";
@@ -100,10 +105,19 @@ export const toPersistedSessionView = ({
   if (!current) {
     return persisted;
   }
+  const transition = resolveAgentSessionAssociationTransition(
+    current.sessionAssociation,
+    persisted.sessionAssociation,
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot reconcile persisted session '${current.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the incoming ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
 
   return {
     ...current,
-    sessionAssociation: persisted.sessionAssociation,
+    sessionAssociation: transition.association,
     runtimeKind: persisted.runtimeKind,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,

@@ -22,8 +22,8 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
   return createAgentSessionFixture(
     {
       externalSessionId: selectedSessionIdentity.externalSessionId,
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: "2026-06-12T08:00:00.000Z",

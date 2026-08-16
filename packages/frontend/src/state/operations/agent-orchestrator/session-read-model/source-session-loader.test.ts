@@ -98,8 +98,8 @@ describe("source session loader", () => {
   test("returns exactly the requested source session from the ordered projection", async () => {
     const attachedSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,
-      taskId: "task-1",
-      role: record.role,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: record.role },
+
       runtimeKind: record.runtimeKind,
       workingDirectory: record.workingDirectory,
       startedAt: record.startedAt,
@@ -154,8 +154,8 @@ describe("source session loader", () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
-        taskId: "task-1",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
         runtimeKind: "opencode",
         status: "running",
         startedAt: record.startedAt,
@@ -208,8 +208,8 @@ describe("source session loader", () => {
     });
     const initialSession = createAgentSessionFixture({
       externalSessionId: record.externalSessionId,
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       runtimeKind: record.runtimeKind,
       workingDirectory: record.workingDirectory,
       status: "idle",

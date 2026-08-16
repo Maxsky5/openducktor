@@ -13,6 +13,7 @@ import type { AgentSessionIdentity, AgentSessionRuntimeTarget } from "@/types/ag
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
+  applyTaskSessionRecords,
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
 import { collectPendingApprovalPolicyActions } from "./pending-approval-policy";
@@ -88,6 +89,137 @@ describe("agent session live projection", () => {
       taskId: "task-1",
       role: "qa",
     });
+  });
+
+  test("rejects repository-to-workflow persisted reconciliation", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "repository" },
+        }),
+      ],
+    });
+
+    expect(() =>
+      applyTaskSessionRecords({
+        current,
+        taskSessionRecords: taskSessionRecords({
+          taskId: "task-1",
+          record: record("thread-1"),
+        }),
+      }),
+    ).toThrow(
+      "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+    );
+  });
+
+  test("accepts matching workflow persisted reconciliation", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
+    });
+
+    const next = applyTaskSessionRecords({
+      current,
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("thread-1"),
+      }),
+    });
+
+    expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
+  });
+
+  test("rejects conflicting workflow persisted reconciliation", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        }),
+      ],
+    });
+
+    expect(() =>
+      applyTaskSessionRecords({
+        current,
+        taskSessionRecords: taskSessionRecords({
+          taskId: "task-2",
+          record: record("thread-1"),
+        }),
+      }),
+    ).toThrow(
+      "Cannot reconcile persisted session 'thread-1' because its registered workflow scope for task 'task-1' and role 'spec' does not match the incoming workflow scope for task 'task-2' and role 'build'.",
+    );
+  });
+
+  test("hydrates an unbound session from persisted workflow scope and refreshes parent routing", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("parent-thread"),
+        snapshot("child-thread", {
+          parentExternalSessionId: "parent-thread",
+          pendingApprovals: [
+            {
+              requestId: "child-approval",
+              requestType: "command_execution",
+              title: "Run command",
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "child-question",
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the child continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const next = applyTaskSessionRecords({
+      current,
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("child-thread"),
+      }),
+    });
+    const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+
+    expect(getAgentSession(next, identity("child-thread"))?.sessionAssociation).toEqual(
+      workflowAssociation,
+    );
+    expect(getAgentSession(next, identity("parent-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({
+        requestId: "child-approval",
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+      }),
+    ]);
+    expect(getAgentSession(next, identity("parent-thread"))?.pendingQuestions).toEqual([
+      expect.objectContaining({
+        requestId: "child-question",
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+      }),
+    ]);
   });
 
   test.each(["opencode", "codex", "claude"] as const)(

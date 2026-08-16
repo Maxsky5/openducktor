@@ -137,8 +137,8 @@ export const sessionFixture = (
   overrides: Partial<TestAgentSessionState> & { externalSessionId: string },
 ): TestAgentSessionState => ({
   runtimeKind: "opencode",
-  taskId: "task-1",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:10:00.000Z",

@@ -27,8 +27,7 @@ const createBaseArgs = (): BuildArgs => {
   const session = createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
-    taskId: "task-1",
-    role: "planner",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
   });
   const sessionSummary = toAgentSessionSummary(session);
   const createTaskDocument = () => ({

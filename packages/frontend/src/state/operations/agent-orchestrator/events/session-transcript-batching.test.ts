@@ -170,7 +170,12 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ]);
     let updateSessionCalls = 0;
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
@@ -275,7 +280,12 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -359,7 +369,7 @@ describe("agent-orchestrator session transcript events", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "running",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         selectedModel: {
           providerId: "claude",
           modelId: "sonnet",
@@ -459,7 +469,7 @@ describe("agent-orchestrator session transcript events", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         status: "running",
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         selectedModel: {
           providerId: "claude",
           modelId: "sonnet",

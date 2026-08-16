@@ -1,5 +1,4 @@
 import {
-  type AgentSessionAssociation,
   type ChatSettings,
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_APPEARANCE_SETTINGS,
@@ -10,7 +9,6 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -275,15 +273,8 @@ export const createTaskCardFixture = (
 
 type AgentSessionFixtureMessages = SessionMessagesState | AgentChatMessage[];
 
-export type AgentSessionFixtureOverrides = Partial<
-  Omit<AgentSessionState, "messages" | "sessionAssociation">
-> & {
+export type AgentSessionFixtureOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: AgentSessionFixtureMessages;
-  sessionAssociation?: AgentSessionAssociation;
-  /** @deprecated Declare sessionAssociation in new tests. */
-  taskId?: string;
-  /** @deprecated Declare sessionAssociation in new tests. */
-  role?: AgentRole | null;
   runId?: string | null;
 };
 
@@ -294,61 +285,24 @@ const toAgentSessionFixtureMessages = (
   return createSessionMessagesFixture(externalSessionId, messages);
 };
 
-const resolveAgentSessionFixtureAssociation = ({
-  defaultAssociation,
-  overrideAssociation,
-  defaultTaskId,
-  overrideTaskId,
-  defaultRole,
-  overrideRole,
-}: {
-  defaultAssociation: AgentSessionAssociation | undefined;
-  overrideAssociation: AgentSessionAssociation | undefined;
-  defaultTaskId: string | undefined;
-  overrideTaskId: string | undefined;
-  defaultRole: AgentRole | null | undefined;
-  overrideRole: AgentRole | null | undefined;
-}): AgentSessionAssociation => {
-  if (overrideAssociation) {
-    return overrideAssociation;
+const assertCanonicalAgentSessionFixtureInput = (input: AgentSessionFixtureOverrides): void => {
+  for (const legacyField of ["taskId", "role"] as const) {
+    if (Object.hasOwn(input, legacyField)) {
+      throw new Error(
+        `Agent session fixture overrides must declare sessionAssociation instead of ${legacyField}.`,
+      );
+    }
   }
-  if (defaultAssociation) {
-    return defaultAssociation;
-  }
-  if (overrideRole === null || (overrideRole === undefined && defaultRole === null)) {
-    return { kind: "unbound" };
-  }
-  const baseAssociation = BASE_AGENT_SESSION_FIXTURE.sessionAssociation;
-  if (baseAssociation.kind !== "workflow") {
-    throw new Error("The base agent session fixture must use a workflow association.");
-  }
-  return {
-    kind: "workflow",
-    taskId: overrideTaskId ?? defaultTaskId ?? baseAssociation.taskId,
-    role: overrideRole ?? defaultRole ?? baseAssociation.role,
-  };
 };
 
 export const createAgentSessionFixture = (
   defaults: AgentSessionFixtureOverrides = {},
   overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionState => {
-  const {
-    runId: _defaultRunId,
-    messages: defaultMessages,
-    sessionAssociation: defaultAssociation,
-    taskId: defaultTaskId,
-    role: defaultRole,
-    ...defaultSession
-  } = defaults;
-  const {
-    runId: _overrideRunId,
-    messages: overrideMessages,
-    sessionAssociation: overrideAssociation,
-    taskId: overrideTaskId,
-    role: overrideRole,
-    ...overrideSession
-  } = overrides;
+  assertCanonicalAgentSessionFixtureInput(defaults);
+  assertCanonicalAgentSessionFixtureInput(overrides);
+  const { runId: _defaultRunId, messages: defaultMessages, ...defaultSession } = defaults;
+  const { runId: _overrideRunId, messages: overrideMessages, ...overrideSession } = overrides;
   const externalSessionId =
     overrideSession.externalSessionId ??
     defaultSession.externalSessionId ??
@@ -357,14 +311,6 @@ export const createAgentSessionFixture = (
     ...BASE_AGENT_SESSION_FIXTURE,
     ...defaultSession,
     ...overrideSession,
-    sessionAssociation: resolveAgentSessionFixtureAssociation({
-      defaultAssociation,
-      overrideAssociation,
-      defaultTaskId,
-      overrideTaskId,
-      defaultRole,
-      overrideRole,
-    }),
     messages: toAgentSessionFixtureMessages(
       externalSessionId,
       overrideMessages ?? defaultMessages ?? BASE_AGENT_SESSION_FIXTURE.messages,

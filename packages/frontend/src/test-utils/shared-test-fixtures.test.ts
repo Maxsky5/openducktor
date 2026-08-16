@@ -5,6 +5,7 @@ import {
   getSessionMessageCount,
 } from "@/state/operations/agent-orchestrator/support/messages";
 import {
+  type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
   createChatSettingsFixture,
   createSettingsSnapshotFixture,
@@ -12,7 +13,26 @@ import {
   TEST_EXTERNAL_SESSION_IDS,
 } from "./shared-test-fixtures";
 
+type ExpectTrue<Value extends true> = Value;
+type AgentSessionFixtureUsesOnlyCanonicalAssociation = ExpectTrue<
+  Extract<keyof AgentSessionFixtureOverrides, "taskId" | "role"> extends never ? true : false
+>;
+const agentSessionFixtureUsesOnlyCanonicalAssociation: AgentSessionFixtureUsesOnlyCanonicalAssociation = true;
+
 describe("shared test fixtures", () => {
+  test("accepts only the canonical session association fields", () => {
+    expect(agentSessionFixtureUsesOnlyCanonicalAssociation).toBeTrue();
+  });
+
+  test("rejects legacy session association sentinel fields at runtime", () => {
+    expect(() => createAgentSessionFixture({ taskId: "" } as never)).toThrow(
+      "Agent session fixture overrides must declare sessionAssociation instead of taskId.",
+    );
+    expect(() => createAgentSessionFixture({ role: null } as never)).toThrow(
+      "Agent session fixture overrides must declare sessionAssociation instead of role.",
+    );
+  });
+
   test("createTaskCardFixture returns isolated nested objects", () => {
     const first = createTaskCardFixture();
     const second = createTaskCardFixture();

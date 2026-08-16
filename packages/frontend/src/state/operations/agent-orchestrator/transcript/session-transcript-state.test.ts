@@ -24,8 +24,8 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
   return createAgentSessionFixture(
     {
       externalSessionId: "external-1",
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: "2026-02-22T08:00:00.000Z",
@@ -163,7 +163,7 @@ describe("deriveLoadedAgentSessionTranscriptState", () => {
   test("renders running planner sessions immediately when durable runtime context is available", () => {
     const transcriptState = deriveLoadedTranscriptStateForSession({
       session: createSession({
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         status: "running",
         historyLoadState: "loaded",
         runtimeKind: "opencode",

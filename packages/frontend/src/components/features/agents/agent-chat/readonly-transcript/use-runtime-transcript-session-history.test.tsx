@@ -22,8 +22,8 @@ const session = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionStat
   createAgentSessionFixture(
     {
       externalSessionId: "thread-1",
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       runtimeKind: "codex",
       workingDirectory: "/repo/worktree",
       status: "idle",
