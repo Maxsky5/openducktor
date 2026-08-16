@@ -3,7 +3,15 @@ import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@op
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
@@ -34,10 +42,7 @@ import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
-import {
-  type TaskSessionRecords,
-  toTaskSessionRecords,
-} from "../session-read-model/task-session-records";
+import type { TaskSessionRecords } from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
@@ -100,8 +105,14 @@ export const useRepoSessionReadModel = ({
     ReadonlyMap<string, AgentSessionTransientFault>
   >(() => new Map());
   const [reloadGeneration, setReloadGeneration] = useState(0);
+  const [taskSessionRecordsRetryAttempt, setTaskSessionRecordsRetryAttempt] = useState(0);
   const retryAttemptRef = useRef(0);
+  const reconciledTaskSessionRecordsRetryAttemptRef = useRef(0);
+  const currentTaskIdsKeyRef = useRef("");
   const taskSessionRecordsProjectionRef = useRef<TaskSessionRecordsProjectionState | null>(null);
+  useLayoutEffect(() => {
+    currentTaskIdsKeyRef.current = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
+  }, [taskIds]);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const observeLiveSessions = useEffectEvent(
     (
@@ -196,6 +207,7 @@ export const useRepoSessionReadModel = ({
     const repoPath = workspaceRepoPath;
     const repoEpoch = repoEpochRef.current;
     const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
+    const taskIdsKey = JSON.stringify(normalizedTaskIds);
     const projectionState = taskSessionRecordsProjectionRef.current;
     const retriesReconciliationFailure =
       projectionState?.kind === "failed" &&
@@ -210,17 +222,12 @@ export const useRepoSessionReadModel = ({
       ? loadAgentSessionListsFromQuery(queryClient, repoPath, normalizedTaskIds, {
           forceFresh: true,
           readPort: sessionReadPort,
-        }).then((recordsByTaskId) => {
+        }).then(() => {
           if (!isCurrentRetry()) {
             return false;
           }
-          return reconcileTaskSessionRecords(
-            repoPath,
-            toTaskSessionRecords(
-              normalizedTaskIds.map((id) => ({ id })),
-              recordsByTaskId,
-            ),
-          );
+          setTaskSessionRecordsRetryAttempt(retryAttempt);
+          return false;
         })
       : retryAgentSessionListQueries(
           queryClient,
@@ -236,6 +243,10 @@ export const useRepoSessionReadModel = ({
       },
       (error: unknown) => {
         if (isCurrentRetry()) {
+          if (retriesReconciliationFailure && currentTaskIdsKeyRef.current !== taskIdsKey) {
+            setTaskSessionRecordsRetryAttempt(retryAttempt);
+            return;
+          }
           setSessionReadModelLoadState(
             failedAgentSessionReadModelLoadState(
               repoPath,
@@ -248,7 +259,6 @@ export const useRepoSessionReadModel = ({
   }, [
     currentWorkspaceRepoPathRef,
     queryClient,
-    reconcileTaskSessionRecords,
     repoEpochRef,
     sessionReadPort,
     taskIds,
@@ -305,13 +315,29 @@ export const useRepoSessionReadModel = ({
       setSessionReadModelLoadState(
         failedAgentSessionReadModelLoadState(workspaceRepoPath, message),
       );
+      reconciledTaskSessionRecordsRetryAttemptRef.current = taskSessionRecordsRetryAttempt;
       return;
     }
 
     // This hook owns the documented query-to-session-store projection boundary.
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
-    reconcileTaskSessionRecords(workspaceRepoPath, taskSessionRecordsState.records);
-  }, [reconcileTaskSessionRecords, taskSessionRecordsState, workspaceRepoPath]);
+    const recordsReconciled = reconcileTaskSessionRecords(
+      workspaceRepoPath,
+      taskSessionRecordsState.records,
+    );
+    if (taskSessionRecordsRetryAttempt <= reconciledTaskSessionRecordsRetryAttemptRef.current) {
+      return;
+    }
+    reconciledTaskSessionRecordsRetryAttemptRef.current = taskSessionRecordsRetryAttempt;
+    if (recordsReconciled) {
+      setReloadGeneration((current) => current + 1);
+    }
+  }, [
+    reconcileTaskSessionRecords,
+    taskSessionRecordsRetryAttempt,
+    taskSessionRecordsState,
+    workspaceRepoPath,
+  ]);
 
   useEffect(() => {
     if (!workspaceRepoPath || !canObserveRepo) {

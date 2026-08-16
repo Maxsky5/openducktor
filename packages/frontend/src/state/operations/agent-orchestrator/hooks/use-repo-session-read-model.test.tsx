@@ -357,6 +357,47 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("does not replay stale task records when task IDs change during conflict retry", async () => {
+    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const batchList = mock(() => retry.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({ ...state.props, taskIds: [] });
+
+      retry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("keeps the persisted collection and reports an initial snapshot association conflict", async () => {
     const state = createState(() => undefined);
 
