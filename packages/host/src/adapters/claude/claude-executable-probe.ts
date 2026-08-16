@@ -21,6 +21,22 @@ type ClaudeQueryFactory = (input: {
   options: Options;
 }) => ClaudeProbeQuery;
 
+const isClaudeInitializationResponse = (
+  response: unknown,
+): response is SDKControlInitializeResponse =>
+  typeof response === "object" &&
+  response !== null &&
+  "commands" in response &&
+  Array.isArray(response.commands) &&
+  "agents" in response &&
+  Array.isArray(response.agents) &&
+  "output_style" in response &&
+  typeof response.output_style === "string" &&
+  "available_output_styles" in response &&
+  Array.isArray(response.available_output_styles) &&
+  "models" in response &&
+  Array.isArray(response.models);
+
 const createIdlePrompt = (signal: AbortSignal): AsyncIterable<SDKUserMessage> => ({
   [Symbol.asyncIterator]() {
     return {
@@ -91,14 +107,18 @@ export const createClaudeExecutableProbe = ({
           toHostOperationError(cause, "claudeExecutableProbe.start", { executablePath }),
       }),
       probe: (sdkQuery) =>
-        Effect.tryPromise<SDKControlInitializeResponse, RuntimeExecutableIncompatibleError>({
+        Effect.tryPromise({
           try: () => sdkQuery.initializationResult(),
           catch: (cause) =>
-            new RuntimeExecutableIncompatibleError({
-              message: `The executable at ${executablePath} did not complete the Claude Agent SDK initialization protocol.`,
-              cause,
-            }),
+            toHostOperationError(cause, "claudeExecutableProbe.initialize", { executablePath }),
         }).pipe(
+          Effect.filterOrFail(
+            isClaudeInitializationResponse,
+            () =>
+              new RuntimeExecutableIncompatibleError({
+                message: `The executable at ${executablePath} returned an invalid Claude Agent SDK initialization response.`,
+              }),
+          ),
           Effect.timeoutFail({
             duration: `${initializationTimeoutMs} millis`,
             onTimeout: () =>

@@ -6,6 +6,16 @@ import {
   createClaudeExecutableProbe,
 } from "./claude-executable-probe";
 
+const initializationResponse = (): SDKControlInitializeResponse =>
+  ({
+    commands: [],
+    agents: [],
+    output_style: "default",
+    available_output_styles: [],
+    models: [],
+    account: {},
+  }) as SDKControlInitializeResponse;
+
 describe("createClaudeExecutableProbe", () => {
   test("uses an isolated Agent SDK initialization and awaits cleanup after success", async () => {
     let receivedOptions: Options | null = null;
@@ -23,7 +33,7 @@ describe("createClaudeExecutableProbe", () => {
       queryFactory(input) {
         receivedOptions = input.options;
         return {
-          initializationResult: async () => ({}) as SDKControlInitializeResponse,
+          initializationResult: async () => initializationResponse(),
           async return() {
             cleanupStarted = true;
             confirmCleanupStarted();
@@ -64,15 +74,40 @@ describe("createClaudeExecutableProbe", () => {
     expect(probeResolved).toBe(true);
   });
 
-  test("awaits Agent SDK query cleanup when initialization fails", async () => {
+  test("preserves operational Agent SDK initialization failures", async () => {
     let cleanupFinished = false;
     const probe = createClaudeExecutableProbe({
       queryFactory() {
         return {
-          initializationResult: () => Promise.reject(new Error("not Claude Code")),
+          initializationResult: () => Promise.reject(new Error("failed to start Claude Code")),
           async return() {
             await Promise.resolve();
             cleanupFinished = true;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    });
+
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.probeExecutable("/usr/local/bin/claude")),
+    );
+
+    expect(failure._tag).toBe("HostOperationError");
+    if (failure._tag !== "HostOperationError") {
+      throw new Error(`Expected HostOperationError, received ${failure._tag}`);
+    }
+    expect(failure.operation).toBe("claudeExecutableProbe.initialize");
+    expect(failure.message).toContain("failed to start Claude Code");
+    expect(cleanupFinished).toBe(true);
+  });
+
+  test("rejects an initialization response without the Claude protocol shape", async () => {
+    const probe = createClaudeExecutableProbe({
+      queryFactory() {
+        return {
+          initializationResult: async () => ({}) as SDKControlInitializeResponse,
+          async return() {
             return { done: true, value: undefined };
           },
         };
@@ -84,14 +119,13 @@ describe("createClaudeExecutableProbe", () => {
     );
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
-    expect(cleanupFinished).toBe(true);
   });
 
   test("preserves Agent SDK cleanup failures", async () => {
     const probe = createClaudeExecutableProbe({
       queryFactory() {
         return {
-          initializationResult: async () => ({}) as SDKControlInitializeResponse,
+          initializationResult: async () => initializationResponse(),
           return: () => Promise.reject(new Error("cleanup failed")),
         };
       },
