@@ -84,6 +84,7 @@ describe("build tools", () => {
     expect(splash?.attrs?.role).toBe("status");
     expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
     expect(splash?.children).toContain('<div class="odt-startup__orbit" aria-hidden="true">');
+    expect(splash?.children).toContain('<div class="odt-startup__particles" aria-hidden="true">');
     expect(splash?.children).not.toContain("odt-startup__launch-panel");
     expect(splash?.children).toContain("./favicon.svg");
   });

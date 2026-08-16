@@ -46,7 +46,58 @@ body {
   opacity: 0;
 }
 
+.odt-startup__particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.odt-startup__particle-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.odt-startup__particle-layer--far {
+  box-shadow:
+    -43vw -40vh 0 rgba(81, 0, 255, 0.14),
+    -27vw -25vh 0 rgba(81, 0, 255, 0.09),
+    -45vw 3vh 0 rgba(81, 0, 255, 0.11),
+    -35vw 32vh 0 rgba(81, 0, 255, 0.08),
+    -12vw 41vh 0 rgba(81, 0, 255, 0.12),
+    15vw -42vh 0 rgba(81, 0, 255, 0.1),
+    41vw -30vh 0 rgba(81, 0, 255, 0.13),
+    34vw -9vh 0 rgba(81, 0, 255, 0.08),
+    44vw 17vh 0 rgba(81, 0, 255, 0.11),
+    25vw 39vh 0 rgba(81, 0, 255, 0.09),
+    7vw 31vh 0 rgba(81, 0, 255, 0.07);
+  animation: odt-startup-particles-far 14s ease-in-out infinite alternate;
+}
+
+.odt-startup__particle-layer--near {
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  box-shadow:
+    -37vw -31vh 0 rgba(81, 0, 255, 0.18),
+    -43vw 22vh 0 rgba(81, 0, 255, 0.14),
+    -20vw 38vh 0 rgba(81, 0, 255, 0.11),
+    -8vw -39vh 0 rgba(81, 0, 255, 0.13),
+    28vw -35vh 0 rgba(81, 0, 255, 0.16),
+    43vw -2vh 0 rgba(81, 0, 255, 0.12),
+    38vw 31vh 0 rgba(81, 0, 255, 0.15),
+    12vw 43vh 0 rgba(81, 0, 255, 0.1);
+  animation: odt-startup-particles-near 10s ease-in-out infinite alternate;
+}
+
 .odt-startup__content {
+  position: relative;
+  z-index: 1;
   display: grid;
   justify-items: center;
   gap: 1.25rem;
@@ -286,6 +337,30 @@ body {
   }
 }
 
+@keyframes odt-startup-particles-far {
+  from {
+    opacity: 0.55;
+    transform: translate3d(-0.35rem, 0.25rem, 0);
+  }
+
+  to {
+    opacity: 0.9;
+    transform: translate3d(0.5rem, -0.45rem, 0);
+  }
+}
+
+@keyframes odt-startup-particles-near {
+  from {
+    opacity: 0.65;
+    transform: translate3d(0.45rem, -0.3rem, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(-0.55rem, 0.65rem, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .odt-startup {
     transition: none;
@@ -294,6 +369,7 @@ body {
   .odt-startup__field,
   .odt-startup__orbit,
   .odt-startup__orbit-node,
+  .odt-startup__particle-layer,
   .odt-startup__mark {
     animation: none;
   }
@@ -319,6 +395,10 @@ body {
 `;
 
 const STARTUP_SPLASH_MARKUP = `
+<div class="odt-startup__particles" aria-hidden="true">
+  <span class="odt-startup__particle-layer odt-startup__particle-layer--far"></span>
+  <span class="odt-startup__particle-layer odt-startup__particle-layer--near"></span>
+</div>
 <div class="odt-startup__content">
   <div class="odt-startup__stage">
     <div class="odt-startup__field" aria-hidden="true"></div>
