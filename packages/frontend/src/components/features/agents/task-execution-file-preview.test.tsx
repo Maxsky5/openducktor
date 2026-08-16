@@ -167,6 +167,7 @@ const renderPreview = (
   model: Pick<TaskExecutionSelectedFilePreviewModel, "selectedFile" | "onClose"> &
     Partial<Omit<TaskExecutionSelectedFilePreviewModel, "selectedFile" | "onClose">>,
   theme: "light" | "dark" = "light",
+  onFileSaved: () => void = () => {},
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     selectedFile: model.selectedFile,
@@ -182,7 +183,7 @@ const renderPreview = (
 
   return (
     <PreviewTestProviders>
-      <TaskExecutionSelectedFilePreview model={fullModel} />
+      <TaskExecutionSelectedFilePreview model={fullModel} onFileSaved={onFileSaved} />
     </PreviewTestProviders>
   );
 };
@@ -639,8 +640,15 @@ describe("TaskExecutionSelectedFilePreview", () => {
   test("opens in edit mode and saves without replacing Pierre's editor document", async () => {
     const onClose = mock(() => {});
     const onLeavePolicyChange = mock(() => {});
+    const onFileSaved = mock(() => {});
 
-    render(renderPreview({ selectedFile: firstFile, onClose, onLeavePolicyChange }));
+    render(
+      renderPreview(
+        { selectedFile: firstFile, onClose, onLeavePolicyChange },
+        "light",
+        onFileSaved,
+      ),
+    );
 
     await screen.findByText("const first = true;");
     await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
@@ -702,6 +710,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
     expect(onLeavePolicyChange).toHaveBeenCalledWith("defer");
     expect(onLeavePolicyChange).toHaveBeenLastCalledWith("allow");
+    expect(onFileSaved).toHaveBeenCalledTimes(1);
   });
 
   test("restores saved contents after a clean editor remount", async () => {

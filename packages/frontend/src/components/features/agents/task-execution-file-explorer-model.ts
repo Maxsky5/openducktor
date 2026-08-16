@@ -6,6 +6,9 @@ export type TaskExecutionSelectedFile = {
   relativePath: string;
 };
 
+// biome-ignore lint/suspicious/noConfusingVoidType: Event handlers may omit a result; false reports a rejected selection.
+export type TaskExecutionFileSelectionResult = false | void;
+
 export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): string =>
   JSON.stringify([file.rootPath, file.relativePath]);
 
@@ -15,7 +18,7 @@ export type TaskExecutionFileExplorerPanelModel = {
   unavailableReason: string | null;
   isActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
-  onSelectFile: (file: TaskExecutionSelectedFile) => void;
+  onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
   onClearSelectedFile: () => void;
 };
 

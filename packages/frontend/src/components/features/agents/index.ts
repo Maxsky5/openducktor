@@ -29,6 +29,7 @@ export type {
 } from "./task-execution-document-panel";
 export type {
   TaskExecutionFileExplorerPanelModel,
+  TaskExecutionFileSelectionResult,
   TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 export type {

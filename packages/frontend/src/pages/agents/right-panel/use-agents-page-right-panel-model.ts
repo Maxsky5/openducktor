@@ -1,7 +1,10 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { TaskExecutionSelectedFile } from "@/components/features/agents";
+import type {
+  TaskExecutionFileSelectionResult,
+  TaskExecutionSelectedFile,
+} from "@/components/features/agents";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
@@ -37,7 +40,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   isPanelOpen: boolean;
   documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
   selectedFile: TaskExecutionSelectedFile | null;
-  onSelectFile: (file: TaskExecutionSelectedFile) => void;
+  onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
   onClearSelectedFile: () => void;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];

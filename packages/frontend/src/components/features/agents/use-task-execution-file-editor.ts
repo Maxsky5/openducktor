@@ -199,12 +199,14 @@ const workspaceWriteFailure = (cause: unknown): WorkspaceTextFileWriteFailure | 
 type UseTaskExecutionFileEditorInput = {
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
+  onFileSaved(): void;
   onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
 };
 
 export const useTaskExecutionFileEditor = ({
   selectedFile,
   readyResult,
+  onFileSaved,
   onLeavePolicyChange,
 }: UseTaskExecutionFileEditorInput) => {
   const queryClient = useQueryClient();
@@ -280,6 +282,7 @@ export const useTaskExecutionFileEditor = ({
     onLeavePolicyChange("defer");
     const baselineRevision = session.baseline.revision;
     const contentsToSave = draftRef.current;
+    let didSaveActiveSession = false;
     try {
       const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync({
         rootPath: session.baseline.rootPath,
@@ -314,6 +317,7 @@ export const useTaskExecutionFileEditor = ({
         isDirty,
       });
       onLeavePolicyChange(isDirty ? "confirm" : "allow");
+      didSaveActiveSession = true;
     } catch (cause) {
       const failure = workspaceWriteFailure(cause);
       dispatch({
@@ -335,8 +339,12 @@ export const useTaskExecutionFileEditor = ({
     } finally {
       saveInFlightRef.current = false;
     }
+    if (didSaveActiveSession) {
+      onFileSaved();
+    }
   }, [
     mutation,
+    onFileSaved,
     onLeavePolicyChange,
     selectedFileId,
     state.isDirty,

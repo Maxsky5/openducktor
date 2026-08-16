@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type {
   TaskExecutionFilePreviewLeavePolicy,
+  TaskExecutionFileSelectionResult,
   TaskExecutionSelectedFile,
   TaskExecutionSelectedFilePreviewModel,
 } from "@/components/features/agents";
@@ -11,7 +12,7 @@ import {
 
 export type UseTaskExecutionFilePreviewControllerResult = {
   model: TaskExecutionSelectedFilePreviewModel;
-  onSelectFile(file: TaskExecutionSelectedFile): void;
+  onSelectFile(file: TaskExecutionSelectedFile): TaskExecutionFileSelectionResult;
   requestContextTransition(
     applyTransition: () => void,
     cancelTransition?: () => void,
@@ -49,7 +50,11 @@ export const useTaskExecutionFilePreviewController =
     }, [state.leavePolicy, state.pendingIntent]);
 
     const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
+      const currentState = stateRef.current;
+      const keepsCurrentSelection =
+        currentState.pendingIntent !== null || currentState.leavePolicy !== "allow";
       dispatch({ type: "request", intent: { type: "select", file } });
+      return keepsCurrentSelection ? false : undefined;
     }, []);
     const onClose = useCallback(() => {
       dispatch({ type: "request", intent: { type: "close" } });

@@ -18,6 +18,7 @@ import { AgentStudioTerminalPanel } from "@/components/features/agents/interacti
 import { TaskExecutionSelectedFilePreview } from "@/components/features/agents/task-execution-file-preview";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
@@ -271,6 +272,10 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     modalContent,
     terminalPanel,
   } = model;
+  const refreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
+  const refreshWorktreeAfterFileSave = useCallback((): void => {
+    void refreshWorktreeRef.current?.("soft");
+  }, []);
 
   const terminalPanelToggleModel = useMemo(
     () => ({
@@ -295,7 +300,12 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     [chatHeaderModel, chatModel],
   );
   const rightPanelContent = useMemo(
-    () => <AgentStudioRightPanelBridge model={rightPanelBridge} />,
+    () => (
+      <AgentStudioRightPanelBridge
+        model={rightPanelBridge}
+        refreshWorktreeRef={refreshWorktreeRef}
+      />
+    ),
     [rightPanelBridge],
   );
   const selectedFilePreviewContent = useMemo(
@@ -303,9 +313,10 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <TaskExecutionSelectedFilePreview
         key={taskExecutionSelectedFilePreviewModel.previewSessionKey}
         model={taskExecutionSelectedFilePreviewModel}
+        onFileSaved={refreshWorktreeAfterFileSave}
       />
     ),
-    [taskExecutionSelectedFilePreviewModel],
+    [refreshWorktreeAfterFileSave, taskExecutionSelectedFilePreviewModel],
   );
   const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
   const workspaceContent = useMemo(

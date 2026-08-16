@@ -777,6 +777,59 @@ describe("TaskExecutionPanel", () => {
     });
   });
 
+  test("restores the controlled file selection when a requested switch is rejected", async () => {
+    const onSelectFile = mock((): false => false);
+    const rootPath = "/repo/.worktrees/task-12";
+    const fileTree: WorkspaceFileTree = {
+      rootPath,
+      entries: [
+        { kind: "file", path: "src/first.ts", size: 24, mtimeMs: 1, gitStatus: null },
+        { kind: "file", path: "src/second.ts", size: 24, mtimeMs: 1, gitStatus: null },
+      ],
+    };
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(filesystemQueryKeys.tree(rootPath, "origin/main"), fileTree);
+
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          ThemeProvider,
+          null,
+          createElement(TaskExecutionPanel, {
+            model: {
+              ...basePanelModel,
+              tabs: [
+                { id: "git", label: "Git" },
+                { id: "file_explorer", label: "File explorer" },
+              ],
+              activeTabId: "file_explorer",
+              documentModel: null,
+              fileExplorerModel: {
+                rootPath,
+                targetBranch: "origin/main",
+                unavailableReason: null,
+                isActive: true,
+                selectedFile: { rootPath, relativePath: "src/first.ts" },
+                onSelectFile,
+                onClearSelectedFile: () => {},
+              },
+              ciChecksModel: null,
+            },
+          }),
+        ),
+      ),
+    );
+
+    await waitFor(() => expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]));
+    fileTreeSelectedPaths = ["src/second.ts"];
+    act(() => fileTreeSubscriber?.());
+
+    expect(onSelectFile).toHaveBeenCalledWith({ rootPath, relativePath: "src/second.ts" });
+    expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]);
+  });
+
   test("clears a selected preview when the canonical file tree root changes", async () => {
     const onClearSelectedFile = mock(() => {});
     const requestedRoot = "/repo/task-worktree";

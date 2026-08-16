@@ -1,20 +1,20 @@
-import { type ReactElement, useRef } from "react";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import type { ReactElement } from "react";
 import {
   AgentsPageBuildWorktreeRefreshRuntime,
   AgentsPageRightPanelRuntime,
 } from "./agents-page-right-panel-runtime";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import type { WorktreeRefreshRef } from "./use-forwarded-worktree-refresh";
 
 type AgentStudioRightPanelBridgeProps = {
   model: AgentStudioRightPanelBridgeModel | null;
+  refreshWorktreeRef: WorktreeRefreshRef;
 };
 
 export function AgentStudioRightPanelBridge({
   model,
+  refreshWorktreeRef,
 }: AgentStudioRightPanelBridgeProps): ReactElement | null {
-  const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
-
   if (!model) {
     return null;
   }
@@ -23,12 +23,9 @@ export function AgentStudioRightPanelBridge({
     <>
       <AgentsPageBuildWorktreeRefreshRuntime
         {...model.buildWorktreeRefresh}
-        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
+        refreshWorktreeRef={refreshWorktreeRef}
       />
-      <AgentsPageRightPanelRuntime
-        {...model.rightPanel}
-        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
-      />
+      <AgentsPageRightPanelRuntime {...model.rightPanel} refreshWorktreeRef={refreshWorktreeRef} />
     </>
   );
 }

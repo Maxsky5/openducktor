@@ -6,8 +6,33 @@ import { useTaskExecutionFilePreviewController } from "./use-task-execution-file
 enableReactActEnvironment();
 
 const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
+const secondFile = { rootPath: "/repo", relativePath: "second.ts" };
 
 describe("useTaskExecutionFilePreviewController", () => {
+  test("reports whether a file selection was accepted", () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController());
+    let selectionWasRejected = false;
+
+    act(() => {
+      selectionWasRejected = view.result.current.onSelectFile(firstFile) === false;
+    });
+    expect(selectionWasRejected).toBe(false);
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+    act(() => {
+      selectionWasRejected = view.result.current.onSelectFile(secondFile) === false;
+    });
+    expect(selectionWasRejected).toBe(true);
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+
+    act(() => view.result.current.model.onKeepEditing());
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
+    act(() => {
+      selectionWasRejected = view.result.current.onSelectFile(secondFile) === false;
+    });
+    expect(selectionWasRejected).toBe(true);
+    expect(view.result.current.model.selectedFile).toEqual(firstFile);
+  });
+
   test("keeps the current context selected until a dirty preview transition is confirmed", () => {
     const view = renderHook(() => useTaskExecutionFilePreviewController());
     let selectedRoot = "/repo";

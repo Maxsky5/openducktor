@@ -418,8 +418,10 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     onKeepEditing,
     onDiscard,
   },
+  onFileSaved,
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
+  onFileSaved(): void;
 }): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
@@ -456,6 +458,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editor = useTaskExecutionFileEditor({
     selectedFile,
     readyResult: readyTextResult,
+    onFileSaved,
     onLeavePolicyChange,
   });
   const retainedSnapshot =
