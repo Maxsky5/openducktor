@@ -49,7 +49,7 @@ body {
 .odt-startup__content {
   display: grid;
   justify-items: center;
-  gap: 1.25rem;
+  gap: 0.75rem;
 }
 
 .odt-startup__stage {
@@ -123,39 +123,60 @@ body {
   border-radius: 2rem;
 }
 
-.odt-startup__title {
+.odt-startup__launch-panel {
   display: grid;
+  width: 13rem;
+  box-sizing: border-box;
   justify-items: center;
-  gap: 0.35rem;
+  padding: 0.875rem 1.125rem 0.8125rem;
+  border: 1px solid rgba(71, 85, 105, 0.09);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 1.25rem 3rem rgba(71, 85, 105, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.odt-startup__title {
   margin: 0;
-  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  font-weight: 600;
-}
-
-.odt-startup__title-open {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  color: rgba(81, 0, 255, 0.62);
-  font-size: 0.625rem;
-  letter-spacing: 0.38em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.odt-startup__title-open::before,
-.odt-startup__title-open::after {
-  width: 1.375rem;
-  height: 1px;
-  background: rgba(81, 0, 255, 0.22);
-  content: "";
-}
-
-.odt-startup__title-name {
   color: var(--odt-startup-title);
-  font-size: 2.25rem;
-  letter-spacing: -0.055em;
-  line-height: 0.9;
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.odt-startup__loader {
+  display: grid;
+  width: 5.5rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.odt-startup__loader span {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--odt-startup-primary);
+  opacity: 0.12;
+  animation: odt-startup-loader 1.2s ease-in-out infinite;
+}
+
+.odt-startup__loader span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.odt-startup__loader span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.odt-startup__loader span:nth-child(4) {
+  animation-delay: 360ms;
+}
+
+.odt-startup__loader span:nth-child(5) {
+  animation-delay: 480ms;
 }
 
 .odt-startup__failure {
@@ -177,6 +198,11 @@ body {
 
 .odt-startup--failed .odt-startup__pulse {
   display: none;
+}
+
+.odt-startup--failed .odt-startup__loader span {
+  opacity: 0.12;
+  animation: none;
 }
 
 .odt-startup--failed .odt-startup__failure {
@@ -226,6 +252,20 @@ body {
   }
 }
 
+@keyframes odt-startup-loader {
+  0%,
+  55%,
+  100% {
+    opacity: 0.12;
+    transform: scaleX(0.72);
+  }
+
+  20% {
+    opacity: 0.72;
+    transform: scaleX(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .odt-startup {
     transition: none;
@@ -245,6 +285,16 @@ body {
   .odt-startup__pulse--second {
     display: none;
   }
+
+  .odt-startup__loader span {
+    opacity: 0.18;
+    animation: none;
+    transform: none;
+  }
+
+  .odt-startup__loader span:first-child {
+    opacity: 0.64;
+  }
 }
 `;
 
@@ -259,10 +309,16 @@ const STARTUP_SPLASH_MARKUP = `
       <img src="./favicon.svg" alt="" width="112" height="112" />
     </div>
   </div>
-  <p class="odt-startup__title" aria-label="OpenDucktor">
-    <span class="odt-startup__title-open" aria-hidden="true">Open</span>
-    <span class="odt-startup__title-name" aria-hidden="true">Ducktor</span>
-  </p>
+  <div class="odt-startup__launch-panel">
+    <p class="odt-startup__title">OpenDucktor</p>
+    <div class="odt-startup__loader" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  </div>
 </div>
 <p class="odt-startup__failure" data-odt-startup-status></p>
 `;
