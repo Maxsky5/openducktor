@@ -67,6 +67,33 @@ function SeedFilesystemDirectory(): ReactNode {
 }
 
 describe("OpenRepositoryModal", () => {
+  test("resets repository creation fields when the modal reopens", async () => {
+    const onOpenChange = mock((_open: boolean) => {});
+    const workspaceState = createWorkspaceStateValue();
+    const modal = (open: boolean) => (
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider value={workspaceState}>
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open={open} canClose onOpenChange={onOpenChange} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>
+    );
+    const view = render(modal(true));
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+    expect(((await screen.findByLabelText("Repository path")) as HTMLInputElement).value).toBe(
+      "/repo",
+    );
+
+    view.rerender(modal(false));
+    view.rerender(modal(true));
+
+    expect(await screen.findByRole("button", { name: /choose repository folder/i })).toBeTruthy();
+    expect(screen.queryByLabelText("Repository path")).toBeNull();
+    view.unmount();
+  });
+
   test("locks modal dismissal and recent workspaces while a repository add is pending", async () => {
     const addWorkspaceResult = createDeferred<void>();
     const addWorkspace = mock(async () => addWorkspaceResult.promise);

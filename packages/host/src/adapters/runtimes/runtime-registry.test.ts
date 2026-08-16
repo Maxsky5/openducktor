@@ -82,8 +82,10 @@ const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
   stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
   isAlive = true,
+  executablePath = "/tools/opencode",
 ): RuntimeWorkspaceHandle => ({
   runtime,
+  configuredExecutablePath: executablePath,
   isAlive: () => isAlive,
   stop,
 });
@@ -287,6 +289,54 @@ describe("createRuntimeRegistry", () => {
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([freshRuntime]);
     expect(starts).toBe(2);
     expect(stops).toEqual(["runtime-stale"]);
+  });
+  test("restarts a registered workspace runtime when its executable path changes", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          if (starts === 1) {
+            return Effect.succeed(
+              createRuntimeHandle(
+                oldRuntime,
+                () =>
+                  Effect.sync(() => {
+                    stops.push(oldRuntime.runtimeId);
+                  }),
+                true,
+                "/tools/opencode-old",
+              ),
+            );
+          }
+          return Effect.succeed(
+            createRuntimeHandle(newRuntime, undefined, true, "/tools/opencode-new"),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    configuredExecutablePath = "/tools/opencode-new";
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      newRuntime,
+    );
+
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
   });
   test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({

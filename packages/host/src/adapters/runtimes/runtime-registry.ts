@@ -27,6 +27,9 @@ export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
   sessionOperations?: RuntimeSessionOperationsByKind;
+  resolveRuntimeExecutablePath?: (
+    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
+  ) => Effect.Effect<string, RuntimeRegistryError>;
 };
 
 type RuntimeEnsureFlight = {
@@ -38,6 +41,7 @@ export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
   sessionOperations = createRuntimeSessionOperations(),
+  resolveRuntimeExecutablePath,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const store = createRuntimeRegistryStore(runtimes);
   const handles = new Map<string, RuntimeWorkspaceHandle>();
@@ -135,7 +139,12 @@ export const createRuntimeRegistry = ({
         });
         if (existingRuntime) {
           const existingHandle = handles.get(existingRuntime.runtimeId);
-          if (existingHandle && !existingHandle.isAlive()) {
+          let shouldRestart = existingHandle ? !existingHandle.isAlive() : false;
+          if (existingHandle && !shouldRestart && resolveRuntimeExecutablePath) {
+            const configuredExecutablePath = yield* resolveRuntimeExecutablePath(input);
+            shouldRestart = existingHandle.configuredExecutablePath !== configuredExecutablePath;
+          }
+          if (existingHandle && shouldRestart) {
             yield* stopRegisteredRuntime(existingRuntime.runtimeId);
           } else {
             const registeredRuntime = store.get(existingRuntime.runtimeId);

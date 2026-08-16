@@ -4,14 +4,12 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { type ToolDiscoveryPort, validateExactToolPath } from "../../ports/tool-discovery-port";
 
-export const resolveSavedRuntimeExecutable = ({
+export const readSavedRuntimeExecutablePath = ({
   kind,
   settingsConfig,
-  toolDiscovery,
 }: {
   kind: RuntimeKind;
   settingsConfig: SettingsConfigPort;
-  toolDiscovery: ToolDiscoveryPort;
 }) =>
   Effect.gen(function* () {
     const config = yield* settingsConfig.readConfig();
@@ -23,6 +21,29 @@ export const resolveSavedRuntimeExecutable = ({
         }),
       );
     }
-    const runtimeConfig = config.agentRuntimes[kind];
-    return (yield* validateExactToolPath(toolDiscovery, kind, runtimeConfig.executablePath)).path;
+    return config.agentRuntimes[kind].executablePath;
   });
+
+export const resolveSavedRuntimeExecutableConfig = ({
+  kind,
+  settingsConfig,
+  toolDiscovery,
+}: {
+  kind: RuntimeKind;
+  settingsConfig: SettingsConfigPort;
+  toolDiscovery: ToolDiscoveryPort;
+}) =>
+  Effect.gen(function* () {
+    const configuredPath = yield* readSavedRuntimeExecutablePath({ kind, settingsConfig });
+    const resolved = yield* validateExactToolPath(toolDiscovery, kind, configuredPath);
+    return { configuredPath, executablePath: resolved.path };
+  });
+
+export const resolveSavedRuntimeExecutable = (input: {
+  kind: RuntimeKind;
+  settingsConfig: SettingsConfigPort;
+  toolDiscovery: ToolDiscoveryPort;
+}) =>
+  resolveSavedRuntimeExecutableConfig(input).pipe(
+    Effect.map(({ executablePath }) => executablePath),
+  );

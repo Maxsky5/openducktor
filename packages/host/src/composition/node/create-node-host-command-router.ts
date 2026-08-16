@@ -30,6 +30,7 @@ import {
 } from "../../application/runtimes/codex-app-server-service";
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
+import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createGithubCommandDependencies } from "../../application/tasks/support/github-pull-requests";
 import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
@@ -237,6 +238,11 @@ export const createNodeEffectHostCommandRouter = (
     runtimeRegistry ??
     createRuntimeRegistry({
       workspaceStarter,
+      resolveRuntimeExecutablePath: (runtimeInput) =>
+        readSavedRuntimeExecutablePath({
+          kind: runtimeInput.descriptor.kind,
+          settingsConfig,
+        }),
       sessionOperations: createRuntimeSessionOperations({
         codexAppServer: effectiveCodexAppServer,
         claudeAgentSdk: claudeRuntime.sessionOperations,

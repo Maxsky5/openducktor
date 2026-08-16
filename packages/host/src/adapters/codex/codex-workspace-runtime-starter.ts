@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Cause, Effect, Exit, Scope } from "effect";
-import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
+import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import {
   HostOperationError,
   HostResourceError,
@@ -111,11 +111,13 @@ export const createCodexWorkspaceRuntimeStarter = ({
         runtimeDistribution,
         toolDiscovery,
       });
-      const binary = yield* resolveSavedRuntimeExecutable({
-        kind: "codex",
-        settingsConfig,
-        toolDiscovery,
-      });
+      const { configuredPath, executablePath: binary } = yield* resolveSavedRuntimeExecutableConfig(
+        {
+          kind: "codex",
+          settingsConfig,
+          toolDiscovery,
+        },
+      );
       const runtimeEnv = {
         ...processEnv,
         ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
@@ -422,6 +424,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
 
       return {
         runtime,
+        configuredExecutablePath: configuredPath,
         isAlive() {
           return !closed;
         },

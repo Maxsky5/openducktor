@@ -463,6 +463,49 @@ describe("useSettingsModalController", () => {
     }
   });
 
+  test("does not block settings while a disabled runtime validation is pending", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    const claudeValidation = createDeferred<RuntimeExecutableCheck>();
+    const requestedKinds: RuntimeKind[] = [];
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      const kind = knownRuntimeKindValues.find((candidate) =>
+        Object.hasOwn(input.paths, candidate),
+      );
+      if (!kind) throw new Error("Runtime validation kind is missing");
+      requestedKinds.push(kind);
+      if (kind === "claude") return claudeValidation.promise;
+      const path = input.paths[kind] ?? "";
+      return {
+        runtimes: [{ kind, path, ok: true, version: "1.0.0", error: null }],
+      };
+    });
+    saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => requestedKinds.length === knownRuntimeKindValues.length);
+      await harness.waitFor((state) => !state.isLoadingRuntimeExecutables);
+
+      await harness.run((state) => {
+        state.updateGlobalChatSettings((chat) => ({
+          ...chat,
+          showThinkingMessages: true,
+        }));
+      });
+      let didSave = false;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+      expect(didSave).toBe(true);
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      claudeValidation.resolve({ runtimes: [] });
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
   test("selects the exact required repository instead of the active workspace", async () => {
     const harness = createHookHarness(true, false, { requiredRepoPath: "/repo-two" });
     await harness.mount();

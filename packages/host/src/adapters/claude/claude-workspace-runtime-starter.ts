@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Effect, Exit, Scope } from "effect";
-import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
+import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import {
   RuntimeExecutableIncompatibleError,
@@ -44,7 +44,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
           }),
         );
       }
-      const executablePath = yield* resolveSavedRuntimeExecutable({
+      const { configuredPath, executablePath } = yield* resolveSavedRuntimeExecutableConfig({
         kind: "claude",
         settingsConfig,
         toolDiscovery,
@@ -142,6 +142,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
 
       return {
         runtime,
+        configuredExecutablePath: configuredPath,
         isAlive() {
           return !stopping;
         },

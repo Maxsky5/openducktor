@@ -36,7 +36,8 @@ export const useRuntimeExecutableValidation = (
     const result = queries[index]?.data;
     return result ? [{ ...result, requestedPath: path }] : [];
   });
-  const checkingRuntimeKinds = knownRuntimeKindValues.filter((_, index) => {
+  const checkingRuntimeKinds = knownRuntimeKindValues.filter((kind, index) => {
+    if (!runtimes?.[kind].enabled) return false;
     const query = queries[index];
     return query?.isPending || query?.isFetching;
   });

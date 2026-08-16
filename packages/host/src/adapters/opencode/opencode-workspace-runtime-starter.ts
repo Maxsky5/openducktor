@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Cause, Clock, Effect, Exit, Option, Scope } from "effect";
-import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
+import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import {
   type HostError,
   HostOperationError,
@@ -193,11 +193,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             details: { runtimeKind: input.runtimeKind },
           }),
       });
-      const binary = yield* resolveSavedRuntimeExecutable({
-        kind: "opencode",
-        settingsConfig,
-        toolDiscovery,
-      });
+      const { configuredPath, executablePath: binary } = yield* resolveSavedRuntimeExecutableConfig(
+        {
+          kind: "opencode",
+          settingsConfig,
+          toolDiscovery,
+        },
+      );
       const port = yield* portAllocator().pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
@@ -439,6 +441,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
 
           return {
             runtime,
+            configuredExecutablePath: configuredPath,
             isAlive() {
               return !closed;
             },
