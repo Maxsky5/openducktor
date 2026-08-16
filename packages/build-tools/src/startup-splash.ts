@@ -49,7 +49,7 @@ body {
 .odt-startup__content {
   display: grid;
   justify-items: center;
-  gap: 0.75rem;
+  gap: 1.25rem;
 }
 
 .odt-startup__stage {
@@ -97,6 +97,69 @@ body {
   animation-delay: 1.4s;
 }
 
+.odt-startup__orbit {
+  position: absolute;
+  width: 13rem;
+  height: 13rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(81, 0, 255, 0.12);
+  border-radius: 4.125rem;
+  animation: odt-startup-orbit 10s linear infinite;
+  transform: rotate(18deg);
+}
+
+.odt-startup__orbit-node {
+  position: absolute;
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border: 1px solid rgba(81, 0, 255, 0.18);
+  border-radius: 0.375rem;
+  background: var(--odt-startup-background);
+  box-shadow: 0 0.625rem 1.5rem rgba(81, 0, 255, 0.12);
+  animation: odt-startup-orbit-node 10s linear infinite;
+}
+
+.odt-startup__orbit-node::after {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 0.1rem;
+  background: var(--odt-startup-primary);
+  content: "";
+}
+
+.odt-startup__orbit-node--first {
+  top: -0.625rem;
+  left: calc(50% - 0.5625rem);
+}
+
+.odt-startup__orbit-node--second {
+  right: 0.625rem;
+  bottom: -0.2rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 0.3rem;
+}
+
+.odt-startup__orbit-node--second::after {
+  width: 0.25rem;
+  height: 0.25rem;
+}
+
+.odt-startup__orbit-node--third {
+  top: 4.2rem;
+  left: -0.45rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.25rem;
+}
+
+.odt-startup__orbit-node--third::after {
+  width: 0.2rem;
+  height: 0.2rem;
+}
+
 .odt-startup__mark {
   position: relative;
   z-index: 1;
@@ -123,60 +186,14 @@ body {
   border-radius: 2rem;
 }
 
-.odt-startup__launch-panel {
-  display: grid;
-  width: 13rem;
-  box-sizing: border-box;
-  justify-items: center;
-  padding: 0.875rem 1.125rem 0.8125rem;
-  border: 1px solid rgba(71, 85, 105, 0.09);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 1.25rem 3rem rgba(71, 85, 105, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-
 .odt-startup__title {
   margin: 0;
   color: var(--odt-startup-title);
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  font-size: 1.875rem;
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: -0.045em;
   line-height: 1;
-}
-
-.odt-startup__loader {
-  display: grid;
-  width: 5.5rem;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.25rem;
-  margin-top: 0.75rem;
-}
-
-.odt-startup__loader span {
-  height: 2px;
-  border-radius: 999px;
-  background: var(--odt-startup-primary);
-  opacity: 0.12;
-  animation: odt-startup-loader 1.2s ease-in-out infinite;
-}
-
-.odt-startup__loader span:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.odt-startup__loader span:nth-child(3) {
-  animation-delay: 240ms;
-}
-
-.odt-startup__loader span:nth-child(4) {
-  animation-delay: 360ms;
-}
-
-.odt-startup__loader span:nth-child(5) {
-  animation-delay: 480ms;
 }
 
 .odt-startup__failure {
@@ -192,17 +209,14 @@ body {
 }
 
 .odt-startup--failed .odt-startup__field,
+.odt-startup--failed .odt-startup__orbit,
+.odt-startup--failed .odt-startup__orbit-node,
 .odt-startup--failed .odt-startup__mark {
   animation: none;
 }
 
 .odt-startup--failed .odt-startup__pulse {
   display: none;
-}
-
-.odt-startup--failed .odt-startup__loader span {
-  opacity: 0.12;
-  animation: none;
 }
 
 .odt-startup--failed .odt-startup__failure {
@@ -252,17 +266,23 @@ body {
   }
 }
 
-@keyframes odt-startup-loader {
-  0%,
-  55%,
-  100% {
-    opacity: 0.12;
-    transform: scaleX(0.72);
+@keyframes odt-startup-orbit {
+  from {
+    transform: rotate(18deg);
   }
 
-  20% {
-    opacity: 0.72;
-    transform: scaleX(1);
+  to {
+    transform: rotate(378deg);
+  }
+}
+
+@keyframes odt-startup-orbit-node {
+  from {
+    transform: rotate(-18deg);
+  }
+
+  to {
+    transform: rotate(-378deg);
   }
 }
 
@@ -272,6 +292,8 @@ body {
   }
 
   .odt-startup__field,
+  .odt-startup__orbit,
+  .odt-startup__orbit-node,
   .odt-startup__mark {
     animation: none;
   }
@@ -286,14 +308,12 @@ body {
     display: none;
   }
 
-  .odt-startup__loader span {
-    opacity: 0.18;
-    animation: none;
-    transform: none;
+  .odt-startup__orbit {
+    transform: rotate(18deg);
   }
 
-  .odt-startup__loader span:first-child {
-    opacity: 0.64;
+  .odt-startup__orbit-node {
+    transform: rotate(-18deg);
   }
 }
 `;
@@ -305,20 +325,16 @@ const STARTUP_SPLASH_MARKUP = `
     <div class="odt-startup__field odt-startup__field--inner" aria-hidden="true"></div>
     <div class="odt-startup__pulse" aria-hidden="true"></div>
     <div class="odt-startup__pulse odt-startup__pulse--second" aria-hidden="true"></div>
+    <div class="odt-startup__orbit" aria-hidden="true">
+      <span class="odt-startup__orbit-node odt-startup__orbit-node--first"></span>
+      <span class="odt-startup__orbit-node odt-startup__orbit-node--second"></span>
+      <span class="odt-startup__orbit-node odt-startup__orbit-node--third"></span>
+    </div>
     <div class="odt-startup__mark" aria-hidden="true">
       <img src="./favicon.svg" alt="" width="112" height="112" />
     </div>
   </div>
-  <div class="odt-startup__launch-panel">
-    <p class="odt-startup__title">OpenDucktor</p>
-    <div class="odt-startup__loader" aria-hidden="true">
-      <span></span>
-      <span></span>
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-  </div>
+  <p class="odt-startup__title">OpenDucktor</p>
 </div>
 <p class="odt-startup__failure" data-odt-startup-status></p>
 `;
