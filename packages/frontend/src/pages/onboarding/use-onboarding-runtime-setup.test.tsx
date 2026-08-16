@@ -248,6 +248,36 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
+  test("does not block onboarding when validation fails for a disabled runtime", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/valid/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "/broken/claude" },
+    };
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode === "validate" && Object.hasOwn(input.paths, "claude")) {
+        throw new Error("Disabled Claude validation failed");
+      }
+      return createCheck(runtimes, true);
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await enterRuntimeStage();
+      await within(opencodeSection()).findByText("Available");
+
+      await waitFor(() =>
+        expect(
+          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
+        ).toBe(false),
+      );
+      expect(screen.queryByText("Disabled Claude validation failed")).toBeNull();
+    } finally {
+      host.runtimeExecutablesCheck = originalCheck;
+    }
+  });
+
   test("blocks Continue until a failed runtime rediscovery succeeds", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },

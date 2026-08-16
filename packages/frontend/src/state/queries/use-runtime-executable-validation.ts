@@ -40,7 +40,16 @@ export const useRuntimeExecutableValidation = (
     const query = queries[index];
     return query?.isPending || query?.isFetching;
   });
-  const error = queries.find((query) => query?.error)?.error ?? null;
+  let error: Error | null = null;
+  if (runtimes) {
+    for (const [index, kind] of knownRuntimeKindValues.entries()) {
+      if (!runtimes[kind].enabled) continue;
+      const queryError = queries[index]?.error;
+      if (!queryError) continue;
+      error = queryError;
+      break;
+    }
+  }
 
   return {
     results,

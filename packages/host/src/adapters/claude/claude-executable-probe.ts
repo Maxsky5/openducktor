@@ -15,7 +15,7 @@ import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-li
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
 
-type ClaudeProbeQuery = Pick<Query, "close" | "initializationResult">;
+type ClaudeProbeQuery = Pick<Query, "initializationResult" | "return">;
 type ClaudeQueryFactory = (input: {
   prompt: AsyncIterable<SDKUserMessage>;
   options: Options;
@@ -111,10 +111,10 @@ export const createClaudeExecutableProbe = ({
           Effect.asVoid,
         ),
       release: (sdkQuery) =>
-        Effect.try({
-          try: () => {
+        Effect.tryPromise({
+          try: async () => {
             abortController.abort();
-            sdkQuery.close();
+            await sdkQuery.return(undefined);
           },
           catch: (cause) =>
             toHostOperationError(cause, "claudeExecutableProbe.close", { executablePath }),

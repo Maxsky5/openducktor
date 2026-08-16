@@ -7,23 +7,40 @@ import {
 } from "./claude-executable-probe";
 
 describe("createClaudeExecutableProbe", () => {
-  test("uses an isolated Agent SDK initialization and closes it after success", async () => {
+  test("uses an isolated Agent SDK initialization and awaits cleanup after success", async () => {
     let receivedOptions: Options | null = null;
-    let closed = false;
+    let cleanupStarted = false;
+    let confirmCleanupStarted = (): void => undefined;
+    let releaseCleanup = (): void => undefined;
+    const cleanupStartedSignal = new Promise<void>((resolve) => {
+      confirmCleanupStarted = resolve;
+    });
+    const cleanupBlocked = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
     const probe = createClaudeExecutableProbe({
       processEnv: { PATH: "/usr/bin" },
       queryFactory(input) {
         receivedOptions = input.options;
         return {
           initializationResult: async () => ({}) as SDKControlInitializeResponse,
-          close() {
-            closed = true;
+          async return() {
+            cleanupStarted = true;
+            confirmCleanupStarted();
+            await cleanupBlocked;
+            return { done: true, value: undefined };
           },
         };
       },
     });
 
-    await Effect.runPromise(probe.probeExecutable("/usr/local/bin/claude"));
+    let probeResolved = false;
+    const probing = Effect.runPromise(probe.probeExecutable("/usr/local/bin/claude")).then(() => {
+      probeResolved = true;
+    });
+    await Effect.runPromise(
+      Effect.promise(() => cleanupStartedSignal).pipe(Effect.timeout("1 second")),
+    );
 
     expect(receivedOptions).toMatchObject({
       allowedTools: [],
@@ -39,17 +56,24 @@ describe("createClaudeExecutableProbe", () => {
       strictMcpConfig: true,
       tools: [],
     });
-    expect(closed).toBe(true);
+    expect(cleanupStarted).toBe(true);
+    expect(probeResolved).toBe(false);
+
+    releaseCleanup();
+    await probing;
+    expect(probeResolved).toBe(true);
   });
 
-  test("closes the Agent SDK query when initialization fails", async () => {
-    let closed = false;
+  test("awaits Agent SDK query cleanup when initialization fails", async () => {
+    let cleanupFinished = false;
     const probe = createClaudeExecutableProbe({
       queryFactory() {
         return {
           initializationResult: () => Promise.reject(new Error("not Claude Code")),
-          close() {
-            closed = true;
+          async return() {
+            await Promise.resolve();
+            cleanupFinished = true;
+            return { done: true, value: undefined };
           },
         };
       },
@@ -60,7 +84,29 @@ describe("createClaudeExecutableProbe", () => {
     );
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
-    expect(closed).toBe(true);
+    expect(cleanupFinished).toBe(true);
+  });
+
+  test("preserves Agent SDK cleanup failures", async () => {
+    const probe = createClaudeExecutableProbe({
+      queryFactory() {
+        return {
+          initializationResult: async () => ({}) as SDKControlInitializeResponse,
+          return: () => Promise.reject(new Error("cleanup failed")),
+        };
+      },
+    });
+
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.probeExecutable("/usr/local/bin/claude")),
+    );
+
+    expect(failure._tag).toBe("HostOperationError");
+    if (failure._tag !== "HostOperationError") {
+      throw new Error(`Expected HostOperationError, received ${failure._tag}`);
+    }
+    expect(failure.operation).toBe("claudeExecutableProbe.cleanup");
+    expect(failure.message).toContain("cleanup failed");
   });
 });
 
