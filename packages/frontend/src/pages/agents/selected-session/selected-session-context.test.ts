@@ -4,6 +4,7 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionFixtureOverrides } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -25,7 +26,7 @@ const createDoc = (markdown: string): TaskDocumentState => ({
   loaded: true,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
@@ -423,6 +424,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
     });
+    const childTarget = {
+      ...childSession,
+      sessionAssociation: { kind: "repository" as const },
+    };
     const parentSession = createSession({
       externalSessionId: "session-parent",
       workingDirectory: "/repo/worktree",
@@ -435,7 +440,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           tool: { name: "shell" },
           mutation: "mutating",
           supportedReplyOutcomes: ["approve_once", "reject"],
-          responseSession: childSession,
+          responseSession: childTarget,
           source: {
             kind: "subagent",
             parentExternalSessionId: "session-parent",

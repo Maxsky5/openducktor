@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
-import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
@@ -19,31 +18,23 @@ import {
   deriveSessionlessTaskTranscriptState,
 } from "./session-transcript-state";
 
-type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type CreateSessionOverrides = AgentSessionFixtureOverrides;
 
 const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
-  const { messages, ...sessionOverrides } = overrides;
-  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
-
-  return {
-    externalSessionId,
-    taskId: "task-1",
-    role: "build",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    runtimeKind: "opencode",
-    workingDirectory: "/tmp/repo/worktree",
-    historyLoadState: "not_requested",
-    messages: createSessionMessagesFixture(externalSessionId, messages),
-    contextUsage: null,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...sessionOverrides,
-  };
+  return createAgentSessionFixture(
+    {
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 };
 
 const deriveLoadedTranscriptStateForSession = ({

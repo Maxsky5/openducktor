@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   closeTaskTab,
   ensureActiveTaskTab,
@@ -31,23 +33,23 @@ import {
   getTabStatusForTask,
 } from "./agents-page-session-tabs";
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionWorkflowSummary => {
-  const session: AgentSessionState = {
-    runtimeKind: "opencode",
-    externalSessionId: "ext-session-1",
-    taskId: "task-1",
-    role: "spec",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-20T10:00:00.000Z",
-    workingDirectory: "/tmp/work",
-    messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...overrides,
-    historyLoadState: overrides.historyLoadState ?? "not_requested",
-  };
+const buildSession = (
+  overrides: AgentSessionFixtureOverrides = {},
+): AgentSessionWorkflowSummary => {
+  const session = createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "ext-session-1",
+      taskId: "task-1",
+      role: "spec",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-20T10:00:00.000Z",
+      workingDirectory: "/tmp/work",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
   const summary = toAgentSessionSummary(session);
   if (summary.role === null) {
     throw new Error("Workflow summary fixtures require a role.");

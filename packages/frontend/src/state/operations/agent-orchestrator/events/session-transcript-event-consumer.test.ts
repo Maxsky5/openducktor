@@ -29,7 +29,7 @@ const createConsumerHarness = (
   const guardedUpdateSession: UpdateSession = (identity, updater, options) =>
     updateSession(identity, (current) => {
       const nextSession = updater(current);
-      if (options?.persist === true && nextSession.role === null) {
+      if (options?.persist === true && nextSession.sessionAssociation.kind !== "workflow") {
         throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
       }
       return nextSession;

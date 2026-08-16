@@ -8,15 +8,17 @@ import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createRef } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
-import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+  TEST_EXTERNAL_SESSION_IDS,
+} from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
   AgentApprovalRequest,
   AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionState,
-  SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentRoleOption } from "../agent-studio-header.types";
 import type {
@@ -81,9 +83,8 @@ const baseMessage: AgentChatMessage = {
 
 const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
-  taskId: "task-1",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
   runtimeKind: "opencode",
-  role: "spec",
   status: "running",
   runtimeStatusMessage: null,
   startedAt: "2026-02-20T10:00:30.000Z",
@@ -107,25 +108,12 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-type AgentChatTranscriptSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: SessionMessagesState | AgentChatMessage[];
-};
+type AgentChatTranscriptSessionOverrides = AgentSessionFixtureOverrides;
 
 export const buildSession = (
   overrides: AgentChatTranscriptSessionOverrides = {},
 ): AgentChatTranscriptSession => {
-  const { messages: overrideMessages, ...overrideSessionFields } = overrides;
-  const session = {
-    ...baseSession,
-    ...overrideSessionFields,
-  };
-  const sourceMessages = overrideMessages ?? baseSession.messages;
-  const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
-
-  return toAgentChatTranscriptSession({
-    ...session,
-    messages,
-  });
+  return toAgentChatTranscriptSession(createAgentSessionFixture(baseSession, overrides));
 };
 
 export const presentRegularToolCall = (

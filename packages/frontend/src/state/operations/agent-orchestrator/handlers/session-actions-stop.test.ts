@@ -139,7 +139,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     try {
       await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
-        "Failed to stop build session 'session-1': build stop failed",
+        "Failed to stop session 'session-1': build stop failed",
       );
       expect(localStopCalls).toBe(1);
       expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeNull();
@@ -575,6 +575,33 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
         taskId: "task-1",
       },
     ]);
+  });
+
+  test("does not call task persistence or task refresh for a repository session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    adapter.stopSession = async () => {};
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([
+      buildSession({ sessionAssociation: { kind: "repository" } }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await actions.stopAgentSession(getSession(sessionsRef));
+
+    expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(taskCalls).toEqual([]);
   });
 
   test("fails fast when stopping without an active workspace", async () => {

@@ -1,4 +1,4 @@
-import type { AgentSessionAssociation, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import {
   type PropsWithChildren,
   type ReactElement,
@@ -135,17 +135,6 @@ export const useAgentSession = (
     sessionStore.subscribe,
     () => sessionStore.getSessionSnapshot(identity),
     () => sessionStore.getSessionSnapshot(identity),
-  );
-};
-
-export const useAgentSessionLiveAssociation = (
-  identity: AgentSessionIdentity | null,
-): AgentSessionAssociation | null => {
-  const sessionStore = useAgentSessionsContext();
-  return useSyncExternalStore(
-    sessionStore.subscribeLiveAssociations,
-    () => sessionStore.getLiveAssociationSnapshot(identity),
-    () => sessionStore.getLiveAssociationSnapshot(identity),
   );
 };
 

@@ -5,10 +5,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import {
-  applyAgentSessionLiveAssociationDelta,
-  buildAgentSessionLiveAssociations,
-} from "@/state/agent-session-live-associations";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import { retryAgentSessionListQueries } from "@/state/queries/agent-sessions";
@@ -53,7 +49,6 @@ type UseRepoSessionReadModelArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
-  setLiveAssociations: AgentSessionsStore["setLiveAssociations"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
@@ -77,7 +72,6 @@ export const useRepoSessionReadModel = ({
   currentWorkspaceRepoPathRef,
   repoEpochRef,
   commitSessionCollection,
-  setLiveAssociations,
   liveSessionPort,
   transcriptEvents,
   recoverTranscriptGap,
@@ -334,7 +328,6 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      setLiveAssociations(() => buildAgentSessionLiveAssociations(envelope.sessions));
       const policyActions = commitSessionCollection((current) => {
         const collection = buildAgentSessionLiveCollection({
           current,
@@ -381,7 +374,6 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
-        setLiveAssociations((current) => applyAgentSessionLiveAssociationDelta(current, envelope));
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
@@ -505,7 +497,6 @@ export const useRepoSessionReadModel = ({
     clearSessionFault,
     clearSessionFaults,
     recordSessionFault,
-    setLiveAssociations,
     workspaceRepoPath,
   ]);
 

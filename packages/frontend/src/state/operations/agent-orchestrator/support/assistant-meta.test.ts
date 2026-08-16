@@ -6,8 +6,7 @@ import { toAssistantMessageMeta } from "./assistant-meta";
 const sessionFixture: AgentSessionState = {
   runtimeKind: "opencode",
   externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   status: "running",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",

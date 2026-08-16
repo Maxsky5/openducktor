@@ -211,31 +211,28 @@ describe("createAgentSessionsStore session snapshots", () => {
     expect(store.getSessionSnapshot(session)).toBe(session);
   });
 
-  test("keeps live policy association updates out of session activity notifications", () => {
+  test("publishes association changes through the session store", () => {
     const store = createAgentSessionsStore();
-    const identity = {
+    const session = createAgentSessionFixture({
       externalSessionId: "repository-session",
-      runtimeKind: "opencode" as const,
+      runtimeKind: "opencode",
       workingDirectory: "/repo",
-    };
-    let sessionNotificationCount = 0;
-    let associationNotificationCount = 0;
+      sessionAssociation: { kind: "unbound" },
+    });
+    replaceStoreSessions(store, [session]);
+    let notificationCount = 0;
     const unsubscribeSession = store.subscribe(() => {
-      sessionNotificationCount += 1;
-    });
-    const unsubscribeAssociation = store.subscribeLiveAssociations(() => {
-      associationNotificationCount += 1;
+      notificationCount += 1;
     });
 
-    store.setLiveAssociations(
-      () => new Map([[agentSessionIdentityKey(identity), { kind: "repository" }]]),
-    );
+    store.updateSession(session, (current) => ({
+      ...current,
+      sessionAssociation: { kind: "repository" },
+    }));
     unsubscribeSession();
-    unsubscribeAssociation();
 
-    expect(store.getLiveAssociationSnapshot(identity)).toEqual({ kind: "repository" });
-    expect(sessionNotificationCount).toBe(0);
-    expect(associationNotificationCount).toBe(1);
+    expect(store.getSessionSnapshot(session)?.sessionAssociation).toEqual({ kind: "repository" });
+    expect(notificationCount).toBe(1);
   });
 
   test("commits a collection update and returns the result from the same current collection", () => {

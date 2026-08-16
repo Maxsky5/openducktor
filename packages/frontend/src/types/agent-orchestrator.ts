@@ -1,5 +1,7 @@
 import type {
+  AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
+  AgentSessionWorkflowScope,
   FileContent,
   FileDiff,
   RuntimeKind,
@@ -146,7 +148,7 @@ export type AgentPendingInputSource = {
 
 type AgentPendingInputRouting = {
   source?: AgentPendingInputSource;
-  responseSession?: AgentSessionIdentity;
+  responseSession?: AgentSessionRuntimeTarget;
 };
 
 export type AgentApprovalRequest = AgentPendingApprovalRequest & AgentPendingInputRouting;
@@ -179,9 +181,8 @@ export type AgentSessionRuntimeAvailability = "runtime" | "missing";
 export type AgentSessionState = {
   externalSessionId: string;
   title?: string;
-  taskId: string;
+  sessionAssociation: AgentSessionAssociation;
   runtimeKind: RuntimeKind;
-  role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   runtimeStatusMessage: string | null;
   startedAt: string;
@@ -202,14 +203,17 @@ export type AgentSessionState = {
 };
 
 export type WorkflowAgentSessionState = AgentSessionState & {
-  role: AgentRole;
+  sessionAssociation: AgentSessionWorkflowScope;
 };
 
-export type AgentTaskSessionBinding = Pick<WorkflowAgentSessionState, "taskId" | "role">;
+export type AgentTaskSessionBinding = Pick<AgentSessionWorkflowScope, "taskId" | "role">;
 
 export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
+
+export type AgentSessionRuntimeTarget = AgentSessionIdentity &
+  Pick<AgentSessionState, "sessionAssociation">;
 
 export type AgentSessionContextLoadTarget = Omit<AgentSessionLiveLoadContextInput, "repoPath">;

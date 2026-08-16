@@ -13,12 +13,11 @@ import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-ses
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AgentSessionReadModelStateContext } from "@/state/app-state-contexts";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
-import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createChatSettingsFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import {
   type AgentStudioChatDraftScope,
@@ -96,9 +95,7 @@ const createTask = () =>
     },
   });
 
-type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type CreateSessionOverrides = AgentSessionFixtureOverrides;
 
 const createSession = (
   externalSessionId = "external-1",

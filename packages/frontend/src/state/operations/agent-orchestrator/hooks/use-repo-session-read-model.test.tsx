@@ -135,7 +135,6 @@ const createState = (
     currentWorkspaceRepoPathRef: { current: "/repo" },
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
-    setLiveAssociations: sessionStore.setLiveAssociations,
     liveSessionPort,
     transcriptEvents,
     recoverTranscriptGap,
@@ -147,12 +146,6 @@ const createState = (
     callOrder,
     getSession: () =>
       sessionStore.getSessionSnapshot({
-        externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
-        workingDirectory: record.workingDirectory,
-      }),
-    getLiveAssociation: () =>
-      sessionStore.getLiveAssociationSnapshot({
         externalSessionId: record.externalSessionId,
         runtimeKind: record.runtimeKind,
         workingDirectory: record.workingDirectory,
@@ -207,7 +200,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()?.pendingApprovals).toEqual([
         expect.objectContaining({ requestId: "opaque-1" }),
       ]);
-      expect(state.getLiveAssociation()).toEqual({
+      expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
         taskId: "task-1",
         role: "build",
@@ -221,7 +214,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps repository policy association outside the projected session", async () => {
+  test("projects repository association into session state", async () => {
     const state = createState((emit) => {
       emit({
         type: "snapshot",
@@ -234,8 +227,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(state.getSession()).toMatchObject({ taskId: "", role: null });
-      expect(state.getLiveAssociation()).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
     } finally {
       await state.harness.unmount();
     }
@@ -388,7 +380,15 @@ describe("useRepoSessionReadModel", () => {
     };
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [
+            snapshot({
+              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            }),
+          ],
+        });
       },
       { ...record, role: "spec" },
     );
@@ -421,7 +421,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(async () => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ pendingApprovals: [mutatingApproval] }),
+          session: snapshot({
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            pendingApprovals: [mutatingApproval],
+          }),
         });
       });
       await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
@@ -1169,7 +1172,12 @@ describe("useRepoSessionReadModel", () => {
         emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ pendingApprovals: [initialApproval] })],
+          sessions: [
+            snapshot({
+              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+              pendingApprovals: [initialApproval],
+            }),
+          ],
         });
       },
       { ...record, role: "spec" },
@@ -1205,7 +1213,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(async () => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ pendingApprovals: [initialApproval, laterApproval] }),
+          session: snapshot({
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            pendingApprovals: [initialApproval, laterApproval],
+          }),
         });
       });
 

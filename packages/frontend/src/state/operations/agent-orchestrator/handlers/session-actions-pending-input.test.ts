@@ -128,6 +128,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "session-child",
       runtimeKind: "opencode" as const,
       workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "repository" as const },
     };
     const request: AgentApprovalRequest = {
       ...approvalRequest("perm-child"),
@@ -140,7 +141,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({ externalSessionId: "session-parent", pendingApprovals: [request] }),
-      buildSession({ externalSessionId: "session-child", pendingApprovals: [request] }),
+      buildSession({
+        externalSessionId: "session-child",
+        sessionAssociation: { kind: "repository" },
+        pendingApprovals: [request],
+      }),
     ]);
     const replies: AgentSessionLiveReplyApprovalInput[] = [];
     const actions = createSessionActions({
@@ -228,6 +233,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       externalSessionId: "session-child",
       runtimeKind: "opencode" as const,
       workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "repository" as const },
     };
     const request: AgentQuestionRequest = {
       ...questionRequest("question-child"),
@@ -240,7 +246,11 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({ externalSessionId: "session-parent", pendingQuestions: [request] }),
-      buildSession({ externalSessionId: "session-child", pendingQuestions: [request] }),
+      buildSession({
+        externalSessionId: "session-child",
+        sessionAssociation: { kind: "repository" },
+        pendingQuestions: [request],
+      }),
     ]);
     const replies: AgentSessionLiveReplyQuestionInput[] = [];
     const actions = createSessionActions({

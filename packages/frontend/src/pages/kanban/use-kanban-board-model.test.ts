@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskActivityStateByTaskId,
@@ -39,23 +41,21 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
-  const session: AgentSessionState = {
-    runtimeKind: "opencode",
-    externalSessionId: "external-1",
-    taskId: "task-1",
-    role: "build",
-    status: "running",
-    runtimeStatusMessage: null,
-    startedAt: "2026-03-17T10:00:00.000Z",
-    workingDirectory: "/repo",
-    messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...overrides,
-    historyLoadState: overrides.historyLoadState ?? "not_requested",
-  };
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionSummary => {
+  const session = createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "external-1",
+      taskId: "task-1",
+      role: "build",
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-03-17T10:00:00.000Z",
+      workingDirectory: "/repo",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
   return toAgentSessionSummary(session);
 };
 

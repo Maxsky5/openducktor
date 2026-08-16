@@ -1,24 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createSessionMessagesState } from "./messages";
 import { toRuntimeSessionRef } from "./session-runtime-ref";
 
-const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  externalSessionId: "session-1",
-  taskId: "task-1",
-  runtimeKind: "codex",
-  role: "build",
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: "2026-02-22T08:00:00.000Z",
-  workingDirectory: "/repo/worktree",
-  messages: createSessionMessagesState(overrides.externalSessionId ?? "session-1"),
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  historyLoadState: "not_requested",
-  ...overrides,
-});
+const sessionFixture = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
+  createAgentSessionFixture(
+    {
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      runtimeKind: "codex",
+      role: "build",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      workingDirectory: "/repo/worktree",
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 
 describe("runtime session refs", () => {
   test("builds session refs from mandatory session runtime fields", () => {

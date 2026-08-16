@@ -3,6 +3,10 @@ import type { PropsWithChildren, ReactElement } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { AgentSessionHistoryLoadContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionHistoryLoadContextValue } from "@/types/state-slices";
 import { createSessionMessagesState } from "../support/messages";
@@ -14,26 +18,21 @@ const selectedSessionIdentity: AgentSessionIdentity = {
   workingDirectory: "/repo/worktree",
 };
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
-  const externalSessionId =
-    overrides.externalSessionId ?? selectedSessionIdentity.externalSessionId;
-  return {
-    externalSessionId,
-    taskId: "task-1",
-    role: "build",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-06-12T08:00:00.000Z",
-    runtimeKind: selectedSessionIdentity.runtimeKind,
-    workingDirectory: selectedSessionIdentity.workingDirectory,
-    historyLoadState: "not_requested",
-    messages: createSessionMessagesState(externalSessionId),
-    contextUsage: null,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...overrides,
-  };
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState => {
+  return createAgentSessionFixture(
+    {
+      externalSessionId: selectedSessionIdentity.externalSessionId,
+      taskId: "task-1",
+      role: "build",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-06-12T08:00:00.000Z",
+      runtimeKind: selectedSessionIdentity.runtimeKind,
+      workingDirectory: selectedSessionIdentity.workingDirectory,
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 };
 
 const createProps = ({

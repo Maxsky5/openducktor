@@ -14,7 +14,9 @@ import type {
   AgentSessionsStore,
 } from "@/state/agent-sessions-store";
 import { AgentSessionsContext, TasksStateContext } from "@/state/app-state-contexts";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import type { AgentSessionFixtureOverrides } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { TasksStateContextValue } from "@/types/state-slices";
 import { useShellAgentActivity } from "./use-shell-agent-activity";
@@ -25,19 +27,21 @@ type HookArgs = {
   activeWorkspaceRepoPath: string | null;
 };
 
-const createActivitySession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
+const createActivitySession = (
+  overrides: AgentSessionFixtureOverrides = {},
+): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     status: "running",
     ...overrides,
   });
-  if (session.role === null) {
+  if (!isWorkflowAgentSession(session)) {
     throw new Error("Activity session fixtures must be workflow sessions.");
   }
   return {
     externalSessionId: session.externalSessionId,
     ...(session.title ? { title: session.title } : {}),
-    taskId: session.taskId,
-    role: session.role,
+    taskId: session.sessionAssociation.taskId,
+    role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
     startedAt: session.startedAt,
     workingDirectory: session.workingDirectory,
@@ -85,17 +89,12 @@ const createActivityStore = (
         listeners.delete(listener);
       };
     },
-    subscribeLiveAssociations: () => () => {},
     getActivitySnapshot: (): AgentActivitySessionsSnapshot => activitySnapshot,
     getSessionSnapshot: (): AgentSessionState | null => null,
-    getLiveAssociationSnapshot: () => null,
     listSessionSnapshots: (): AgentSessionState[] => [],
     getVisiblePendingInputSnapshot: () => EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT,
     commitSessionCollection: () => {
       throw new Error("commitSessionCollection is not used in this test");
-    },
-    setLiveAssociations: (): void => {
-      throw new Error("setLiveAssociations is not used in this test");
     },
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");

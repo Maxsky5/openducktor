@@ -7,6 +7,7 @@ import {
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import type { AgentApprovalRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 
 export type PendingApprovalPolicyAction = {
   input: AgentSessionLiveReplyApprovalInput;
@@ -45,8 +46,11 @@ export const collectPendingApprovalPolicyActions = ({
   const scheduledApprovalIdentities = new Set<string>();
 
   for (const session of listAgentSessions(next)) {
-    const role = session.role;
-    if (!role || !isReadOnlyAgentRole(role)) {
+    if (!isWorkflowAgentSession(session)) {
+      continue;
+    }
+    const role = session.sessionAssociation.role;
+    if (!isReadOnlyAgentRole(role)) {
       continue;
     }
     const previousIdentities = previousApprovalIdentities(previous, session);

@@ -9,9 +9,8 @@ import { createSessionMessagesState } from "./operations/agent-orchestrator/supp
 
 const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "session-1",
-  taskId: "task-1",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimeKind: "codex",
-  role: "build",
   status: "running",
   runtimeStatusMessage: null,
   startedAt: "2026-08-15T10:00:00.000Z",
@@ -47,7 +46,7 @@ describe("createAgentActivitySnapshot", () => {
       collection: createAgentSessionCollection([
         session({
           externalSessionId: "child-session",
-          role: null,
+          sessionAssociation: { kind: "unbound" },
         }),
       ]),
       previous: createEmptyAgentActivitySnapshot("/repo"),

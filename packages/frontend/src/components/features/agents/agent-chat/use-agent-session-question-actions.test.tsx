@@ -102,7 +102,10 @@ describe("useAgentSessionQuestionActions", () => {
   test("passes surfaced question requests to the operation boundary", async () => {
     const answerAgentQuestion = mock(async () => {});
     const parentSession = sessionIdentity("parent-session");
-    const childSession = sessionIdentity("child-session");
+    const childSession = {
+      ...sessionIdentity("child-session"),
+      sessionAssociation: { kind: "repository" as const },
+    };
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
       createBaseArgs({

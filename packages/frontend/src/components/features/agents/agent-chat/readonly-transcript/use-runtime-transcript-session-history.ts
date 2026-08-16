@@ -3,7 +3,6 @@ import type {
   AgentSkillCatalog,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -11,6 +10,7 @@ import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
+import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
 import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
@@ -119,10 +119,10 @@ export function useRuntimeTranscriptSessionHistory({
   const inheritedSessionScope = stableTarget?.sessionScope ?? null;
   const sessionScope = useMemo(
     () =>
-      matchingSession?.role
-        ? workflowAgentSessionScope(matchingSession.taskId, matchingSession.role)
+      matchingSession
+        ? resolveSessionRuntimeScope(matchingSession.sessionAssociation)
         : inheritedSessionScope,
-    [inheritedSessionScope, matchingSession?.role, matchingSession?.taskId],
+    [inheritedSessionScope, matchingSession],
   );
   const runtimeSessionRefInput = useMemo(() => {
     if (repoPath === null || stableTarget === null) {

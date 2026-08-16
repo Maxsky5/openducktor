@@ -45,7 +45,7 @@ describe("session runtime policy", () => {
     });
   });
 
-  test("does not infer repository scope from missing workflow metadata", async () => {
+  test("does not infer repository scope for an unbound session", async () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",
       {
@@ -54,8 +54,7 @@ describe("session runtime policy", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        taskBinding: null,
-        liveSessionAssociation: null,
+        sessionAssociation: { kind: "unbound" },
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
@@ -64,7 +63,7 @@ describe("session runtime policy", () => {
     expect(ref).not.toHaveProperty("sessionScope");
   });
 
-  test("forwards repository scope from a live policy association", async () => {
+  test("forwards repository scope from the session association", async () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",
       {
@@ -73,8 +72,7 @@ describe("session runtime policy", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        taskBinding: null,
-        liveSessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "repository" },
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),
@@ -83,7 +81,7 @@ describe("session runtime policy", () => {
     expect(ref.sessionScope).toEqual({ kind: "repository" });
   });
 
-  test("keeps task binding authoritative over live policy association", async () => {
+  test("forwards workflow scope from the session association", async () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",
       {
@@ -92,8 +90,7 @@ describe("session runtime policy", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        taskBinding: { taskId: "task-1", role: "build" },
-        liveSessionAssociation: { kind: "repository" },
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         selectedModel: null,
       },
       async () => createSettingsSnapshotFixture(),

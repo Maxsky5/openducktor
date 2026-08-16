@@ -26,13 +26,11 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import type {
-  AgentChatMessage,
-  AgentSessionIdentity,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionTurnMetadata } from "../support/session-turn-metadata";
 import {
   createAgentSessionCollectionRefFixture,
@@ -216,31 +214,29 @@ export const createRecordingSessionTodosUpdater = () => {
   };
 };
 
-type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type BuildSessionOverrides =
+  import("@/test-utils/shared-test-fixtures").AgentSessionFixtureOverrides;
 
 export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessionState => {
-  const { messages, ...sessionOverrides } = overrides;
-  const externalSessionId = sessionOverrides.externalSessionId ?? "session-1";
-
-  return {
-    runtimeKind: "opencode",
-    externalSessionId,
-    taskId: "task-1",
-    role: "spec",
-    status: "running",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    workingDirectory: "/tmp/repo",
-    messages: createSessionMessagesFixture(externalSessionId, messages),
-    contextUsage: null,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...sessionOverrides,
-    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
-  };
+  return createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      role: "spec",
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      workingDirectory: "/tmp/repo",
+      messages: createSessionMessagesFixture("session-1"),
+      contextUsage: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 };
 
 export const getSession = (
@@ -284,10 +280,13 @@ const runtimeRefForSession = ({
   externalSessionId: string;
   repoPath: string;
 }): PolicyBoundSessionRef => {
-  if (!session.role) {
-    throw new Error(`Session '${session.externalSessionId}' is missing a role.`);
+  if (session.sessionAssociation.kind !== "workflow") {
+    throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
-  const sessionScope = workflowAgentSessionScope(session.taskId, session.role);
+  const sessionScope = workflowAgentSessionScope(
+    session.sessionAssociation.taskId,
+    session.sessionAssociation.role,
+  );
   const baseRef = {
     externalSessionId,
     repoPath,
@@ -319,7 +318,7 @@ const runtimeRefForSession = ({
         kind: "codex",
         policy: resolveCodexEffectivePolicy(
           createSettingsSnapshotFixture().agentRuntimes.codex,
-          session.role,
+          session.sessionAssociation.role,
         ),
       },
     };
@@ -400,8 +399,8 @@ export const listenToAgentSessionEvents = (
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const session = getSession(sessionsRef, targetExternalSessionId);
-  if (!session.role) {
-    throw new Error(`Session '${session.externalSessionId}' is missing a role.`);
+  if (session.sessionAssociation.kind !== "workflow") {
+    throw new Error(`Session '${session.externalSessionId}' is not a workflow session.`);
   }
   const sessionRef =
     providedSessionRef ??

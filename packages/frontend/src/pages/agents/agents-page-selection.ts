@@ -15,6 +15,7 @@ import {
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
@@ -400,7 +401,18 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
   const sessions: AgentSessionSummary[] = [];
 
   for (const session of candidateSessions) {
-    if (session?.role !== "build" || session.taskId !== taskId) {
+    if (!session) {
+      continue;
+    }
+    if (isLiveAgentSessionState(session)) {
+      if (
+        !isWorkflowAgentSession(session) ||
+        session.sessionAssociation.role !== "build" ||
+        session.sessionAssociation.taskId !== taskId
+      ) {
+        continue;
+      }
+    } else if (session.role !== "build" || session.taskId !== taskId) {
       continue;
     }
     const sessionKey = agentSessionIdentityKey(session);

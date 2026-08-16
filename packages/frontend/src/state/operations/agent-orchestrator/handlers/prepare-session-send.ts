@@ -23,9 +23,9 @@ export type PreparedSessionSend = {
 const STALE_SEND_PREPARATION_ERROR = "Workspace changed while preparing session send.";
 
 const findSessionTask = (tasks: TaskCard[], session: WorkflowAgentSessionState): TaskCard => {
-  const task = tasks.find((entry) => entry.id === session.taskId);
+  const task = tasks.find((entry) => entry.id === session.sessionAssociation.taskId);
   if (!task) {
-    throw new Error(`Task not found: ${session.taskId}`);
+    throw new Error(`Task not found: ${session.sessionAssociation.taskId}`);
   }
   return task;
 };
@@ -57,7 +57,7 @@ export const createPrepareSessionSend = ({
     const [promptContext] = await Promise.all([
       loadSessionPromptContext({
         workspaceId,
-        role: session.role,
+        role: session.sessionAssociation.role,
         task,
         loadRepoPromptOverrides,
       }),

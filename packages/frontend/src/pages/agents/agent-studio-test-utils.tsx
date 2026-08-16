@@ -25,6 +25,7 @@ import type { AgentSessionTranscriptState } from "@/state/operations/agent-orche
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  type AgentSessionFixtureOverrides,
   createSettingsSnapshotFixture,
   createAgentSessionFixture as createSharedAgentSessionFixture,
   createDeferred as createSharedDeferred,
@@ -32,11 +33,7 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type ReactActEnvironment = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -74,10 +71,7 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   createdAt: "2026-02-22T12:00:00.000Z",
 };
 
-type PageAgentSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-  runId?: string | null;
-};
+type PageAgentSessionOverrides = AgentSessionFixtureOverrides;
 
 const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
   startedAt: "2026-02-22T10:00:00.000Z",

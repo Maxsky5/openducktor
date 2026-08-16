@@ -9,28 +9,31 @@ import { AgentOperationsContext, RuntimeDefinitionsContext } from "@/state/app-s
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
-const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  externalSessionId: "thread-1",
-  taskId: "task-1",
-  role: "build",
-  runtimeKind: "codex",
-  workingDirectory: "/repo/worktree",
-  status: "idle",
-  runtimeStatusMessage: null,
-  startedAt: "2026-07-16T08:00:00.000Z",
-  historyLoadState: "not_requested",
-  messages: createSessionMessagesState("thread-1"),
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-});
+const session = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
+  createAgentSessionFixture(
+    {
+      externalSessionId: "thread-1",
+      taskId: "task-1",
+      role: "build",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-07-16T08:00:00.000Z",
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("thread-1"),
+    },
+    overrides,
+  );
 
 const operations = (
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"],

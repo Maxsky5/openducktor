@@ -11,40 +11,37 @@ import {
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionTurnState } from "../support/session-turn-state";
 import { createAgentSessionRuntimeSnapshotFixture, createTaskCardFixture } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
 
-type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type BuildSessionOverrides = AgentSessionFixtureOverrides;
 
 export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessionState => {
-  const { messages, ...sessionOverrides } = overrides;
-  const externalSessionId = sessionOverrides.externalSessionId ?? "session-1";
-
-  return {
-    runtimeKind: "opencode",
-    externalSessionId,
-    taskId: "task-1",
-    role: "build",
-    status: "running",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    workingDirectory: "/tmp/repo/worktree",
-    messages: createSessionMessagesFixture(externalSessionId, messages),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...sessionOverrides,
-    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
-  };
+  return createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      role: "build",
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: createSessionMessagesFixture("session-1"),
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 };
 
 export const getSession = (

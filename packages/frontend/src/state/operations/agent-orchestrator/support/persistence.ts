@@ -17,7 +17,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
 
   return {
     externalSessionId: session.externalSessionId,
-    role: session.role,
+    role: session.sessionAssociation.role,
     startedAt: session.startedAt,
     runtimeKind,
     workingDirectory: session.workingDirectory,
@@ -62,8 +62,7 @@ export const fromPersistedSessionRecord = ({
   return {
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
-    taskId,
-    role: record.role,
+    sessionAssociation: { kind: "workflow", taskId, role: record.role },
     // Persisted task-store records are durable session fields only. Cold reads
     // start idle; mounted refreshes may preserve current live state separately.
     status: "idle",
@@ -104,9 +103,8 @@ export const toPersistedSessionView = ({
 
   return {
     ...current,
-    taskId: persisted.taskId,
+    sessionAssociation: persisted.sessionAssociation,
     runtimeKind: persisted.runtimeKind,
-    role: persisted.role,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,
     selectedModel: persisted.selectedModel,

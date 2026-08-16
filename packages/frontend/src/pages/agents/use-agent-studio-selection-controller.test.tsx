@@ -16,7 +16,10 @@ import {
   AgentSessionsContext,
 } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createRepoRuntimeHealthFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
@@ -125,7 +128,7 @@ const repoSettings: RepoSettingsInput = {
 const createSession = (
   taskId: string,
   externalSessionId: string,
-  overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {},
+  overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     externalSessionId,
