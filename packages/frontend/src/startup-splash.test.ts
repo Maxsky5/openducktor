@@ -6,6 +6,8 @@ if (typeof document === "undefined") {
   GlobalRegistrator.register();
 }
 
+const originalMatchMedia = window.matchMedia;
+
 const renderStartupSplash = (): HTMLElement => {
   document.body.innerHTML = `
     <div id="openducktor-startup" class="odt-startup" role="status">
@@ -53,6 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.matchMedia = originalMatchMedia;
   document.body.innerHTML = "";
 });
 
