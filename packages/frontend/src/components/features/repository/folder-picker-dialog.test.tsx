@@ -289,6 +289,60 @@ describe("FolderPickerDialog", () => {
     }
   });
 
+  test("does not restore a superseded directory after its refresh completes", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let rootRequestCount = 0;
+    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
+    let rejectNextDirectory = (_error: Error): void => undefined;
+    const refreshListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const nextDirectory = new Promise<DirectoryListing>((_resolve, reject) => {
+      rejectNextDirectory = reject;
+    });
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
+      if (path === "/Users/dev/next") return nextDirectory;
+      if (path !== "/Users/dev") throw new Error(`Unexpected path: ${String(path)}`);
+
+      rootRequestCount += 1;
+      if (rootRequestCount > 1) return refreshListing;
+      return createListing({
+        entries: [
+          {
+            name: "next",
+            path: "/Users/dev/next",
+            isDirectory: true,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+
+    try {
+      const nextButton = await screen.findByRole("button", { name: "next" });
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      await waitFor(() => expect(rootRequestCount).toBe(2));
+
+      fireEvent.click(nextButton);
+      await act(async () => rejectNextDirectory(new Error("Failed to load next directory")));
+      await screen.findByText("Failed to load next directory");
+
+      await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
+
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("supports parent and home navigation, manual path loading, and current-path confirmation", async () => {
     const onConfirm = mock(async (_path: string) => {});
 

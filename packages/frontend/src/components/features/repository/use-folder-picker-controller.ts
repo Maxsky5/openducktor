@@ -1,6 +1,6 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 import { directoryListingQueryOptions } from "@/state/queries/filesystem";
 
@@ -130,6 +130,7 @@ export function useFolderPickerController({
   onConfirm: (path: string) => Promise<void> | void;
 }): FolderPickerController {
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
+  const requestedPathRef = useRef(initialPath);
   const {
     requestedPath,
     manualPath,
@@ -181,10 +182,13 @@ export function useFolderPickerController({
     }
     if (path === requestedPath) {
       void directoryQuery.refetch().then(({ data }) => {
-        if (data) dispatch({ type: "directoryConfirmed", listing: data });
+        if (data && requestedPathRef.current === path) {
+          dispatch({ type: "directoryConfirmed", listing: data });
+        }
       });
       return;
     }
+    requestedPathRef.current = path;
     dispatch({ type: "directoryRequested", path });
   };
 
