@@ -64,13 +64,18 @@ const folderPickerReducer = (
         selectedFilePath: null,
         submitError: null,
       };
-    case "directoryConfirmed":
+    case "directoryConfirmed": {
+      const selectedFileStillExists = action.listing.entries.some(
+        (entry) => !entry.isDirectory && entry.path === state.selectedFilePath,
+      );
       return {
         ...state,
         confirmedListing: action.listing,
-        selectedFilePath: state.hasResolvedRequestedPath ? state.selectedFilePath : null,
+        selectedFilePath:
+          state.hasResolvedRequestedPath && selectedFileStillExists ? state.selectedFilePath : null,
         hasResolvedRequestedPath: true,
       };
+    }
     case "fileSelected":
       if (!state.hasResolvedRequestedPath) {
         return state;
@@ -172,7 +177,9 @@ export function useFolderPickerController({
       return;
     }
     if (path === requestedPath) {
-      void directoryQuery.refetch();
+      void directoryQuery.refetch().then(({ data }) => {
+        if (data) dispatch({ type: "directoryConfirmed", listing: data });
+      });
       return;
     }
     dispatch({ type: "directoryRequested", path });

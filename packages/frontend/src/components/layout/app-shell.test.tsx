@@ -248,6 +248,7 @@ function AppShellTestEnvironment({
           >
             <WorkspacePresenceContext.Provider
               value={{
+                hasLoadedWorkspaceList: true,
                 isLoadingWorkspaces: false,
                 workspaceLoadError: null,
                 retryWorkspaces: async () => {},
@@ -388,6 +389,7 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
+        hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
       },
     });
@@ -404,6 +406,23 @@ describe("AppShell", () => {
     });
 
     expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(
+      screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeNull();
+  });
+
+  test("keeps onboarding visible when a cached empty workspace list refresh fails", () => {
+    renderAppShellForTest({
+      initialEntry: "/onboarding",
+      workspacePresence: {
+        hasWorkspaces: false,
+        workspaceLoadError: new Error("Workspace refresh unavailable"),
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
     ).toBeNull();

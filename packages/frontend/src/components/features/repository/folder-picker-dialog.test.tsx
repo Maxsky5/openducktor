@@ -229,6 +229,61 @@ describe("FolderPickerDialog", () => {
     }
   });
 
+  test("clears a file selection removed by a same-directory refresh", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
+    const refreshListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount > 1) return refreshListing;
+      return createListing({
+        entries: [
+          {
+            name: "codex",
+            path: "/Users/dev/codex",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({
+      onConfirm,
+      initialPath: "/Users/dev",
+      selectionMode: "file",
+    });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      expect(requestCount).toBe(1);
+      expect(
+        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await waitFor(() => expect(requestCount).toBe(2));
+      await act(async () => resolveRefresh(createListing()));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
+        expect(
+          (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        ).toBe(true);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("supports parent and home navigation, manual path loading, and current-path confirmation", async () => {
     const onConfirm = mock(async (_path: string) => {});
 

@@ -27,6 +27,7 @@ type UseWorkspaceSelectionOperationsArgs = {
 
 type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
+  hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
@@ -360,6 +361,7 @@ export function useWorkspaceSelectionOperations({
 
   return {
     workspaces,
+    hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
     isLoadingWorkspaces: workspaceListQuery.isPending,
     workspaceLoadError,
     isSwitchingWorkspace,

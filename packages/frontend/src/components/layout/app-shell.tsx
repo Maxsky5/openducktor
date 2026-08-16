@@ -230,8 +230,13 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
   const onboardingStartedWithoutWorkspaceRef = useRef(false);
-  const { hasWorkspaces, isLoadingWorkspaces, workspaceLoadError, retryWorkspaces } =
-    useWorkspacePresence();
+  const {
+    hasWorkspaces,
+    hasLoadedWorkspaceList,
+    isLoadingWorkspaces,
+    workspaceLoadError,
+    retryWorkspaces,
+  } = useWorkspacePresence();
   const isOnboardingRoute = location.pathname === "/onboarding";
 
   useEffect(() => {
@@ -257,7 +262,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
     );
   }
 
-  if (workspaceLoadError && !hasWorkspaces) {
+  if (workspaceLoadError && !hasLoadedWorkspaceList) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
         <div

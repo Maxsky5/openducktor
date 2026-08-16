@@ -22,6 +22,7 @@ export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient 
 
 export type UseWorkspaceOperationsResult = {
   workspaces: WorkspaceRecord[];
+  hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
   branches: GitBranch[];
