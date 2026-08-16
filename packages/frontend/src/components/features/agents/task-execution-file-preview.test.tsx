@@ -495,7 +495,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
   });
 
-  test("cannot save a previous draft while an unsupported file is selected", async () => {
+  test("discards a previous draft before an unsupported-file switch", async () => {
     const onClose = mock(() => {});
     const view = render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
@@ -524,6 +524,16 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(saveEvent.defaultPrevented).toBe(true);
     expect(writeTextFileMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
+
+    view.rerender(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("const first = true;");
+    await waitForCleanFile();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save file" }).disabled).toBe(
+      true,
+    );
+    await dispatchPreviewSaveShortcut();
+    expect(writeTextFileMock).not.toHaveBeenCalled();
   });
 
   test("keeps editor sessions distinct when file paths contain separators", async () => {

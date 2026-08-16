@@ -234,9 +234,14 @@ export const useTaskExecutionFileEditor = ({
       }
       return;
     }
-    if (!readyResult) return;
     const id = taskExecutionSelectedFileKey(selectedFile);
-    if (!state.session || state.session.id !== id) {
+    if (state.session && state.session.id !== id) {
+      draftRef.current = "";
+      dispatch({ type: "reset" });
+      return;
+    }
+    if (!readyResult) return;
+    if (!state.session) {
       draftRef.current = readyResult.contents;
       dispatch({ type: "seed", id, result: readyResult });
       return;
