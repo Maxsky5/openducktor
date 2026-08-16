@@ -126,9 +126,6 @@ export const useTerminals = (
     ...terminalOptions,
     enabled,
   });
-  const syncedTerminalListByScopeRef = useRef(
-    new Map<string, NonNullable<typeof terminalQuery.data>>(),
-  );
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
   useLayoutEffect(() => {
@@ -137,8 +134,6 @@ export const useTerminals = (
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
-    if (syncedTerminalListByScopeRef.current.get(scopeKey) === terminalQuery.data) return;
-    syncedTerminalListByScopeRef.current.set(scopeKey, terminalQuery.data);
     dispatch({
       type: "hostSynced",
       scopeKey,

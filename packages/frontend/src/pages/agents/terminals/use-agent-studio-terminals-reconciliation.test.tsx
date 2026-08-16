@@ -502,7 +502,6 @@ describe("useAgentStudioTerminals", () => {
       Array<{
         disposals: number;
         mounts: number;
-        active: boolean;
         input: Parameters<typeof terminalMountModule.mountInteractiveTerminal>[0];
       }>
     >();
@@ -513,7 +512,6 @@ describe("useAgentStudioTerminals", () => {
     const mountSpy = spyOn(terminalMountModule, "mountInteractiveTerminal").mockImplementation(
       (input) => {
         const probe = {
-          active: input.isActive(),
           disposals: 0,
           input,
           mounts: 1,
@@ -524,9 +522,6 @@ describe("useAgentStudioTerminals", () => {
         input.onHydrated();
         return {
           activate: () => undefined,
-          setActive: (active) => {
-            probe.active = active;
-          },
           dispose: () => {
             probe.disposals += 1;
           },
@@ -571,7 +566,6 @@ describe("useAgentStudioTerminals", () => {
       if (!taskAProbe || !taskBProbe) throw new Error("Expected both terminal probes.");
       expect(probes.get("terminal-task-a")).toHaveLength(1);
       expect(probes.get("terminal-task-b")).toHaveLength(1);
-      expect([...probes.values()].flat().filter(({ active }) => active)).toHaveLength(1);
       const mountedTabsBeforeSwitches = getLatest().mountedTabs;
       const taskAMountedBeforeSwitches = mountedTabsBeforeSwitches.find(
         ({ scopeKey }) => scopeKey === "/repo:task-a",

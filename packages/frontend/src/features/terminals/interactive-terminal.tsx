@@ -82,7 +82,6 @@ export function InteractiveTerminal({
         onTitleChange: (title) => callbacksRef.current.onTitleChange(title),
         onHydrated: () => setIsHydrated(true),
         onImageDragActiveChange: setIsImageDragActive,
-        onRendererError: setRendererError,
         onInteractionFailure: (title, cause) => {
           interactionToastShown = true;
           toast.error(title, { id: interactionToastId, description: errorMessage(cause) });
@@ -97,14 +96,6 @@ export function InteractiveTerminal({
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
   }, [controller, terminalId]);
-
-  useEffect(() => {
-    try {
-      mountRef.current?.setActive(active);
-    } catch (cause) {
-      setRendererError(errorMessage(cause));
-    }
-  }, [active]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;

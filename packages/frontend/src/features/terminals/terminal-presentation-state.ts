@@ -28,6 +28,41 @@ export const terminalTabLabel = (tab: TerminalTab): string =>
 export const terminalTabLifecycle = (tab: TerminalTab): TerminalLifecycle | null =>
   tab.requestState === "ready" ? tab.summary.lifecycle : null;
 
+const terminalContextsEqual = (
+  left: TerminalSummary["context"],
+  right: TerminalSummary["context"],
+): boolean => {
+  if (!("taskId" in left) || !("taskId" in right)) {
+    return !("taskId" in left) && !("taskId" in right);
+  }
+  return left.repoPath === right.repoPath && left.taskId === right.taskId;
+};
+
+const terminalExitsEqual = (
+  left: TerminalSummary["exit"],
+  right: TerminalSummary["exit"],
+): boolean => {
+  if (!left || !right) return left === right;
+  return (
+    left.exitCode === right.exitCode &&
+    left.signal === right.signal &&
+    left.finalSequence === right.finalSequence &&
+    left.exitedAt === right.exitedAt
+  );
+};
+
+const terminalSummariesEqual = (left: TerminalSummary, right: TerminalSummary): boolean =>
+  left.terminalId === right.terminalId &&
+  left.label === right.label &&
+  terminalContextsEqual(left.context, right.context) &&
+  left.initialWorkingDir === right.initialWorkingDir &&
+  left.createdAt === right.createdAt &&
+  left.lifecycle === right.lifecycle &&
+  terminalExitsEqual(left.exit, right.exit);
+
+const arraysEqualByIdentity = <Value>(left: readonly Value[], right: readonly Value[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
 export type TerminalScopePresentation = {
   hostInstanceId: string | null;
   tabs: TerminalTab[];
@@ -99,16 +134,24 @@ export const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): Ter
     previous?.requestState === "ready" &&
     previous.awaitingLifecycleSync &&
     previous.summary.lifecycle !== summary.lifecycle;
+  const nextSummary = previousSummary
+    ? {
+        ...summary,
+        label: previousLabel ?? summary.label,
+        lifecycle: preserveLiveLifecycle ? previousSummary.lifecycle : summary.lifecycle,
+      }
+    : { ...summary, label: previousLabel ?? summary.label };
+  if (
+    previous?.requestState === "ready" &&
+    previous.awaitingLifecycleSync === preserveLiveLifecycle &&
+    terminalSummariesEqual(previous.summary, nextSummary)
+  ) {
+    return previous;
+  }
   return {
     tabId: previous?.tabId ?? `tab:${summary.terminalId}`,
     terminalId: summary.terminalId,
-    summary: previousSummary
-      ? {
-          ...summary,
-          label: previousLabel ?? summary.label,
-          lifecycle: preserveLiveLifecycle ? previousSummary.lifecycle : summary.lifecycle,
-        }
-      : { ...summary, label: previousLabel ?? summary.label },
+    summary: nextSummary,
     awaitingLifecycleSync: preserveLiveLifecycle,
     error: null,
     requestState: "ready",
@@ -139,13 +182,18 @@ const updateScope = (
   state: TerminalPresentationState,
   scopeKey: string,
   update: (scope: TerminalScopePresentation) => TerminalScopePresentation,
-): TerminalPresentationState => ({
-  ...state,
-  scopes: {
-    ...state.scopes,
-    [scopeKey]: update(state.scopes[scopeKey] ?? emptyTerminalScopePresentation()),
-  },
-});
+): TerminalPresentationState => {
+  const currentScope = state.scopes[scopeKey] ?? emptyTerminalScopePresentation();
+  const nextScope = update(currentScope);
+  if (state.scopes[scopeKey] === currentScope && nextScope === currentScope) return state;
+  return {
+    ...state,
+    scopes: {
+      ...state.scopes,
+      [scopeKey]: nextScope,
+    },
+  };
+};
 
 const reconcileHostTabs = (
   scope: TerminalScopePresentation,
@@ -199,12 +247,21 @@ const reconcileHostTabs = (
   );
   const closingTabIdSet = new Set(closingTabIds);
   const selectableTabs = tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
+  const activeTabId = resolveActiveTabId(selectableTabs, scope.activeTabId);
+  if (
+    scope.hostInstanceId === hostInstanceId &&
+    arraysEqualByIdentity(scope.tabs, tabs) &&
+    arraysEqualByIdentity(scope.closingTabIds, closingTabIds) &&
+    scope.activeTabId === activeTabId
+  ) {
+    return scope;
+  }
   return {
     ...scope,
     hostInstanceId,
     tabs,
     closingTabIds,
-    activeTabId: resolveActiveTabId(selectableTabs, scope.activeTabId),
+    activeTabId,
   };
 };
 

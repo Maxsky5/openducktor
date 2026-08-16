@@ -16,6 +16,28 @@ const summary = (terminalId: string): TerminalSummary => ({
 });
 
 describe("terminalPresentationReducer", () => {
+  test("preserves state identity when the host list has no material change", () => {
+    const scopeKey = "/repo:task-1";
+    const terminal = summary("terminal-a");
+    const initial = terminalPresentationReducer(createTerminalPresentationState(scopeKey), {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [terminal],
+    });
+
+    const repeated = terminalPresentationReducer(initial, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [{ ...terminal, context: { ...terminal.context } }],
+    });
+
+    expect(repeated).toBe(initial);
+    expect(repeated.scopes[scopeKey]).toBe(initial.scopes[scopeKey]);
+    expect(repeated.scopes[scopeKey]?.tabs).toBe(initial.scopes[scopeKey]?.tabs);
+  });
+
   test("shows a surviving tab when overlapping closes have mixed outcomes", () => {
     const scopeKey = "/repo:task-1";
     let state = createTerminalPresentationState(scopeKey);
