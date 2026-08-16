@@ -25,7 +25,7 @@ enableReactActEnvironment();
 const toastErrorMock = mock(() => {});
 
 type UseAgentStudioSessionStartFlowHook =
-  typeof import("./session-start/use-agent-studio-session-start-flow")["useAgentStudioSessionStartFlow"];
+  (typeof import("./session-start/use-agent-studio-session-start-flow"))["useAgentStudioSessionStartFlow"];
 
 let useAgentStudioSessionStartFlow: UseAgentStudioSessionStartFlowHook;
 
@@ -170,9 +170,8 @@ beforeEach(async () => {
       dismiss: () => {},
     },
   }));
-  ({ useAgentStudioSessionStartFlow } = await import(
-    "./session-start/use-agent-studio-session-start-flow"
-  ));
+  ({ useAgentStudioSessionStartFlow } =
+    await import("./session-start/use-agent-studio-session-start-flow"));
 });
 
 afterEach(async () => {

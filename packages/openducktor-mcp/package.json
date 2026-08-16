@@ -1,6 +1,17 @@
 {
   "name": "@openducktor/mcp",
   "version": "0.6.0-beta.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maxsky5/openducktor.git"
+  },
+  "bin": {
+    "openducktor-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,17 +21,6 @@
       "default": "./dist/index.js"
     }
   },
-  "bin": {
-    "openducktor-mcp": "dist/index.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Maxsky5/openducktor.git"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
   "publishConfig": {
     "access": "public"
   },
@@ -29,7 +29,7 @@
     "build": "bun run scripts/build.ts",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.scripts.json --noEmit",
     "test": "bun test --timeout 1000 --max-concurrency=1",
-    "lint": "biome check src scripts",
+    "lint": "oxlint -c ../../.oxlintrc.json src scripts",
     "publish:dry-run": "bun publish --dry-run"
   },
   "dependencies": {

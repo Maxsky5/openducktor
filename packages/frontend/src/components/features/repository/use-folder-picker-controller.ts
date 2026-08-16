@@ -228,10 +228,10 @@ export function useFolderPickerController({
   const isBusy = isSubmitting || isInitialLoad;
   const isCurrentPathSelectable = Boolean(
     hasVerifiedDirectory &&
-      confirmedListing &&
-      (selectionMode === "file"
-        ? selectedFilePath
-        : !requireGitRepo || confirmedListing.currentPathIsGitRepo),
+    confirmedListing &&
+    (selectionMode === "file"
+      ? selectedFilePath
+      : !requireGitRepo || confirmedListing.currentPathIsGitRepo),
   );
   const helperMessage =
     requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo

@@ -200,9 +200,7 @@ export const deriveRepoRuntimeReadiness = ({
     runtimeHealthByRuntime,
   );
   const isRuntimeHealthPending =
-    hasActiveWorkspace &&
-    scopedRuntimeEntries.length > 0 &&
-    scopedRuntimeEntries.some((entry) => entry.runtimeHealth === undefined);
+    hasActiveWorkspace && scopedRuntimeEntries.some((entry) => entry.runtimeHealth === undefined);
   const healthyRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "ready");
   const checkingRuntime = findRuntimeEntryWithReadiness(scopedRuntimeEntries, "checking");
   const awaitingStartupRuntime = findRuntimeEntryWithReadiness(

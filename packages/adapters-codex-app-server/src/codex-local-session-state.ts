@@ -43,7 +43,7 @@ export class CodexLocalSessionState implements CodexSessionLookup {
 
   releaseRuntime(runtimeId: string): CodexSessionState[] {
     const released: CodexSessionState[] = [];
-    for (const session of [...this.sessions.values()]) {
+    for (const session of this.sessions.values()) {
       if (session.runtimeId !== runtimeId) {
         continue;
       }

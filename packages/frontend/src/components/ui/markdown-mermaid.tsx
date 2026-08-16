@@ -79,8 +79,7 @@ export function MarkdownMermaid({
         {preview?.status === "ready" ? (
           <div
             className="flex size-full items-center justify-center overflow-auto [&_svg]:max-h-full [&_svg]:max-w-full"
-            // The SVG comes from Mermaid strict mode and passes through DOMPurify.
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Mermaid SVG must be inserted as markup to render.
+            // oxlint-disable-next-line react/no-danger -- Mermaid strict-mode output passes through DOMPurify
             dangerouslySetInnerHTML={{ __html: preview.svg }}
           />
         ) : null}

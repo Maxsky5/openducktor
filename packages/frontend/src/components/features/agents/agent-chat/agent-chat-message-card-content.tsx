@@ -607,8 +607,8 @@ const SubagentMessage = ({
   const isRunning = meta.status === "running";
   const isWaitingForInput = Boolean(
     meta.externalSessionId &&
-      (meta.status === "pending" || meta.status === "running") &&
-      subagentPendingApprovalCount + subagentPendingQuestionCount > 0,
+    (meta.status === "pending" || meta.status === "running") &&
+    subagentPendingApprovalCount + subagentPendingQuestionCount > 0,
   );
   const durationMs =
     meta.status !== "pending" &&

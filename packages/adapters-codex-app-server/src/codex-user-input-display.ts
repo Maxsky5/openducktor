@@ -96,7 +96,7 @@ const stringRangeFromUtf8ByteRange = (
   let byteOffset = 0;
   let rangeStart: number | null = null;
   let rangeEnd: number | null = null;
-  for (let index = 0; index < text.length; ) {
+  for (let index = 0; index < text.length;) {
     if (byteOffset === byteRange.start) {
       rangeStart = index;
     }

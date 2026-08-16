@@ -80,7 +80,7 @@ export const createTerminalService = ({
   hostInstanceIdFactory = () => globalThis.crypto.randomUUID(),
   scheduleTitleSettlement,
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
-  Effect.gen(function* () {
+  Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
     const engine = createTerminalSessionEngine({
       now,

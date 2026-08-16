@@ -166,6 +166,7 @@ export const resolveIndexedStagedAttachment = (
       return yield* Effect.fail(createNoStagedAttachmentMatchError(displayName));
     }
     // Stale entries are pruned while scanning, so iterate over a stable snapshot.
+    // oxlint-disable-next-line unicorn/no-useless-spread -- pruning mutates matches during iteration
     for (const match of [...matches]) {
       const exists = yield* localAttachmentPort.exists(match.entry.path).pipe(
         Effect.mapError(

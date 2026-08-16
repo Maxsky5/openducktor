@@ -8,7 +8,7 @@
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000",
-    "lint": "biome check src"
+    "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "devDependencies": {
     "bun-types": "^1.3.14"

@@ -47,6 +47,7 @@ export function useSessionTranscriptSurfaceModel({
     hasWorkspace,
     runtimeTarget: repoRuntimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
   });
+  const { refreshChecks: refreshRuntimeChecks } = runtimeReadiness;
 
   const sessionHistory = useRuntimeTranscriptSessionHistory({
     isOpen,
@@ -87,12 +88,12 @@ export function useSessionTranscriptSurfaceModel({
     () => ({
       label: "Recheck",
       onAction: () => {
-        void runtimeReadiness.refreshChecks();
+        void refreshRuntimeChecks();
       },
       disabled: runtimeReadiness.isLoadingChecks,
       isPending: runtimeReadiness.isLoadingChecks,
     }),
-    [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
+    [refreshRuntimeChecks, runtimeReadiness.isLoadingChecks],
   );
   const failedTranscriptAction = useMemo(
     () =>

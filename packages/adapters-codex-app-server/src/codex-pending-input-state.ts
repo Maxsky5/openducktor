@@ -473,12 +473,12 @@ export class CodexPendingInputState {
   }
 
   clearRuntime(runtimeId: string): void {
-    for (const [requestId, entry] of [...this.pendingApprovalsByRequestKey]) {
+    for (const [requestId, entry] of this.pendingApprovalsByRequestKey) {
       if (entry.runtimeId === runtimeId) {
         this.resolveApproval(requestId, runtimeId);
       }
     }
-    for (const [requestId, entry] of [...this.pendingQuestionsByRequestKey]) {
+    for (const [requestId, entry] of this.pendingQuestionsByRequestKey) {
       if (entry.runtimeId === runtimeId) {
         this.resolveQuestion(requestId, runtimeId);
       }

@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
-type FileDiffListComponent = typeof import("./file-diff-list")["FileDiffList"];
+type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
 
 let FileDiffList: FileDiffListComponent;
 

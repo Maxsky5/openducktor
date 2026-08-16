@@ -48,7 +48,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       }
       const current = timingBySession[sessionKey]?.activityStartedAtMs;
       timingBySession[sessionKey] = {
-        ...(timingBySession[sessionKey] ?? {}),
+        ...timingBySession[sessionKey],
         activityStartedAtMs:
           typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
       };
@@ -62,7 +62,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const userAnchorAtMs =
         typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
       timingBySession[sessionKey] = {
-        ...(timingBySession[sessionKey] ?? {}),
+        ...timingBySession[sessionKey],
         userAnchorAtMs,
       };
       return userAnchorAtMs;
@@ -97,7 +97,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
     clearTurnDuration: (sessionKey, completedTimestamp) => {
       const completedAtMs =
         completedTimestamp === undefined ? undefined : toTimestampMs(completedTimestamp);
-      const nextTiming = { ...(timingBySession[sessionKey] ?? {}) };
+      const nextTiming = { ...timingBySession[sessionKey] };
       delete nextTiming.activityStartedAtMs;
       delete nextTiming.userAnchorAtMs;
       if (typeof completedAtMs === "number") {

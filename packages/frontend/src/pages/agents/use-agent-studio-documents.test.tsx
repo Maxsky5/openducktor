@@ -94,7 +94,7 @@ mock.module("@/components/features/task-details/use-task-documents", () => ({
 }));
 
 type UseAgentStudioDocumentsHook =
-  typeof import("./use-agent-studio-documents")["useAgentStudioDocuments"];
+  (typeof import("./use-agent-studio-documents"))["useAgentStudioDocuments"];
 
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 

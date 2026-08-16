@@ -119,13 +119,13 @@ const canLinkSessionScopedSubagentToPartScopedRow = (
 ): boolean => {
   return Boolean(
     incoming.externalSessionId &&
-      isSessionScopedSubagentKey(incoming.correlationKey) &&
-      !candidate.meta.externalSessionId &&
-      isPartScopedSubagentKey(candidate.meta.correlationKey) &&
-      typeof incoming.agent === "string" &&
-      typeof incoming.prompt === "string" &&
-      candidate.meta.agent === incoming.agent &&
-      candidate.meta.prompt === incoming.prompt,
+    isSessionScopedSubagentKey(incoming.correlationKey) &&
+    !candidate.meta.externalSessionId &&
+    isPartScopedSubagentKey(candidate.meta.correlationKey) &&
+    typeof incoming.agent === "string" &&
+    typeof incoming.prompt === "string" &&
+    candidate.meta.agent === incoming.agent &&
+    candidate.meta.prompt === incoming.prompt,
   );
 };
 
@@ -485,9 +485,9 @@ const shouldIgnoreIncomingHistorySubagent = (
 ): boolean => {
   return Boolean(
     existingMessage.meta.externalSessionId &&
-      !incomingMessage.meta.externalSessionId &&
-      existingMessage.meta.correlationKey !== incomingMessage.meta.correlationKey &&
-      matchesLoadedSubagentActivity(existingMessage, incomingMessage),
+    !incomingMessage.meta.externalSessionId &&
+    existingMessage.meta.correlationKey !== incomingMessage.meta.correlationKey &&
+    matchesLoadedSubagentActivity(existingMessage, incomingMessage),
   );
 };
 
@@ -501,8 +501,8 @@ const canMergeHistorySubagentMessage = (
 
   return Boolean(
     incomingMessage.meta.externalSessionId &&
-      !existingMessage.meta.externalSessionId &&
-      matchesLoadedSubagentActivity(existingMessage, incomingMessage),
+    !existingMessage.meta.externalSessionId &&
+    matchesLoadedSubagentActivity(existingMessage, incomingMessage),
   );
 };
 

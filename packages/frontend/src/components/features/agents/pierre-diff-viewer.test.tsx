@@ -808,7 +808,7 @@ describe("PierreDiffViewer", () => {
 
 const requireFileDiff = (
   fileDiff: ReturnType<
-    typeof import("./pierre-diff-viewer-model")["getRenderableFileDiff"]
+    (typeof import("./pierre-diff-viewer-model"))["getRenderableFileDiff"]
   >["fileDiff"],
 ) => {
   expect(fileDiff).not.toBeNull();

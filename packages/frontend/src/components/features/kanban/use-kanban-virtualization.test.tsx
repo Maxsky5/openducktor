@@ -177,6 +177,7 @@ const installMockResizeObserver = () => {
   globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
   const trigger = (): void => {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- callbacks can unsubscribe during delivery
     for (const callback of [...activeCallbacks]) {
       callback([], {} as ResizeObserver);
     }

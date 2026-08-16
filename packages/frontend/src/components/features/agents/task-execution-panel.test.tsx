@@ -24,9 +24,9 @@ import type {
   TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
 
-type TaskExecutionPanelComponent = typeof import("./task-execution-panel")["TaskExecutionPanel"];
+type TaskExecutionPanelComponent = (typeof import("./task-execution-panel"))["TaskExecutionPanel"];
 type TaskExecutionPanelToggleButtonComponent =
-  typeof import("./task-execution-panel")["TaskExecutionPanelToggleButton"];
+  (typeof import("./task-execution-panel"))["TaskExecutionPanelToggleButton"];
 
 let TaskExecutionPanel: TaskExecutionPanelComponent;
 let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;

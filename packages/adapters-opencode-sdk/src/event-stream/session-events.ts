@@ -40,9 +40,9 @@ const shouldQueueSubagentInputEvent = (
 ): boolean => {
   return Boolean(
     event.parentExternalSessionId === runtime.externalSessionId &&
-      event.childExternalSessionId &&
-      event.childExternalSessionId !== runtime.externalSessionId &&
-      !event.subagentCorrelationKey,
+    event.childExternalSessionId &&
+    event.childExternalSessionId !== runtime.externalSessionId &&
+    !event.subagentCorrelationKey,
   );
 };
 

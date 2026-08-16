@@ -143,50 +143,46 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   listAvailableModels(input: ListAgentModelsInput) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.listAvailableModels",
       );
       return yield* fromPromise("claudeRuntime.listAvailableModels", () =>
-        listClaudeModels(input, service.input.processEnv, claudeExecutablePath),
+        listClaudeModels(input, this.input.processEnv, claudeExecutablePath),
       );
     });
   }
   listAvailableSlashCommands(input: ListAgentSlashCommandsInput) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.listAvailableSlashCommands",
       );
       return yield* fromPromise("claudeRuntime.listAvailableSlashCommands", () =>
-        listClaudeSlashCommands(input, service.input.processEnv, claudeExecutablePath),
+        listClaudeSlashCommands(input, this.input.processEnv, claudeExecutablePath),
       );
     });
   }
   listAvailableSkills(input: ListAgentSkillsInput) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.listAvailableSkills",
       );
       return yield* fromPromise("claudeRuntime.listAvailableSkills", () =>
-        listClaudeSkills(input, service.input.processEnv, claudeExecutablePath),
+        listClaudeSkills(input, this.input.processEnv, claudeExecutablePath),
       );
     });
   }
   listAvailableSubagents(input: ListAgentSubagentsInput) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.listAvailableSubagents",
       );
       return yield* fromPromise("claudeRuntime.listAvailableSubagents", () =>
-        listClaudeSubagents(input, service.input.processEnv, claudeExecutablePath),
+        listClaudeSubagents(input, this.input.processEnv, claudeExecutablePath),
       );
     });
   }
@@ -244,13 +240,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
       if (target.subpath) {
         return null;
       }
-      const session = service.sessionStore.get(target.sessionId);
+      const session = this.sessionStore.get(target.sessionId);
       if (session) {
         return yield* fromPromise("claudeRuntime.loadSessionContextUsage", async () => {
           assertClaudeSessionRef(
@@ -269,14 +264,14 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         });
       }
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.loadSessionContextUsage",
       );
       return yield* fromPromise("claudeRuntime.loadSessionContextUsage", () =>
-        service.dependencies.loadDetachedSessionContextUsage({
+        this.dependencies.loadDetachedSessionContextUsage({
           claudeExecutablePath,
           externalSessionId: target.sessionId,
-          ...(service.input.processEnv ? { processEnv: service.input.processEnv } : {}),
+          ...(this.input.processEnv ? { processEnv: this.input.processEnv } : {}),
           workingDirectory: input.workingDirectory,
         }),
       );
@@ -299,21 +294,20 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   sendUserMessage(input: SendAgentUserMessageInput, runtimeId: string) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const scope = yield* requireClaudeSessionScope(
         input.sessionScope,
         "send Claude user message",
       );
-      const session = yield* service.requireSessionForSend(input, runtimeId, scope);
+      const session = yield* this.requireSessionForSend(input, runtimeId, scope);
       assertClaudeSessionRef(session, input, "send message");
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
           messageInput: input,
           session,
-          now: service.now,
-          randomId: service.randomId,
-          emit: service.emit.bind(service),
+          now: this.now,
+          randomId: this.randomId,
+          emit: this.emit.bind(this),
         }),
       );
     });
@@ -400,8 +394,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     runtimeId: string,
     sessionInput: ClaudeSessionLaunchInput,
   ) {
-    const service = this;
-    return Effect.gen(function* () {
+    return Effect.gen(this, function* () {
       const resumeSessionId = sessionInput.options.resume;
       const initialTodos = resumeSessionId
         ? yield* fromPromise("claudeRuntime.loadSessionTodos", () =>
@@ -412,12 +405,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           )
         : [];
       const claudeExecutablePath = yield* resolveClaudeExecutable(
-        service.input,
+        this.input,
         "claudeRuntime.createSession",
       );
       const mcpCommand = yield* resolveOpenDucktorMcpCommand({
-        runtimeDistribution: service.input.runtimeDistribution,
-        toolDiscovery: service.input.toolDiscovery,
+        runtimeDistribution: this.input.runtimeDistribution,
+        toolDiscovery: this.input.toolDiscovery,
       }).pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "claudeRuntime.resolveMcpCommand", {
@@ -425,23 +418,23 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           }),
         ),
       );
-      const mcpBridgeConnection = yield* service.input.resolveMcpBridgeConnection(input.repoPath);
+      const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
       return yield* fromPromise("claudeRuntime.createSession", () =>
         createClaudeAgentSdkSession({
-          emit: service.emit.bind(service),
+          emit: this.emit.bind(this),
           initialTodos,
           input,
-          now: service.now,
-          randomId: service.randomId,
+          now: this.now,
+          randomId: this.randomId,
           resolvedDependencies: {
             claudeExecutablePath,
             mcpBridgeConnection,
             mcpCommand,
           },
           runtimeId,
-          serviceInput: service.input,
+          serviceInput: this.input,
           sessionInput,
-          sessionStore: service.sessionStore,
+          sessionStore: this.sessionStore,
         }),
       );
     });
@@ -471,14 +464,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         return existing;
       });
     }
-    const service = this;
-    return Effect.gen(function* () {
-      yield* service.createSession(
+    return Effect.gen(this, function* () {
+      yield* this.createSession(
         input,
         runtimeId,
         resumedClaudeSessionLaunch(scope, input.externalSessionId),
       );
-      return service.requireSession(input.externalSessionId);
+      return this.requireSession(input.externalSessionId);
     });
   }
 

@@ -155,9 +155,9 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
-const removeUndefinedFields = (
-  override: { [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined },
-): Partial<CodexPolicyFields> => {
+const removeUndefinedFields = (override: {
+  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
+}): Partial<CodexPolicyFields> => {
   const next: Partial<CodexPolicyFields> = {};
   for (const field of Object.keys(override) as CodexPolicyField[]) {
     if (override[field] !== undefined) {
@@ -326,7 +326,7 @@ function CodexSettings({
     value: CodexPolicyFields[Field] | undefined,
   ) =>
     onUpdate((current) => {
-      const draftRoleOverride = { ...(current.roleOverrides[role] ?? {}) };
+      const draftRoleOverride = { ...current.roleOverrides[role] };
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
@@ -355,7 +355,7 @@ function CodexSettings({
       const nextRoleOverrides = { ...current.roleOverrides };
 
       for (const role of AGENT_ROLE_ORDER) {
-        const draftRoleOverride = { ...(nextRoleOverrides[role] ?? {}) };
+        const draftRoleOverride = { ...nextRoleOverrides[role] };
         delete draftRoleOverride[field];
 
         const nextRoleOverride = removeUndefinedFields(draftRoleOverride);

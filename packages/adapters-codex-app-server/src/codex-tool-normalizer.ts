@@ -321,7 +321,7 @@ export const normalizeCodexToolInvocation = ({
     ...(resolvedError ? { error: resolvedError } : {}),
     ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : {}),
     metadata: {
-      ...(metadata ?? {}),
+      ...metadata,
       rawToolName,
       ...(namespace ? { namespace } : {}),
     },

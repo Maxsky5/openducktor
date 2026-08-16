@@ -1,8 +1,7 @@
 {
   "name": "openducktor",
-  "private": true,
   "version": "0.6.0-beta.2",
-  "packageManager": "bun@1.3.11",
+  "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -23,9 +22,9 @@
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test && bun run test:scripts",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
-    "lint": "bun run frontend:boundary-guard && bun run host:architecture-guard && bun run --workspaces lint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "bun run frontend:boundary-guard && bun run host:architecture-guard && oxlint .",
     "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
     "host:architecture-guard": "bun run scripts/host-architecture-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
@@ -39,6 +38,17 @@
     "react-doctor:full": "npx -y react-doctor@latest . --full",
     "react-doctor:diff": "npx -y react-doctor@latest . --diff main --yes"
   },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@types/node": "^26.1.2",
+    "husky": "^9.1.7",
+    "knip": "^6.29.0",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "typescript": "^5.7.3",
+    "yaml": "^2.9.0"
+  },
   "overrides": {
     "@hono/node-server": "^1.19.11",
     "express-rate-limit": "^8.2.2",
@@ -51,14 +61,5 @@
     "tmp": "^0.2.7",
     "undici": "^7.28.0"
   },
-  "devDependencies": {
-    "@commitlint/cli": "^21.2.1",
-    "@commitlint/config-conventional": "^21.2.0",
-    "@biomejs/biome": "^2.5.6",
-    "@types/node": "^26.1.2",
-    "husky": "^9.1.7",
-    "knip": "^6.29.0",
-    "typescript": "^5.7.3",
-    "yaml": "^2.9.0"
-  }
+  "packageManager": "bun@1.3.11"
 }

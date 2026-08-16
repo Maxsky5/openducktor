@@ -272,9 +272,10 @@ const normalizeHistoryStreamParts = (
     }
 
     if (rawPart.type === "text") {
-      const backgroundTaskResult = mapOpenCodeBackgroundTaskResultPart(rawPart, {
-        ...(timestamp ? { timestamp } : {}),
-      });
+      const backgroundTaskResult = mapOpenCodeBackgroundTaskResultPart(
+        rawPart,
+        timestamp ? { timestamp } : {},
+      );
       if (backgroundTaskResult) {
         const externalSessionId = backgroundTaskResult.externalSessionId;
         if (!externalSessionId) {

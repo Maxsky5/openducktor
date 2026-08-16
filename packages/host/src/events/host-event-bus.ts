@@ -50,6 +50,7 @@ export const createHostEventBus = (reporter: HostEventDeliveryReporter): HostEve
         return;
       }
 
+      // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
       for (const listener of [...listeners]) {
         try {
           listener(payload);

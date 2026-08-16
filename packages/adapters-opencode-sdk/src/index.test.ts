@@ -19,6 +19,7 @@ describe("OpencodeSdkAdapter index", () => {
       abortSignals.push(options?.signal ?? AbortSignal.abort());
 
       async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+        yield* [];
         if (options?.signal?.aborted) {
           return;
         }

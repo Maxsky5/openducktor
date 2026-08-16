@@ -255,7 +255,6 @@ export const useRepoSessionReadModel = ({
     }));
   }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Consumer cleanup must match every live-stream restart as well as consumer replacement.
   useEffect(() => {
     if (!workspaceRepoPath || !canObserveRepo) {
       return;

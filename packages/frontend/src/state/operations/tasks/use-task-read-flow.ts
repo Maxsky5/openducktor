@@ -54,10 +54,11 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
     lastTaskRefreshToastRef,
     lastTaskLoadErrorToastRef,
   });
+  const { resetManualLoading } = refreshFlow;
 
   useTaskReadFlowRepoSwitchCleanup({
     activeRepoPath,
-    resetManualLoading: refreshFlow.resetManualLoading,
+    resetManualLoading,
     lastTaskRefreshToastRef,
     lastTaskLoadErrorToastRef,
   });
@@ -65,9 +66,9 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
   const readModel = useTaskQueryReadModel({ activeRepoPath, lastTaskLoadErrorToastRef });
 
   const clearTaskReadState = useCallback(() => {
-    refreshFlow.resetManualLoading();
+    resetManualLoading();
     lastTaskRefreshToastRef.current = null;
-  }, [refreshFlow.resetManualLoading]);
+  }, [resetManualLoading]);
 
   const loadingState = getTaskReadLoadingState({
     activeRepoPath,

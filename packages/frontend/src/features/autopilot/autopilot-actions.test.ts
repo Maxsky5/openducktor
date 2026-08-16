@@ -17,14 +17,12 @@ import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
-const runSessionStartWorkflowMock = mock(
-  async (): Promise<SessionStartWorkflowResult> => ({
-    externalSessionId: "session-new",
-    runtimeKind: "opencode" as const,
-    workingDirectory: "/repo/worktrees/session-new",
-    postStartActionError: null,
-  }),
-);
+const runSessionStartWorkflowMock = mock(async (): Promise<SessionStartWorkflowResult> => ({
+  externalSessionId: "session-new",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session-new",
+  postStartActionError: null,
+}));
 
 const createBuilderSessionRecord = (
   overrides: Partial<AgentSessionRecord> = {},
@@ -115,24 +113,22 @@ const createExecuteArgs = (task: TaskCard) => {
     task,
     queryClient: createQueryClient(),
     loadTaskSessionRecords,
-    loadRepoRuntimeCatalog: mock(
-      async (): Promise<AgentModelCatalog> => ({
-        models: [
-          {
-            id: "openai",
-            providerId: "openai",
-            providerName: "OpenAI",
-            modelId: "gpt-5",
-            modelName: "GPT-5",
-            variants: ["high"],
-          },
-        ],
-        defaultModelsByProvider: {
-          openai: "gpt-5",
+    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => ({
+      models: [
+        {
+          id: "openai",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
         },
-        profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
-      }),
-    ),
+      ],
+      defaultModelsByProvider: {
+        openai: "gpt-5",
+      },
+      profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
+    })),
     loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
     loadRepoRuntimeFileSearch: mock(async () => []),
     resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),

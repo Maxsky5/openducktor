@@ -471,9 +471,10 @@ export const useSettingsModalController = ({
     markDirty,
     draftActions,
   });
+  const { checkAgain: checkRuntimeExecutables } = runtimeExecutableSetup;
   const checkRuntimeExecutablesAgain = useCallback(
-    () => runtimeExecutableSetup.checkAgain(updateAgentRuntimes),
-    [runtimeExecutableSetup.checkAgain, updateAgentRuntimes],
+    () => checkRuntimeExecutables(updateAgentRuntimes),
+    [checkRuntimeExecutables, updateAgentRuntimes],
   );
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({

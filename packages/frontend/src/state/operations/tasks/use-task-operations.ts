@@ -44,6 +44,7 @@ export function useTaskOperations({
     [agentSessionReadPort],
   );
   const taskReadFlow = useTaskReadFlow({ activeRepoPath });
+  const { clearTaskReadState } = taskReadFlow;
   const mutationRunner = useTaskMutationRunner({ activeRepoPath });
   const mutationCommands = useTaskMutationCommands({
     activeRepoPath,
@@ -66,11 +67,12 @@ export function useTaskOperations({
     notificationPort: pullRequestNotificationPort,
     taskChatDraftCleanup: pullRequestChatDraftCleanup,
   });
+  const { clearPullRequestState } = pullRequestOperations;
 
   const clearTaskData = useCallback(() => {
-    taskReadFlow.clearTaskReadState();
-    pullRequestOperations.clearPullRequestState();
-  }, [pullRequestOperations.clearPullRequestState, taskReadFlow.clearTaskReadState]);
+    clearTaskReadState();
+    clearPullRequestState();
+  }, [clearPullRequestState, clearTaskReadState]);
 
   return {
     tasks: taskReadFlow.tasks,

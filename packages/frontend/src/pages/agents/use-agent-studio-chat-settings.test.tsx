@@ -10,8 +10,8 @@ import {
 const actualHostOperationsModule = await import("@/state/operations/host");
 
 const hostMock = {
-  workspaceGetSettingsSnapshot: mock(
-    async (): Promise<SettingsSnapshot> => createSettingsSnapshotFixture(),
+  workspaceGetSettingsSnapshot: mock(async (): Promise<SettingsSnapshot> =>
+    createSettingsSnapshotFixture(),
   ),
 };
 
@@ -84,8 +84,8 @@ const createHookHarness = (initialProps: HookArgs) =>
 describe("useAgentStudioChatSettings", () => {
   test("loads chat settings when a repository is active", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> => createSettingsSnapshot({ showThinkingMessages: true }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ showThinkingMessages: true }),
     );
 
     const harness = createHookHarness({
@@ -117,9 +117,8 @@ describe("useAgentStudioChatSettings", () => {
 
   test("defaults file diff expansion for older chat snapshots", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> =>
-        createSettingsSnapshot({ includeExpandFileDiffsByDefault: false }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ includeExpandFileDiffsByDefault: false }),
     );
 
     const harness = createHookHarness({
@@ -142,9 +141,8 @@ describe("useAgentStudioChatSettings", () => {
 
   test("loads explicit collapsed file diff setting", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> =>
-        createSettingsSnapshot({ expandFileDiffsByDefault: false }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ expandFileDiffsByDefault: false }),
     );
 
     const harness = createHookHarness({
@@ -161,17 +159,16 @@ describe("useAgentStudioChatSettings", () => {
 
   test("loads explicit transcript diff display settings", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> =>
-        createSettingsSnapshot({
-          chatOverrides: {
-            diffStyle: "unified",
-            diffIndicators: "none",
-            diffHeight: "scroll",
-            lineOverflow: "scroll",
-            hunkSeparators: "simple",
-          },
-        }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({
+        chatOverrides: {
+          diffStyle: "unified",
+          diffIndicators: "none",
+          diffHeight: "scroll",
+          lineOverflow: "scroll",
+          hunkSeparators: "simple",
+        },
+      }),
     );
 
     const harness = createHookHarness({
@@ -194,8 +191,8 @@ describe("useAgentStudioChatSettings", () => {
 
   test("surfaces malformed snapshots that omit chat settings", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> => createSettingsSnapshot({ includeChat: false }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ includeChat: false }),
     );
 
     const harness = createHookHarness({
@@ -252,8 +249,8 @@ describe("useAgentStudioChatSettings", () => {
 
   test("resets to false when the active repo becomes unavailable", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
-    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
-      async (): Promise<SettingsSnapshot> => createSettingsSnapshot({ showThinkingMessages: true }),
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(async (): Promise<SettingsSnapshot> =>
+      createSettingsSnapshot({ showThinkingMessages: true }),
     );
 
     const harness = createHookHarness({

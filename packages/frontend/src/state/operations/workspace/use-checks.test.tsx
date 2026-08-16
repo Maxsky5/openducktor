@@ -61,13 +61,11 @@ let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =
   makeTaskStoreCheck();
 const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
 const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
-const refreshRepoRuntimeHealthMock = mock(
-  async (): Promise<RepoRuntimeHealthMap> => ({
-    opencode: makeRepoHealth(),
-  }),
-);
+const refreshRepoRuntimeHealthMock = mock(async (): Promise<RepoRuntimeHealthMap> => ({
+  opencode: makeRepoHealth(),
+}));
 
-type UseChecksHook = typeof import("./use-checks")["useChecks"];
+type UseChecksHook = (typeof import("./use-checks"))["useChecks"];
 type HookArgs = Parameters<UseChecksHook>[0];
 type HookResult = ReturnType<UseChecksHook>;
 type HookHarnessArgs = Partial<HookArgs> & {
@@ -214,8 +212,8 @@ beforeEach(async () => {
 
 describe("use-checks", () => {
   test("refreshChecks is a no-op when no active repo is selected", async () => {
-    const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
+      makeRuntimeCheck(),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
 
@@ -248,8 +246,8 @@ describe("use-checks", () => {
   }, 5000);
 
   test("refreshRuntimeCheck caches and supports force retries", async () => {
-    const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
+      makeRuntimeCheck(),
     );
 
     runtimeCheckHandler = runtimeCheck;
@@ -277,8 +275,8 @@ describe("use-checks", () => {
   }, 5000);
 
   test("does not refresh runtime health while mounted", async () => {
-    const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
+      makeRuntimeCheck(),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
     const refreshRepoRuntimeHealth = mock(async () => ({
@@ -359,11 +357,10 @@ describe("use-checks", () => {
   }, 5000);
 
   test("tracks per-repo task-store cache when active repo changes", async () => {
-    const taskStoreCheck = mock(
-      async (repoPath: string): Promise<TaskStoreCheck> =>
-        makeTaskStoreCheck({
-          taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
-        }),
+    const taskStoreCheck = mock(async (repoPath: string): Promise<TaskStoreCheck> =>
+      makeTaskStoreCheck({
+        taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
+      }),
     );
 
     taskStoreCheckHandler = taskStoreCheck;
@@ -416,8 +413,8 @@ describe("use-checks", () => {
   }, 5000);
 
   test("deduplicates runtime health error toasts across manual refreshes", async () => {
-    const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
+    const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> =>
+      makeRuntimeCheck(),
     );
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
     runtimeCheckHandler = runtimeCheck;

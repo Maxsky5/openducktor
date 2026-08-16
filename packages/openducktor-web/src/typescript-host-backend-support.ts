@@ -57,6 +57,7 @@ export class BufferedHostEventStream {
     if (this.recent.length > this.capacity) {
       this.recent.shift();
     }
+    // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...this.listeners]) {
       try {
         listener(event);
@@ -113,6 +114,7 @@ export class BufferedHostEventBus implements HostEventBusPort {
     if (!listeners) {
       return;
     }
+    // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...listeners]) {
       try {
         listener(payload);

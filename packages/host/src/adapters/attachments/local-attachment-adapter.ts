@@ -52,12 +52,10 @@ export const createLocalAttachmentAdapter = (): LocalAttachmentPort => ({
         catch: (cause) =>
           toHostOperationError(cause, "localAttachment.readDirectory", { path: inputPath }),
       });
-      return entries.map(
-        (entry): LocalAttachmentEntry => ({
-          path: path.join(inputPath, entry.name),
-          fileName: entry.name,
-        }),
-      );
+      return entries.map((entry): LocalAttachmentEntry => ({
+        path: path.join(inputPath, entry.name),
+        fileName: entry.name,
+      }));
     });
   },
   modifiedTimeMs(inputPath) {

@@ -27,7 +27,7 @@ const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 
 type UseAgentStudioGitActionsHook =
-  typeof import("./use-agent-studio-git-actions")["useAgentStudioGitActions"];
+  (typeof import("./use-agent-studio-git-actions"))["useAgentStudioGitActions"];
 
 let useAgentStudioGitActions: UseAgentStudioGitActionsHook;
 

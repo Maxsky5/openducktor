@@ -92,10 +92,7 @@ bun run test
 bun run build
 ```
 
-Use `bun run format` to apply Biome formatting across the repository. The `format:check`
-command is intentionally repo-wide and runs before linting in both CI and the local pre-commit
-hook. Biome is configured to honor Git ignore files, so generated outputs such as `dist`, `build`,
-`coverage`, and `.vite` are excluded from this gate.
+Use `bun run format` to apply Oxfmt formatting across the repository. The `format:check` command is intentionally repo-wide and runs before linting in both CI and the local pre-commit hook. Oxfmt honors Git ignore files, so generated outputs such as `dist`, `build`, `coverage`, and `.vite` are excluded from this gate. Oxlint checks JavaScript and TypeScript files in one repo-wide process; Oxfmt checks supported data and style files such as JSON and CSS. Neither tool checks SVG files.
 
 Useful focused commands:
 

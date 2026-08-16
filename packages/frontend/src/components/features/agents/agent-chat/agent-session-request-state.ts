@@ -8,7 +8,7 @@ export const setAgentSessionRequestValue = <Value>(
 ): AgentSessionRequestState<Value> => ({
   ...source,
   [sessionKey]: {
-    ...(source[sessionKey] ?? {}),
+    ...source[sessionKey],
     [requestId]: value,
   },
 });

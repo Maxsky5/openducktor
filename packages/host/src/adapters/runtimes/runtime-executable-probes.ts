@@ -10,10 +10,10 @@ export const createRuntimeExecutableProbes = ({
   clientVersion?: string;
   processEnv?: NodeJS.ProcessEnv;
 } = {}): RuntimeExecutableProbesByKind => ({
-  claude: createClaudeExecutableProbe({ ...(processEnv ? { processEnv } : {}) }),
+  claude: createClaudeExecutableProbe(processEnv ? { processEnv } : {}),
   codex: createCodexExecutableProbe({
     ...(clientVersion ? { clientVersion } : {}),
     ...(processEnv ? { processEnv } : {}),
   }),
-  opencode: createOpenCodeExecutableProbe({ ...(processEnv ? { processEnv } : {}) }),
+  opencode: createOpenCodeExecutableProbe(processEnv ? { processEnv } : {}),
 });

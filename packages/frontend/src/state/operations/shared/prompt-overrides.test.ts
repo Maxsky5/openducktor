@@ -41,8 +41,8 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
     },
   });
 
-const workspaceGetRepoConfigMock = mock(
-  async (_workspaceId: string): Promise<RepoConfig> => createRepoConfig(),
+const workspaceGetRepoConfigMock = mock(async (_workspaceId: string): Promise<RepoConfig> =>
+  createRepoConfig(),
 );
 
 const workspaceListMock = mock(async () => [
@@ -58,8 +58,8 @@ const workspaceListMock = mock(async () => [
   },
 ]);
 
-const workspaceGetSettingsSnapshotMock = mock(
-  async (): Promise<SettingsSnapshot> => createSettingsSnapshot(),
+const workspaceGetSettingsSnapshotMock = mock(async (): Promise<SettingsSnapshot> =>
+  createSettingsSnapshot(),
 );
 
 mock.module("../host", () => ({
@@ -74,7 +74,7 @@ afterAll(async () => {
   await restoreMockedModules([["../host", () => import("../host")]]);
 });
 
-let loadEffectivePromptOverrides: typeof import("./prompt-overrides")["loadEffectivePromptOverrides"];
+let loadEffectivePromptOverrides: (typeof import("./prompt-overrides"))["loadEffectivePromptOverrides"];
 
 beforeAll(async () => {
   ({ loadEffectivePromptOverrides } = await import("./prompt-overrides"));

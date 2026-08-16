@@ -114,6 +114,7 @@ const releaseEventSessions = async (
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
   const failures: Error[] = [];
+  // oxlint-disable-next-line unicorn/no-useless-spread -- cleanup awaits and must not include new sessions
   for (const session of [...sessions.values()]) {
     try {
       await releaseSessionRuntime(session, sessions, runtimeEventTransports);
@@ -225,6 +226,7 @@ export const createPrepareOpencodeSessionRuntime = (
 
     const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
       const activeSessionIds = new Set(sources.map((source) => source.externalSessionId));
+      // oxlint-disable-next-line unicorn/no-useless-spread -- cleanup awaits and must not include new sessions
       for (const session of [...eventSessions.values()]) {
         if (!activeSessionIds.has(session.externalSessionId)) {
           await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);

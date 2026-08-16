@@ -113,7 +113,7 @@ export class CodexSubagentLifecycleProjector {
       this.deletePendingLifecycle(runtimeId, threadId);
       return;
     }
-    for (const pendingRuntimeId of [...this.pendingLifecycleByRuntimeId.keys()]) {
+    for (const pendingRuntimeId of this.pendingLifecycleByRuntimeId.keys()) {
       this.deletePendingLifecycle(pendingRuntimeId, threadId);
     }
   }

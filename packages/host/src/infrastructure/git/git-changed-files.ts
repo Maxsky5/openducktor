@@ -20,7 +20,7 @@ const nameStatusToFileStatus = (value: string): string => {
 const parseChangedFiles = (output: string): GitChangedFile[] => {
   const fields = output.split("\0");
   const files: GitChangedFile[] = [];
-  for (let index = 0; index < fields.length; ) {
+  for (let index = 0; index < fields.length;) {
     const status = fields[index] ?? "";
     index += 1;
     if (!status) {

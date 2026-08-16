@@ -354,7 +354,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
     clearFileSearchLoadingTimer();
   }, [clearFileSearchDebounceTimer, clearFileSearchLoadingTimer]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Availability changes must invalidate queued work.
   useEffect(() => invalidateFileSearchRequest, [availabilityContext, invalidateFileSearchRequest]);
 
   const closeReferenceMenu = useCallback(() => {

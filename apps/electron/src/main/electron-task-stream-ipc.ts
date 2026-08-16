@@ -147,7 +147,7 @@ export const registerElectronTaskStreamIpc = ({
   const cleanupSenderSubscriptions = (sender: ElectronTaskStreamSender): void => {
     const lifecycle = senderLifecycles.get(sender);
     if (!lifecycle) return;
-    for (const subscriptionId of [...lifecycle.subscriptionIds]) {
+    for (const subscriptionId of lifecycle.subscriptionIds) {
       subscriptions.get(subscriptionId)?.cleanup();
     }
   };

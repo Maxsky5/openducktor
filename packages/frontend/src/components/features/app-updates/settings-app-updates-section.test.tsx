@@ -19,8 +19,9 @@ describe("SettingsAppUpdatesSection", () => {
       status: "idle",
       currentVersion: "0.4.2",
     });
-    let resolveInitialState: (state: Awaited<ReturnType<typeof appUpdates.getState>>) => void =
-      () => {};
+    let resolveInitialState: (
+      state: Awaited<ReturnType<typeof appUpdates.getState>>,
+    ) => void = () => {};
     appUpdates.getState.mockImplementation(
       () =>
         new Promise((resolve) => {

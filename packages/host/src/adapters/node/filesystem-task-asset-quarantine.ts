@@ -68,7 +68,9 @@ export const createTaskAssetQuarantineFiles = ({
     }
     return manifest;
   };
-  const listIds = async (): Promise<string[]> => {
+  const listIds = async ({
+    ignoreMissingEntries = false,
+  }: { ignoreMissingEntries?: boolean } = {}): Promise<string[]> => {
     if (!(await existingStat(quarantineRoot))) {
       return [];
     }
@@ -97,7 +99,7 @@ export const createTaskAssetQuarantineFiles = ({
       try {
         childNames = await readdir(entryPath);
       } catch (cause) {
-        if (isMissing(cause)) {
+        if (ignoreMissingEntries && isMissing(cause)) {
           continue;
         }
         throw cause;
@@ -157,14 +159,18 @@ export const createTaskAssetQuarantineFiles = ({
     async claim(destinationRoot: string): Promise<string[]> {
       const claimed: string[] = [];
       await mkdir(destinationRoot, { recursive: true });
-      for (const quarantineId of await listIds()) {
+      for (const quarantineId of await listIds({ ignoreMissingEntries: true })) {
+        const destinationPath = path.join(destinationRoot, quarantineId);
         try {
-          await rename(root(quarantineId), path.join(destinationRoot, quarantineId));
-          claimed.push(quarantineId);
+          await rename(root(quarantineId), destinationPath);
         } catch (cause) {
           if (!isMissing(cause)) {
             throw cause;
           }
+          continue;
+        }
+        if (await existingStat(destinationPath)) {
+          claimed.push(quarantineId);
         }
       }
       return claimed;

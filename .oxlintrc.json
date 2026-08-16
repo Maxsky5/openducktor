@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "overrides": [
+    {
+      "files": ["packages/frontend/**/*.ts", "packages/frontend/**/*.tsx"],
+      "plugins": ["oxc", "react", "typescript", "unicorn"],
+      "rules": {
+        "react/exhaustive-deps": "warn",
+        "react/no-danger": "warn",
+        "react/rules-of-hooks": "warn"
+      }
+    }
+  ],
+  "options": {
+    "maxWarnings": 0
+  }
+}

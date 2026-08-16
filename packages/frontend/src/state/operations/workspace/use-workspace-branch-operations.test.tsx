@@ -279,21 +279,17 @@ describe("use-workspace-branch-operations", () => {
   });
 
   test("revalidates each partial branch cache independently", async () => {
-    const gitGetCurrentBranch = mock(
-      async (repoPath: string): Promise<GitCurrentBranch> => ({
+    const gitGetCurrentBranch = mock(async (repoPath: string): Promise<GitCurrentBranch> => ({
+      name: repoPath === "/repo-a" ? "develop" : "release",
+      detached: false,
+    }));
+    const gitGetBranches = mock(async (repoPath: string): Promise<GitBranch[]> => [
+      {
         name: repoPath === "/repo-a" ? "develop" : "release",
-        detached: false,
-      }),
-    );
-    const gitGetBranches = mock(
-      async (repoPath: string): Promise<GitBranch[]> => [
-        {
-          name: repoPath === "/repo-a" ? "develop" : "release",
-          isCurrent: true,
-          isRemote: false,
-        },
-      ],
-    );
+        isCurrent: true,
+        isRemote: false,
+      },
+    ]);
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
     const harness = createBranchHarness({ activeRepo: "/repo-a" });

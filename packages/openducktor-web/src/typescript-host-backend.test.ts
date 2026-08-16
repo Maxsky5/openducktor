@@ -21,9 +21,8 @@ const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const { handleTypescriptHostBackendRequest, resolveAppSessionCookieName } = await import(
-  "./typescript-host-backend"
-);
+const { handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
+  await import("./typescript-host-backend");
 
 const APP_TOKEN = "app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";

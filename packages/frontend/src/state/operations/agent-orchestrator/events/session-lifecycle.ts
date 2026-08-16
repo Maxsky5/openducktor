@@ -436,15 +436,17 @@ export const handleSessionFinished = (
         ...current,
         pendingUserMessageStartedAt: undefined,
         runtimeStatusMessage: null,
-        messages: settleTerminalMessages(current, event.timestamp, {
-          ...(appendUserStoppedNotice
+        messages: settleTerminalMessages(
+          current,
+          event.timestamp,
+          appendUserStoppedNotice
             ? {
                 outcome: "error" as const,
                 errorMessage: USER_STOPPED_NOTICE,
                 appendUserStoppedNotice: true,
               }
-            : {}),
-        }),
+            : {},
+        ),
         pendingApprovals: [],
         pendingQuestions: [],
         status: terminalStatus,
