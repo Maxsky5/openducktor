@@ -104,8 +104,7 @@ const {
   protocol,
   session,
   shell,
-} =
-  electron;
+} = electron;
 const APPLICATION_NAME = "OpenDucktor";
 const currentVersion = resolveElectronAppVersion({
   isPackaged: app.isPackaged,
