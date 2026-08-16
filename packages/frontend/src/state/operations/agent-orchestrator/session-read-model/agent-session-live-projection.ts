@@ -62,6 +62,19 @@ const projectObservedSessionActivity = (
   return { status: "idle", pendingUserMessageStartedAt: undefined };
 };
 
+const settleAbsentSessionActivity = (
+  current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
+): Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt"> => {
+  if (
+    current.pendingUserMessageStartedAt === undefined ||
+    current.status === "starting" ||
+    isTerminalSessionStatus(current.status)
+  ) {
+    return projectObservedSessionActivity(current, "idle");
+  }
+  return { status: "idle", pendingUserMessageStartedAt: undefined };
+};
+
 type PendingInputRouting = {
   source: AgentPendingInputSource;
   responseSession: AgentSessionIdentity;
@@ -287,7 +300,7 @@ const rebuildProjectedPendingInput = (
 };
 
 const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionState => {
-  const activity = projectObservedSessionActivity(session, "idle");
+  const activity = settleAbsentSessionActivity(session);
   return {
     ...session,
     ...activity,
@@ -306,9 +319,14 @@ const persistedRecordKeys = (taskSessionRecords: TaskSessionRecords): Set<string
     ),
   );
 
-const resetSessionLiveStateForSnapshot = (session: AgentSessionState): AgentSessionState => ({
+const resetSessionLiveStateForSnapshot = (
+  session: AgentSessionState,
+  hasLiveSnapshot: boolean,
+): AgentSessionState => ({
   ...session,
-  ...projectObservedSessionActivity(session, "idle"),
+  ...(hasLiveSnapshot
+    ? projectObservedSessionActivity(session, "idle")
+    : settleAbsentSessionActivity(session)),
   runtimeStatusMessage: null,
   liveParentExternalSessionId: undefined,
   pendingApprovals: [],
@@ -336,7 +354,12 @@ const materializePersistedSessions = ({
           session.status === "starting" ||
           persistedKeys.has(agentSessionIdentityKey(session))));
     if (shouldCarrySession) {
-      carried.push(resetSessionLiveStateForSnapshot(session));
+      carried.push(
+        resetSessionLiveStateForSnapshot(
+          session,
+          liveSnapshotKeys.has(agentSessionIdentityKey(session)),
+        ),
+      );
     }
   }
   let collection = createAgentSessionCollection(carried);
@@ -348,7 +371,14 @@ const materializePersistedSessions = ({
       toPersistedSessionView({
         taskId,
         record,
-        ...(currentSession ? { current: resetSessionLiveStateForSnapshot(currentSession) } : {}),
+        ...(currentSession
+          ? {
+              current: resetSessionLiveStateForSnapshot(
+                currentSession,
+                liveSnapshotKeys.has(agentSessionIdentityKey(currentSession)),
+              ),
+            }
+          : {}),
       }),
     );
   }

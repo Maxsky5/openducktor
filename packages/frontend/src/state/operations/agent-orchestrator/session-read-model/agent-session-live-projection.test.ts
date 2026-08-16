@@ -562,7 +562,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("idle");
   });
 
-  test("does not let stale OpenCode idle observations cancel an accepted local send", () => {
+  test("keeps an accepted OpenCode send only while the live session is still present", () => {
     const opencodeIdentity = {
       runtimeKind: "opencode" as const,
       workingDirectory,
@@ -604,6 +604,11 @@ describe("agent session live projection", () => {
       taskSessionRecords: tasks,
       snapshots: [staleIdleSnapshot],
     });
+    const afterAbsentReconnect = buildAgentSessionLiveCollection({
+      current: afterAcceptedSend,
+      taskSessionRecords: tasks,
+      snapshots: [],
+    });
     const afterLiveRemoval = applyAgentSessionLiveDelta({
       current: afterAcceptedSend,
       taskSessionRecords: tasks,
@@ -618,9 +623,13 @@ describe("agent session live projection", () => {
       status: "running",
       pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
     });
+    expect(getAgentSession(afterAbsentReconnect, opencodeIdentity)).toMatchObject({
+      status: "idle",
+      pendingUserMessageStartedAt: undefined,
+    });
     expect(getAgentSession(afterLiveRemoval, opencodeIdentity)).toMatchObject({
-      status: "running",
-      pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+      status: "idle",
+      pendingUserMessageStartedAt: undefined,
     });
   });
 

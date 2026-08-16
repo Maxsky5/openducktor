@@ -1,4 +1,5 @@
 import type {
+  AgentSessionRef,
   AgentSessionTodoItem,
   LoadAgentSessionTodosInput,
   SessionRef,
@@ -11,13 +12,20 @@ export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionTodosQueryKeys = {
   all: ["agent-session-todos"] as const,
-  todos: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: SessionRef) =>
+  identity: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: SessionRef) =>
     [
       ...agentSessionTodosQueryKeys.all,
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
+    ] as const,
+  todos: (session: AgentSessionRef) =>
+    [
+      ...agentSessionTodosQueryKeys.identity(session),
+      session.sessionScope?.kind ?? null,
+      session.sessionScope?.kind === "workflow" ? session.sessionScope.taskId : null,
+      session.sessionScope?.kind === "workflow" ? session.sessionScope.role : null,
     ] as const,
 };
 
@@ -38,7 +46,13 @@ export const updateSessionTodosQueryData = (
   session: SessionRef,
   updater: SessionTodosUpdater,
 ): void => {
-  const queryKey = agentSessionTodosQueryKeys.todos(session);
-  const current = queryClient.getQueryData<AgentSessionTodoItem[]>(queryKey) ?? [];
-  queryClient.setQueryData(queryKey, updater(current));
+  const unscopedQueryKey = agentSessionTodosQueryKeys.todos(session);
+  const hasUnscopedQuery = queryClient.getQueryState(unscopedQueryKey) !== undefined;
+  queryClient.setQueriesData<AgentSessionTodoItem[]>(
+    { queryKey: agentSessionTodosQueryKeys.identity(session) },
+    (current) => updater(current ?? []),
+  );
+  if (!hasUnscopedQuery) {
+    queryClient.setQueryData(unscopedQueryKey, updater([]));
+  }
 };
