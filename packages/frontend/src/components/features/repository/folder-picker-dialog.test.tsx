@@ -289,6 +289,91 @@ describe("FolderPickerDialog", () => {
     }
   });
 
+  test("blocks directory confirmation when a same-directory refresh fails", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount > 1) {
+        throw new Error("Directory no longer exists: /Users/dev");
+      }
+      return createListing();
+    });
+    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+
+    try {
+      await screen.findByText("/Users/dev");
+      expect(
+        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await screen.findByText("Directory no longer exists: /Users/dev");
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("restores file confirmation only after a failed refresh succeeds", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    const listing = createListing({
+      entries: [
+        {
+          name: "codex",
+          path: "/Users/dev/codex",
+          isDirectory: false,
+          isGitRepo: false,
+        },
+      ],
+    });
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount === 2) {
+        throw new Error("Failed to refresh /Users/dev");
+      }
+      return listing;
+    });
+    const rendered = renderDialog({
+      onConfirm,
+      initialPath: "/Users/dev",
+      selectionMode: "file",
+    });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await screen.findByText("Failed to refresh /Users/dev");
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await waitFor(() => {
+        expect(requestCount).toBe(3);
+        expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+      });
+      fireEvent.click(confirmButton);
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("does not restore a superseded directory after its refresh completes", async () => {
     const onConfirm = mock(async (_path: string) => {});
     let rootRequestCount = 0;
