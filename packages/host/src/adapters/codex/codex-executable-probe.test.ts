@@ -70,9 +70,11 @@ describe("verifyCodexAppServerProtocol", () => {
       rejectPendingRequestsForShutdown: () => Effect.void,
     } as unknown as CodexProbeTransport;
 
-    const exit = await Effect.runPromiseExit(verifyCodexAppServerProtocol(transport, "1.2.3"));
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+    );
 
-    expect(exit._tag).toBe("Failure");
+    expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
     expect(notified).toBe(false);
   });
 });

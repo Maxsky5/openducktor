@@ -191,18 +191,16 @@ export const createSystemDiagnosticsService = ({
         ghOk && ghTool.path !== null
           ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
           : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
-      const runtimes: RuntimeHealth[] = [];
-      for (const definition of runtimeDefinitionsService.listRuntimeDefinitions()) {
-        const runtimeConfig = config.agentRuntimes[definition.kind];
-        const health = yield* runtimeHealth.getRuntimeHealth(
-          definition.kind,
-          runtimeConfig.executablePath,
-        );
-        runtimes.push({
-          ...health,
-          enabled: runtimeConfig.enabled,
-        });
-      }
+      const runtimes: RuntimeHealth[] = yield* Effect.forEach(
+        runtimeDefinitionsService.listRuntimeDefinitions(),
+        (definition) => {
+          const runtimeConfig = config.agentRuntimes[definition.kind];
+          return runtimeHealth
+            .getRuntimeHealth(definition.kind, runtimeConfig.executablePath)
+            .pipe(Effect.map((health) => ({ ...health, enabled: runtimeConfig.enabled })));
+        },
+        { concurrency: "unbounded" },
+      );
       const errors = [gitError].filter((error): error is string => error !== null);
       for (const runtime of runtimes) {
         if (runtime.enabled && runtime.error) {

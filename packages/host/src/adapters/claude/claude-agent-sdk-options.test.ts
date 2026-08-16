@@ -8,6 +8,7 @@ import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { buildClaudeAgentSdkOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -121,6 +122,7 @@ const createServiceInput = (events?: {
       executablePath: process.execPath,
     },
   }),
+  settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
   toolDiscovery: {
     discoverTool: () => Effect.die("unused"),
     resolveTool: () => Effect.die("unused"),

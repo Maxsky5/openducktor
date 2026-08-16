@@ -10,7 +10,10 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
-import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
+import {
+  RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbePort,
+} from "../../ports/runtime-executable-probe-port";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
@@ -27,7 +30,7 @@ type CodexProbeTransport = Pick<
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,
   clientVersion: string,
-): Effect.Effect<void, HostOperationError> =>
+): Effect.Effect<void, RuntimeExecutableIncompatibleError> =>
   Effect.gen(function* () {
     yield* transport.request({
       method: "initialize",
@@ -46,8 +49,12 @@ export const verifyCodexAppServerProtocol = (
     });
     yield* transport.notify({ method: "initialized" });
   }).pipe(
-    Effect.mapError((cause) =>
-      toHostOperationError(cause, "codexExecutableProbe.initializeAppServer"),
+    Effect.mapError(
+      (cause) =>
+        new RuntimeExecutableIncompatibleError({
+          message: "The executable did not complete the Codex app-server initialization protocol.",
+          cause,
+        }),
     ),
   );
 
@@ -167,10 +174,6 @@ export const createCodexExecutableProbe = ({
           transport,
         }),
       cleanupOperation: "codexExecutableProbe.cleanup",
-    }).pipe(
-      Effect.mapError((cause) =>
-        toHostOperationError(cause, "codexExecutableProbe.probeExecutable", { executablePath }),
-      ),
-    );
+    });
   },
 });

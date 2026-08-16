@@ -100,6 +100,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
       },
     }),
     sessionStore,
+    settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
     toolDiscovery: {} as CreateClaudeAgentSdkServiceInput["toolDiscovery"],
   });
 };

@@ -12,6 +12,7 @@ describe("session runtime policy", () => {
       agentRuntimes: {
         ...defaults.agentRuntimes,
         codex: {
+          ...defaults.agentRuntimes.codex,
           enabled: true,
           defaults: {
             sandboxMode: "workspace-write",

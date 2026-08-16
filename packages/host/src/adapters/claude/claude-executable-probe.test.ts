@@ -55,9 +55,11 @@ describe("createClaudeExecutableProbe", () => {
       },
     });
 
-    const exit = await Effect.runPromiseExit(probe.probeExecutable("/usr/local/bin/not-claude"));
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.probeExecutable("/usr/local/bin/not-claude")),
+    );
 
-    expect(exit._tag).toBe("Failure");
+    expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
     expect(closed).toBe(true);
   });
 });

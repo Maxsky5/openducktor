@@ -3,7 +3,10 @@ import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Cause, Chunk, Effect, Exit } from "effect";
 import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
-import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
+import {
+  RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbePort,
+} from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
@@ -233,8 +236,7 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
       runtimeExecutableProbe: {
         probeExecutable(executablePath) {
           return Effect.fail(
-            new HostOperationError({
-              operation: "claudeExecutableProbe.initialize",
+            new RuntimeExecutableIncompatibleError({
               message: `Selected executable does not speak the Claude Agent SDK protocol: ${executablePath}`,
             }),
           );
@@ -246,7 +248,8 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
     const failure = await firstFailure(starter.startWorkspaceRuntime(createStartInput()));
 
     expect(failure).toMatchObject({
-      operation: "claudeExecutableProbe.initialize",
+      _tag: "HostValidationError",
+      field: "agentRuntimes.claude.executablePath",
       message: `Selected executable does not speak the Claude Agent SDK protocol: ${process.execPath}`,
     });
     expect(runtimeIdCalls).toBe(0);

@@ -67,6 +67,31 @@ describe("createOpenCodeExecutableProbe", () => {
     expect(child.listenerCount("error")).toBe(1);
     expect(() => child.emit("error", new Error("spawn failed"))).not.toThrow();
   });
+
+  test("reports an executable that exits before readiness as incompatible", async () => {
+    const child = Object.assign(new EventEmitter(), {
+      pid: 42,
+      stdin: null,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+    });
+    const probe = createOpenCodeExecutableProbe({
+      portAllocator: () => Effect.succeed(4567),
+      processTreeTerminator: () => Effect.void,
+      readinessProbe: () => {
+        child.emit("close", 2);
+        return Effect.succeed(false);
+      },
+      retryDelayMs: 1,
+      spawnProcess: () => child as never,
+    });
+
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.probeExecutable("/usr/local/bin/not-opencode")),
+    );
+
+    expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
+  });
 });
 
 describe("buildOpenCodeExecutableProbeEnvironment", () => {

@@ -292,6 +292,53 @@ describe("createSystemDiagnosticsService", () => {
     expect(cached.gitVersion).toBe("git version 1.0.0");
     expect(refreshed.gitVersion).toBe("git version 2.0.0");
   });
+  test("runtimeCheck probes independent runtimes concurrently", async () => {
+    const startedKinds: RuntimeHealth["kind"][] = [];
+    let releaseProbes!: () => void;
+    const probesStarted = new Promise<void>((resolve) => {
+      releaseProbes = resolve;
+    });
+    const runtimeHealthPort: RuntimeHealthPort = {
+      getRuntimeHealth: (kind) =>
+        Effect.tryPromise({
+          try: async () => {
+            startedKinds.push(kind);
+            if (startedKinds.length === 2) releaseProbes();
+            await probesStarted;
+            return runtimeHealth(kind);
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.runtimeHealth",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        }),
+    };
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode", "codex"]),
+      runtimeHealth: runtimeHealthPort,
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(
+      service.runtimeCheck(true).pipe(
+        Effect.timeoutFail({
+          duration: "250 millis",
+          onTimeout: () =>
+            new HostOperationError({
+              operation: "test.runtimeHealth",
+              message: "Runtime probes did not start concurrently.",
+            }),
+        }),
+      ),
+    );
+
+    expect(startedKinds).toEqual(["opencode", "codex"]);
+    expect(check.runtimes.map(({ kind }) => kind)).toEqual(["opencode", "codex"]);
+  });
   test("runtimeCheck reports missing gh without making it a blocking diagnostic error", async () => {
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),

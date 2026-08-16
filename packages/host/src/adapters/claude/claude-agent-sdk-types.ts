@@ -40,7 +40,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;
-  settingsConfig?: SettingsConfigPort;
+  settingsConfig: SettingsConfigPort;
   toolDiscovery: ToolDiscoveryPort;
   now?: () => string;
   randomId?: () => string;

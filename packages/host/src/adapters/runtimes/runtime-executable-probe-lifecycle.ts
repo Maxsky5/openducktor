@@ -1,17 +1,17 @@
 import { Cause, Effect, Exit } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 
-export const useRuntimeProbeResource = <Resource>({
+export const useRuntimeProbeResource = <Resource, ProbeError>({
   acquire,
   probe,
   release,
   cleanupOperation,
 }: {
   acquire: Effect.Effect<Resource, HostOperationError>;
-  probe: (resource: Resource) => Effect.Effect<void, HostOperationError>;
+  probe: (resource: Resource) => Effect.Effect<void, ProbeError>;
   release: (resource: Resource) => Effect.Effect<void, HostOperationError>;
   cleanupOperation: string;
-}): Effect.Effect<void, HostOperationError> =>
+}): Effect.Effect<void, HostOperationError | ProbeError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const resource = yield* acquire;

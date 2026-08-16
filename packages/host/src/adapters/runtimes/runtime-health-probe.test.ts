@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
+import {
+  RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbeError,
+  type RuntimeExecutableProbesByKind,
+} from "../../ports/runtime-executable-probe-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
@@ -33,7 +37,7 @@ const createExecutableProbes = (
   probeExecutable: (
     kind: RuntimeKind,
     executablePath: string,
-  ) => Effect.Effect<void, HostOperationError> = () => Effect.void,
+  ) => Effect.Effect<void, RuntimeExecutableProbeError> = () => Effect.void,
 ): RuntimeExecutableProbesByKind => ({
   claude: {
     probeExecutable: (executablePath) => probeExecutable("claude", executablePath),
@@ -109,8 +113,7 @@ describe("createRuntimeHealthProbe", () => {
       createExecutableProbes((kind, executablePath) =>
         kind === "opencode"
           ? Effect.fail(
-              new HostOperationError({
-                operation: "opencodeExecutableProbe.startServer",
+              new RuntimeExecutableIncompatibleError({
                 message: `OpenCode health protocol failed for ${executablePath}.`,
               }),
             )
@@ -135,8 +138,7 @@ describe("createRuntimeHealthProbe", () => {
       systemCommands,
       createExecutableProbes(() =>
         Effect.fail(
-          new HostOperationError({
-            operation: "claudeExecutableProbe.initialize",
+          new RuntimeExecutableIncompatibleError({
             message:
               "Claude Code process exited with code 2. stderr: \u001b[31merror: unexpected argument '--output-format' found\u001b[0m",
           }),
@@ -153,6 +155,31 @@ describe("createRuntimeHealthProbe", () => {
     );
     expect(health.error).not.toContain("\u001b");
     expect(health.error).not.toContain("unexpected argument");
+  });
+
+  test("propagates operational probe failures instead of reporting an incompatible runtime", async () => {
+    const systemCommands = createSystemCommands({ version: "1.18.9" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes(() =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "opencodeExecutableProbe.cleanup",
+            message: "Failed to stop the probe process.",
+          }),
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.getRuntimeHealth("opencode", executablePaths.opencode)),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "opencodeExecutableProbe.cleanup",
+      message: "Failed to stop the probe process.",
+    });
   });
 
   test("keeps a protocol-ready runtime available when version display fails", async () => {

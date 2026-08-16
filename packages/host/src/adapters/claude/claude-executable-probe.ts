@@ -7,7 +7,10 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
-import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
+import {
+  RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbePort,
+} from "../../ports/runtime-executable-probe-port";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
@@ -88,10 +91,13 @@ export const createClaudeExecutableProbe = ({
           toHostOperationError(cause, "claudeExecutableProbe.start", { executablePath }),
       }),
       probe: (sdkQuery) =>
-        Effect.tryPromise<SDKControlInitializeResponse, HostOperationError>({
+        Effect.tryPromise<SDKControlInitializeResponse, RuntimeExecutableIncompatibleError>({
           try: () => sdkQuery.initializationResult(),
           catch: (cause) =>
-            toHostOperationError(cause, "claudeExecutableProbe.initialize", { executablePath }),
+            new RuntimeExecutableIncompatibleError({
+              message: `The executable at ${executablePath} did not complete the Claude Agent SDK initialization protocol.`,
+              cause,
+            }),
         }).pipe(
           Effect.timeoutFail({
             duration: `${initializationTimeoutMs} millis`,
@@ -114,10 +120,6 @@ export const createClaudeExecutableProbe = ({
             toHostOperationError(cause, "claudeExecutableProbe.close", { executablePath }),
         }),
       cleanupOperation: "claudeExecutableProbe.cleanup",
-    }).pipe(
-      Effect.mapError((cause) =>
-        toHostOperationError(cause, "claudeExecutableProbe.probeExecutable", { executablePath }),
-      ),
-    );
+    });
   },
 });
