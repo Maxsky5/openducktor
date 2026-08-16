@@ -1,10 +1,20 @@
 export const OPEN_DUCKTOR_STARTUP_BACKGROUND = "#ffffff";
 
+const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-600.woff2";
+
 const STARTUP_SPLASH_STYLES = `
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("${STARTUP_FONT_PATH}") format("woff2");
+}
+
 :root {
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-primary: #5100ff;
-  --odt-startup-title: #18181b;
+  --odt-startup-title: #475569;
 }
 
 html,
@@ -116,6 +126,7 @@ body {
 .odt-startup__title {
   margin: 0;
   color: var(--odt-startup-title);
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   font-size: 1.875rem;
   font-weight: 600;
   letter-spacing: -0.045em;
@@ -231,7 +242,7 @@ const STARTUP_SPLASH_MARKUP = `
 type StartupSplashHtmlTag = {
   tag: string;
   attrs?: Record<string, string>;
-  children: string;
+  children?: string;
   injectTo: "head-prepend" | "body-prepend";
 };
 
@@ -240,6 +251,17 @@ export const createOpenDucktorStartupSplashPlugin = () => ({
   enforce: "pre" as const,
   transformIndexHtml: (): { tags: StartupSplashHtmlTag[] } => ({
     tags: [
+      {
+        tag: "link",
+        attrs: {
+          rel: "preload",
+          href: STARTUP_FONT_PATH,
+          as: "font",
+          type: "font/woff2",
+          crossorigin: "anonymous",
+        },
+        injectTo: "head-prepend",
+      },
       {
         tag: "style",
         attrs: { id: "openducktor-startup-styles" },

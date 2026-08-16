@@ -68,6 +68,7 @@ describe("build tools", () => {
   it("creates the shared startup splash for Vite HTML", () => {
     const plugin = createOpenDucktorStartupSplashPlugin();
     const result = plugin.transformIndexHtml();
+    const fontPreload = result.tags.find((tag) => tag.attrs?.rel === "preload");
     const styles = result.tags.find((tag) => tag.tag === "style");
     const splash = result.tags.find((tag) => tag.attrs?.id === "openducktor-startup");
 
@@ -75,8 +76,10 @@ describe("build tools", () => {
     expect(styles?.injectTo).toBe("head-prepend");
     expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_BACKGROUND);
     expect(styles?.children).not.toContain("gradient");
-    expect(styles?.children).not.toContain("Space Grotesk");
-    expect(styles?.children).toContain("--odt-startup-title: #18181b");
+    expect(styles?.children).toContain('font-family: "Space Grotesk"');
+    expect(styles?.children).toContain("--odt-startup-title: #475569");
+    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-600.woff2");
+    expect(fontPreload?.attrs?.type).toBe("font/woff2");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
     expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
