@@ -460,17 +460,26 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template: joinPromptBlocks(
-      "Focus only on pull request publication work for the current Builder session.",
+      "Publish a review-ready pull request for the current Builder session.",
       lineSection("Pull request context", ["- targetBranch: {{git.targetBranch}}"]),
-      bulletSection("Publication workflow", [
+      bulletSection("Prepare", [
         "Treat the targetBranch above as the pull-request base branch for this task.",
-        "Inspect the current source branch, remote branch, and existing pull-request state before deciding whether to create a new pull request or update an existing one.",
-        "Always rebase on targetBranch before pushing the source branch.",
-        "Then create or update the pull request against the exact targetBranch above using the provider-native tooling available.",
-        "Write a pull request title and body grounded in the task, spec, plan, and actual implementation diff.",
+        "Follow the repository's pull request conventions, including its contribution guidance and GitHub pull request template when present.",
+        "Inspect the current source branch, remote branch, existing pull-request state, task artifacts, and actual diff against targetBranch. Use live evidence instead of relying on the session summary.",
+        "Run the repository-required checks. Diagnose check failures, fix their root causes, and rerun the affected checks until all required checks pass.",
+        "If the source branch is behind targetBranch, rebase it on targetBranch and resolve conflicts carefully.",
+      ]),
+      bulletSection("Write and publish", [
+        "Use a concise Conventional Commit title that explains why the change matters.",
+        "Start the body with the problem, then explain the goal and the context reviewers need. Include key decisions or tradeoffs when they help review.",
+        "Follow any repository pull request template and fill every relevant section. Do not lead with an implementation inventory or add a verification section.",
+        "Push the source branch, then create or update the pull request against the exact targetBranch above with provider-native tooling.",
+      ]),
+      bulletSection("Finish", [
         "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
+        "Report local check results and hosted check state separately; keep pending hosted checks marked as pending.",
       ]),
       "Use taskId {{task.id}} for every odt_* tool call.",
     ),
