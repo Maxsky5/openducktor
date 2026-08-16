@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveWebCliStopSignal } from "../scripts/dev";
 import { parseCliArgs } from "./cli";
 
 describe("web CLI argument parsing", () => {
@@ -233,11 +234,12 @@ describe("web CLI argument parsing", () => {
       );
       await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
 
-      subprocess.kill("SIGTERM");
+      const shutdownSignal = resolveWebCliStopSignal();
+      subprocess.kill(shutdownSignal);
       const { exitCode, stderr } = await exited;
       await stdoutPump;
 
-      expect(exitCode).toBe(143);
+      expect(exitCode).toBe(shutdownSignal === "SIGINT" ? 130 : 143);
       expect(stderr).not.toContain("log persistence failed");
       expect(stderr).not.toContain("OPENDUCKTOR_CONFIG_DIR");
       const logDirectory = path.join(configDirectory, "logs");
@@ -269,7 +271,7 @@ describe("web CLI argument parsing", () => {
       if (process.platform !== "win32") {
         await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
         const shutdownConsoleMessages = [
-          "Stopping OpenDucktor web after SIGTERM...",
+          `Stopping OpenDucktor web after ${shutdownSignal}...`,
           "Stopping OpenDucktor frontend server...",
         ];
         for (const message of shutdownConsoleMessages) {
