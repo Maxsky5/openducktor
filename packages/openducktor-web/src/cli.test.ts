@@ -6,6 +6,24 @@ import { fileURLToPath } from "node:url";
 import { resolveWebCliStopSignal } from "../scripts/dev";
 import { parseCliArgs } from "./cli";
 
+const waitForPersistedLogRecord = async (
+  logFilePath: string,
+  expectedRecord: string,
+): Promise<void> => {
+  const deadline = performance.now() + 2_000;
+  while (true) {
+    const persisted = await readFile(logFilePath, "utf8");
+    if (persisted.includes(expectedRecord)) {
+      return;
+    }
+    if (performance.now() >= deadline) {
+      break;
+    }
+    await Bun.sleep(20);
+  }
+  throw new Error(`Web launcher did not persist ${JSON.stringify(expectedRecord)}.`);
+};
+
 describe("web CLI argument parsing", () => {
   test("uses OS-assigned ports for workspace development", () => {
     expect(parseCliArgs(["--workspace"])).toMatchObject({
@@ -233,6 +251,16 @@ describe("web CLI argument parsing", () => {
         "mcp-bridge.json",
       );
       await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
+      const logDirectory = path.join(configDirectory, "logs");
+      const logFileName = (await readdir(logDirectory)).find(
+        (name) => name.startsWith("openducktor-web-") && name.endsWith(".log"),
+      );
+      expect(logFileName).toBeDefined();
+      if (!logFileName) {
+        throw new Error("Expected the web launcher to create a daily log file.");
+      }
+      const logFilePath = path.join(logDirectory, logFileName);
+      await waitForPersistedLogRecord(logFilePath, `Instance: ${developmentInstanceId}`);
 
       const shutdownSignal = resolveWebCliStopSignal();
       subprocess.kill(shutdownSignal);
@@ -242,15 +270,7 @@ describe("web CLI argument parsing", () => {
       expect(exitCode).toBe(shutdownSignal === "SIGINT" ? 130 : 143);
       expect(stderr).not.toContain("log persistence failed");
       expect(stderr).not.toContain("OPENDUCKTOR_CONFIG_DIR");
-      const logDirectory = path.join(configDirectory, "logs");
-      const logFileName = (await readdir(logDirectory)).find(
-        (name) => name.startsWith("openducktor-web-") && name.endsWith(".log"),
-      );
-      expect(logFileName).toBeDefined();
-      if (!logFileName) {
-        throw new Error("Expected the web launcher to create a daily log file.");
-      }
-      const persisted = await readFile(path.join(logDirectory, logFileName), "utf8");
+      const persisted = await readFile(logFilePath, "utf8");
       const startupMessages = [
         "Starting OpenDucktor TypeScript host...",
         "Waiting for OpenDucktor TypeScript host readiness...",
