@@ -64,8 +64,13 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
       data-stage={stage}
       className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
     >
+      <div
+        className="electron-native-controls-surface fixed inset-x-0 top-0 z-10 w-full"
+        data-onboarding-native-titlebar=""
+        aria-hidden="true"
+      />
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="electron-titlebar-safe-area flex items-center justify-between gap-4 pb-5">
+        <header className="electron-titlebar-safe-area -mt-5 flex items-center justify-between gap-4 pt-5 pb-5 sm:-mt-7 sm:pt-7">
           <div className="flex items-center gap-3">
             <span
               className="block size-9 shrink-0 bg-foreground"

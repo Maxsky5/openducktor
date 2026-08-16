@@ -62,10 +62,23 @@ describe("OnboardingPage", () => {
     }
   });
 
-  test("marks the onboarding header as an Electron title-bar drag region", () => {
+  test("covers the full onboarding title-bar area with Electron drag regions", () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
 
-    expect(screen.getByRole("banner").classList.contains("electron-titlebar-safe-area")).toBe(true);
+    const header = screen.getByRole("banner");
+    expect(header.classList.contains("electron-titlebar-safe-area")).toBe(true);
+    expect(header.classList.contains("-mt-5")).toBe(true);
+    expect(header.classList.contains("pt-5")).toBe(true);
+    expect(header.classList.contains("sm:-mt-7")).toBe(true);
+    expect(header.classList.contains("sm:pt-7")).toBe(true);
+
+    const nativeTitlebar = document.querySelector("[data-onboarding-native-titlebar]");
+    expect(nativeTitlebar).toBeTruthy();
+    expect(nativeTitlebar?.classList.contains("electron-native-controls-surface")).toBe(true);
+    expect(nativeTitlebar?.classList.contains("fixed")).toBe(true);
+    expect(nativeTitlebar?.classList.contains("inset-x-0")).toBe(true);
+    expect(nativeTitlebar?.classList.contains("top-0")).toBe(true);
+    expect(nativeTitlebar?.classList.contains("w-full")).toBe(true);
   });
 
   test("resets the onboarding scroll position when the stage changes", async () => {
