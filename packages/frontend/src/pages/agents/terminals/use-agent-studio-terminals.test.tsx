@@ -4,6 +4,7 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import type { TerminalTab } from "@/features/terminals";
 import { terminalTabLabel } from "@/features/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/lib/query-provider";
@@ -63,6 +64,76 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("uses workspace identity for terminal presentation scopes", async () => {
+    const dependencies = createTerminalTestDependencies();
+    let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;
+    const Harness = ({ workspaceId }: { workspaceId: string }) => {
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId,
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness workspaceId="workspace-a" />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(latest?.scopeKey).toBe(JSON.stringify(["workspace-a", "task-a"])));
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness workspaceId="workspace-b" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(latest?.scopeKey).toBe(JSON.stringify(["workspace-b", "task-a"])));
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("removes the legacy terminal preference after layout work", async () => {
+    const legacyKey = "openducktor:agent-studio-terminals:/repo:task-a";
+    localStorage.setItem(legacyKey, "legacy");
+    const dependencies = createTerminalTestDependencies();
+    let preferencePresentDuringLayout = false;
+    const Harness = () => {
+      useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
+      useLayoutEffect(() => {
+        preferencePresentDuringLayout = localStorage.getItem(legacyKey) !== null;
+      }, []);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      expect(preferencePresentDuringLayout).toBe(true);
+      await waitFor(() => expect(localStorage.getItem(legacyKey)).toBeNull());
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reopens the panel when the host lists existing task terminals", async () => {
     localStorage.setItem(
       "openducktor:agent-studio-terminals:/repo:task-a",
@@ -85,7 +156,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -133,7 +213,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -189,7 +278,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -254,7 +352,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -314,7 +421,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -358,7 +474,16 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       const queryClient = useQueryClient();
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       refresh = async () => {
         await queryClient.invalidateQueries();
       };
@@ -373,7 +498,7 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(2));
       act(() => {
-        getLatest().onTitleChange(first.terminalId, "pnpm run dev");
+        getLatest().onTitleChange('["workspace-1","task-a"]', first.terminalId, "pnpm run dev");
         getLatest().onReorderTab("tab:terminal-task-a-2", "tab:terminal-task-a", "before");
       });
       expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
@@ -403,7 +528,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -427,7 +561,9 @@ describe("useAgentStudioTerminals", () => {
         onForgotten: getLatest().onForgotten,
       };
 
-      act(() => getLatest().onTitleChange("terminal-task-a", "pnpm run dev"));
+      act(() =>
+        getLatest().onTitleChange('["workspace-1","task-a"]', "terminal-task-a", "pnpm run dev"),
+      );
       await waitFor(() =>
         expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("pnpm run dev"),
       );
@@ -475,7 +611,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -498,7 +643,7 @@ describe("useAgentStudioTerminals", () => {
       try {
         await waitFor(() => expect(getLatest().tabs).toEqual([]));
         expect(getLatest().mountedTabs).toHaveLength(1);
-        expect(getLatest().mountedTabs[0]?.terminalId).toBe("terminal-task-a");
+        expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe("terminal-task-a");
         expect(getLatest().isVisible).toBe(false);
       } finally {
         resolveClose({ closed: true });
@@ -534,7 +679,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -554,8 +708,8 @@ describe("useAgentStudioTerminals", () => {
       });
 
       await waitFor(() => expect(getLatest().tabs).toEqual([]));
-      expect(getLatest().mountedTabs[0]?.tabId).toBe(originalTab?.tabId);
-      expect(getLatest().mountedTabs[0]?.terminalId).toBe(originalTab?.terminalId);
+      expect(getLatest().mountedTabs[0]?.tab.tabId).toBe(originalTab?.tabId);
+      expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe(originalTab?.terminalId);
       expect(getLatest().isVisible).toBe(false);
 
       resolveClose({ closed: false, confirmationRequired: true });
@@ -582,7 +736,16 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -594,7 +757,11 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
       act(() => {
-        getLatest().onForgotten("terminal-task-a", "Terminal host restarted.");
+        getLatest().onForgotten(
+          '["workspace-1","task-a"]',
+          "terminal-task-a",
+          "Terminal host restarted.",
+        );
       });
       await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
 

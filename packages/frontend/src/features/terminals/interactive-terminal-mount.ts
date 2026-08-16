@@ -1,7 +1,6 @@
 import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { type IDisposable, Terminal } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -10,10 +9,6 @@ import {
   createTerminalViewportActivator,
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
-import {
-  attachInteractiveTerminalRenderer,
-  createBufferedTerminalFitter,
-} from "./interactive-terminal-renderer";
 import {
   containsTransferredImage,
   createTerminalImagePasteHandler,
@@ -44,7 +39,6 @@ type MountInteractiveTerminalInput = {
   onTitleChange: (title: string) => void;
   onHydrated: () => void;
   onImageDragActiveChange: (active: boolean) => void;
-  onRendererError: (message: string) => void;
   onInteractionFailure: (title: string, cause: unknown) => void;
 };
 
@@ -63,7 +57,6 @@ export const mountInteractiveTerminal = ({
   onTitleChange,
   onHydrated,
   onImageDragActiveChange,
-  onRendererError,
   onInteractionFailure,
 }: MountInteractiveTerminalInput): InteractiveTerminalMount => {
   let disposed = false;
@@ -73,27 +66,18 @@ export const mountInteractiveTerminal = ({
   const terminal = new Terminal(
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
-  const fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-  terminal.open(container);
-  let rendererSubscription: IDisposable;
+  let fitAddon: FitAddon | undefined;
   try {
-    rendererSubscription = attachInteractiveTerminalRenderer({
-      terminal,
-      renderer: new WebglAddon(/* preserveDrawingBuffer */ true),
-      onContextLoss: () => {
-        if (!disposed) onRendererError("The terminal renderer stopped responding.");
-      },
-    });
+    fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(container);
   } catch (cause) {
-    fitAddon.dispose();
+    fitAddon?.dispose();
     terminal.dispose();
     throw cause;
   }
-
-  const terminalFitter = createBufferedTerminalFitter({ container, terminal, fitAddon });
   const activateViewport = createTerminalViewportActivator({
-    fit: terminalFitter.fit,
+    fit: () => fitAddon.fit(),
     scrollToBottom: () => terminal.scrollToBottom(),
     refresh: (start, end) => terminal.refresh(start, end),
     readRows: () => terminal.rows,
@@ -111,6 +95,7 @@ export const mountInteractiveTerminal = ({
     },
   });
   const enqueueInput = createTerminalInputSequencer({
+    isActive,
     writeInput: (data) => controller.write(terminalId, data),
     reportFailure: (cause) => reportFailure("Terminal input failed", cause),
   });
@@ -166,7 +151,7 @@ export const mountInteractiveTerminal = ({
       stageFile,
       prepareInput: preparePathInput,
       paste: (value) => {
-        if (disposed) return;
+        if (disposed || !isActive()) return;
         terminal.paste(value);
         terminal.focus();
       },
@@ -205,10 +190,10 @@ export const mountInteractiveTerminal = ({
       .catch((cause) => reportFailure("Terminal output failed", cause));
   };
   const unsubscribe = controller.subscribe(terminalId, handleFrame);
-  const fitScheduler = createLiveTerminalFitScheduler({ fit: terminalFitter.fit, isActive });
+  const fitScheduler = createLiveTerminalFitScheduler({ fit: () => fitAddon.fit(), isActive });
   const observer = new ResizeObserver(() => fitScheduler.schedule());
   observer.observe(container);
-  if (isActive()) terminalFitter.fit();
+  if (isActive()) fitAddon.fit();
 
   return {
     activate: (focus) => activateViewport(focus ? () => terminal.focus() : null),
@@ -219,7 +204,6 @@ export const mountInteractiveTerminal = ({
       unsubscribe();
       observer.disconnect();
       fitScheduler.dispose();
-      terminalFitter.dispose();
       container.removeEventListener("paste", handleImagePaste, true);
       container.removeEventListener("dragenter", handleImageDragEnter);
       container.removeEventListener("dragover", handleImageDragOver);
@@ -228,7 +212,6 @@ export const mountInteractiveTerminal = ({
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();
-      rendererSubscription.dispose();
       fitAddon.dispose();
       terminal.dispose();
     },

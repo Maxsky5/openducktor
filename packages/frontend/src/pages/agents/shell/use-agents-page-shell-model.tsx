@@ -104,11 +104,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isLoadingRepoSettings,
   });
   const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
-  const terminalPanel = useAgentStudioTerminals({
-    repoPath: workspaceRepoPath,
-    taskId: selection.view.selectedTask?.id ?? null,
-    taskVersion: selection.view.selectedTask?.updatedAt ?? null,
-  });
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
@@ -153,6 +148,13 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     },
     humanRequestChangesTask,
     setTaskTargetBranch,
+  });
+  const terminalPanel = useAgentStudioTerminals({
+    workspaceId: activeWorkspaceId,
+    repoPath: workspaceRepoPath,
+    taskId: selection.view.taskId || null,
+    taskVersion: selection.view.selectedTask?.updatedAt ?? null,
+    mountedTaskIds: selection.tabTaskIds,
   });
 
   const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =

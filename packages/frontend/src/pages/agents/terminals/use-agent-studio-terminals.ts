@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLayoutEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { TerminalDependencies, TerminalPanelModel, TerminalScope } from "@/features/terminals";
 import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -21,25 +21,32 @@ const defaultDependencies = (): AgentStudioTerminalDependencies => ({
 const legacyPreferenceKey = (repoPath: string, taskId: string): string =>
   `openducktor:agent-studio-terminals:${repoPath}:${taskId}`;
 
+const terminalScopeKey = (workspaceId: string, taskId: string): string =>
+  JSON.stringify([workspaceId, taskId]);
+
 export const useAgentStudioTerminals = (
   {
+    workspaceId,
     repoPath,
     taskId,
     taskVersion,
+    mountedTaskIds,
   }: {
+    workspaceId: string | null;
     repoPath: string | null;
     taskId: string | null;
-    taskVersion?: string | null;
+    taskVersion: string | null;
+    mountedTaskIds: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): AgentStudioTerminalPanelModel => {
-  const enabled = repoPath !== null && taskId !== null;
+  const enabled = workspaceId !== null && repoPath !== null && taskId !== null;
   const worktreeOptions = enabled
     ? taskWorktreeQueryOptions({
         repoPath,
         taskId,
         hostClient: dependencies.hostClient,
-        ...(taskVersion !== undefined ? { taskVersion } : {}),
+        taskVersion,
       })
     : taskWorktreeQueryOptions({
         repoPath: "disabled",
@@ -51,21 +58,26 @@ export const useAgentStudioTerminals = (
     enabled,
   });
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
   }, [repoPath, taskId]);
 
+  const mountedScopeKeys = useMemo(() => {
+    if (!workspaceId) return [];
+    return mountedTaskIds.map((mountedTaskId) => terminalScopeKey(workspaceId, mountedTaskId));
+  }, [mountedTaskIds, workspaceId]);
+
   const scope = useMemo((): TerminalScope | null => {
-    if (!repoPath || !taskId) return null;
+    if (!workspaceId || !repoPath || !taskId) return null;
     return {
-      key: `${repoPath}:${taskId}`,
+      key: terminalScopeKey(workspaceId, taskId),
       context: { repoPath, taskId },
       workingDirectory: worktreeQuery.data?.workingDirectory ?? null,
       workingDirectoryError: `Task ${taskId} has no available worktree.`,
     };
-  }, [repoPath, taskId, worktreeQuery.data?.workingDirectory]);
+  }, [repoPath, taskId, workspaceId, worktreeQuery.data?.workingDirectory]);
   const terminalModel = useTerminals(
-    { scope, isScopeLoading: worktreeQuery.isLoading },
+    { scope, isScopeLoading: worktreeQuery.isLoading, mountedScopeKeys },
     dependencies,
   );
 

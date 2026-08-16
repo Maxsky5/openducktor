@@ -28,12 +28,13 @@ import { terminalTabLabel } from "./terminal-presentation-state";
 import { TerminalTabStrip } from "./terminal-tab-strip";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
 
-const InteractiveTerminal = lazy(async () => {
+const LazyInteractiveTerminal = lazy(async () => {
   const module = await import("./interactive-terminal");
   return { default: module.InteractiveTerminal };
 });
 
 const TerminalViewport = memo(function TerminalViewport({
+  scopeKey,
   tab,
   controller,
   focusRequest,
@@ -45,6 +46,7 @@ const TerminalViewport = memo(function TerminalViewport({
   onForgotten,
   onTitleChange,
 }: {
+  scopeKey: string;
   tab: TerminalTab;
   controller: TerminalPanelModel["controller"];
   focusRequest: number;
@@ -53,13 +55,14 @@ const TerminalViewport = memo(function TerminalViewport({
   onRetryCreate: TerminalPanelModel["onRetryCreate"];
   onAttention: (tabId: string, message: string | null) => void;
   onLifecycle: (
+    scopeKey: string,
     tabId: string,
     terminalId: string,
     lifecycle: TerminalLifecycle,
     exitText: string | null,
   ) => void;
-  onForgotten: (terminalId: string, message: string) => void;
-  onTitleChange: (terminalId: string, title: string) => void;
+  onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
+  onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
 }): ReactElement {
   const handleAttention = useCallback(
     (message: string | null) => onAttention(tab.tabId, message),
@@ -67,28 +70,32 @@ const TerminalViewport = memo(function TerminalViewport({
   );
   const handleLifecycle = useCallback(
     (lifecycle: TerminalLifecycle, exitText: string | null) => {
-      if (tab.terminalId) onLifecycle(tab.tabId, tab.terminalId, lifecycle, exitText);
+      if (tab.terminalId) onLifecycle(scopeKey, tab.tabId, tab.terminalId, lifecycle, exitText);
     },
-    [onLifecycle, tab.tabId, tab.terminalId],
+    [onLifecycle, scopeKey, tab.tabId, tab.terminalId],
   );
   const handleForgotten = useCallback(
     (message: string) => {
-      if (tab.terminalId) onForgotten(tab.terminalId, message);
+      if (tab.terminalId) onForgotten(scopeKey, tab.terminalId, message);
     },
-    [onForgotten, tab.terminalId],
+    [onForgotten, scopeKey, tab.terminalId],
   );
   const handleTitleChange = useCallback(
     (title: string) => {
-      if (tab.terminalId) onTitleChange(tab.terminalId, title);
+      if (tab.terminalId) onTitleChange(scopeKey, tab.terminalId, title);
     },
-    [onTitleChange, tab.terminalId],
+    [onTitleChange, scopeKey, tab.terminalId],
   );
   if (tab.error) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="max-w-[70ch] text-sm text-destructive">{tab.error}</p>
-        {tab.requestState === "lost" ? null : (
-          <Button type="button" variant="outline" onClick={() => onRetryCreate(tab.tabId)}>
+        {tab.requestState === "lost" || !active ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onRetryCreate(scopeKey, tab.tabId)}
+          >
             Retry terminal creation
           </Button>
         )}
@@ -120,7 +127,7 @@ const TerminalViewport = memo(function TerminalViewport({
         />
       }
     >
-      <InteractiveTerminal
+      <LazyInteractiveTerminal
         terminalId={tab.terminalId}
         controller={controller}
         platform={platform}
@@ -155,9 +162,15 @@ export function TerminalPanel({
     undefined,
   );
   const currentScopeKey = useRef(model.scopeKey);
+  const retryCreateRef = useRef(model.onRetryCreate);
   useLayoutEffect(() => {
     currentScopeKey.current = model.scopeKey;
-  }, [model.scopeKey]);
+    retryCreateRef.current = model.onRetryCreate;
+  }, [model.onRetryCreate, model.scopeKey]);
+  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
+    if (ownerScopeKey !== currentScopeKey.current) return;
+    retryCreateRef.current(ownerScopeKey, tabId);
+  }, []);
   const closeCandidate =
     pendingCloseCandidate?.scopeKey === model.scopeKey ? pendingCloseCandidate.tab : null;
   const closeError =
@@ -179,18 +192,22 @@ export function TerminalPanel({
     };
   }, [model.platformError]);
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
-  const showsEmptyTerminalState = model.tabs.length === 0 && model.mountedTabs.length === 0;
+  const hasCurrentScopeMountedTabs = model.mountedTabs.some(
+    (mountedTab) => mountedTab.scopeKey === model.scopeKey,
+  );
+  const showsEmptyTerminalState = model.tabs.length === 0 && !hasCurrentScopeMountedTabs;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
   }, []);
   const setTerminalLifecycle = useCallback(
     (
+      scopeKey: string,
       tabId: string,
       terminalId: string,
       lifecycle: TerminalLifecycle,
       exitText: string | null,
     ): void => {
-      model.onLifecycle(terminalId, lifecycle);
+      model.onLifecycle(scopeKey, terminalId, lifecycle);
       if (exitText) setTabAttention(tabId, exitText);
     },
     [model.onLifecycle, setTabAttention],
@@ -234,23 +251,21 @@ export function TerminalPanel({
     }
   };
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
+    <Tabs
+      {...(model.activeTabId ? { value: model.activeTabId } : {})}
+      onValueChange={model.onSelectTab}
+      className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]"
+    >
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-surface)]">
         {headerLeading}
         <div className="min-w-0 flex-1">
           {model.tabs.length > 0 ? (
-            <Tabs
-              {...(model.activeTabId ? { value: model.activeTabId } : {})}
-              onValueChange={model.onSelectTab}
-              className="gap-0"
-            >
-              <TerminalTabStrip
-                tabs={model.tabs}
-                onSelectTab={model.onSelectTab}
-                onReorderTab={model.onReorderTab}
-                onCloseTab={(tab) => void closeTab(tab)}
-              />
-            </Tabs>
+            <TerminalTabStrip
+              tabs={model.tabs}
+              onSelectTab={model.onSelectTab}
+              onReorderTab={model.onReorderTab}
+              onCloseTab={(tab) => void closeTab(tab)}
+            />
           ) : null}
           {showsEmptyTerminalState ? (
             <p className="px-1 text-xs text-muted-foreground">No terminals.</p>
@@ -277,33 +292,40 @@ export function TerminalPanel({
       </div>
       {model.mountedTabs.length > 0 ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <Tabs
-            value={activeTab?.tabId ?? "pending-terminal-close"}
-            onValueChange={model.onSelectTab}
-            className="relative min-h-0 flex-1 gap-0 overflow-hidden"
-          >
-            {model.mountedTabs.map((tab) => (
-              <TabsContent
-                key={tab.tabId}
-                value={tab.tabId}
-                forceMount
-                className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:inset-0 data-[state=inactive]:invisible"
-              >
-                <TerminalViewport
-                  tab={tab}
-                  controller={model.controller}
-                  focusRequest={model.focusRequest}
-                  active={tab.tabId === activeTab?.tabId}
-                  platform={model.platform}
-                  onRetryCreate={model.onRetryCreate}
-                  onAttention={setTabAttention}
-                  onLifecycle={setTerminalLifecycle}
-                  onForgotten={model.onForgotten}
-                  onTitleChange={model.onTitleChange}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {model.mountedTabs.map((mountedTab) => {
+              const active =
+                model.isVisible &&
+                mountedTab.scopeKey === model.scopeKey &&
+                mountedTab.tab.tabId === activeTab?.tabId;
+              return (
+                <TabsContent
+                  key={`${mountedTab.scopeKey}:${mountedTab.tab.tabId}`}
+                  forceMount
+                  value={mountedTab.tab.tabId}
+                  data-terminal-viewport
+                  data-viewport-state={active ? "active" : "inactive"}
+                  aria-hidden={!active}
+                  inert={!active}
+                  className="h-full min-h-0 data-[viewport-state=inactive]:pointer-events-none data-[viewport-state=inactive]:absolute data-[viewport-state=inactive]:top-0 data-[viewport-state=inactive]:left-[calc(100%+1px)] data-[viewport-state=inactive]:w-full"
+                >
+                  <TerminalViewport
+                    scopeKey={mountedTab.scopeKey}
+                    tab={mountedTab.tab}
+                    controller={model.controller}
+                    focusRequest={active ? model.focusRequest : 0}
+                    active={active}
+                    platform={model.platform}
+                    onRetryCreate={retryTerminalCreation}
+                    onAttention={setTabAttention}
+                    onLifecycle={setTerminalLifecycle}
+                    onForgotten={model.onForgotten}
+                    onTitleChange={model.onTitleChange}
+                  />
+                </TabsContent>
+              );
+            })}
+          </div>
           {activeTab && attentionByTab[activeTab.tabId] ? (
             <p className="border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground">
               {attentionByTab[activeTab.tabId]}
@@ -362,6 +384,6 @@ export function TerminalPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Tabs>
   );
 }

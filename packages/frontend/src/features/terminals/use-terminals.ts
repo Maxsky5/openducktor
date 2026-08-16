@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
@@ -23,6 +23,11 @@ import type { TerminalTransportController } from "./terminal-transport-controlle
 import { useTerminalTransport } from "./use-terminal-transport";
 
 export type { TerminalTab } from "./terminal-presentation-state";
+
+type MountedTerminalTab = {
+  scopeKey: string;
+  tab: TerminalTab;
+};
 
 export type TerminalDependencies = {
   hostClient: Pick<
@@ -56,7 +61,7 @@ export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
   tabs: TerminalTab[];
-  mountedTabs: TerminalTab[];
+  mountedTabs: MountedTerminalTab[];
   activeTabId: string | null;
   isVisible: boolean;
   isLoading: boolean;
@@ -70,21 +75,23 @@ export type TerminalPanelModel = {
   onHide: () => void;
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
-  onRetryCreate: (tabId: string) => void;
+  onRetryCreate: (scopeKey: string, tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
-  onTitleChange: (terminalId: string, title: string) => void;
+  onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
   onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
-  onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => void;
-  onForgotten: (terminalId: string, message: string) => void;
+  onLifecycle: (scopeKey: string, terminalId: string, lifecycle: TerminalLifecycle) => void;
+  onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
 };
 
 export const useTerminals = (
   {
     scope,
-    isScopeLoading = false,
+    isScopeLoading,
+    mountedScopeKeys,
   }: {
     scope: TerminalScope | null;
-    isScopeLoading?: boolean;
+    isScopeLoading: boolean;
+    mountedScopeKeys: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): TerminalPanelModel => {
@@ -112,9 +119,10 @@ export const useTerminals = (
   });
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
-  useLayoutEffect(() => {
+  // Activate the scope during render so consumers never commit the previous scope for one frame.
+  if (presentation.activeScopeKey !== scopeKey) {
     dispatch({ type: "scopeActivated", scopeKey });
-  }, [scopeKey]);
+  }
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
@@ -137,12 +145,13 @@ export const useTerminals = (
   }, [visibleState.closingTabIds, visibleState.tabs]);
   const mountedTabs = useMemo(
     () =>
-      visibleState.tabs.toSorted((left, right) => {
-        const leftCreatedAt = left.summary?.createdAt ?? `~${left.tabId}`;
-        const rightCreatedAt = right.summary?.createdAt ?? `~${right.tabId}`;
-        return leftCreatedAt.localeCompare(rightCreatedAt);
-      }),
-    [visibleState.tabs],
+      mountedScopeKeys.flatMap((ownerScopeKey) =>
+        (presentation.scopes[ownerScopeKey]?.tabs ?? []).map((tab) => ({
+          scopeKey: ownerScopeKey,
+          tab,
+        })),
+      ),
+    [mountedScopeKeys, presentation.scopes],
   );
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
@@ -256,8 +265,11 @@ export const useTerminals = (
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
   const retryCreate = useCallback(
-    (tabId: string): void => void createTerminal(tabId),
-    [createTerminal],
+    (ownerScopeKey: string, tabId: string): void => {
+      if (ownerScopeKey !== scopeKey) return;
+      void createTerminal(tabId);
+    },
+    [createTerminal, scopeKey],
   );
   const reorderTab = useCallback(
     (draggedTabId: string, targetTabId: string, position: "before" | "after"): void => {
@@ -267,10 +279,10 @@ export const useTerminals = (
     [scopeKey],
   );
   const changeTitle = useCallback(
-    (terminalId: string, title: string): void => {
-      if (scopeKey) dispatch({ type: "titleChanged", scopeKey, terminalId, title });
+    (ownerScopeKey: string, terminalId: string, title: string): void => {
+      dispatch({ type: "titleChanged", scopeKey: ownerScopeKey, terminalId, title });
     },
-    [scopeKey],
+    [],
   );
   const closeTerminal = useCallback(
     async (tab: TerminalTab, confirmTerminate: boolean): Promise<TerminalCloseResponse> => {
@@ -315,16 +327,16 @@ export const useTerminals = (
     [controller, dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
   const changeLifecycle = useCallback(
-    (terminalId: string, lifecycle: TerminalLifecycle): void => {
-      if (scopeKey) dispatch({ type: "lifecycleChanged", scopeKey, terminalId, lifecycle });
+    (ownerScopeKey: string, terminalId: string, lifecycle: TerminalLifecycle): void => {
+      dispatch({ type: "lifecycleChanged", scopeKey: ownerScopeKey, terminalId, lifecycle });
     },
-    [scopeKey],
+    [],
   );
   const forgetTerminal = useCallback(
-    (terminalId: string, message: string): void => {
-      if (scopeKey) dispatch({ type: "terminalForgotten", scopeKey, terminalId, message });
+    (ownerScopeKey: string, terminalId: string, message: string): void => {
+      dispatch({ type: "terminalForgotten", scopeKey: ownerScopeKey, terminalId, message });
     },
-    [scopeKey],
+    [],
   );
   const isLoading = terminalQuery.isLoading || isScopeLoading;
   const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");

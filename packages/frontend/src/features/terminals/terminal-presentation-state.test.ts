@@ -16,6 +16,28 @@ const summary = (terminalId: string): TerminalSummary => ({
 });
 
 describe("terminalPresentationReducer", () => {
+  test("preserves state identity when the host list has no material change", () => {
+    const scopeKey = "/repo:task-1";
+    const terminal = summary("terminal-a");
+    const initial = terminalPresentationReducer(createTerminalPresentationState(scopeKey), {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [terminal],
+    });
+
+    const repeated = terminalPresentationReducer(initial, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [{ ...terminal, context: { ...terminal.context } }],
+    });
+
+    expect(repeated).toBe(initial);
+    expect(repeated.scopes[scopeKey]).toBe(initial.scopes[scopeKey]);
+    expect(repeated.scopes[scopeKey]?.tabs).toBe(initial.scopes[scopeKey]?.tabs);
+  });
+
   test("shows a surviving tab when overlapping closes have mixed outcomes", () => {
     const scopeKey = "/repo:task-1";
     let state = createTerminalPresentationState(scopeKey);
@@ -122,5 +144,99 @@ describe("terminalPresentationReducer", () => {
     });
 
     expect(state.scopes[scopeKey]?.tabs).toEqual([]);
+  });
+
+  test("does not restore a forgotten terminal from a stale host list", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "terminalForgotten",
+      scopeKey,
+      terminalId: "terminal-a",
+      message: "Terminal terminal-a was forgotten.",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toMatchObject([
+      {
+        tabId: "tab:terminal-a",
+        terminalId: null,
+        requestState: "lost",
+        sourceTerminalId: "terminal-a",
+      },
+    ]);
+  });
+
+  test("does not restore a forgotten terminal after the host restarts", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "terminalForgotten",
+      scopeKey,
+      terminalId: "terminal-a",
+      message: "Terminal terminal-a was forgotten.",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-2",
+      summaries: [summary("terminal-a")],
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toMatchObject([
+      {
+        tabId: "tab:terminal-a",
+        terminalId: null,
+        requestState: "lost",
+        sourceTerminalId: "terminal-a",
+      },
+    ]);
+  });
+
+  test("does not reactivate a tab removed before close rejection", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "closeStarted",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "closeRejected",
+      scopeKey,
+      tabId: "tab:terminal-a",
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toEqual([]);
+    expect(state.scopes[scopeKey]?.activeTabId).toBeNull();
   });
 });

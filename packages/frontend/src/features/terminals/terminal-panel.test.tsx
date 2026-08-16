@@ -28,9 +28,13 @@ const lostTab: TerminalTab = {
   label: "Shell 1",
   error: "This terminal belonged to a previous host session.",
   requestState: "lost",
+  sourceTerminalId: "terminal-1",
 };
 
-const tabsModel = (tabs: TerminalTab[]) => ({ tabs, mountedTabs: tabs });
+const tabsModel = (tabs: TerminalTab[]) => ({
+  tabs,
+  mountedTabs: tabs.map((tab) => ({ scopeKey: "/repo:task-1", tab })),
+});
 
 const readyTab = (
   summary: TerminalSummary,
@@ -94,7 +98,14 @@ describe("TerminalPanel", () => {
     const terminalViewport = screen.getByText("This terminal belonged to a previous host session.");
 
     view.rerender(
-      <TerminalPanel model={{ ...model, tabs: [], activeTabId: null, mountedTabs: [lostTab] }} />,
+      <TerminalPanel
+        model={{
+          ...model,
+          tabs: [],
+          activeTabId: null,
+          mountedTabs: [{ scopeKey: "/repo:task-1", tab: lostTab }],
+        }}
+      />,
     );
 
     expect(screen.queryByRole("tab", { name: "Shell 1, Lost after host restart" })).toBeNull();
@@ -104,7 +115,24 @@ describe("TerminalPanel", () => {
     );
   });
 
-  test("keeps inactive terminal viewports measurable while hiding them", () => {
+  test("shows the empty state when only another task scope has retained terminals", () => {
+    render(
+      <TerminalPanel
+        model={{
+          ...model,
+          scopeKey: "/repo:task-2",
+          tabs: [],
+          activeTabId: null,
+          mountedTabs: [{ scopeKey: "/repo:task-1", tab: lostTab }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("No terminals.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New terminal" })).toBeTruthy();
+  });
+
+  test("keeps inactive terminal viewports measurable outside the clipped viewport", () => {
     const secondTab: TerminalTab = {
       ...lostTab,
       tabId: "lost:terminal-2",
@@ -112,35 +140,109 @@ describe("TerminalPanel", () => {
     };
     const view = render(<TerminalPanel model={{ ...model, ...tabsModel([lostTab, secondTab]) }} />);
 
-    const panels = view.container.querySelectorAll<HTMLElement>('[data-slot="tabs-content"]');
-    const inactivePanel = Array.from(panels).find((panel) => panel.dataset.state === "inactive");
+    const panels = view.container.querySelectorAll<HTMLElement>("[data-terminal-viewport]");
+    const inactivePanel = Array.from(panels).find(
+      (panel) => panel.dataset.viewportState === "inactive",
+    );
 
     expect(panels).toHaveLength(2);
-    expect(inactivePanel).toBeTruthy();
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:absolute");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:invisible");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:pointer-events-none");
-    expect(inactivePanel?.className).not.toContain("data-[state=inactive]:hidden");
+    if (!inactivePanel) throw new Error("Expected an inactive terminal viewport.");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:absolute");
+    expect(inactivePanel.className).toContain(
+      "data-[viewport-state=inactive]:left-[calc(100%+1px)]",
+    );
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:top-0");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:w-full");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:pointer-events-none");
+    expect(inactivePanel.className).not.toContain("data-[viewport-state=inactive]:invisible");
+    expect(inactivePanel.className).not.toContain("data-[viewport-state=inactive]:hidden");
+    expect(inactivePanel.hasAttribute("inert")).toBe(true);
   });
 
-  test("enforces the eight-terminal tab limit", () => {
-    render(
+  test("renders retry only for the active task scope", () => {
+    const onRetryCreate = mock(() => undefined);
+    const taskAFailedTab: TerminalTab = {
+      tabId: "creating:task-a",
+      terminalId: null,
+      summary: null,
+      label: "Task A shell",
+      error: "Task A creation failed.",
+      requestState: "creation_failed",
+    };
+    const taskBFailedTab: TerminalTab = {
+      ...taskAFailedTab,
+      tabId: "creating:task-b",
+      label: "Task B shell",
+      error: "Task B creation failed.",
+    };
+    const view = render(
       <TerminalPanel
         model={{
           ...model,
-          ...tabsModel(
-            Array.from({ length: 8 }, (_, index) => ({
-              tabId: `lost:${index}`,
-              terminalId: null,
-              summary: null,
-              label: `Shell ${index + 1}`,
-              error: "This terminal belonged to a previous host session.",
-              requestState: "lost" as const,
-            })),
-          ),
+          scopeKey: "/repo:task-b",
+          tabs: [taskBFailedTab],
+          mountedTabs: [
+            { scopeKey: "/repo:task-a", tab: taskAFailedTab },
+            { scopeKey: "/repo:task-b", tab: taskBFailedTab },
+          ],
+          activeTabId: taskBFailedTab.tabId,
+          onRetryCreate,
         }}
       />,
     );
+    const inactiveViewport = view.container.querySelector<HTMLElement>(
+      '[data-terminal-viewport][data-viewport-state="inactive"]',
+    );
+    if (!inactiveViewport) throw new Error("Expected an inactive terminal viewport.");
+    expect(inactiveViewport.querySelector("button")).toBeNull();
+    const activeRetry = screen.getByRole("button", { name: "Retry terminal creation" });
+    fireEvent.click(activeRetry);
+
+    expect(onRetryCreate).toHaveBeenCalledWith("/repo:task-b", taskBFailedTab.tabId);
+  });
+
+  test("links each current terminal tab to its tab panel", () => {
+    const secondTab: TerminalTab = {
+      ...lostTab,
+      tabId: "lost:terminal-2",
+      label: "Shell 2",
+    };
+    render(<TerminalPanel model={{ ...model, ...tabsModel([lostTab, secondTab]) }} />);
+
+    const tab = screen.getByRole("tab", { name: "Shell 1, Lost after host restart" });
+    const panelId = tab.getAttribute("aria-controls");
+    if (!panelId) throw new Error("Expected the terminal tab to control a panel.");
+    const panel = document.getElementById(panelId);
+    if (!panel) throw new Error("Expected the linked terminal tab panel.");
+
+    expect(panel.getAttribute("role")).toBe("tabpanel");
+    expect(panel.getAttribute("aria-labelledby")).toBe(tab.id);
+  });
+
+  test("enforces the eight-terminal tab limit", () => {
+    const tabs = Array.from({ length: 8 }, (_, index) => ({
+      tabId: `lost:${index}`,
+      terminalId: null,
+      summary: null,
+      label: `Shell ${index + 1}`,
+      error: "This terminal belonged to a previous host session.",
+      requestState: "lost" as const,
+      sourceTerminalId: `terminal-${index}`,
+    }));
+    const view = render(
+      <TerminalPanel
+        model={{
+          ...model,
+          ...tabsModel(tabs.slice(0, 7)),
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
+      false,
+    );
+
+    view.rerender(<TerminalPanel model={{ ...model, ...tabsModel(tabs) }} />);
     expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
       true,
     );

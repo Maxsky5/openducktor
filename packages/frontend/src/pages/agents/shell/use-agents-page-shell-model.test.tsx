@@ -95,6 +95,7 @@ type SelectionState = {
   };
   activeTaskTabId: string;
   taskTabs: [];
+  tabTaskIds: string[];
   availableTabTasks: (typeof task)[];
   taskId: string;
   sessionsForTask: SessionFixture[];
@@ -147,6 +148,7 @@ type AgentsPageShellModelState = {
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
+  terminalPanel: { scopeKey: string | null };
 };
 
 let workspaceState: Pick<
@@ -264,6 +266,7 @@ let selectionState: SelectionState = {
   },
   activeTaskTabId: "task-1",
   taskTabs: [],
+  tabTaskIds: ["task-1"],
   availableTabTasks: [task],
   taskId: "task-1",
   sessionsForTask: [initialSelectionSession],
@@ -602,6 +605,7 @@ beforeEach(async () => {
     },
     activeTaskTabId: "task-1",
     taskTabs: [],
+    tabTaskIds: ["task-1"],
     availableTabTasks: [task],
     taskId: "task-1",
     sessionsForTask: [session],
@@ -714,6 +718,7 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
+      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -735,6 +740,31 @@ describe("useAgentsPageShellModel", () => {
     }
   });
 
+  test("keeps the active terminal scope while the selected task card loads", async () => {
+    selectionState = {
+      ...selectionState,
+      activeTaskTabId: "task-2",
+      tabTaskIds: ["task-1", "task-2"],
+      taskId: "task-2",
+      view: {
+        ...selectionState.view,
+        taskId: "task-2",
+        selectedTask: null,
+      },
+    };
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().terminalPanel.scopeKey).toBe(
+        JSON.stringify(["workspace-repo", "task-2"]),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps the shell stable while repo-boundary reset clears stale Agent Studio selection", async () => {
     querySyncState = {
       ...querySyncState,
@@ -742,6 +772,7 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
+      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -786,6 +817,7 @@ describe("useAgentsPageShellModel", () => {
 
       selectionState = {
         ...selectionState,
+        tabTaskIds: ["task-2"],
         view: {
           ...selectionState.view,
           taskId: "task-2",

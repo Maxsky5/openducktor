@@ -24,16 +24,23 @@ export const createTerminalViewportActivator = ({
 };
 
 export const createTerminalInputSequencer = ({
+  isActive,
   writeInput,
   reportFailure,
 }: {
+  isActive: () => boolean;
   writeInput: (data: Uint8Array) => Promise<void>;
   reportFailure: (cause: unknown) => void;
 }) => {
   let inputQueue = Promise.resolve();
   return (operation: () => Uint8Array | Promise<Uint8Array>): Promise<void> => {
     inputQueue = inputQueue
-      .then(async () => writeInput(await operation()))
+      .then(async () => {
+        if (!isActive()) return;
+        const data = await operation();
+        if (!isActive()) return;
+        await writeInput(data);
+      })
       .catch((cause) => reportFailure(cause));
     return inputQueue;
   };
