@@ -221,7 +221,17 @@ const reconcileHostTabs = (
     const previousHostTabs = scope.tabs.map((tab) =>
       tab.requestState === "ready" ? toLostTab(tab, "The terminal host restarted.") : tab,
     );
-    const tabs = [...previousHostTabs, ...summaries.map((summary) => toHostTab(summary))];
+    const previousTerminalIds = new Set(
+      previousHostTabs.flatMap((tab) =>
+        tab.requestState === "lost" ? [tab.sourceTerminalId] : [],
+      ),
+    );
+    const tabs = [
+      ...previousHostTabs,
+      ...summaries.flatMap((summary) =>
+        previousTerminalIds.has(summary.terminalId) ? [] : [toHostTab(summary)],
+      ),
+    ];
     const closingTabIds = scope.closingTabIds.filter((tabId) =>
       tabs.some((tab) => tab.tabId === tabId),
     );
@@ -376,7 +386,7 @@ export const terminalPresentationReducer = (
       return {
         ...scope,
         closingTabIds,
-        activeTabId: event.tabId,
+        activeTabId: resolveActiveTabId(selectableTabs, event.tabId),
         visibility:
           selectableTabs.length > 0 ? { value: true, isExplicit: true } : scope.visibility,
       };

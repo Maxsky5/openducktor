@@ -152,7 +152,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const terminalPanel = useAgentStudioTerminals({
     workspaceId: activeWorkspaceId,
     repoPath: workspaceRepoPath,
-    taskId: selection.view.selectedTask?.id ?? null,
+    taskId: selection.view.taskId || null,
     taskVersion: selection.view.selectedTask?.updatedAt ?? null,
     mountedTaskIds: selection.tabTaskIds,
   });

@@ -15,8 +15,8 @@ if (typeof document === "undefined") {
 }
 
 // packages/host terminal limits: 32 live sessions + 64 retained exited sessions.
-const RETAINED_TERMINAL_BOUND = 96;
-const STALE_BUFFER_LINES = 2_024;
+const PRODUCTION_TERMINAL_MOUNT_COUNT = 96;
+const STALE_BUFFER_LINES = 4;
 
 const nextFrame = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -73,9 +73,14 @@ const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): v
 };
 
 describe("retained terminal rendering", () => {
-  test("hydrates stale output for every retained production terminal mount", async () => {
+  test("hydrates output for 96 retained production terminal mounts", async () => {
     const { controller, listeners } = createController();
     const activeTerminalIds = new Set<string>(["terminal-0"]);
+    const hydratedTerminalIds = new Set<string>();
+    let finishHydration: () => void = () => undefined;
+    const allHydrated = new Promise<void>((resolve) => {
+      finishHydration = resolve;
+    });
     const retained: Array<{
       container: HTMLDivElement;
       mount: InteractiveTerminalMount;
@@ -83,7 +88,7 @@ describe("retained terminal rendering", () => {
     }> = [];
 
     try {
-      for (let index = 0; index < RETAINED_TERMINAL_BOUND; index += 1) {
+      for (let index = 0; index < PRODUCTION_TERMINAL_MOUNT_COUNT; index += 1) {
         const terminalId = `terminal-${index}`;
         const container = document.createElement("div");
         Object.defineProperties(container, {
@@ -104,7 +109,10 @@ describe("retained terminal rendering", () => {
           onLifecycle: () => undefined,
           onForgotten: () => undefined,
           onTitleChange: () => undefined,
-          onHydrated: () => undefined,
+          onHydrated: () => {
+            hydratedTerminalIds.add(terminalId);
+            if (hydratedTerminalIds.size === PRODUCTION_TERMINAL_MOUNT_COUNT) finishHydration();
+          },
           onImageDragActiveChange: () => undefined,
           onInteractionFailure: () => undefined,
         });
@@ -113,10 +121,13 @@ describe("retained terminal rendering", () => {
         if (!listener) throw new Error(`Expected ${terminalId} to subscribe.`);
         sendStaleBuffer(listener, terminalId);
       }
-      await nextFrame();
+      await allHydrated;
 
-      expect(retained).toHaveLength(RETAINED_TERMINAL_BOUND);
-      for (const index of [0, RETAINED_TERMINAL_BOUND - 1]) {
+      expect(retained).toHaveLength(PRODUCTION_TERMINAL_MOUNT_COUNT);
+      for (const current of retained) {
+        expect(hydratedTerminalIds.has(current.terminalId)).toBe(true);
+      }
+      for (const index of [0, 31, 32, PRODUCTION_TERMINAL_MOUNT_COUNT - 1]) {
         const current = retained[index];
         if (!current) throw new Error("Expected retained terminal.");
         activeTerminalIds.clear();
@@ -132,4 +143,64 @@ describe("retained terminal rendering", () => {
       }
     }
   }, 15_000);
+
+  test("does not focus a retained terminal after delayed image staging", async () => {
+    const { controller } = createController();
+    const container = document.createElement("div");
+    Object.defineProperties(container, {
+      clientHeight: { value: 400 },
+      clientWidth: { value: 800 },
+    });
+    document.body.append(container);
+    let active = true;
+    let releaseStage: (path: string) => void = () => undefined;
+    const stagedPath = new Promise<string>((resolve) => {
+      releaseStage = resolve;
+    });
+    let finishPreparation: () => void = () => undefined;
+    const preparationFinished = new Promise<void>((resolve) => {
+      finishPreparation = resolve;
+    });
+    const mount = mountInteractiveTerminal({
+      container,
+      terminalId: "terminal-image-drop",
+      controller,
+      isActive: () => active,
+      getPlatform: () => "darwin",
+      stageFile: () => stagedPath,
+      preparePathInput: async () => {
+        finishPreparation();
+        return "/tmp/image.png";
+      },
+      writeClipboard: async () => undefined,
+      onAttention: () => undefined,
+      onLifecycle: () => undefined,
+      onForgotten: () => undefined,
+      onTitleChange: () => undefined,
+      onHydrated: () => undefined,
+      onImageDragActiveChange: () => undefined,
+      onInteractionFailure: () => undefined,
+    });
+
+    try {
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, "dataTransfer", {
+        value: {
+          files: [new File([new Uint8Array([1])], "image.png", { type: "image/png" })],
+          items: [],
+        },
+      });
+      container.dispatchEvent(drop);
+      await Promise.resolve();
+      active = false;
+      releaseStage("/tmp/image.png");
+      await preparationFinished;
+      await Promise.resolve();
+
+      expect(container.contains(document.activeElement)).toBe(false);
+    } finally {
+      mount.dispose();
+      container.remove();
+    }
+  });
 });

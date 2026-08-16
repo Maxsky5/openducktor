@@ -192,7 +192,10 @@ export function TerminalPanel({
     };
   }, [model.platformError]);
   const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
-  const showsEmptyTerminalState = model.tabs.length === 0 && model.mountedTabs.length === 0;
+  const hasCurrentScopeMountedTabs = model.mountedTabs.some(
+    (mountedTab) => mountedTab.scopeKey === model.scopeKey,
+  );
+  const showsEmptyTerminalState = model.tabs.length === 0 && !hasCurrentScopeMountedTabs;
   const setTabAttention = useCallback((tabId: string, message: string | null): void => {
     setAttentionByTab((current) => ({ ...current, [tabId]: message }));
   }, []);

@@ -719,29 +719,31 @@ describe("useAgentStudioTerminals", () => {
       </QueryProvider>,
     );
 
-    await waitFor(() => {
-      expect(getLatest().controller).not.toBeNull();
+    try {
+      await waitFor(() => {
+        expect(getLatest().controller).not.toBeNull();
+        expect(connectCalls).toBe(1);
+        expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
+      });
+
+      act(() =>
+        view.rerender(
+          <QueryProvider useIsolatedClient>
+            <Harness taskId="task-b" />
+          </QueryProvider>,
+        ),
+      );
+      await waitFor(() => {
+        expect(getLatest().scopeKey).toBe('["workspace-1","task-b"]');
+        expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-b");
+      });
+
       expect(connectCalls).toBe(1);
-      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-a");
-    });
-
-    act(() =>
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness taskId="task-b" />
-        </QueryProvider>,
-      ),
-    );
-    await waitFor(() => {
-      expect(getLatest().scopeKey).toBe('["workspace-1","task-b"]');
-      expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-b");
-    });
-
-    expect(connectCalls).toBe(1);
-    expect(closeCalls).toBe(0);
-
-    view.unmount();
-    expect(closeCalls).toBe(1);
+      expect(closeCalls).toBe(0);
+    } finally {
+      view.unmount();
+      expect(closeCalls).toBe(1);
+    }
   });
 
   test("restores task-local tab order and active selection when returning to a task", async () => {
@@ -802,8 +804,8 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().activeTabId).toBe("tab:terminal-task-a-2");
       expect(getLatest().focusRequest).toBe(1);
       expect(getLatest().mountedTabs.map(({ tab }) => tab.terminalId)).toEqual([
-        "terminal-task-a",
         "terminal-task-a-2",
+        "terminal-task-a",
       ]);
 
       view.rerender(

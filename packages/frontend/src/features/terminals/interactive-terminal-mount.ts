@@ -66,9 +66,16 @@ export const mountInteractiveTerminal = ({
   const terminal = new Terminal(
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
-  const fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-  terminal.open(container);
+  let fitAddon: FitAddon | undefined;
+  try {
+    fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(container);
+  } catch (cause) {
+    fitAddon?.dispose();
+    terminal.dispose();
+    throw cause;
+  }
   const activateViewport = createTerminalViewportActivator({
     fit: () => fitAddon.fit(),
     scrollToBottom: () => terminal.scrollToBottom(),
@@ -144,7 +151,7 @@ export const mountInteractiveTerminal = ({
       stageFile,
       prepareInput: preparePathInput,
       paste: (value) => {
-        if (disposed) return;
+        if (disposed || !isActive()) return;
         terminal.paste(value);
         terminal.focus();
       },

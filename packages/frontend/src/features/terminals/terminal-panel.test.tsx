@@ -115,6 +115,23 @@ describe("TerminalPanel", () => {
     );
   });
 
+  test("shows the empty state when only another task scope has retained terminals", () => {
+    render(
+      <TerminalPanel
+        model={{
+          ...model,
+          scopeKey: "/repo:task-2",
+          tabs: [],
+          activeTabId: null,
+          mountedTabs: [{ scopeKey: "/repo:task-1", tab: lostTab }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("No terminals.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New terminal" })).toBeTruthy();
+  });
+
   test("keeps inactive terminal viewports measurable outside the clipped viewport", () => {
     const secondTab: TerminalTab = {
       ...lostTab,
@@ -142,7 +159,7 @@ describe("TerminalPanel", () => {
     expect(inactivePanel.hasAttribute("inert")).toBe(true);
   });
 
-  test("does not retry terminal creation from an inactive task scope", () => {
+  test("renders retry only for the active task scope", () => {
     const onRetryCreate = mock(() => undefined);
     const taskAFailedTab: TerminalTab = {
       tabId: "creating:task-a",
@@ -203,24 +220,29 @@ describe("TerminalPanel", () => {
   });
 
   test("enforces the eight-terminal tab limit", () => {
-    render(
+    const tabs = Array.from({ length: 8 }, (_, index) => ({
+      tabId: `lost:${index}`,
+      terminalId: null,
+      summary: null,
+      label: `Shell ${index + 1}`,
+      error: "This terminal belonged to a previous host session.",
+      requestState: "lost" as const,
+      sourceTerminalId: `terminal-${index}`,
+    }));
+    const view = render(
       <TerminalPanel
         model={{
           ...model,
-          ...tabsModel(
-            Array.from({ length: 8 }, (_, index) => ({
-              tabId: `lost:${index}`,
-              terminalId: null,
-              summary: null,
-              label: `Shell ${index + 1}`,
-              error: "This terminal belonged to a previous host session.",
-              requestState: "lost" as const,
-              sourceTerminalId: `terminal-${index}`,
-            })),
-          ),
+          ...tabsModel(tabs.slice(0, 7)),
         }}
       />,
     );
+
+    expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
+      false,
+    );
+
+    view.rerender(<TerminalPanel model={{ ...model, ...tabsModel(tabs) }} />);
     expect(screen.getByRole("button", { name: "New terminal" }).hasAttribute("disabled")).toBe(
       true,
     );

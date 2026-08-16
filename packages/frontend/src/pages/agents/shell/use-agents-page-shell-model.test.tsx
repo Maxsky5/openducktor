@@ -148,6 +148,7 @@ type AgentsPageShellModelState = {
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
   modalContent: AgentsPageModalContentModel;
+  terminalPanel: { scopeKey: string | null };
 };
 
 let workspaceState: Pick<
@@ -734,6 +735,31 @@ describe("useAgentsPageShellModel", () => {
       expect(state.hasSelectedTask).toBe(false);
       expect(state.modalContent.sessionStartModal).toBeNull();
       expect(state.modalContent.mergedPullRequestModal).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the active terminal scope while the selected task card loads", async () => {
+    selectionState = {
+      ...selectionState,
+      activeTaskTabId: "task-2",
+      tabTaskIds: ["task-1", "task-2"],
+      taskId: "task-2",
+      view: {
+        ...selectionState.view,
+        taskId: "task-2",
+        selectedTask: null,
+      },
+    };
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().terminalPanel.scopeKey).toBe(
+        JSON.stringify(["workspace-repo", "task-2"]),
+      );
     } finally {
       await harness.unmount();
     }

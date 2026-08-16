@@ -39,7 +39,7 @@ export function InteractiveTerminal({
   const mountRef = useRef<InteractiveTerminalMount | null>(null);
   const platformRef = useRef(platform);
   const callbacksRef = useRef({ onAttention, onLifecycle, onForgotten, onTitleChange });
-  const [rendererError, setRendererError] = useState<string | null>(null);
+  const [mountError, setMountError] = useState<string | null>(null);
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const isActive = useEffectEvent(() => active);
@@ -57,7 +57,7 @@ export function InteractiveTerminal({
     if (!container) return;
     setIsHydrated(false);
     setIsImageDragActive(false);
-    setRendererError(null);
+    setMountError(null);
     const interactionToastId = `terminal:${terminalId}:interaction`;
     let interactionToastShown = false;
     try {
@@ -88,7 +88,7 @@ export function InteractiveTerminal({
         },
       });
     } catch (cause) {
-      setRendererError(errorMessage(cause));
+      setMountError(errorMessage(cause));
     }
     return () => {
       mountRef.current?.dispose();
@@ -107,7 +107,7 @@ export function InteractiveTerminal({
     <div className="relative h-full min-h-0 bg-[var(--dev-server-terminal-panel)]">
       <div
         ref={containerRef}
-        className={cn("h-full min-h-0 px-2 py-1", (!isHydrated || rendererError) && "invisible")}
+        className={cn("h-full min-h-0 px-2 py-1", (!isHydrated || mountError) && "invisible")}
         role="application"
         aria-label={`Interactive terminal ${terminalId}`}
       />
@@ -119,12 +119,12 @@ export function InteractiveTerminal({
           Drop image to paste its path
         </div>
       ) : null}
-      {rendererError ? (
+      {mountError ? (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--dev-server-terminal-panel)] p-6">
           <div role="alert" className="flex max-w-md flex-col items-center gap-2 text-center">
-            <p className="text-sm font-semibold text-foreground">Terminal renderer unavailable</p>
+            <p className="text-sm font-semibold text-foreground">Terminal failed to start</p>
             <p className="text-xs text-muted-foreground">
-              {rendererError} Close and reopen this terminal tab.
+              {mountError} Close and reopen this terminal tab.
             </p>
           </div>
         </div>

@@ -119,6 +119,7 @@ export const useTerminals = (
   });
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
+  // Activate the scope during render so consumers never commit the previous scope for one frame.
   if (presentation.activeScopeKey !== scopeKey) {
     dispatch({ type: "scopeActivated", scopeKey });
   }
@@ -144,18 +145,12 @@ export const useTerminals = (
   }, [visibleState.closingTabIds, visibleState.tabs]);
   const mountedTabs = useMemo(
     () =>
-      mountedScopeKeys
-        .flatMap((ownerScopeKey) =>
-          (presentation.scopes[ownerScopeKey]?.tabs ?? []).map((tab) => ({
-            scopeKey: ownerScopeKey,
-            tab,
-          })),
-        )
-        .toSorted((left, right) => {
-          const leftCreatedAt = left.tab.summary?.createdAt ?? `~${left.tab.tabId}`;
-          const rightCreatedAt = right.tab.summary?.createdAt ?? `~${right.tab.tabId}`;
-          return leftCreatedAt.localeCompare(rightCreatedAt);
-        }),
+      mountedScopeKeys.flatMap((ownerScopeKey) =>
+        (presentation.scopes[ownerScopeKey]?.tabs ?? []).map((tab) => ({
+          scopeKey: ownerScopeKey,
+          tab,
+        })),
+      ),
     [mountedScopeKeys, presentation.scopes],
   );
   const isVisible = visibleState.visibility.isExplicit
