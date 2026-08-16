@@ -171,6 +171,10 @@ export function useFolderPickerController({
     if (!path) {
       return;
     }
+    if (path === requestedPath) {
+      void directoryQuery.refetch();
+      return;
+    }
     dispatch({ type: "directoryRequested", path });
   };
 

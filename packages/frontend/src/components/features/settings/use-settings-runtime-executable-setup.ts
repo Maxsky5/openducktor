@@ -61,17 +61,13 @@ export const useSettingsRuntimeExecutableSetup = ({
       discoveryInFlight.current = false;
       setIsCheckingDiscovery(false);
       setDiscoveryError(null);
-      void queryClient.cancelQueries({
-        queryKey: runtimeDiscoveryQueryOptions().queryKey,
-        exact: true,
-      });
     }
     return () => {
       if (visit.current === currentVisit) {
         visit.current += 1;
       }
     };
-  }, [open, queryClient]);
+  }, [open]);
 
   const checkAgain = useCallback(
     async (updateAgentRuntimes: UpdateAgentRuntimes): Promise<void> => {

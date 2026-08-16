@@ -9,36 +9,28 @@ import {
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import { HostOperationError } from "../../effect/host-errors";
-import type { RuntimeExecutableCheckService } from "./runtime-executable-check-service";
+import type { HostOperationError } from "../../effect/host-errors";
+import { discoverToolFresh, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 export type RuntimeConfigInitializer = (
   legacyConfig: PersistedGlobalConfigV2 | null,
 ) => Effect.Effect<LoadedGlobalConfig, HostOperationError>;
 
 export const createRuntimeConfigInitializer =
-  (checkService: RuntimeExecutableCheckService): RuntimeConfigInitializer =>
+  (toolDiscovery: ToolDiscoveryPort): RuntimeConfigInitializer =>
   (legacyConfig) =>
     Effect.gen(function* () {
-      const check = yield* checkService.check({ mode: "discover" });
-      const checksByKind = new Map<string, (typeof check.runtimes)[number]>(
-        check.runtimes.map((row) => [row.kind, row]),
+      const discoveredPaths = yield* Effect.forEach(
+        knownRuntimeKindValues,
+        (kind) =>
+          Effect.either(discoverToolFresh(toolDiscovery, kind)).pipe(
+            Effect.map(
+              (result) => [kind, result._tag === "Right" ? result.right.path : ""] as const,
+            ),
+          ),
+        { concurrency: 3 },
       );
-      for (const kind of knownRuntimeKindValues) {
-        if (!checksByKind.has(kind)) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "runtimeConfig.initialize",
-              message: `Runtime discovery did not return a result for ${kind}`,
-              details: { kind },
-            }),
-          );
-        }
-      }
-      const executablePaths: Record<string, string> = {};
-      for (const row of check.runtimes) {
-        executablePaths[row.kind] = row.ok ? row.path : "";
-      }
+      const executablePaths = Object.fromEntries(discoveredPaths);
 
       if (legacyConfig) {
         return upgradePersistedGlobalConfigV2(legacyConfig, executablePaths);
@@ -47,13 +39,13 @@ export const createRuntimeConfigInitializer =
       const config = createDefaultGlobalConfig();
       const agentRuntimes = Object.fromEntries(
         Object.entries(config.agentRuntimes).map(([kind, runtime]) => {
-          const row = checksByKind.get(kind);
+          const executablePath = executablePaths[kind] ?? "";
           return [
             kind,
             {
               ...runtime,
-              enabled: row?.ok === true,
-              executablePath: row?.ok === true ? row.path : "",
+              enabled: executablePath.length > 0,
+              executablePath,
             },
           ];
         }),

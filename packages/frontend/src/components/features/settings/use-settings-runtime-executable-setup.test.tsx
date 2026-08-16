@@ -197,6 +197,37 @@ describe("useSettingsRuntimeExecutableSetup", () => {
     }
   });
 
+  test("joins the active discovery when Settings closes and reopens", async () => {
+    const discovery = createDeferred<RuntimeExecutableCheck>();
+    const runtimeCheck = mock(async () => discovery.promise);
+    host.runtimeExecutablesCheck = runtimeCheck;
+    const harness = createHarness();
+
+    try {
+      await harness.mount();
+      let firstRequest = Promise.resolve();
+      await harness.run((state) => {
+        firstRequest = state.checkAgain();
+      });
+      await harness.waitFor((state) => state.isCheckingDiscovery);
+
+      await harness.update({ open: false });
+      await harness.update({ open: true });
+      let secondRequest = Promise.resolve();
+      await harness.run((state) => {
+        secondRequest = state.checkAgain();
+      });
+
+      expect(runtimeCheck).toHaveBeenCalledTimes(1);
+      await harness.run(() => discovery.resolve(discoveredRuntimes("shared")));
+      await Promise.all([firstRequest, secondRequest]);
+
+      expect(harness.appliedRuntimes.at(-1)?.opencode.executablePath).toBe("/shared/opencode");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("ignores a rediscovery failure from a closed Settings visit", async () => {
     const stale = createDeferred<RuntimeExecutableCheck>();
     host.runtimeExecutablesCheck = mock(async () => stale.promise);
