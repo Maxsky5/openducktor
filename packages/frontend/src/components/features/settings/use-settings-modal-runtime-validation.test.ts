@@ -47,36 +47,20 @@ const createSnapshot = (): SettingsSnapshot =>
   });
 
 describe("settings runtime availability validation", () => {
-  test("allows disabling OpenCode when another runtime remains enabled", () => {
-    const snapshotDraft = createSnapshot();
-    snapshotDraft.agentRuntimes = {
-      opencode: { enabled: false, executablePath: "/bin/opencode" },
-      codex: {
-        ...DEFAULT_AGENT_RUNTIMES.codex,
-        enabled: true,
-        executablePath: "/bin/codex",
-      },
-      claude: { enabled: false, executablePath: "" },
-    };
-    const repoConfig = snapshotDraft.workspaces.repo;
-    if (!repoConfig) {
-      throw new Error("Fixture repo workspace is missing.");
-    }
-    snapshotDraft.workspaces = {
-      ...snapshotDraft.workspaces,
-      repo: {
-        ...repoConfig,
-        defaultRuntimeKind: "opencode",
-        agentDefaults: {},
-      },
-    };
-
+  test("reports repository references to disabled runtimes", () => {
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-      snapshotDraft,
+      snapshotDraft: createSnapshot(),
     });
 
-    expect(validation.totalErrorCount).toBe(0);
+    expect(validation.errorsByWorkspaceId).toEqual({
+      repo: [
+        'Default agent runtime "Codex" is disabled.',
+        'Builder agent runtime "Codex" is disabled.',
+      ],
+    });
+    expect(validation.errorCountByWorkspaceId).toEqual({ repo: 2 });
+    expect(validation.totalErrorCount).toBe(2);
   });
 
   test("does not require a runtime while runtime definitions are unavailable", () => {
@@ -89,9 +73,15 @@ describe("settings runtime availability validation", () => {
   });
 
   test("reports an enabled runtime whose saved executable path is invalid", () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes.codex = {
+      ...snapshotDraft.agentRuntimes.codex,
+      enabled: true,
+      executablePath: "/bin/codex",
+    };
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-      snapshotDraft: createSnapshot(),
+      snapshotDraft,
       runtimeExecutableResults: [
         {
           kind: "opencode",
@@ -103,11 +93,11 @@ describe("settings runtime availability validation", () => {
         },
         {
           kind: "codex",
-          path: "",
-          requestedPath: "",
-          ok: false,
-          version: null,
-          error: "Executable path is empty.",
+          path: "/bin/codex",
+          requestedPath: "/bin/codex",
+          ok: true,
+          version: "codex-cli 1.0.0",
+          error: null,
         },
       ],
     });

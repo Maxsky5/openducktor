@@ -62,6 +62,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   reusablePromptValidationState: { errorsById: {}, totalErrorCount: 0 },
   hasReusablePromptValidationErrors: false,
   runtimeAvailabilityValidationState: {
+    errorsByWorkspaceId: {},
+    errorCountByWorkspaceId: {},
     runtimeExecutableErrors: [],
     totalErrorCount: 0,
   },
@@ -69,6 +71,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   hasUnacknowledgedCodexDangerousSettings: false,
   requiresCodexDangerAcknowledgement: false,
   isCodexDangerAcknowledged: false,
+  selectedRepoRuntimeAvailabilityErrors: [],
+  selectedRepoRuntimeAvailabilityErrorCount: 0,
   hasRepoScriptValidationErrors: false,
   repoScriptValidationErrorCountByWorkspaceId: {},
   repoScriptValidationErrorCount: 0,

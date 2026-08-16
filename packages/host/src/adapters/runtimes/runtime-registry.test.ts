@@ -389,6 +389,69 @@ describe("createRuntimeRegistry", () => {
     expect(starts).toBe(2);
     expect(stops).toEqual(["runtime-old"]);
   });
+  test("deduplicates concurrent executable path replacements", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let activeSessionChecks = 0;
+    let markActiveSessionCheckStarted = (): void => undefined;
+    const activeSessionCheckStarted = new Promise<void>((resolve) => {
+      markActiveSessionCheckStarted = resolve;
+    });
+    let releaseActiveSessionCheck = (): void => undefined;
+    const activeSessionCheckBlocked = new Promise<void>((resolve) => {
+      releaseActiveSessionCheck = resolve;
+    });
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      hasActiveRuntimeSessions: () =>
+        Effect.promise(async () => {
+          activeSessionChecks += 1;
+          markActiveSessionCheckStarted();
+          await activeSessionCheckBlocked;
+          return false;
+        }),
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          return Effect.succeed(
+            createRuntimeHandle(
+              starts === 1 ? oldRuntime : newRuntime,
+              () =>
+                Effect.sync(() => {
+                  stops.push(oldRuntime.runtimeId);
+                }),
+              true,
+              configuredExecutablePath,
+            ),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    configuredExecutablePath = "/tools/opencode-new";
+    const replacements = [
+      Effect.runPromise(registry.ensureWorkspaceRuntime(input)),
+      Effect.runPromise(registry.ensureWorkspaceRuntime(input)),
+    ];
+    await activeSessionCheckStarted;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseActiveSessionCheck();
+    await expect(Promise.all(replacements)).resolves.toEqual([newRuntime, newRuntime]);
+
+    expect(activeSessionChecks).toBe(1);
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
+  });
   test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({
       runtimeId: "runtime-1",

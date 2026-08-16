@@ -833,8 +833,8 @@ describe("useOnboardingRuntimeSetup", () => {
       expect(pathInput.disabled).toBe(false);
       expect(enabledSwitch.disabled).toBe(false);
       expect(scanButton.disabled).toBe(false);
-      expect(continueButton.disabled).toBe(false);
-      expect(screen.queryByRole("button", { name: "Saving coding agents..." })).toBeNull();
+      expect(continueButton.disabled).toBe(true);
+      expect(screen.getByRole("button", { name: "Saving coding agents..." })).toBe(continueButton);
 
       await act(async () => save.resolve());
       await screen.findByRole("heading", { name: "Open your first workspace" });

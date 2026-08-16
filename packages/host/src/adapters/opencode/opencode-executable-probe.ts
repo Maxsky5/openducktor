@@ -16,10 +16,7 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../../infrastructure/process/process-tree";
-import {
-  RuntimeExecutableIncompatibleError,
-  type RuntimeExecutableProbePort,
-} from "../../ports/runtime-executable-probe-port";
+import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
 import { isOpenCodeHealthy, pickFreePort } from "./opencode-local-port";
 
@@ -171,11 +168,13 @@ export const createOpenCodeExecutableProbe = ({
             }
             if (runtime.closed()) {
               return yield* Effect.fail(
-                new RuntimeExecutableIncompatibleError({
+                new HostOperationError({
+                  operation: "opencodeExecutableProbe.startServer",
                   message: `OpenCode server exited before it became ready: ${processOutputDetail(
                     runtime.stderr(),
                     runtime.stdout(),
                   )}`,
+                  details: { executablePath: runtime.executablePath, port: runtime.port },
                 }),
               );
             }

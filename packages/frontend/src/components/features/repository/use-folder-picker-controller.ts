@@ -68,9 +68,13 @@ const folderPickerReducer = (
       return {
         ...state,
         confirmedListing: action.listing,
+        selectedFilePath: state.hasResolvedRequestedPath ? state.selectedFilePath : null,
         hasResolvedRequestedPath: true,
       };
     case "fileSelected":
+      if (!state.hasResolvedRequestedPath) {
+        return state;
+      }
       return { ...state, selectedFilePath: action.path, submitError: null };
     case "submitStarted":
       return { ...state, submitError: null, isSubmitting: true };

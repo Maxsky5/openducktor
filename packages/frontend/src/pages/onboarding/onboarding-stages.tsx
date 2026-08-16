@@ -153,141 +153,146 @@ export function RuntimeStage({
     checkingRuntimeKinds.length > 0;
 
   return (
-    <Card
-      className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm"
-      inert={isSaving}
-      aria-busy={isSaving}
-    >
-      <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-2xl sm:text-3xl">Configure coding agents</CardTitle>
-          <Button type="button" variant="outline" disabled={scanDisabled} onClick={onCheckAgain}>
-            <RefreshCw data-icon="inline-start" />
-            {isRediscovering ? "Scanning..." : "Scan for coding agents"}
+    <>
+      {isSaving ? (
+        <span className="sr-only" role="status">
+          Saving coding agents...
+        </span>
+      ) : null}
+      <Card
+        className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm"
+        inert={isSaving}
+        aria-busy={isSaving}
+      >
+        <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-2xl sm:text-3xl">Configure coding agents</CardTitle>
+            <Button type="button" variant="outline" disabled={scanDisabled} onClick={onCheckAgain}>
+              <RefreshCw data-icon="inline-start" />
+              {isRediscovering ? "Scanning..." : "Scan for coding agents"}
+            </Button>
+          </div>
+          <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
+            Choose the coding agents OpenDucktor can use and confirm the exact executable path for
+            each one.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-1 flex-col gap-5 bg-muted/20 px-6 py-6 sm:px-9">
+          {requestError ? (
+            <div
+              className="flex flex-col gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+              role="alert"
+            >
+              <div>
+                <p className="text-sm font-medium text-destructive-surface-foreground">
+                  Coding agent setup could not load
+                </p>
+                <p className="mt-1 text-sm text-destructive-muted">{requestError}</p>
+              </div>
+              <Button variant="outline" onClick={onRetry}>
+                Retry
+              </Button>
+            </div>
+          ) : isLoading ? (
+            <div
+              className="flex flex-col gap-3"
+              role="status"
+              aria-label="Loading coding agent settings"
+            >
+              <div className="flex items-center gap-3 rounded-lg border border-border p-4">
+                <Skeleton className="size-9 shrink-0" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border p-4">
+                <Skeleton className="size-9 shrink-0" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border p-4">
+                <Skeleton className="size-9 shrink-0" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </div>
+            </div>
+          ) : runtimeDraft ? (
+            <RuntimeExecutablePanel
+              runtimes={runtimeDraft}
+              definitions={definitions}
+              results={results}
+              disabled={isRediscovering}
+              isChecking={isRediscovering}
+              checkingRuntimeKinds={checkingRuntimeKinds}
+              onChange={onChange}
+              onCheckAgain={onCheckAgain}
+              checkAgainPlacement="hidden"
+            />
+          ) : null}
+
+          {discoveryError ? (
+            <div
+              className="flex flex-col gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+              role="alert"
+            >
+              <p className="text-sm text-destructive-muted">{discoveryError}</p>
+              <Button variant="outline" onClick={onCheckAgain}>
+                Scan again
+              </Button>
+            </div>
+          ) : null}
+
+          {showNoRuntimeWarning ? (
+            <div
+              className="flex items-start gap-3 rounded-lg border border-warning-border bg-warning-surface p-4"
+              role="alert"
+            >
+              <ListChecks
+                className="mt-0.5 size-4 shrink-0 text-warning-muted"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-medium text-warning-surface-foreground">
+                  No coding agent is ready
+                </p>
+                <p className="mt-1 text-sm text-warning-muted">
+                  Agent sessions will not work until you configure and enable a valid coding agent
+                  in Settings.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {stageError ? (
+            <p
+              ref={stageErrorRef}
+              className="text-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              role="alert"
+              tabIndex={-1}
+            >
+              {stageError}
+            </p>
+          ) : null}
+        </CardContent>
+
+        <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
+          <Button variant="outline" onClick={onBack} disabled={isRediscovering}>
+            <ArrowLeft data-icon="inline-start" />
+            Back
+          </Button>
+          <Button size="lg" onClick={onContinue} disabled={continueDisabled || isSaving}>
+            {isSaving ? "Saving coding agents..." : "Continue to workspace"}
+            {!isSaving ? <ArrowRight data-icon="inline-end" /> : null}
           </Button>
         </div>
-        <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
-          Choose the coding agents OpenDucktor can use and confirm the exact executable path for
-          each one.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="flex flex-1 flex-col gap-5 bg-muted/20 px-6 py-6 sm:px-9">
-        {requestError ? (
-          <div
-            className="flex flex-col gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-4 sm:flex-row sm:items-center sm:justify-between"
-            role="alert"
-          >
-            <div>
-              <p className="text-sm font-medium text-destructive-surface-foreground">
-                Coding agent setup could not load
-              </p>
-              <p className="mt-1 text-sm text-destructive-muted">{requestError}</p>
-            </div>
-            <Button variant="outline" onClick={onRetry}>
-              Retry
-            </Button>
-          </div>
-        ) : isLoading ? (
-          <div
-            className="flex flex-col gap-3"
-            role="status"
-            aria-label="Loading coding agent settings"
-          >
-            <div className="flex items-center gap-3 rounded-lg border border-border p-4">
-              <Skeleton className="size-9 shrink-0" />
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-lg border border-border p-4">
-              <Skeleton className="size-9 shrink-0" />
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            </div>
-            <div className="flex items-center gap-3 rounded-lg border border-border p-4">
-              <Skeleton className="size-9 shrink-0" />
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-            </div>
-          </div>
-        ) : runtimeDraft ? (
-          <RuntimeExecutablePanel
-            runtimes={runtimeDraft}
-            definitions={definitions}
-            results={results}
-            disabled={isRediscovering}
-            isChecking={isRediscovering}
-            checkingRuntimeKinds={checkingRuntimeKinds}
-            onChange={onChange}
-            onCheckAgain={onCheckAgain}
-            checkAgainPlacement="hidden"
-          />
-        ) : null}
-
-        {discoveryError ? (
-          <div
-            className="flex flex-col gap-3 rounded-lg border border-destructive-border bg-destructive-surface p-4 sm:flex-row sm:items-center sm:justify-between"
-            role="alert"
-          >
-            <p className="text-sm text-destructive-muted">{discoveryError}</p>
-            <Button variant="outline" onClick={onCheckAgain}>
-              Scan again
-            </Button>
-          </div>
-        ) : null}
-
-        {showNoRuntimeWarning ? (
-          <div
-            className="flex items-start gap-3 rounded-lg border border-warning-border bg-warning-surface p-4"
-            role="alert"
-          >
-            <ListChecks className="mt-0.5 size-4 shrink-0 text-warning-muted" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-medium text-warning-surface-foreground">
-                No coding agent is ready
-              </p>
-              <p className="mt-1 text-sm text-warning-muted">
-                Agent sessions will not work until you configure and enable a valid coding agent in
-                Settings.
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {stageError ? (
-          <p
-            ref={stageErrorRef}
-            className="text-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            role="alert"
-            tabIndex={-1}
-          >
-            {stageError}
-          </p>
-        ) : null}
-        {isSaving ? (
-          <span className="sr-only" role="status">
-            Saving coding agents...
-          </span>
-        ) : null}
-      </CardContent>
-
-      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
-        <Button variant="outline" onClick={onBack} disabled={isRediscovering}>
-          <ArrowLeft data-icon="inline-start" />
-          Back
-        </Button>
-        <Button size="lg" onClick={onContinue} disabled={continueDisabled}>
-          Continue to workspace
-          <ArrowRight data-icon="inline-end" />
-        </Button>
-      </div>
-    </Card>
+      </Card>
+    </>
   );
 }
 

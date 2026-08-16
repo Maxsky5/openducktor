@@ -103,6 +103,7 @@ export function SettingsRepositoryContent({
     promptValidationState,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
+    selectedRepoRuntimeAvailabilityErrors,
     repoScriptValidationErrorCountByWorkspaceId,
     selectedRepoPromptRoleTabErrorCounts,
     setSelectedWorkspaceId,
@@ -198,6 +199,7 @@ export function SettingsRepositoryContent({
               isSaving,
             }}
             runtimeDefinitionsError={runtimeDefinitionsError}
+            runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
             getCatalogForRuntime={controller.getCatalogForRuntime}
             getCatalogErrorForRuntime={controller.getCatalogErrorForRuntime}
             isCatalogLoadingForRuntime={controller.isCatalogLoadingForRuntime}

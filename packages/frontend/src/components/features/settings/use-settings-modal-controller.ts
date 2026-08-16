@@ -90,6 +90,8 @@ export type SettingsModalController = {
   hasUnacknowledgedCodexDangerousSettings: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
+  selectedRepoRuntimeAvailabilityErrors: string[];
+  selectedRepoRuntimeAvailabilityErrorCount: number;
   hasRepoScriptValidationErrors: boolean;
   repoScriptValidationErrorCountByWorkspaceId: Record<string, number>;
   repoScriptValidationErrorCount: number;
@@ -308,6 +310,10 @@ export const useSettingsModalController = ({
   );
   const hasUnacknowledgedCodexDangerousSettings =
     requiresCodexDangerAcknowledgement && !isCodexDangerAcknowledged;
+  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
+    ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
+    : [];
+  const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
@@ -354,13 +360,18 @@ export const useSettingsModalController = ({
   const settingsSectionErrorCountByIdWithValidation = useMemo(
     () => ({
       ...settingsSectionErrorCountById,
-      repositories: settingsSectionErrorCountById.repositories + repoScriptValidationErrorCount,
+      repositories:
+        settingsSectionErrorCountById.repositories +
+        runtimeAvailabilityValidationState.totalErrorCount -
+        runtimeAvailabilityValidationState.runtimeExecutableErrors.length +
+        repoScriptValidationErrorCount,
       runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
     [
       repoScriptValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.totalErrorCount,
       runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       settingsSectionErrorCountById,
     ],
@@ -520,6 +531,8 @@ export const useSettingsModalController = ({
     hasUnacknowledgedCodexDangerousSettings,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
+    selectedRepoRuntimeAvailabilityErrors,
+    selectedRepoRuntimeAvailabilityErrorCount,
     hasRepoScriptValidationErrors,
     repoScriptValidationErrorCountByWorkspaceId,
     repoScriptValidationErrorCount,

@@ -68,7 +68,7 @@ describe("createOpenCodeExecutableProbe", () => {
     expect(() => child.emit("error", new Error("spawn failed"))).not.toThrow();
   });
 
-  test("reports an executable that exits before readiness as incompatible", async () => {
+  test("preserves an operational failure when the server exits before readiness", async () => {
     const child = Object.assign(new EventEmitter(), {
       pid: 42,
       stdin: null,
@@ -90,7 +90,11 @@ describe("createOpenCodeExecutableProbe", () => {
       Effect.flip(probe.probeExecutable("/usr/local/bin/not-opencode")),
     );
 
-    expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
+    expect(failure._tag).toBe("HostOperationError");
+    if (failure._tag !== "HostOperationError") {
+      throw new Error(`Expected HostOperationError, received ${failure._tag}`);
+    }
+    expect(failure.operation).toBe("opencodeExecutableProbe.startServer");
   });
 });
 

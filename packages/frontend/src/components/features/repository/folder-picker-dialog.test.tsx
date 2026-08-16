@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -174,6 +174,56 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
 
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not keep a stale file selection when a new directory resolves", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let resolveNextDirectory = (_listing: DirectoryListing): void => undefined;
+    const nextDirectory = new Promise<DirectoryListing>((resolve) => {
+      resolveNextDirectory = resolve;
+    });
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      if (pathFromInput(input) === "/Users/dev/next") {
+        return nextDirectory;
+      }
+      return createListing({
+        entries: [
+          {
+            name: "old-cli",
+            path: "/Users/dev/old-cli",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+          {
+            name: "next",
+            path: "/Users/dev/next",
+            isDirectory: true,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
+      fireEvent.click(screen.getByRole("button", { name: "next" }));
+      fireEvent.click(screen.getByRole("button", { name: "old-cli" }));
+
+      await act(async () => {
+        resolveNextDirectory(
+          createListing({ currentPath: "/Users/dev/next", parentPath: "/Users/dev" }),
+        );
+      });
+      await screen.findByText("/Users/dev/next");
+
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
     }
