@@ -126,14 +126,14 @@ describe("TerminalPanel", () => {
     const inactivePanel = Array.from(panels).find((panel) => panel.dataset.state === "inactive");
 
     expect(panels).toHaveLength(2);
-    expect(inactivePanel).toBeTruthy();
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:absolute");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:left-[calc(100%+1px)]");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:top-0");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:w-full");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:pointer-events-none");
-    expect(inactivePanel?.className).not.toContain("data-[state=inactive]:invisible");
-    expect(inactivePanel?.className).not.toContain("data-[state=inactive]:hidden");
+    if (!inactivePanel) throw new Error("Expected an inactive terminal viewport.");
+    expect(inactivePanel.className).toContain("data-[state=inactive]:absolute");
+    expect(inactivePanel.className).toContain("data-[state=inactive]:left-[calc(100%+1px)]");
+    expect(inactivePanel.className).toContain("data-[state=inactive]:top-0");
+    expect(inactivePanel.className).toContain("data-[state=inactive]:w-full");
+    expect(inactivePanel.className).toContain("data-[state=inactive]:pointer-events-none");
+    expect(inactivePanel.className).not.toContain("data-[state=inactive]:invisible");
+    expect(inactivePanel.className).not.toContain("data-[state=inactive]:hidden");
   });
 
   test("enforces the eight-terminal tab limit", () => {
