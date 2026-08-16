@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveDevelopmentInstanceId } from "@openducktor/host";
+import { validateDevelopmentInstanceId } from "@openducktor/host";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -26,6 +27,9 @@ type CliInvocation =
 
 const DEFAULT_FRONTEND_PORT = 1420;
 const DEFAULT_BACKEND_PORT = 14327;
+
+const createBrowserDevelopmentInstanceId = () =>
+  validateDevelopmentInstanceId(`browser-${randomBytes(6).toString("hex")}`);
 
 const printHelp = (): void => {
   console.log(
@@ -137,7 +141,7 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
       const workspaceRoot = path.resolve(packageRoot, "../..");
       launcherOptions = {
         ...commonOptions,
-        developmentInstanceId: resolveDevelopmentInstanceId("browser", workspaceRoot),
+        developmentInstanceId: createBrowserDevelopmentInstanceId(),
         workspaceMode: true,
         workspaceRoot,
       };

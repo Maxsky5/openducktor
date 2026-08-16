@@ -24,6 +24,67 @@ const waitForPersistedLogRecord = async (
   throw new Error(`Web launcher did not persist ${JSON.stringify(expectedRecord)}.`);
 };
 
+const captureWorkspaceInstanceId = async (
+  cliPath: string,
+  configDirectory: string,
+): Promise<string> => {
+  const subprocess = Bun.spawn(
+    [process.execPath, cliPath, "--workspace", "--port", "0", "--backend-port", "0"],
+    {
+      env: {
+        ...process.env,
+        NO_COLOR: "1",
+        OPENDUCKTOR_CONFIG_DIR: configDirectory,
+      },
+      stderr: "pipe",
+      stdout: "pipe",
+    },
+  );
+  const instanceId = Promise.withResolvers<string>();
+  let resolvedInstanceId = false;
+  const stdoutPump = (async () => {
+    const decoder = new TextDecoder();
+    const reader = subprocess.stdout.getReader();
+    let stdout = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      stdout += decoder.decode(value, { stream: true });
+      const match = stdout.match(/Instance:\s+(browser-[a-f0-9]{12})/u);
+      if (!resolvedInstanceId && match?.[1]) {
+        resolvedInstanceId = true;
+        instanceId.resolve(match[1]);
+      }
+    }
+    stdout += decoder.decode();
+    if (!resolvedInstanceId) {
+      instanceId.reject(
+        new Error(`Web launcher exited before logging its instance ID.\n${stdout}`),
+      );
+    }
+  })();
+  const stderrPromise = new Response(subprocess.stderr).text();
+  let readinessTimeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      instanceId.promise,
+      new Promise<never>((_, reject) => {
+        readinessTimeout = setTimeout(
+          () => reject(new Error("Web launcher did not log its instance ID.")),
+          15_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(readinessTimeout);
+    subprocess.kill("SIGKILL");
+    await subprocess.exited;
+    await Promise.all([stdoutPump, stderrPromise]);
+  }
+};
+
 describe("web CLI argument parsing", () => {
   test("uses OS-assigned ports for workspace development", () => {
     expect(parseCliArgs(["--workspace"])).toMatchObject({
@@ -313,4 +374,27 @@ describe("web CLI argument parsing", () => {
       await rm(configDirectory, { force: true, recursive: true });
     }
   }, 20_000);
+
+  test("assigns a fresh development identity to each workspace launch", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-identities-"));
+    const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
+    try {
+      const firstInstanceId = await captureWorkspaceInstanceId(cliPath, configDirectory);
+      const secondInstanceId = await captureWorkspaceInstanceId(cliPath, configDirectory);
+
+      expect(secondInstanceId).not.toBe(firstInstanceId);
+      for (const developmentInstanceId of [firstInstanceId, secondInstanceId]) {
+        const discoveryPath = path.join(
+          configDirectory,
+          "runtime",
+          "dev-instances",
+          developmentInstanceId,
+          "mcp-bridge.json",
+        );
+        await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
+      }
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
+  }, 35_000);
 });
