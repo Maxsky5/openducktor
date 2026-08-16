@@ -6,7 +6,12 @@ const STARTUP_FAILURE_MESSAGE = "OpenDucktor could not start. Check the applicat
 const STARTUP_SPLASH_MINIMUM_VISIBLE_MS = 1_000;
 const STARTUP_SPLASH_REMOVAL_FALLBACK_MS = 250;
 const startupSplashFirstSeenAt = new WeakMap<HTMLElement, number>();
-const pendingStartupSplashDismissals = new WeakMap<HTMLElement, number>();
+const pendingStartupSplashDismissals = new WeakMap<HTMLElement, () => void>();
+
+const cancelStartupSplashDismissal = (splash: HTMLElement): void => {
+  pendingStartupSplashDismissals.get(splash)?.();
+  pendingStartupSplashDismissals.delete(splash);
+};
 
 const getStartupSplash = (): HTMLElement | null => {
   const splash = document.getElementById(STARTUP_SPLASH_ID);
@@ -29,20 +34,22 @@ const beginStartupSplashDismissal = (splash: HTMLElement): void => {
     return;
   }
 
-  const removeSplash = (): void => {
+  const handleTransitionEnd = (event: TransitionEvent): void => {
+    if (event.target === splash && event.propertyName === "opacity") {
+      removeSplash();
+    }
+  };
+  const cancelRemoval = (): void => {
     window.clearTimeout(removalFallback);
+    splash.removeEventListener("transitionend", handleTransitionEnd);
+  };
+  const removeSplash = (): void => {
+    cancelStartupSplashDismissal(splash);
     splash.remove();
   };
   const removalFallback = window.setTimeout(removeSplash, STARTUP_SPLASH_REMOVAL_FALLBACK_MS);
-  splash.addEventListener(
-    "transitionend",
-    (event) => {
-      if (event.target === splash && event.propertyName === "opacity") {
-        removeSplash();
-      }
-    },
-    { once: true },
-  );
+  splash.addEventListener("transitionend", handleTransitionEnd, { once: true });
+  pendingStartupSplashDismissals.set(splash, cancelRemoval);
 };
 
 // Module evaluation starts a conservative hold before the browser can paint the splash.
@@ -67,7 +74,9 @@ export const dismissOpenDucktorStartupSplash = (): void => {
       pendingStartupSplashDismissals.delete(splash);
       beginStartupSplashDismissal(splash);
     }, remainingVisibleMs);
-    pendingStartupSplashDismissals.set(splash, dismissalTimeout);
+    pendingStartupSplashDismissals.set(splash, () => {
+      window.clearTimeout(dismissalTimeout);
+    });
     return;
   }
 
@@ -80,11 +89,9 @@ export const showOpenDucktorStartupFailure = (): void => {
     return;
   }
 
-  const pendingDismissal = pendingStartupSplashDismissals.get(splash);
-  if (pendingDismissal !== undefined) {
-    window.clearTimeout(pendingDismissal);
-    pendingStartupSplashDismissals.delete(splash);
-  }
+  cancelStartupSplashDismissal(splash);
+  splash.classList.remove(STARTUP_SPLASH_LEAVING_CLASS);
+  splash.removeAttribute("aria-hidden");
   splash.classList.add(STARTUP_SPLASH_FAILED_CLASS);
   splash.setAttribute("aria-label", STARTUP_FAILURE_MESSAGE);
   splash.setAttribute("role", "alert");

@@ -183,4 +183,38 @@ describe("startup splash", () => {
       scheduledTimeout.restore();
     }
   });
+
+  test("cancels active removal and keeps the startup failure visible", () => {
+    const splash = renderStartupSplash();
+    let nowCallCount = 0;
+    const nowSpy = spyOn(performance, "now").mockImplementation(() => {
+      nowCallCount += 1;
+      return nowCallCount === 1 ? 0 : 1_001;
+    });
+    const scheduledTimeout = captureScheduledTimeout();
+
+    try {
+      dismissOpenDucktorStartupSplash();
+      expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
+      expect(splash.getAttribute("aria-hidden")).toBe("true");
+
+      showOpenDucktorStartupFailure();
+
+      expect(scheduledTimeout.isCleared()).toBe(true);
+      expect(splash.classList.contains("odt-startup--leaving")).toBe(false);
+      expect(splash.classList.contains("odt-startup--failed")).toBe(true);
+      expect(splash.getAttribute("aria-hidden")).toBeNull();
+
+      const transitionEvent = new Event("transitionend") as TransitionEvent;
+      Object.defineProperty(transitionEvent, "propertyName", { value: "opacity" });
+      splash.dispatchEvent(transitionEvent);
+      scheduledTimeout.run();
+
+      expect(splash.isConnected).toBe(true);
+      expect(splash.textContent).toContain("OpenDucktor could not start");
+    } finally {
+      scheduledTimeout.restore();
+      nowSpy.mockRestore();
+    }
+  });
 });
