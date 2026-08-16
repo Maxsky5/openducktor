@@ -12,21 +12,21 @@ Portless is not part of the technical solution. It can still add a named browser
 
 ## Previous OpenDucktor behavior
 
-This section records the 2026-08-14 baseline that caused the parallel-run failures.
+This section records the 2026-08-14 baseline that caused the parallel-run failures. Its source links point to baseline commit `07692a5bf8b4c5549f993d99a795c34750deb920`, before the implementation changed these files.
 
 ### Browser mode
 
-- The browser CLI defaults to frontend port `1420` and backend port `14327`; explicit `--port` and `--backend-port` accept only `1-65535`, so port `0` is not a request for OS allocation. See [`packages/openducktor-web/src/cli.ts`](../../packages/openducktor-web/src/cli.ts) lines 16-122.
-- The launcher builds both loopback URLs before it starts either listener, starts the TypeScript host on the backend port, waits for readiness, and then starts Vite. Vite binds `127.0.0.1` with `strictPort: true`. See [`packages/openducktor-web/src/launcher.ts`](../../packages/openducktor-web/src/launcher.ts) lines 230-311 and 434-526.
+- The browser CLI defaults to frontend port `1420` and backend port `14327`; explicit `--port` and `--backend-port` accept only `1-65535`, so port `0` is not a request for OS allocation. See the [baseline browser CLI](https://github.com/Maxsky5/openducktor/blob/07692a5bf8b4c5549f993d99a795c34750deb920/packages/openducktor-web/src/cli.ts).
+- The launcher builds both loopback URLs before it starts either listener, starts the TypeScript host on the backend port, waits for readiness, and then starts Vite. Vite binds `127.0.0.1` with `strictPort: true`. See the [baseline browser launcher](https://github.com/Maxsky5/openducktor/blob/07692a5bf8b4c5549f993d99a795c34750deb920/packages/openducktor-web/src/launcher.ts).
 - The frontend receives the backend URL and token from a Vite middleware response, so both allocated ports must be known before Vite starts. The current `bun run scripts/dev.ts` command is not a direct Vite command that Portless can rewrite safely.
 - The backend accepts only an explicit `http` origin on `127.0.0.1`, `localhost`, or `[::1]`, and its allowed-origin set preserves the frontend port. See [`packages/openducktor-web/src/typescript-host-backend-support.ts`](../../packages/openducktor-web/src/typescript-host-backend-support.ts) lines 158-230.
 - The session endpoint sets an `HttpOnly; SameSite=Strict` cookie. A new HTTPS or named-host browser origin cannot call the current direct HTTP backend as a drop-in change: mixed-content, CORS, and same-site cookie rules require a same-origin proxy layout or an explicit contract change. See [`packages/openducktor-web/src/typescript-host-backend.ts`](../../packages/openducktor-web/src/typescript-host-backend.ts) lines 615-625.
 
 ### Electron mode
 
-- Electron defaults the renderer to port `1430`; `ELECTRON_RENDERER_DEV_PORT` can select another port, but `0` is rejected. See [`apps/electron/src/effect/electron-config.ts`](../../apps/electron/src/effect/electron-config.ts) lines 5-52.
+- Electron defaults the renderer to port `1430`; `ELECTRON_RENDERER_DEV_PORT` can select another port, but `0` is rejected. See the [baseline Electron config](https://github.com/Maxsky5/openducktor/blob/07692a5bf8b4c5549f993d99a795c34750deb920/apps/electron/src/effect/electron-config.ts).
 - The dev script creates Vite with `strictPort: true`, resolves its loopback URL, and spawns Electron with that value in `VITE_DEV_SERVER_URL`. See [`apps/electron/scripts/dev.ts`](../../apps/electron/scripts/dev.ts) lines 431-496.
-- Every development instance resolves the same `electron-profile-dev` directory under the selected OpenDucktor config root and assigns it to both `userData` and `sessionData`. There is no application single-instance lock in this path, but parallel processes still share profile and session state. See [`apps/electron/src/main/electron-app-identity.ts`](../../apps/electron/src/main/electron-app-identity.ts) lines 31-67.
+- Every development instance resolves the same `electron-profile-dev` directory under the selected OpenDucktor config root and assigns it to both `userData` and `sessionData`. There is no application single-instance lock in this path, but parallel processes still share profile and session state. See the [baseline Electron app identity](https://github.com/Maxsky5/openducktor/blob/07692a5bf8b4c5549f993d99a795c34750deb920/apps/electron/src/main/electron-app-identity.ts).
 - Unpackaged Electron selects development MCP discovery, and browser workspace mode does the same. Both write one `runtime/mcp-bridge-dev.json`, so the last writer becomes the standalone development host. See [`apps/electron/src/main/electron-host.ts`](../../apps/electron/src/main/electron-host.ts) lines 15-26 and [`packages/host/src/adapters/mcp/mcp-bridge-discovery-file.ts`](../../packages/host/src/adapters/mcp/mcp-bridge-discovery-file.ts) lines 8-27.
 - `OPENDUCKTOR_CONFIG_DIR` can change the config root; without it, all worktrees use `~/.openducktor`. See [`packages/host/src/config/openducktor-config-dir.ts`](../../packages/host/src/config/openducktor-config-dir.ts) lines 52-58.
 
@@ -40,9 +40,10 @@ Unique ports remove the bind conflicts, but they do not give full instance isola
 
 1. `bun run browser:dev` starts Vite and the host backend on port `0`, reads both bound ports, injects the exact backend URL into runtime config, and logs the copyable frontend and backend URLs.
 2. `bun run electron:dev` starts its Vite renderer on port `0`, passes the resolved URL to Electron, and logs the copyable renderer URL.
-3. Both dev wrappers derive `browser-<hash>` or `electron-<hash>` from the canonical worktree path and pass it as `OPENDUCKTOR_DEV_INSTANCE`.
+3. Both dev wrappers derive `browser-<hash>` or `electron-<hash>` from the canonical worktree path. Electron passes it to the app process as `OPENDUCKTOR_DEV_INSTANCE`; Browser passes it through launcher options into the host process environment.
 4. Electron development profiles use `runtime/dev-instances/<instance-id>/electron-profile`, while settings and task stores remain under the shared config root.
 5. Development MCP discovery uses `runtime/dev-instances/<instance-id>/mcp-bridge.json`; missing or invalid development identity fails with an actionable error and never falls back to another instance.
+6. Electron development mode claims one application instance per worktree. A second launch in the same worktree exits, while Electron runs from different worktrees remain independent.
 
 ## External-tool comparison
 
