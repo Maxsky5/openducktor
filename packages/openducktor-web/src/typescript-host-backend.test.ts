@@ -34,12 +34,16 @@ const nativeResponse = await Bun.fetch("data:,");
 
 const {
   handleTypescriptHostBackendRequest,
+  resolveAppSessionCookieName,
   startTypescriptHostBackend,
   startTypescriptHostBackendEffect,
 } = await import("./typescript-host-backend");
 
 const APP_TOKEN = "app-token";
+const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const CONTROL_TOKEN = "control-token";
+const DEVELOPMENT_INSTANCE_ID = "browser-0123456789ab";
+const DEVELOPMENT_APP_SESSION_COOKIE_NAME = `${APP_SESSION_COOKIE_NAME}_${DEVELOPMENT_INSTANCE_ID}`;
 const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
 const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../.."),
@@ -104,6 +108,7 @@ const missingTaskAssetReadService: TaskAssetReadService = {
 };
 
 type TestRequestOptions = Partial<{
+  appSessionCookieName: string;
   appToken: string;
   controlToken: string;
   eventBus: BufferedHostEventBus;
@@ -123,6 +128,7 @@ const handleTestRequest = (
   return Effect.runPromise(
     handleTypescriptHostBackendRequest({
       allowedOrigins: new Set(),
+      appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
       appToken: options.appToken ?? APP_TOKEN,
       controlToken: options.controlToken ?? CONTROL_TOKEN,
       eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
@@ -142,6 +148,24 @@ const handleTestRequest = (
 };
 
 describe("TypeScript web host backend", () => {
+  test("uses one session cookie name per development instance", () => {
+    expect(
+      resolveAppSessionCookieName("development", {
+        OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
+      }),
+    ).toBe(DEVELOPMENT_APP_SESSION_COOKIE_NAME);
+    expect(
+      resolveAppSessionCookieName("development", {
+        OPENDUCKTOR_DEV_INSTANCE: "browser-fedcba987654",
+      }),
+    ).toBe(`${APP_SESSION_COOKIE_NAME}_browser-fedcba987654`);
+    expect(
+      resolveAppSessionCookieName("production", {
+        OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
+      }),
+    ).toBe(APP_SESSION_COOKIE_NAME);
+  });
+
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
     const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
     const previousDevelopmentInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
@@ -160,7 +184,7 @@ describe("TypeScript web host backend", () => {
 
     try {
       process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
-      process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
+      process.env.OPENDUCKTOR_DEV_INSTANCE = DEVELOPMENT_INSTANCE_ID;
       await mkdir(path.dirname(productionDiscoveryPath), { recursive: true });
       await writeFile(productionDiscoveryPath, productionDiscovery, "utf8");
       const logger = await Effect.runPromise(
@@ -200,7 +224,9 @@ describe("TypeScript web host backend", () => {
         headers: { "x-openducktor-app-token": APP_TOKEN },
       });
       expect(session.status).toBe(200);
-      expect(session.headers.get("set-cookie")).toContain("openducktor_web_session=app-token");
+      expect(session.headers.get("set-cookie")).toContain(
+        `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=app-token`,
+      );
 
       if (process.platform !== "win32") {
         const terminalIds: string[] = [];
@@ -222,7 +248,7 @@ describe("TypeScript web host backend", () => {
           [TERMINAL_PROTOCOL_SUBPROTOCOL],
           {
             headers: {
-              cookie: `openducktor_web_session=${APP_TOKEN}`,
+              cookie: `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
               origin: FRONTEND_ORIGIN,
             },
           },
@@ -326,7 +352,7 @@ describe("TypeScript web host backend", () => {
 
       const rejectedTerminalProtocol = await Bun.fetch(`${backendUrl}/terminal`, {
         headers: {
-          cookie: `openducktor_web_session=${APP_TOKEN}`,
+          cookie: `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
           origin: FRONTEND_ORIGIN,
           "sec-websocket-protocol": "openducktor-terminal.v0",
         },
@@ -1329,6 +1355,7 @@ describe("TypeScript web host backend", () => {
         Effect.runPromise(
           handleTypescriptHostBackendRequest({
             allowedOrigins: new Set(),
+            appSessionCookieName: APP_SESSION_COOKIE_NAME,
             appToken: APP_TOKEN,
             controlToken: CONTROL_TOKEN,
             eventBus,
