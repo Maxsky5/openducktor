@@ -5,7 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
@@ -248,7 +248,12 @@ describe("ModelPicker", () => {
         favoriteAction.focus();
       });
 
-      expect((await screen.findByRole("tooltip")).textContent).toContain(expectedTooltip);
+      await waitFor(
+        () => {
+          expect(screen.getByRole("tooltip").textContent).toContain(expectedTooltip);
+        },
+        { timeout: 750 },
+      );
     },
   );
 
@@ -278,8 +283,13 @@ describe("ModelPicker", () => {
 
     expect(document.activeElement).toBe(favoriteAction);
     expect(favoriteAction.getAttribute("aria-disabled")).toBe("true");
-    expect((await screen.findByRole("tooltip")).textContent).toContain(
-      "Favorites unavailable: Settings read failed",
+    await waitFor(
+      () => {
+        expect(screen.getByRole("tooltip").textContent).toContain(
+          "Favorites unavailable: Settings read failed",
+        );
+      },
+      { timeout: 750 },
     );
     await act(async () => {
       fireEvent.click(favoriteAction);
