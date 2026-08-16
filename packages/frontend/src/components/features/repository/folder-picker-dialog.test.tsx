@@ -269,6 +269,11 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole("button", { name: /load path/i }));
 
       await waitFor(() => expect(requestCount).toBe(2));
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+
       await act(async () => resolveRefresh(createListing()));
 
       await waitFor(() => {

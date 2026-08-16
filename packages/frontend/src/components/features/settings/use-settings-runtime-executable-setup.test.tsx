@@ -90,6 +90,7 @@ describe("useSettingsRuntimeExecutableSetup", () => {
       await harness.run(() => failed.reject(new Error("Runtime rediscovery failed")));
       await request;
       await harness.waitFor((state) => state.discoveryError === "Runtime rediscovery failed");
+      expect(harness.getLatest().error).toBeNull();
 
       await harness.run((state) => {
         request = state.checkAgain();

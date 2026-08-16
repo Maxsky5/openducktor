@@ -112,7 +112,7 @@ export const useSettingsRuntimeExecutableSetup = ({
       (validation.checkingRuntimeKinds.length > 0 || isCheckingDiscovery),
     isCheckingDiscovery,
     discoveryError,
-    error: discoveryError ?? validationError,
+    error: validationError,
     checkAgain,
   };
 };

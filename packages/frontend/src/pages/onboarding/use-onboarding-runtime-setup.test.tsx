@@ -411,12 +411,13 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
-  test("blocks Continue until a failed runtime rediscovery succeeds", async () => {
+  test("keeps Continue available after an optional runtime rediscovery fails", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "" },
     };
+    const saveSettingsSnapshot = mock(async () => {});
     let discoveryAttempts = 0;
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
@@ -428,7 +429,7 @@ describe("useOnboardingRuntimeSetup", () => {
     });
 
     try {
-      renderOnboarding({ runtimes });
+      renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
@@ -438,17 +439,11 @@ describe("useOnboardingRuntimeSetup", () => {
       await screen.findByText("Runtime discovery failed");
 
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
-        true,
-      );
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Scan again" }));
-      });
-
-      await waitFor(() => expect(discoveryAttempts).toBe(2));
-      await waitFor(() => expect(screen.queryByText("Runtime discovery failed")).toBeNull());
-      expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         false,
       );
+      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      await screen.findByRole("heading", { name: "Open your first workspace" });
+      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }

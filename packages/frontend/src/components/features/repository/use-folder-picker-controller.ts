@@ -154,6 +154,9 @@ export function useFolderPickerController({
     dispatch({ type: "directoryConfirmed", listing: directoryQuery.data });
   }, [directoryQuery.data]);
 
+  const isInitialLoad = directoryQuery.isPending && !confirmedListing;
+  const isRefreshing = directoryQuery.isFetching && Boolean(confirmedListing);
+
   const filteredEntries = useMemo(() => {
     if (!confirmedListing) {
       return [];
@@ -195,7 +198,7 @@ export function useFolderPickerController({
   };
 
   const confirm = async (): Promise<void> => {
-    if (!confirmedListing || !hasResolvedRequestedPath) {
+    if (!confirmedListing || !hasResolvedRequestedPath || isRefreshing) {
       return;
     }
 
@@ -215,12 +218,11 @@ export function useFolderPickerController({
 
   const directoryError = directoryQuery.error ? errorMessage(directoryQuery.error) : null;
   const activeError = submitError ?? directoryError;
-  const isInitialLoad = directoryQuery.isPending && !confirmedListing;
-  const isRefreshing = directoryQuery.isFetching && Boolean(confirmedListing);
   const isBusy = isSubmitting || isInitialLoad;
   const isCurrentPathSelectable = Boolean(
     confirmedListing &&
       hasResolvedRequestedPath &&
+      !isRefreshing &&
       (selectionMode === "file"
         ? selectedFilePath
         : !requireGitRepo || confirmedListing.currentPathIsGitRepo),

@@ -149,17 +149,12 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
     isRediscovering: isChecking,
   });
   const continueDisabled =
-    runtimeLoading ||
-    validationPending ||
-    isChecking ||
-    !!runtimeRequestError ||
-    runtimeDiscoveryError !== null;
+    runtimeLoading || validationPending || isChecking || !!runtimeRequestError;
 
   const saveRuntimes = async (allowNoRuntime = false): Promise<void> => {
     if (
       saveInFlight.current ||
       isChecking ||
-      runtimeDiscoveryError !== null ||
       !runtimeDraft ||
       !settingsQuery.data ||
       checkingRuntimeKinds.length > 0
