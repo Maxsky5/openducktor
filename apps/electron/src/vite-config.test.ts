@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import packageJson from "../package.json";
+import releasePackageJson from "../../../package.json";
 import { resolveAppVersion } from "../vite.config";
 
 describe("resolveAppVersion", () => {
@@ -10,16 +10,16 @@ describe("resolveAppVersion", () => {
     expect(resolveAppVersion({ ODT_APP_VERSION: "9.8.7" })).toBe("9.8.7");
   });
 
-  test("uses the Electron package version when ODT_APP_VERSION is absent", () => {
-    expect(resolveAppVersion({})).toBe(packageJson.version);
+  test("uses the release package version when ODT_APP_VERSION is absent", () => {
+    expect(resolveAppVersion({})).toBe(releasePackageJson.version);
   });
 
-  test("uses the Electron package version when ODT_APP_VERSION is empty", () => {
-    expect(resolveAppVersion({ ODT_APP_VERSION: "" })).toBe(packageJson.version);
+  test("uses the release package version when ODT_APP_VERSION is empty", () => {
+    expect(resolveAppVersion({ ODT_APP_VERSION: "" })).toBe(releasePackageJson.version);
   });
 
-  test("uses the Electron package version when ODT_APP_VERSION is blank", () => {
-    expect(resolveAppVersion({ ODT_APP_VERSION: "   " })).toBe(packageJson.version);
+  test("uses the release package version when ODT_APP_VERSION is blank", () => {
+    expect(resolveAppVersion({ ODT_APP_VERSION: "   " })).toBe(releasePackageJson.version);
   });
 
   test("fails with a typed error when the package version is missing", async () => {
