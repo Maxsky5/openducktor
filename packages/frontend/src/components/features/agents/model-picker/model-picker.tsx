@@ -190,7 +190,26 @@ const ModelRow = ({
   onNavigate: (key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
   onSelect: () => void;
 }): ReactElement => {
-  const favoriteLabel = item.isFavorite ? "Remove" : "Add";
+  const favoriteLabel = item.isFavorite
+    ? `Remove ${item.model.modelName} from favorites`
+    : `Add ${item.model.modelName} to favorites`;
+  const favoriteTooltip = item.isFavorite ? "Remove from favorites" : "Add to favorites";
+  const favoriteDisabledReasonId = useId();
+  const favoriteDisabledReason = (() => {
+    if (favoriteState.canMutate) {
+      return null;
+    }
+    if (favoriteState.readError) {
+      return `Favorites unavailable: ${favoriteState.readError}`;
+    }
+    if (favoriteState.isLoading) {
+      return "Favorites are loading.";
+    }
+    if (favoriteState.isMutationPending) {
+      return "Saving favorite changes.";
+    }
+    return favoriteState.mutationError ?? "Favorites are unavailable.";
+  })();
   return (
     <li
       aria-label={`${item.model.modelName} model actions`}
@@ -233,21 +252,34 @@ const ModelRow = ({
         </span>
         {selected ? <Check aria-label="Selected model" /> : null}
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        disabled={!favoriteState.canMutate}
-        aria-label={`${favoriteLabel} ${item.model.modelName} ${item.isFavorite ? "from" : "to"} favorites`}
-        aria-pressed={item.isFavorite}
-        onClick={() => favoriteState.toggleFavorite(item.value)}
-      >
-        <Star
-          aria-hidden="true"
-          className={cn(item.isFavorite && "fill-current text-warning-muted")}
-        />
-      </Button>
+      {favoriteDisabledReason ? (
+        <span id={favoriteDisabledReasonId} className="sr-only">
+          {favoriteDisabledReason}
+        </span>
+      ) : null}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn("size-7", favoriteDisabledReason && "cursor-not-allowed opacity-50")}
+            aria-label={favoriteLabel}
+            aria-pressed={item.isFavorite}
+            aria-disabled={favoriteDisabledReason !== null}
+            aria-describedby={favoriteDisabledReason ? favoriteDisabledReasonId : undefined}
+            onClick={
+              favoriteDisabledReason ? undefined : () => favoriteState.toggleFavorite(item.value)
+            }
+          >
+            <Star
+              aria-hidden="true"
+              className={cn(item.isFavorite && "fill-current text-warning-muted")}
+            />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">{favoriteDisabledReason ?? favoriteTooltip}</TooltipContent>
+      </Tooltip>
     </li>
   );
 };

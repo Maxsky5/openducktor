@@ -216,6 +216,77 @@ describe("ModelPicker", () => {
     expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
   });
 
+  test.each([
+    { isFavorite: false, interaction: "hover", expectedTooltip: "Add to favorites" },
+    { isFavorite: false, interaction: "focus", expectedTooltip: "Add to favorites" },
+    { isFavorite: true, interaction: "hover", expectedTooltip: "Remove from favorites" },
+    { isFavorite: true, interaction: "focus", expectedTooltip: "Remove from favorites" },
+  ])(
+    "shows the $expectedTooltip tooltip on $interaction",
+    async ({ isFavorite, interaction, expectedTooltip }) => {
+      render(
+        <ModelPicker
+          runtimes={runtimes}
+          value={value}
+          favoriteState={favoriteState({ favorites: isFavorite ? [value] : [] })}
+          selectionPolicy={{ kind: "editable" }}
+          onValueChange={() => {}}
+        />,
+      );
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+      });
+      const favoriteAction = screen.getByRole("button", {
+        name: isFavorite ? "Remove GPT Five from favorites" : "Add GPT Five to favorites",
+      });
+      await act(async () => {
+        if (interaction === "hover") {
+          fireEvent.pointerMove(favoriteAction);
+          return;
+        }
+        favoriteAction.focus();
+      });
+
+      expect((await screen.findByRole("tooltip")).textContent).toContain(expectedTooltip);
+    },
+  );
+
+  test("keeps the unavailable favorite reason focusable without mutating", async () => {
+    const toggleFavorite = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState({
+          readError: "Settings read failed",
+          canMutate: false,
+          toggleFavorite,
+        })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    const favoriteAction = screen.getByRole("button", { name: "Add GPT Five to favorites" });
+    await act(async () => {
+      favoriteAction.focus();
+    });
+
+    expect(document.activeElement).toBe(favoriteAction);
+    expect(favoriteAction.getAttribute("aria-disabled")).toBe("true");
+    expect((await screen.findByRole("tooltip")).textContent).toContain(
+      "Favorites unavailable: Settings read failed",
+    );
+    await act(async () => {
+      fireEvent.click(favoriteAction);
+    });
+    expect(toggleFavorite).not.toHaveBeenCalled();
+  });
+
   test("renders model selection and favorite actions as sibling buttons", async () => {
     render(
       <ModelPicker
@@ -330,8 +401,8 @@ describe("ModelPicker", () => {
     const search = screen.getByPlaceholderText("Search models...") as HTMLInputElement;
     fireEvent.change(search, { target: { value: "gpt" } });
     const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });
-    star.focus();
     await act(async () => {
+      star.focus();
       fireEvent.keyDown(star, { key });
       fireEvent.keyUp(star, { key });
       fireEvent.click(star);
@@ -358,8 +429,8 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
     const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });
-    star.focus();
     await act(async () => {
+      star.focus();
       fireEvent.keyDown(star, { key: "Escape" });
     });
 

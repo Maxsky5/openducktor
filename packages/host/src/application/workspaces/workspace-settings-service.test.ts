@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
@@ -6,6 +9,7 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
@@ -186,6 +190,31 @@ describe("createWorkspaceSettingsService", () => {
       recentWorkspaces: ["repo"],
       agentModelFavorites: snapshot.agentModelFavorites,
     });
+  });
+  test("reloads exact agent model favorites through a fresh disk adapter and service", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-settings-restart-"));
+    const configPath = path.join(tempDir, "config.json");
+    const favorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+
+    try {
+      const firstService = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath }),
+      );
+      await Effect.runPromise(firstService.updateAgentModelFavorites([favorite]));
+
+      const restartedService = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath }),
+      );
+      const restartedSnapshot = await Effect.runPromise(restartedService.getSettingsSnapshot());
+
+      expect(restartedSnapshot.agentModelFavorites).toEqual([favorite]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
   test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
     const service = createWorkspaceSettingsService(
