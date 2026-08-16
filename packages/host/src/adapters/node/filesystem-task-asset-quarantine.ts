@@ -72,7 +72,14 @@ export const createTaskAssetQuarantineFiles = ({
     if (!(await existingStat(quarantineRoot))) {
       return [];
     }
-    const entries = await readdir(quarantineRoot, { withFileTypes: true });
+    const entries = await readdir(quarantineRoot, { withFileTypes: true }).catch(
+      (cause: unknown) => {
+        if (isMissing(cause)) {
+          return [];
+        }
+        throw cause;
+      },
+    );
     const quarantineIds: string[] = [];
     for (const entry of entries) {
       const entryPath = path.join(quarantineRoot, entry.name);
@@ -86,7 +93,15 @@ export const createTaskAssetQuarantineFiles = ({
       if (!entry.isDirectory() || !taskAssetIdSchema.safeParse(entry.name).success) {
         throw new Error(`Unexpected task asset quarantine entry '${entry.name}'.`);
       }
-      const childNames = await readdir(entryPath);
+      let childNames: string[];
+      try {
+        childNames = await readdir(entryPath);
+      } catch (cause) {
+        if (isMissing(cause)) {
+          continue;
+        }
+        throw cause;
+      }
       if (!childNames.includes("manifest.json")) {
         if (childNames.length === 0) {
           await rm(entryPath, { force: true, recursive: true });
