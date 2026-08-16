@@ -338,6 +338,57 @@ describe("createRuntimeRegistry", () => {
     expect(starts).toBe(2);
     expect(stops).toEqual(["runtime-old"]);
   });
+  test("defers an executable path restart until active sessions become idle", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let hasActiveSessions = true;
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      hasActiveRuntimeSessions: () => Effect.succeed(hasActiveSessions),
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          return Effect.succeed(
+            createRuntimeHandle(
+              starts === 1 ? oldRuntime : newRuntime,
+              () =>
+                Effect.sync(() => {
+                  stops.push(oldRuntime.runtimeId);
+                }),
+              true,
+              configuredExecutablePath,
+            ),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    configuredExecutablePath = "/tools/opencode-new";
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    expect(starts).toBe(1);
+    expect(stops).toEqual([]);
+
+    hasActiveSessions = false;
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      newRuntime,
+    );
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
+  });
   test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({
       runtimeId: "runtime-1",

@@ -84,6 +84,7 @@ import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-hos
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskEventServices } from "./node-task-event-services";
+import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
@@ -238,6 +239,7 @@ export const createNodeEffectHostCommandRouter = (
     runtimeRegistry ??
     createRuntimeRegistry({
       workspaceStarter,
+      hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
       resolveRuntimeExecutablePath: (runtimeInput) =>
         readSavedRuntimeExecutablePath({
           kind: runtimeInput.descriptor.kind,

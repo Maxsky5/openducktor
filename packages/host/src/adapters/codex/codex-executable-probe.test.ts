@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerChildTransport } from "./codex-app-server-transport-types";
 import { createCodexExecutableProbe, verifyCodexAppServerProtocol } from "./codex-executable-probe";
 
@@ -57,8 +57,7 @@ describe("verifyCodexAppServerProtocol", () => {
     const transport = {
       request: () =>
         Effect.fail(
-          new HostOperationError({
-            operation: "codexAppServerTransport.request.initialize",
+          new HostValidationError({
             message: "invalid protocol response",
           }),
         ),
@@ -76,6 +75,25 @@ describe("verifyCodexAppServerProtocol", () => {
 
     expect(failure._tag).toBe("RuntimeExecutableIncompatibleError");
     expect(notified).toBe(false);
+  });
+
+  test("preserves operational initialization failures", async () => {
+    const operationFailure = new HostOperationError({
+      operation: "codexAppServerTransport.request.initialize",
+      message: "initialize request timed out",
+    });
+    const transport = {
+      request: () => Effect.fail(operationFailure),
+      notify: () => Effect.void,
+      close: () => Effect.void,
+      rejectPendingRequestsForShutdown: () => Effect.void,
+    } as unknown as CodexProbeTransport;
+
+    const failure = await Effect.runPromise(
+      Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
+    );
+
+    expect(failure).toBe(operationFailure);
   });
 });
 

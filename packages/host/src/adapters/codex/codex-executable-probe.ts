@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import {
   type ProcessTreePlatform,
@@ -12,6 +16,7 @@ import {
 } from "../../infrastructure/process/process-tree";
 import {
   RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbeError,
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
@@ -30,7 +35,7 @@ type CodexProbeTransport = Pick<
 export const verifyCodexAppServerProtocol = (
   transport: CodexProbeTransport,
   clientVersion: string,
-): Effect.Effect<void, RuntimeExecutableIncompatibleError> =>
+): Effect.Effect<void, RuntimeExecutableProbeError> =>
   Effect.gen(function* () {
     yield* transport.request({
       method: "initialize",
@@ -49,12 +54,14 @@ export const verifyCodexAppServerProtocol = (
     });
     yield* transport.notify({ method: "initialized" });
   }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new RuntimeExecutableIncompatibleError({
-          message: "The executable did not complete the Codex app-server initialization protocol.",
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      cause instanceof HostValidationError
+        ? new RuntimeExecutableIncompatibleError({
+            message:
+              "The executable did not complete the Codex app-server initialization protocol.",
+            cause,
+          })
+        : toHostOperationError(cause, "codexExecutableProbe.initialize"),
     ),
   );
 
