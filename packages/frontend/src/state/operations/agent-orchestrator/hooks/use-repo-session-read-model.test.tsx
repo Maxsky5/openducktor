@@ -259,6 +259,99 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
       });
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps an unchanged association conflict failed after explicit retry", async () => {
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      });
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("recovers an association conflict after retry reads corrected task records", async () => {
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([]);
     } finally {
       await state.harness.unmount();
     }
