@@ -53,8 +53,8 @@ import {
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
-import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { resolveElectronAppVersion } from "./electron-app-version";
+import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 import { runElectronHostInvoke } from "./electron-host-invoke";
