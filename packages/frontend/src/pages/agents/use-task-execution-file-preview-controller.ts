@@ -23,6 +23,7 @@ export type UseTaskExecutionFilePreviewControllerResult = {
 type PendingContextTransition = {
   apply: () => void;
   cancel: (() => void) | null;
+  force: boolean;
 };
 
 export const useTaskExecutionFilePreviewController =
@@ -40,13 +41,16 @@ export const useTaskExecutionFilePreviewController =
     }, [state]);
 
     useEffect(() => {
-      if (state.pendingIntent?.type !== "leave_context" || state.leavePolicy !== "allow") {
+      if (state.pendingIntent?.type !== "leave_context" || state.leavePolicy === "defer") {
         return;
       }
       const transition = pendingContextTransitionRef.current;
+      if (!transition || (!transition.force && state.leavePolicy !== "allow")) {
+        return;
+      }
       pendingContextTransitionRef.current = null;
-      dispatch({ type: "discard" });
-      transition?.apply();
+      dispatch({ type: transition.force ? "force_clear" : "discard" });
+      transition.apply();
     }, [state.leavePolicy, state.pendingIntent]);
 
     const onSelectFile = useCallback((file: TaskExecutionSelectedFile) => {
@@ -107,6 +111,7 @@ export const useTaskExecutionFilePreviewController =
           pendingContextTransitionRef.current = {
             apply: applyTransition,
             cancel: cancelTransition ?? null,
+            force: options?.force === true || storedTransition.force,
           };
           return;
         }
@@ -124,6 +129,7 @@ export const useTaskExecutionFilePreviewController =
         pendingContextTransitionRef.current = {
           apply: applyTransition,
           cancel: cancelTransition ?? null,
+          force: options?.force === true,
         };
         dispatch({ type: "request", intent: { type: "leave_context" } });
       },

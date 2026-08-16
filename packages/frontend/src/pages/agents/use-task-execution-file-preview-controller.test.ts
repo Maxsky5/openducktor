@@ -166,4 +166,24 @@ describe("useTaskExecutionFilePreviewController", () => {
     await waitFor(() => expect(applyTransition).toHaveBeenCalledTimes(1));
     expect(view.result.current.model.selectedFile).toBeNull();
   });
+
+  test("applies a forced repository transition after Save fails", async () => {
+    const view = renderHook(() => useTaskExecutionFilePreviewController());
+    const applyTransition = mock(() => {});
+    const cancelTransition = mock(() => {});
+    act(() => view.result.current.onSelectFile(firstFile));
+    act(() => view.result.current.model.onLeavePolicyChange("defer"));
+
+    act(() =>
+      view.result.current.requestContextTransition(applyTransition, cancelTransition, {
+        force: true,
+      }),
+    );
+    act(() => view.result.current.model.onLeavePolicyChange("confirm"));
+
+    await waitFor(() => expect(applyTransition).toHaveBeenCalledTimes(1));
+    expect(cancelTransition).not.toHaveBeenCalled();
+    expect(view.result.current.model.selectedFile).toBeNull();
+    expect(view.result.current.model.hasPendingDiscard).toBe(false);
+  });
 });

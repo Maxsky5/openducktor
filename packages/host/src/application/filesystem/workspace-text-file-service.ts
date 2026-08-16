@@ -239,6 +239,14 @@ export const createWorkspaceTextFileService = (
         return yield* Effect.fail(invalidWriteInput(rawInput, parsedInput.error));
       }
       const input = parsedInput.data;
+      if (input.contents.length > MAX_WORKSPACE_TEXT_FILE_BYTES) {
+        return yield* Effect.fail(
+          unsupportedWrite(
+            `File contents exceed the ${MAX_WORKSPACE_TEXT_FILE_BYTES}-byte edit limit.`,
+            input,
+          ),
+        );
+      }
       const bytes = TEXT_ENCODER.encode(input.contents);
       if (TEXT_DECODER.decode(bytes) !== input.contents) {
         return yield* Effect.fail(

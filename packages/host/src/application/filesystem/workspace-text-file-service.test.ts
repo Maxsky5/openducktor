@@ -339,6 +339,35 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("before");
   });
 
+  test("rejects a draft whose string length exceeds the byte limit before encoding", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    await writeFile(filePath, "before");
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["file.txt"]),
+    );
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    const error = await writeError(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: "\ud800".repeat(MAX_WORKSPACE_TEXT_FILE_BYTES + 1),
+        revision: loaded.revision,
+      }),
+    );
+
+    expect(error.failure).toMatchObject({
+      code: "unsupported_file",
+      message: `File contents exceed the ${MAX_WORKSPACE_TEXT_FILE_BYTES}-byte edit limit.`,
+    });
+    expect(await readFile(filePath, "utf8")).toBe("before");
+  });
+
   test("reports a stale revision before classifying changed current contents", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");

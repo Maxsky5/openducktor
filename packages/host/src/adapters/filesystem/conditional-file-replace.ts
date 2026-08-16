@@ -72,5 +72,6 @@ export const conditionallyReplaceOpenFile = async (
       message: "The file changed before the saved contents could be confirmed.",
     });
   }
+  await input.verifyEntry();
   return saved;
 };
