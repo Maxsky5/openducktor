@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectionState,
@@ -16,6 +16,11 @@ type UseAgentStudioSelectionStateArgs = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
+  requestContextTransition: (
+    applyTransition: () => void,
+    cancelTransition?: () => void,
+    options?: { force: boolean },
+  ) => void;
 };
 
 type SelectionStateSnapshot = {
@@ -35,6 +40,7 @@ export function useAgentStudioSelectionState({
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
+  requestContextTransition,
 }: UseAgentStudioSelectionStateArgs): AgentStudioSelectionStateModel {
   const routeSelection = useMemo(
     () =>
@@ -61,41 +67,71 @@ export function useAgentStudioSelectionState({
     routeQueryKey: routeSelectionQueryKey,
     selection: routeSelection,
   }));
+  const latestTransitionStateRef = useRef({
+    routeSelection,
+    routeSelectionQueryKey,
+    snapshot,
+  });
 
-  const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(snapshot.selection);
-  const hasRouteChangedOutsideLocalSelection =
-    snapshot.routeQueryKey !== routeSelectionQueryKey &&
-    snapshotSelectionQueryKey !== routeSelectionQueryKey;
-  const selection = hasRouteChangedOutsideLocalSelection ? routeSelection : snapshot.selection;
+  const selection = snapshot.selection;
 
   useLayoutEffect(() => {
-    setSnapshot((current) => {
-      const currentSelectionQueryKey = agentStudioSelectionQueryKey(current.selection);
-      if (current.routeQueryKey === routeSelectionQueryKey) {
-        return current;
-      }
-      if (currentSelectionQueryKey === routeSelectionQueryKey) {
-        return {
-          routeQueryKey: routeSelectionQueryKey,
-          selection: current.selection,
-        };
-      }
-      return {
+    latestTransitionStateRef.current = {
+      routeSelection,
+      routeSelectionQueryKey,
+      snapshot,
+    };
+  }, [routeSelection, routeSelectionQueryKey, snapshot]);
+
+  useLayoutEffect(() => {
+    if (snapshot.routeQueryKey === routeSelectionQueryKey) {
+      return;
+    }
+    const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(snapshot.selection);
+    if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
+      setSnapshot({
         routeQueryKey: routeSelectionQueryKey,
-        selection: routeSelection,
-      };
-    });
-  }, [routeSelection, routeSelectionQueryKey]);
+        selection: snapshot.selection,
+      });
+      return;
+    }
+    const requestedRouteQueryKey = routeSelectionQueryKey;
+    requestContextTransition(
+      () => {
+        const latest = latestTransitionStateRef.current;
+        setSnapshot({
+          routeQueryKey: latest.routeSelectionQueryKey,
+          selection: latest.routeSelection,
+        });
+      },
+      () => {
+        const latest = latestTransitionStateRef.current;
+        if (latest.routeSelectionQueryKey !== requestedRouteQueryKey) return;
+        scheduleQueryUpdate(
+          buildAgentStudioSelectionQueryUpdateFromState(latest.snapshot.selection),
+        );
+      },
+      { force: isRepoNavigationBoundaryPending },
+    );
+  }, [
+    isRepoNavigationBoundaryPending,
+    requestContextTransition,
+    routeSelectionQueryKey,
+    scheduleQueryUpdate,
+    snapshot,
+  ]);
 
   const selectAgentStudioSelection = useCallback<SelectAgentStudioSelection>(
     (nextSelection) => {
-      setSnapshot({
-        routeQueryKey: routeSelectionQueryKey,
-        selection: nextSelection,
+      requestContextTransition(() => {
+        setSnapshot({
+          routeQueryKey: routeSelectionQueryKey,
+          selection: nextSelection,
+        });
+        scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
-      scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
     },
-    [routeSelectionQueryKey, scheduleQueryUpdate],
+    [requestContextTransition, routeSelectionQueryKey, scheduleQueryUpdate],
   );
 
   return {

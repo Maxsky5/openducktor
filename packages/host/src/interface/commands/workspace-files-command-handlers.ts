@@ -29,4 +29,5 @@ export const createWorkspaceFilesCommandHandlers = (
   filesystem_list_tree: (args) => workspaceFilesService.listTree(parseListTreeInput(args)),
   filesystem_read_text_file: (args) =>
     workspaceFilesService.readTextFile(parseReadTextFileInput(args)),
+  filesystem_write_text_file: (args) => workspaceFilesService.writeTextFile(args),
 });

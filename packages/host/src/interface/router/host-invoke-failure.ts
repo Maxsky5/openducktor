@@ -1,4 +1,5 @@
 import type { HostInvokeFailure } from "@openducktor/contracts";
+import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import {
   TerminalServiceError,
   terminalServiceErrorToFailure,
@@ -7,6 +8,12 @@ import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
+  if (cause instanceof WorkspaceTextFileWriteError) {
+    return {
+      kind: "workspace_text_file_write",
+      workspaceTextFileWriteFailure: cause.failure,
+    };
+  }
   if (cause instanceof TerminalServiceError) {
     return {
       kind: "terminal",

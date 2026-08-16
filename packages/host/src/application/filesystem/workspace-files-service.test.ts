@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { FileDiff } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -17,6 +18,8 @@ type FakeFilesystemInput = {
 };
 
 const encoder = new TextEncoder();
+const revisionForBytes = (bytes: Uint8Array): string =>
+  `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 const hostOperationError = (message: string): HostOperationError =>
   new HostOperationError({
@@ -44,6 +47,37 @@ const createFakeFilesystem = ({
     return value
       ? Effect.succeed(maxBytes === undefined ? value : value.slice(0, maxBytes))
       : Effect.fail(hostOperationError(`Missing file ${path}`));
+  },
+  readFileSnapshot: (path, maxBytes) => {
+    readLimits?.push(maxBytes);
+    const value = files[path];
+    const metadata = stats[path];
+    if (!value || !metadata) {
+      return Effect.die(`Missing file ${path}`);
+    }
+    const bytes = value.slice(0, maxBytes);
+    return Effect.succeed({
+      bytes,
+      isFile: metadata.isFile ?? !metadata.isDirectory,
+      size: Math.max(metadata.size ?? 0, bytes.byteLength),
+      mtimeMs: metadata.mtimeMs ?? null,
+      revision: revisionForBytes(bytes),
+    });
+  },
+  replaceFileBytes: ({ path, expectedRevision, bytes }) => {
+    const current = files[path];
+    const metadata = stats[path];
+    if (!current || !metadata || revisionForBytes(current) !== expectedRevision) {
+      return Effect.die(`Cannot replace file ${path}`);
+    }
+    files[path] = bytes;
+    return Effect.succeed({
+      bytes,
+      isFile: true,
+      size: bytes.byteLength,
+      mtimeMs: metadata.mtimeMs ?? null,
+      revision: revisionForBytes(bytes),
+    });
   },
   stat: (path, options) => {
     const followSymbolicLinks = options?.followSymbolicLinks ?? true;

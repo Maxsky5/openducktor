@@ -12,7 +12,10 @@ import {
   createHostClient,
   HostInvokeError,
 } from "@openducktor/host-client";
-import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
+import {
+  type OpenDucktorElectronApi,
+  PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE,
+} from "../shared/electron-bridge-contract";
 import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
@@ -100,6 +103,15 @@ export const createElectronShellBridge = (): ShellBridge => {
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
     resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
     resolveTaskAssetSrc: async (context) => createElectronTaskAssetUrl(context),
+    editorClipboard: {
+      readText(type) {
+        if (type === undefined) return electronApi.editorClipboard.readText();
+        if (type !== PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE) {
+          throw new TypeError("Unsupported editor clipboard format.");
+        }
+        return electronApi.editorClipboard.readText(type);
+      },
+    },
     terminals: {
       connect: async (onFrame, onStateChange) => {
         const clientId = globalThis.crypto.randomUUID();

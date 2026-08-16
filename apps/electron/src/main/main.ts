@@ -53,6 +53,7 @@ import {
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
+import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 import { runElectronHostInvoke } from "./electron-host-invoke";
@@ -87,7 +88,8 @@ import {
 } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
-const { app, BrowserWindow, ipcMain, nativeImage, net, protocol, session, shell } = electron;
+const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, protocol, session, shell } =
+  electron;
 const APPLICATION_NAME = "OpenDucktor";
 const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
@@ -668,6 +670,7 @@ const registerIpcHandlers = (
   hostCommandRouter: EffectNodeHostCommandRouter,
   appUpdateService: ElectronAppUpdateService,
 ): void => {
+  registerElectronEditorClipboardIpc({ clipboard, ipcMain });
   registerElectronTaskStreamIpc({
     ipcMain,
     reportDeliveryFailure: ({ cause, subscriptionId }) =>

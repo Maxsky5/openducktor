@@ -23,6 +23,7 @@ import {
   resolveTaskExecutionFileTreeSelectionEntry,
   shouldClearTaskExecutionSelectedFile,
   type TaskExecutionFileExplorerPanelModel,
+  type TaskExecutionFileSelectionResult,
   type TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";
 
@@ -90,7 +91,7 @@ type SelectionContextRef = {
   entriesByPath: Map<string, WorkspaceFileTreeEntry>;
   rootPath: string | null;
   selectedFile: TaskExecutionSelectedFile | null;
-  onSelectFile: (file: TaskExecutionSelectedFile) => void;
+  onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
 };
 
 type FileTreeModel = ReturnType<typeof useFileTree>["model"];
@@ -141,6 +142,7 @@ const syncFileTreeSelection = (
 };
 
 const selectTaskExecutionFileTreePath = (
+  fileTree: FileTreeModel,
   selectedPath: string | undefined,
   context: SelectionContextRef,
 ): void => {
@@ -158,7 +160,9 @@ const selectTaskExecutionFileTreePath = (
   if (selectedFilesEqual(selectedFile, context.selectedFile)) {
     return;
   }
-  context.onSelectFile(selectedFile);
+  if (context.onSelectFile(selectedFile) === false) {
+    syncFileTreeSelection(fileTree, context.selectedFile, context.rootPath, context.entriesByPath);
+  }
 };
 
 function FileExplorerUnavailableState({ message }: { message: string }): ReactElement {
@@ -274,7 +278,7 @@ export function TaskExecutionFileExplorerPanel({
     () =>
       fileTree.subscribe(() => {
         const selectedPath = fileTree.getSelectedPaths().at(-1);
-        selectTaskExecutionFileTreePath(selectedPath, selectionRef.current);
+        selectTaskExecutionFileTreePath(fileTree, selectedPath, selectionRef.current);
       }),
     [fileTree],
   );

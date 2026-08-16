@@ -4,7 +4,7 @@ import type {
   GitTargetBranch,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import type {
   AgentStudioTaskTabsModel,
   SessionStartModalModel,
@@ -27,6 +27,7 @@ import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
+import type { UseTaskExecutionFilePreviewControllerResult } from "./use-task-execution-file-preview-controller";
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 
@@ -56,6 +57,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   githubIntegrationEnabled: boolean;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
+  taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
   hasActiveGitConflict: boolean;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
@@ -78,42 +80,6 @@ type UseAgentStudioOrchestrationControllerResult = {
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: TaskExecutionSelectedFile) => void;
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
-};
-
-export type TaskExecutionFilePreviewState = {
-  selectedFile: TaskExecutionSelectedFile | null;
-  previewSessionKey: number;
-  preservePreviousSnapshot: boolean;
-};
-
-export const createTaskExecutionFilePreviewState = (): TaskExecutionFilePreviewState => ({
-  selectedFile: null,
-  previewSessionKey: 0,
-  preservePreviousSnapshot: false,
-});
-
-export const selectTaskExecutionFilePreviewState = (
-  state: TaskExecutionFilePreviewState,
-  selectedFile: TaskExecutionSelectedFile,
-): TaskExecutionFilePreviewState => ({
-  selectedFile,
-  previewSessionKey:
-    state.selectedFile === null ? state.previewSessionKey + 1 : state.previewSessionKey,
-  preservePreviousSnapshot: state.selectedFile !== null,
-});
-
-export const clearTaskExecutionFilePreviewState = (
-  state: TaskExecutionFilePreviewState,
-): TaskExecutionFilePreviewState => {
-  if (state.selectedFile === null) {
-    return state;
-  }
-
-  return {
-    selectedFile: null,
-    previewSessionKey: state.previewSessionKey + 1,
-    preservePreviousSnapshot: false,
-  };
 };
 
 type AgentStudioPageModelsViewContext = Pick<
@@ -243,6 +209,7 @@ export function useAgentStudioOrchestrationController({
   githubIntegrationEnabled,
   workspaceRepoPath,
   selection,
+  taskExecutionFilePreview,
   hasActiveGitConflict,
   composer,
   actions,
@@ -259,9 +226,6 @@ export function useAgentStudioOrchestrationController({
     handleReorderTab,
   } = selection;
   const selectedSession = view.selectedSession;
-  const [taskExecutionFilePreviewState, setTaskExecutionFilePreviewState] = useState(
-    createTaskExecutionFilePreviewState,
-  );
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
     scheduleQueryUpdate,
@@ -512,47 +476,8 @@ export function useAgentStudioOrchestrationController({
     hasGithubIntegration: githubIntegrationEnabled,
     hasLinkedGithubPullRequest: view.selectedTask?.pullRequest?.providerId === "github",
   });
-  const selectedSessionIdentity = selectedSession.identity;
-  const selectedSessionWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
-  const selectedSessionExternalId = selectedSessionIdentity?.externalSessionId ?? null;
-  const taskExecutionFileRootKey = selectedSessionIdentity
-    ? (selectedSessionWorkingDirectory ?? "__missing_session_working_directory__")
-    : (workspaceRepoPath ?? "__missing_workspace_repo_path__");
-  const taskExecutionFileContextKey = [
-    view.taskId ?? "__missing_task__",
-    selectedSessionExternalId ?? "__no_selected_session__",
-    taskExecutionFileRootKey,
-  ].join("\0");
-  const previousTaskExecutionFileContextKeyRef = useRef(taskExecutionFileContextKey);
-  useEffect(() => {
-    if (previousTaskExecutionFileContextKeyRef.current === taskExecutionFileContextKey) {
-      return;
-    }
-    previousTaskExecutionFileContextKeyRef.current = taskExecutionFileContextKey;
-    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
-  }, [taskExecutionFileContextKey]);
-  const onSelectTaskExecutionFile = useCallback((file: TaskExecutionSelectedFile) => {
-    setTaskExecutionFilePreviewState((state) => selectTaskExecutionFilePreviewState(state, file));
-  }, []);
-  const closeTaskExecutionSelectedFilePreview = useCallback(() => {
-    setTaskExecutionFilePreviewState(clearTaskExecutionFilePreviewState);
-  }, []);
-  const taskExecutionSelectedFile = taskExecutionFilePreviewState.selectedFile;
-  const taskExecutionFilePreviewSessionKey = taskExecutionFilePreviewState.previewSessionKey;
-  const taskExecutionSelectedFilePreviewModel = useMemo<TaskExecutionSelectedFilePreviewModel>(
-    () => ({
-      selectedFile: taskExecutionSelectedFile,
-      previewSessionKey: taskExecutionFilePreviewSessionKey,
-      preservePreviousSnapshot: taskExecutionFilePreviewState.preservePreviousSnapshot,
-      onClose: closeTaskExecutionSelectedFilePreview,
-    }),
-    [
-      closeTaskExecutionSelectedFilePreview,
-      taskExecutionFilePreviewState.preservePreviousSnapshot,
-      taskExecutionFilePreviewSessionKey,
-      taskExecutionSelectedFile,
-    ],
-  );
+  const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
+    taskExecutionFilePreview;
 
   return {
     repoSettings,

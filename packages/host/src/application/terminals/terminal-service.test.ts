@@ -18,6 +18,8 @@ const filesystem: FilesystemPort = {
   canonicalize: (path: string) => Effect.succeed(`/canonical${path}`),
   readDirectory: () => Effect.succeed([]),
   readFileBytes: () => Effect.succeed(new Uint8Array()),
+  readFileSnapshot: () => Effect.die("not used"),
+  replaceFileBytes: () => Effect.die("not used"),
   stat: () => Effect.succeed({ isDirectory: directoryAvailable }),
   exists: () => Effect.succeed(true),
   join: posix.join,

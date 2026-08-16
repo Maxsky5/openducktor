@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { act, render as testingLibraryRender } from "@testing-library/react";
-import { createElement, type ReactElement } from "react";
+import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
+import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
@@ -31,6 +31,15 @@ const renderWorkspacePanes = (hasSelectedFilePreview: boolean) =>
     }),
   );
 
+function DraftPreviewHarness(): ReactElement {
+  const [contents, setContents] = useState("saved");
+  return createElement("textarea", {
+    "aria-label": "Draft preview",
+    value: contents,
+    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setContents(event.target.value),
+  });
+}
+
 describe("AgentsPageWorkspacePanes", () => {
   test("hides the chat pane while the selected file preview owns the left pane", () => {
     const view = renderWorkspacePanes(true);
@@ -51,6 +60,73 @@ describe("AgentsPageWorkspacePanes", () => {
 });
 
 describe("AgentsPageWorkspace terminal visibility", () => {
+  test("keeps the selected file draft mounted across responsive layout changes", () => {
+    let isNarrow = false;
+    const listeners = new Set<() => void>();
+    window.matchMedia = ((query: string) => ({
+      get matches() {
+        return isNarrow;
+      },
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: (_type: string, listener: () => void) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type: string, listener: () => void) => {
+        listeners.delete(listener);
+      },
+      dispatchEvent: () => true,
+    })) as unknown as typeof window.matchMedia;
+    const terminalPanel: AgentStudioTerminalPanelModel = {
+      scopeKey: "repo:task-1",
+      isAvailable: true,
+      tabs: [],
+      mountedTabs: [],
+      activeTabId: null,
+      isVisible: false,
+      isLoading: false,
+      isCreating: false,
+      transportError: null,
+      platform: "darwin",
+      platformError: null,
+      focusRequest: 1,
+      controller: null,
+      onToggle: () => undefined,
+      onHide: () => undefined,
+      onSelectTab: () => undefined,
+      onCreate: () => undefined,
+      onRetryCreate: () => undefined,
+      onReorderTab: () => undefined,
+      onTitleChange: () => undefined,
+      onClose: async () => ({ closed: true }),
+      onLifecycle: () => undefined,
+      onForgotten: () => undefined,
+    };
+    const view = render(
+      createElement(AgentsPageWorkspace, {
+        hasSelectedTask: true,
+        chatContent: createElement("div", null, "Chat"),
+        hasSelectedFilePreview: true,
+        selectedFilePreviewContent: createElement(DraftPreviewHarness),
+        isRightPanelVisible: false,
+        rightPanelContent: null,
+        terminalPanel,
+      }),
+    );
+    const draft = view.getByRole("textbox", { name: "Draft preview" }) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "unsaved draft" } });
+
+    isNarrow = true;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+
+    expect(view.getByRole("textbox", { name: "Draft preview" })).toBe(draft);
+    expect(draft.value).toBe("unsaved draft");
+  });
+
   test("keeps the terminal panel mounted while hiding and reopening it", () => {
     window.matchMedia = ((query: string) => ({
       matches: false,

@@ -5,33 +5,54 @@ import {
   type FileContents,
   getFiletypeFromFileName,
 } from "@pierre/diffs";
-import { CodeView, useWorkerPool } from "@pierre/diffs/react";
+import { Editor, type EditorOptions } from "@pierre/diffs/edit";
 import { useQuery } from "@tanstack/react-query";
-import { FileCode2, X } from "lucide-react";
+import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import {
   type CSSProperties,
   memo,
   type ReactElement,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
-  useEffectEvent,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { errorMessage } from "@/lib/errors";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
-import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import {
+  type TaskExecutionSelectedFile,
+  taskExecutionSelectedFileKey,
+} from "./task-execution-file-explorer-model";
+import { CodeView, EditProvider, useWorkerPool } from "./task-execution-file-preview-pierre";
+import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
 
 export type TaskExecutionSelectedFilePreviewModel = {
   selectedFile: TaskExecutionSelectedFile | null;
   previewSessionKey: number;
   preservePreviousSnapshot: boolean;
+  hasPendingDiscard: boolean;
   onClose: () => void;
+  onLeavePolicyChange(policy: TaskExecutionFilePreviewLeavePolicy): void;
+  onKeepEditing: () => void;
+  onDiscard: () => void;
 };
+
+export type TaskExecutionFilePreviewLeavePolicy = "allow" | "confirm" | "defer";
 
 const CODE_VIEW_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const CODE_VIEW_THEME_BACKGROUND = { dark: "#0a0a0a", light: "#ffffff" } as const;
@@ -52,6 +73,17 @@ const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-scrollbar-gutter-override": "0px",
   "--diffs-tab-size": 2,
 } as CSSProperties;
+
+function EditorAttachmentLifecycle({
+  children,
+  onDetach,
+}: {
+  children: ReactElement;
+  onDetach(): void;
+}): ReactElement {
+  useLayoutEffect(() => onDetach, [onDetach]);
+  return children;
+}
 const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
 [data-column-number],
 [data-gutter-buffer] {
@@ -79,20 +111,16 @@ type CommittedFilePreviewSnapshot = {
   snapshot: FilePreviewSnapshot;
 };
 
-const getContentMetrics = (value: string): { contentHash: string; numberColumnWidth: string } => {
-  let hash = 0x811c9dc5;
+const getContentMetrics = (value: string): { numberColumnWidth: string } => {
   let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
     const characterCode = value.charCodeAt(index);
-    hash ^= characterCode;
-    hash = Math.imul(hash, 0x01000193);
     if (characterCode === 10) {
       lineCount += 1;
     }
   }
   const numberColumnWidth = String(lineCount).length + CODE_VIEW_NUMBER_COLUMN_PADDING;
   return {
-    contentHash: (hash >>> 0).toString(36),
     numberColumnWidth: `${numberColumnWidth}ch`,
   };
 };
@@ -105,7 +133,7 @@ const createFilePreviewSnapshot = (
     return { selectedFile, result, codeViewFile: null };
   }
 
-  const id = `${selectedFile.rootPath}:${selectedFile.relativePath}`;
+  const id = taskExecutionSelectedFileKey(selectedFile);
   const metrics = getContentMetrics(result.contents);
   const language = getFiletypeFromFileName(selectedFile.relativePath);
   return {
@@ -117,7 +145,7 @@ const createFilePreviewSnapshot = (
         name: selectedFile.relativePath,
         contents: result.contents,
         lang: language,
-        cacheKey: `${id}:${result.size}:${metrics.contentHash}`,
+        cacheKey: JSON.stringify([id, result.revision]),
       },
       numberColumnWidth: metrics.numberColumnWidth,
     },
@@ -168,6 +196,216 @@ function FilePreviewState({ message }: { message: string }): ReactElement {
   );
 }
 
+function FileConflictReviewDialog({
+  result,
+  onClose,
+  onAccept,
+}: {
+  result: Extract<WorkspaceTextFileReadResult, { kind: "text" }> | null;
+  onClose: () => void;
+  onAccept: () => void;
+}): ReactElement {
+  return (
+    <Dialog open={result !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Review latest file</DialogTitle>
+          <DialogDescription>
+            This file changed outside OpenDucktor. Review the latest contents below. Your draft
+            stays unchanged.
+          </DialogDescription>
+        </DialogHeader>
+        <section aria-label="Latest file contents">
+          <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted p-3 text-xs text-foreground">
+            {result?.contents}
+          </pre>
+        </section>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Keep current baseline
+          </Button>
+          <Button type="button" onClick={onAccept}>
+            Use latest as baseline
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type FilePreviewSaveState = "unavailable" | "clean" | "dirty" | "saving" | "blocked";
+
+const resolveFilePreviewSaveState = ({
+  hasSession,
+  isSwitchingFiles,
+  isDirty,
+  isSaving,
+  hasStaleConflict,
+}: {
+  hasSession: boolean;
+  isSwitchingFiles: boolean;
+  isDirty: boolean;
+  isSaving: boolean;
+  hasStaleConflict: boolean;
+}): FilePreviewSaveState => {
+  if (!hasSession || isSwitchingFiles) return "unavailable";
+  if (isSaving) return "saving";
+  if (!isDirty) return "clean";
+  if (hasStaleConflict) return "blocked";
+  return "dirty";
+};
+
+function FilePreviewHeader({
+  relativePath,
+  isSwitchingFiles,
+  saveState,
+  onSave,
+  onClose,
+}: {
+  relativePath: string;
+  isSwitchingFiles: boolean;
+  saveState: FilePreviewSaveState;
+  onSave: () => void;
+  onClose: () => void;
+}): ReactElement {
+  const isAvailable = saveState !== "unavailable";
+  const showsUnsavedIndicator = isAvailable && saveState !== "clean";
+  const isSaving = saveState === "saving";
+  const saveLabel = isSaving ? "Saving file" : "Save file";
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+      <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-sm font-medium">{relativePath}</span>
+        {showsUnsavedIndicator ? (
+          <span
+            className="size-2 shrink-0 rounded-full bg-foreground"
+            role="status"
+            aria-label="Unsaved changes"
+            title="Unsaved changes"
+          />
+        ) : null}
+      </div>
+      {isSwitchingFiles ? (
+        <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
+      ) : null}
+      {isAvailable ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          aria-label={saveLabel}
+          aria-busy={isSaving || undefined}
+          title={saveLabel}
+          disabled={saveState !== "dirty"}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onSave}
+        >
+          <Save />
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7 shrink-0"
+        aria-label="Close file preview"
+        onClick={onClose}
+      >
+        <X className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+function FileSaveErrorBanner({
+  message,
+  hasStaleConflict,
+  isReviewingConflict,
+  onReview,
+}: {
+  message: string | null;
+  hasStaleConflict: boolean;
+  isReviewingConflict: boolean;
+  onReview: () => void;
+}): ReactElement | null {
+  if (!message) return null;
+  return (
+    <div
+      className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+      role="alert"
+    >
+      <span className="min-w-0 flex-1">{message}</span>
+      {hasStaleConflict ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isReviewingConflict}
+          onClick={onReview}
+        >
+          {isReviewingConflict ? (
+            <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          ) : null}
+          Review latest version
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function FileDiscardDialog({
+  open,
+  onKeepEditing,
+  onDiscard,
+  onReturnFocus,
+}: {
+  open: boolean;
+  onKeepEditing: () => void;
+  onDiscard: () => void;
+  onReturnFocus: () => void;
+}): ReactElement {
+  const shouldRestoreEditorFocusRef = useRef(false);
+  const keepEditing = (): void => {
+    shouldRestoreEditorFocusRef.current = true;
+    onKeepEditing();
+  };
+  const discard = (): void => {
+    shouldRestoreEditorFocusRef.current = false;
+    onDiscard();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && keepEditing()}>
+      <DialogContent
+        closeButton={null}
+        onCloseAutoFocus={(event) => {
+          if (!shouldRestoreEditorFocusRef.current) return;
+          shouldRestoreEditorFocusRef.current = false;
+          event.preventDefault();
+          onReturnFocus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Discard unsaved changes?</DialogTitle>
+          <DialogDescription>
+            This file has unsaved changes. Keep editing or discard the draft to continue.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={keepEditing}>
+            Keep editing
+          </Button>
+          <Button type="button" variant="destructive" onClick={discard}>
+            Discard
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const resultBelongsToSelectedFile = (
   result: WorkspaceTextFileReadResult | undefined,
   selectedFile: TaskExecutionSelectedFile | null,
@@ -181,13 +419,25 @@ const resultBelongsToSelectedFile = (
 };
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
-  model: { selectedFile, previewSessionKey, preservePreviousSnapshot, onClose },
+  model: {
+    selectedFile,
+    previewSessionKey,
+    preservePreviousSnapshot,
+    hasPendingDiscard,
+    onClose,
+    onLeavePolicyChange,
+    onKeepEditing,
+    onDiscard,
+  },
+  onFileSaved,
 }: {
   model: TaskExecutionSelectedFilePreviewModel;
+  onFileSaved(): void;
 }): ReactElement | null {
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
+  const attachedEditorRef = useRef<Editor<undefined> | null>(null);
   const {
     data: fileData,
     error: fileError,
@@ -214,10 +464,44 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const isCurrentSnapshotReady =
     currentSnapshot !== null && (currentSnapshot.codeViewFile === null || isCurrentHighlightReady);
   const readyCurrentSnapshot = isCurrentSnapshotReady ? currentSnapshot : null;
+  const readyTextResult =
+    readyCurrentSnapshot?.result.kind === "text" ? readyCurrentSnapshot.result : null;
+  const editor = useTaskExecutionFileEditor({
+    selectedFile,
+    readyResult: readyTextResult,
+    onFileSaved,
+    onLeavePolicyChange,
+  });
   const retainedSnapshot =
     committedSnapshot?.sessionKey === previewSessionKey ? committedSnapshot.snapshot : null;
+  const currentEditorSnapshot = useMemo(() => {
+    if (
+      !selectedFile ||
+      !editor.session ||
+      editor.session.id !== taskExecutionSelectedFileKey(selectedFile)
+    ) {
+      return readyCurrentSnapshot;
+    }
+    const mustKeepDraft = editor.isDirty || editor.isSaving;
+    const refreshedFileCannotStayEditable =
+      isFileError || readyCurrentSnapshot?.result.kind === "unsupported";
+    if (!mustKeepDraft && refreshedFileCannotStayEditable) {
+      return readyCurrentSnapshot;
+    }
+    const editorResult = attachedEditorRef.current
+      ? editor.session.source
+      : editor.session.baseline;
+    return createFilePreviewSnapshot(selectedFile, editorResult);
+  }, [
+    editor.isDirty,
+    editor.isSaving,
+    editor.session,
+    isFileError,
+    readyCurrentSnapshot,
+    selectedFile,
+  ]);
   const visibleSnapshot =
-    readyCurrentSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
+    currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
   const isSwitchingFiles =
     selectedFile !== null &&
     visibleSnapshot !== null &&
@@ -258,6 +542,14 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
     codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
+  const handleEditorDetach = useCallback(() => {
+    attachedEditorRef.current = null;
+  }, []);
+  const hasActiveEditorSession =
+    codeViewFileId !== null &&
+    editor.session?.id === codeViewFileId &&
+    !isSwitchingFiles &&
+    (!isFileError || editor.isDirty || editor.isSaving);
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];
@@ -268,10 +560,25 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         id: codeViewFileId,
         type: "file",
         file: visibleSnapshot.codeViewFile.file,
+        edit: hasActiveEditorSession,
+        version: hasActiveEditorSession ? (editor.session?.version ?? 0) + 1 : 0,
       },
     ];
-  }, [codeViewFileId, visibleSnapshot]);
-  const closePreview = useEffectEvent(onClose);
+  }, [codeViewFileId, editor.session, hasActiveEditorSession, visibleSnapshot]);
+  const createEditor = useCallback(
+    (options: EditorOptions<undefined>) => new Editor<undefined>(options),
+    [],
+  );
+  const editorOptions = useMemo<EditorOptions<undefined>>(() => {
+    const clipboard = getShellBridge().editorClipboard;
+    return {
+      ...(clipboard ? { clipboard } : {}),
+      onAttach(attachedEditor) {
+        attachedEditorRef.current = attachedEditor;
+        attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });
+      },
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (!selectedFile) {
@@ -293,29 +600,42 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     }
   }, [currentSnapshot, isCurrentSnapshotReady, previewSessionKey, selectedFile]);
 
-  useEffect(() => {
-    if (!selectedFile) {
-      return undefined;
-    }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) {
+  const handlePreviewShortcut = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      const isSave = event.key.toLowerCase() === "s" && (event.metaKey || event.ctrlKey);
+      if (isSave) {
+        event.preventDefault();
+        if (hasPendingDiscard) return;
+        const canSave =
+          hasActiveEditorSession && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict;
+        if (canSave) {
+          void editor.save();
+        }
+        return;
+      }
+      if (event.key !== "Escape" || event.defaultPrevented || hasPendingDiscard) {
         return;
       }
       event.preventDefault();
-      closePreview();
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [selectedFile]);
+      onClose();
+    },
+    [
+      editor.hasStaleConflict,
+      editor.isDirty,
+      editor.isSaving,
+      editor.save,
+      hasActiveEditorSession,
+      hasPendingDiscard,
+      onClose,
+    ],
+  );
 
   if (!selectedFile) {
     return null;
   }
 
   let body: ReactElement;
-  if (isFileError) {
+  if (isFileError && !hasActiveEditorSession) {
     body = <FilePreviewState message={errorMessage(fileError)} />;
   } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
     body = <FilePreviewState message="Loading file..." />;
@@ -323,40 +643,60 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
   } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
-      <CodeView
-        key={codeViewRenderKey}
-        className={CODE_VIEW_CLASS_NAME}
-        style={codeViewRootStyle}
-        items={codeViewItems}
-        options={codeViewOptions}
-      />
+      <EditorAttachmentLifecycle key={codeViewRenderKey} onDetach={handleEditorDetach}>
+        <EditProvider createEditor={createEditor}>
+          <CodeView
+            className={CODE_VIEW_CLASS_NAME}
+            style={codeViewRootStyle}
+            items={codeViewItems}
+            options={codeViewOptions}
+            editorOptions={editorOptions}
+            onItemEditChange={editor.onItemEditChange}
+          />
+        </EditProvider>
+      </EditorAttachmentLifecycle>
     );
   } else {
     body = <FilePreviewState message="No file selected." />;
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-card" aria-label="Selected file preview">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-        <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1 truncate text-sm font-medium">
-          {visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
-        </div>
-        {isSwitchingFiles ? (
-          <div className="shrink-0 text-xs text-muted-foreground">Loading...</div>
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0"
-          aria-label="Close file preview"
-          onClick={onClose}
-        >
-          <X className="size-3.5" />
-        </Button>
-      </div>
+    <section
+      className="flex h-full min-h-0 flex-col bg-card"
+      aria-label="Selected file preview"
+      onKeyDown={handlePreviewShortcut}
+    >
+      <FilePreviewHeader
+        relativePath={visibleSnapshot?.selectedFile.relativePath ?? selectedFile.relativePath}
+        isSwitchingFiles={isSwitchingFiles}
+        saveState={resolveFilePreviewSaveState({
+          hasSession: hasActiveEditorSession,
+          isSwitchingFiles,
+          isDirty: editor.isDirty,
+          isSaving: editor.isSaving,
+          hasStaleConflict: editor.hasStaleConflict,
+        })}
+        onSave={() => void editor.save()}
+        onClose={onClose}
+      />
+      <FileSaveErrorBanner
+        message={editor.saveError}
+        hasStaleConflict={editor.hasStaleConflict}
+        isReviewingConflict={editor.isReviewingConflict}
+        onReview={() => void editor.reviewLatestVersion()}
+      />
       <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
+      <FileDiscardDialog
+        open={hasPendingDiscard}
+        onKeepEditing={onKeepEditing}
+        onDiscard={onDiscard}
+        onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}
+      />
+      <FileConflictReviewDialog
+        result={editor.conflictReview}
+        onClose={editor.closeConflictReview}
+        onAccept={editor.acceptLatestBaseline}
+      />
     </section>
   );
 });

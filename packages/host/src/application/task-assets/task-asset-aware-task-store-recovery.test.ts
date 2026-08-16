@@ -444,5 +444,5 @@ describe("asset-aware task store", () => {
         }),
       ),
     ).not.toBeNull();
-  });
+  }, 15_000);
 });

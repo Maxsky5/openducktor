@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
-import { HostTerminalClientError } from "@openducktor/host-client";
+import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
@@ -94,6 +94,9 @@ const createElectronApi = (): {
       },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
+      editorClipboard: {
+        readText: mock((type?: string) => (type ? `typed:${type}` : "plain")),
+      },
       taskStream: {
         subscribe: mock(async () => ({
           acknowledge: mock(async () => {}),
@@ -162,6 +165,10 @@ describe("electron shell bridge", () => {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
     });
+    expect(await bridge.editorClipboard?.readText()).toBe("plain");
+    expect(
+      await bridge.editorClipboard?.readText("application/vnd.pierre.diffs-selections+json"),
+    ).toBe("typed:application/vnd.pierre.diffs-selections+json");
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://run-event", listener);
     expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://dev-server-event", listener);
     expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
@@ -395,6 +402,48 @@ describe("electron shell bridge", () => {
     expect(result.error).toMatchObject({
       code: "unsupported_runtime",
       message: "Interactive terminals are unavailable in this runtime.",
+    });
+  });
+
+  test("preserves workspace write failures in the renderer realm", async () => {
+    const { electronApi } = createElectronApi();
+    electronApi.invoke = mock(async () => ({
+      ok: false,
+      error: {
+        message: "The file changed after it was loaded.",
+        failure: {
+          kind: "workspace_text_file_write",
+          workspaceTextFileWriteFailure: {
+            code: "stale_revision",
+            message: "The file changed after it was loaded.",
+            rootPath: "/repo",
+            relativePath: "src/file.ts",
+          },
+        },
+      },
+    }));
+    setElectronApi(electronApi);
+
+    const result = await createElectronShellBridge()
+      .client.filesystemWriteTextFile({
+        rootPath: "/repo",
+        relativePath: "src/file.ts",
+        contents: "draft",
+        revision: "sha256:old",
+      })
+      .then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected filesystemWriteTextFile to reject.");
+    expect(result.error).toBeInstanceOf(HostInvokeError);
+    expect(result.error).toMatchObject({
+      failure: {
+        kind: "workspace_text_file_write",
+        workspaceTextFileWriteFailure: { code: "stale_revision" },
+      },
     });
   });
 });

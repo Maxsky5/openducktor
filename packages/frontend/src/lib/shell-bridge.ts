@@ -75,6 +75,9 @@ export type ShellBridge = HostBridge & {
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
   resolveTaskAssetSrc: (context: TaskAssetRenderContext) => Promise<string>;
   terminals: TerminalBridge;
+  editorClipboard?: {
+    readText(type?: string): Promise<string> | string;
+  };
 };
 
 const DEFAULT_UNAVAILABLE_MESSAGE =

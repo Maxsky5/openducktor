@@ -20,6 +20,7 @@ export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
+export const ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL = "openducktor:editor-clipboard:read";
 export const ELECTRON_APP_UPDATE_GET_STATE_CHANNEL = "openducktor:app-update:get-state";
 export const ELECTRON_APP_UPDATE_CHECK_CHANNEL = "openducktor:app-update:check";
 export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:download";
@@ -28,6 +29,9 @@ export const ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL = "openducktor:app-update
 export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
   "OpenDucktor is shutting down. The requested command was not run.";
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
+export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
+  "application/vnd.pierre.diffs-selections+json" as const;
+export type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
 export const ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL = "openducktor:task-stream:subscribe";
@@ -140,4 +144,7 @@ export type OpenDucktorElectronApi = {
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
+  editorClipboard: {
+    readText(type?: EditorClipboardReadType): Promise<string>;
+  };
 };

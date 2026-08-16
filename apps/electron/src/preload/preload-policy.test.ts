@@ -16,4 +16,14 @@ describe("Electron preload policy", () => {
     expect(source).toContain("return;");
     expect(source).toContain("listener(parsedState.data)");
   });
+
+  test("routes PierreDiffs clipboard reads through main-process IPC", () => {
+    const source = readPreloadSource();
+
+    expect(source).toContain("const { contextBridge, ipcRenderer } = electron");
+    expect(source).toContain(
+      "return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type)",
+    );
+    expect(source).not.toContain("clipboard.readText");
+  });
 });

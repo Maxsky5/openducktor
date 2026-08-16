@@ -167,7 +167,7 @@ export function useAgentStudioRightPanelBridge({
   const isRightPanelVisible = Boolean(activeTabId && isPanelOpen);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
-    if (!isRightPanelVisible || !activeTabId) {
+    if (!activeTabId) {
       return null;
     }
 
@@ -199,7 +199,6 @@ export function useAgentStudioRightPanelBridge({
     documentsModel,
     activeTabId,
     isPanelOpen,
-    isRightPanelVisible,
     onClearSelectedFile,
     onDetectPullRequest,
     onSelectFile,

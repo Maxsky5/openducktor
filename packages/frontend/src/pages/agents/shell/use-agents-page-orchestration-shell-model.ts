@@ -102,6 +102,7 @@ export function useAgentsPageOrchestrationShellModel({
     githubIntegrationEnabled,
     workspaceRepoPath,
     selection: orchestrationSelection,
+    taskExecutionFilePreview: routeSession.taskExecutionFilePreview,
     hasActiveGitConflict,
     composer,
     actions: {

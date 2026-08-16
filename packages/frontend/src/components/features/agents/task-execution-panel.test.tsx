@@ -5,9 +5,9 @@ import type {
   PullRequestReviewContext,
   WorkspaceFileTree,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -317,6 +317,18 @@ const renderPanel = (model: TaskExecutionPanelModel): string =>
       createElement(ThemeProvider, null, createElement(TaskExecutionPanel, { model })),
     ),
   );
+
+function SeedQueryData({
+  children,
+  queryKey,
+  data,
+}: PropsWithChildren<{ queryKey: readonly unknown[]; data: unknown }>) {
+  const queryClient = useQueryClient();
+  if (queryClient.getQueryData(queryKey) === undefined) {
+    queryClient.setQueryData(queryKey, data);
+  }
+  return children;
+}
 
 const renderPanelWithFileTreeData = (
   model: TaskExecutionPanelModel,
@@ -775,6 +787,60 @@ describe("TaskExecutionPanel", () => {
       rootPath: fileTree.rootPath,
       relativePath: "src/index.ts",
     });
+  });
+
+  test("restores the controlled file selection when a requested switch is rejected", async () => {
+    const onSelectFile = mock((): false => false);
+    const rootPath = "/repo/.worktrees/task-12";
+    const fileTree: WorkspaceFileTree = {
+      rootPath,
+      entries: [
+        { kind: "file", path: "src/first.ts", size: 24, mtimeMs: 1, gitStatus: null },
+        { kind: "file", path: "src/second.ts", size: 24, mtimeMs: 1, gitStatus: null },
+      ],
+    };
+    render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(
+          SeedQueryData,
+          { queryKey: filesystemQueryKeys.tree(rootPath, "origin/main"), data: fileTree },
+          createElement(
+            ThemeProvider,
+            null,
+            createElement(TaskExecutionPanel, {
+              model: {
+                ...basePanelModel,
+                tabs: [
+                  { id: "git", label: "Git" },
+                  { id: "file_explorer", label: "File explorer" },
+                ],
+                activeTabId: "file_explorer",
+                documentModel: null,
+                fileExplorerModel: {
+                  rootPath,
+                  targetBranch: "origin/main",
+                  unavailableReason: null,
+                  isActive: true,
+                  selectedFile: { rootPath, relativePath: "src/first.ts" },
+                  onSelectFile,
+                  onClearSelectedFile: () => {},
+                },
+                ciChecksModel: null,
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+
+    await waitFor(() => expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]));
+    fileTreeSelectedPaths = ["src/second.ts"];
+    act(() => fileTreeSubscriber?.());
+
+    expect(onSelectFile).toHaveBeenCalledWith({ rootPath, relativePath: "src/second.ts" });
+    expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]);
   });
 
   test("clears a selected preview when the canonical file tree root changes", async () => {

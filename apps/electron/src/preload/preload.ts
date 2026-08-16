@@ -10,6 +10,7 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
+  ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
@@ -118,6 +119,11 @@ const electronApi: OpenDucktorElectronApi = {
   },
   terminals,
   taskStream,
+  editorClipboard: {
+    readText(type) {
+      return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld("openducktorElectron", electronApi);
