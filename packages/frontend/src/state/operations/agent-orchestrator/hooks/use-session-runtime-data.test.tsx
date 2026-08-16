@@ -350,7 +350,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeDataWithQueryClient,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -413,7 +413,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeDataWithQueryClient,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -459,7 +459,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -504,7 +504,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState({ runtimeKind: "codex" }),
+        selectedSession: sessionTarget(sessionState({ runtimeKind: "codex" })),
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
         repoReadinessState: "ready",
         loadRuntimeCatalog,
