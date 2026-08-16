@@ -85,6 +85,11 @@ describe("build tools", () => {
     expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
     expect(splash?.children).toContain('<div class="odt-startup__orbit" aria-hidden="true">');
     expect(splash?.children).toContain('<div class="odt-startup__particles" aria-hidden="true">');
+    expect(
+      splash?.children?.match(/class="odt-startup__particle odt-startup__particle--/g),
+    ).toHaveLength(18);
+    expect(splash?.children).toContain("odt-startup__particle--ring");
+    expect(splash?.children).toContain("odt-startup__particle--spark");
     expect(splash?.children).not.toContain("odt-startup__launch-panel");
     expect(splash?.children).toContain("./favicon.svg");
   });

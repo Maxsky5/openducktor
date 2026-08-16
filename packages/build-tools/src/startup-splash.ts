@@ -53,46 +53,35 @@ body {
   pointer-events: none;
 }
 
-.odt-startup__particle-layer {
+.odt-startup__particle {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2px;
-  height: 2px;
-  border-radius: 1px;
-  background: transparent;
+  top: var(--top);
+  left: var(--left);
+  width: var(--size);
+  height: var(--size);
+  box-sizing: border-box;
+  opacity: var(--opacity);
+  animation: odt-startup-particle-drift var(--duration) ease-in-out var(--delay) infinite alternate;
+  will-change: transform;
 }
 
-.odt-startup__particle-layer--far {
-  box-shadow:
-    -43vw -40vh 0 rgba(81, 0, 255, 0.14),
-    -27vw -25vh 0 rgba(81, 0, 255, 0.09),
-    -45vw 3vh 0 rgba(81, 0, 255, 0.11),
-    -35vw 32vh 0 rgba(81, 0, 255, 0.08),
-    -12vw 41vh 0 rgba(81, 0, 255, 0.12),
-    15vw -42vh 0 rgba(81, 0, 255, 0.1),
-    41vw -30vh 0 rgba(81, 0, 255, 0.13),
-    34vw -9vh 0 rgba(81, 0, 255, 0.08),
-    44vw 17vh 0 rgba(81, 0, 255, 0.11),
-    25vw 39vh 0 rgba(81, 0, 255, 0.09),
-    7vw 31vh 0 rgba(81, 0, 255, 0.07);
-  animation: odt-startup-particles-far 14s ease-in-out infinite alternate;
+.odt-startup__particle--dot {
+  border-radius: 50%;
+  background: var(--odt-startup-primary);
 }
 
-.odt-startup__particle-layer--near {
-  width: 3px;
-  height: 3px;
-  border-radius: 1px;
-  box-shadow:
-    -37vw -31vh 0 rgba(81, 0, 255, 0.18),
-    -43vw 22vh 0 rgba(81, 0, 255, 0.14),
-    -20vw 38vh 0 rgba(81, 0, 255, 0.11),
-    -8vw -39vh 0 rgba(81, 0, 255, 0.13),
-    28vw -35vh 0 rgba(81, 0, 255, 0.16),
-    43vw -2vh 0 rgba(81, 0, 255, 0.12),
-    38vw 31vh 0 rgba(81, 0, 255, 0.15),
-    12vw 43vh 0 rgba(81, 0, 255, 0.1);
-  animation: odt-startup-particles-near 10s ease-in-out infinite alternate;
+.odt-startup__particle--ring {
+  border: 1.5px solid var(--odt-startup-primary);
+  border-radius: 50%;
+}
+
+.odt-startup__particle--spark::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.5px;
+  background: var(--odt-startup-primary);
+  content: "";
+  transform: rotate(45deg);
 }
 
 .odt-startup__content {
@@ -262,6 +251,7 @@ body {
 .odt-startup--failed .odt-startup__field,
 .odt-startup--failed .odt-startup__orbit,
 .odt-startup--failed .odt-startup__orbit-node,
+.odt-startup--failed .odt-startup__particle,
 .odt-startup--failed .odt-startup__mark {
   animation: none;
 }
@@ -337,27 +327,15 @@ body {
   }
 }
 
-@keyframes odt-startup-particles-far {
+@keyframes odt-startup-particle-drift {
   from {
-    opacity: 0.55;
-    transform: translate3d(-0.35rem, 0.25rem, 0);
+    opacity: calc(var(--opacity) * 0.72);
+    transform: translate3d(0, 0, 0) scale(0.92);
   }
 
   to {
-    opacity: 0.9;
-    transform: translate3d(0.5rem, -0.45rem, 0);
-  }
-}
-
-@keyframes odt-startup-particles-near {
-  from {
-    opacity: 0.65;
-    transform: translate3d(0.45rem, -0.3rem, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(-0.55rem, 0.65rem, 0);
+    opacity: var(--opacity);
+    transform: translate3d(var(--drift-x), var(--drift-y), 0) scale(1.08);
   }
 }
 
@@ -369,9 +347,14 @@ body {
   .odt-startup__field,
   .odt-startup__orbit,
   .odt-startup__orbit-node,
-  .odt-startup__particle-layer,
+  .odt-startup__particle,
   .odt-startup__mark {
     animation: none;
+  }
+
+  .odt-startup__particle {
+    opacity: var(--opacity);
+    will-change: auto;
   }
 
   .odt-startup__pulse {
@@ -396,8 +379,24 @@ body {
 
 const STARTUP_SPLASH_MARKUP = `
 <div class="odt-startup__particles" aria-hidden="true">
-  <span class="odt-startup__particle-layer odt-startup__particle-layer--far"></span>
-  <span class="odt-startup__particle-layer odt-startup__particle-layer--near"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 9%; --left: 8%; --size: 6px; --opacity: 0.34; --drift-x: 18px; --drift-y: -10px; --duration: 12s; --delay: -4s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 17%; --left: 23%; --size: 13px; --opacity: 0.24; --drift-x: -12px; --drift-y: 17px; --duration: 15s; --delay: -8s"></span>
+  <span class="odt-startup__particle odt-startup__particle--spark" style="--top: 8%; --left: 62%; --size: 7px; --opacity: 0.3; --drift-x: 14px; --drift-y: 13px; --duration: 11s; --delay: -6s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 14%; --left: 86%; --size: 5px; --opacity: 0.28; --drift-x: -19px; --drift-y: 9px; --duration: 14s; --delay: -2s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 32%; --left: 6%; --size: 10px; --opacity: 0.2; --drift-x: 15px; --drift-y: 14px; --duration: 13s; --delay: -9s"></span>
+  <span class="odt-startup__particle odt-startup__particle--spark" style="--top: 42%; --left: 18%; --size: 6px; --opacity: 0.26; --drift-x: -10px; --drift-y: -16px; --duration: 10s; --delay: -5s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 35%; --left: 78%; --size: 7px; --opacity: 0.3; --drift-x: 12px; --drift-y: -14px; --duration: 16s; --delay: -11s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 43%; --left: 92%; --size: 14px; --opacity: 0.22; --drift-x: -17px; --drift-y: 11px; --duration: 15s; --delay: -3s"></span>
+  <span class="odt-startup__particle odt-startup__particle--spark" style="--top: 59%; --left: 7%; --size: 8px; --opacity: 0.32; --drift-x: 13px; --drift-y: 15px; --duration: 12s; --delay: -7s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 64%; --left: 24%; --size: 5px; --opacity: 0.25; --drift-x: -15px; --drift-y: 10px; --duration: 14s; --delay: -10s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 61%; --left: 82%; --size: 11px; --opacity: 0.26; --drift-x: 10px; --drift-y: -13px; --duration: 11s; --delay: -1s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 72%; --left: 94%; --size: 6px; --opacity: 0.32; --drift-x: -18px; --drift-y: -9px; --duration: 13s; --delay: -6s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 84%; --left: 9%; --size: 7px; --opacity: 0.29; --drift-x: 16px; --drift-y: -12px; --duration: 15s; --delay: -12s"></span>
+  <span class="odt-startup__particle odt-startup__particle--spark" style="--top: 89%; --left: 31%; --size: 6px; --opacity: 0.24; --drift-x: -11px; --drift-y: -15px; --duration: 10s; --delay: -4s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 82%; --left: 57%; --size: 15px; --opacity: 0.2; --drift-x: 14px; --drift-y: 10px; --duration: 16s; --delay: -9s"></span>
+  <span class="odt-startup__particle odt-startup__particle--spark" style="--top: 88%; --left: 87%; --size: 8px; --opacity: 0.28; --drift-x: -13px; --drift-y: 12px; --duration: 12s; --delay: -5s"></span>
+  <span class="odt-startup__particle odt-startup__particle--ring" style="--top: 24%; --left: 46%; --size: 9px; --opacity: 0.18; --drift-x: 12px; --drift-y: -14px; --duration: 14s; --delay: -7s"></span>
+  <span class="odt-startup__particle odt-startup__particle--dot" style="--top: 76%; --left: 69%; --size: 5px; --opacity: 0.27; --drift-x: -14px; --drift-y: 13px; --duration: 11s; --delay: -3s"></span>
 </div>
 <div class="odt-startup__content">
   <div class="odt-startup__stage">
