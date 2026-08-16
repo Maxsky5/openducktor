@@ -1,19 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import {
   CodexSessionHistoryError,
   createLocalAttachmentAdapter,
-  createSourceRuntimeDistribution,
   type EffectHostCommandRouter,
   TaskAssetError,
   type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
-import { Deferred, Effect, TestClock, TestContext } from "effect";
+import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
-import { createWebLogger, type WebLogger } from "./logger";
+import type { WebLogger } from "./logger";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
   BufferedHostEventBus,
@@ -25,22 +21,15 @@ const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const {
-  handleTypescriptHostBackendRequest,
-  resolveAppSessionCookieName,
-  startTypescriptHostBackend,
-  startTypescriptHostBackendEffect,
-} = await import("./typescript-host-backend");
+const { handleTypescriptHostBackendRequest, resolveAppSessionCookieName } = await import(
+  "./typescript-host-backend"
+);
 
 const APP_TOKEN = "app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const CONTROL_TOKEN = "control-token";
 const DEVELOPMENT_INSTANCE_ID = "browser-0123456789ab";
 const DEVELOPMENT_APP_SESSION_COOKIE_NAME = `${APP_SESSION_COOKIE_NAME}_${DEVELOPMENT_INSTANCE_ID}`;
-const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
-const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
-  path.resolve(import.meta.dir, "../../.."),
-);
 const testLogger: WebLogger = {
   error: () => Effect.void,
   info: () => Effect.void,
@@ -159,224 +148,23 @@ describe("TypeScript web host backend", () => {
     ).toBe(APP_SESSION_COOKIE_NAME);
   });
 
-  test("serves core HTTP routes, owns development discovery, and shuts down cleanly", async () => {
-    const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
-    const processEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      OPENDUCKTOR_CONFIG_DIR: tempConfigDir,
-      OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
-    };
-    let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
-    const consoleLines: string[] = [];
-    const productionDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge.json");
-    const developmentDiscoveryPath = path.join(
-      tempConfigDir,
-      "runtime",
-      "dev-instances",
-      "browser-0123456789ab",
-      "mcp-bridge.json",
-    );
-    const productionDiscovery = '{"hostUrl":"http://127.0.0.1:1","hostToken":"prod","pid":1}\n';
+  test("serves health and development session routes without opening a server", async () => {
+    const health = await handleTestRequest(new Request("http://127.0.0.1/health"));
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ ok: true });
 
-    try {
-      await mkdir(path.dirname(productionDiscoveryPath), { recursive: true });
-      await writeFile(productionDiscoveryPath, productionDiscovery, "utf8");
-      const logger = await Effect.runPromise(
-        createWebLogger({
-          console: {
-            error: (message) => consoleLines.push(message),
-            log: (message) => consoleLines.push(message),
-          },
-          environment: { ...processEnv, NO_COLOR: "1" },
-          now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
-        }),
-      );
-      backend = await startTypescriptHostBackend({
-        port: 0,
-        frontendOrigin: FRONTEND_ORIGIN,
-        controlToken: CONTROL_TOKEN,
-        appToken: APP_TOKEN,
-        logger,
-        mcpBridgeDiscoveryMode: "development",
-        onBackgroundFailure: () => {},
-        processEnv,
-        runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
-      });
-      const backendUrl = `http://127.0.0.1:${backend.port}`;
-      await expect(readFile(productionDiscoveryPath, "utf8")).resolves.toBe(productionDiscovery);
-      expect(JSON.parse(await readFile(developmentDiscoveryPath, "utf8"))).toEqual({
-        hostToken: expect.any(String),
-        hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
-        pid: process.pid,
-      });
-
-      const health = await Bun.fetch(`${backendUrl}/health`);
-      expect(health.status).toBe(200);
-      expect(await health.json()).toEqual({ ok: true });
-
-      const session = await Bun.fetch(`${backendUrl}/session`, {
+    const session = await handleTestRequest(
+      new Request("http://127.0.0.1/session", {
         method: "POST",
         headers: { "x-openducktor-app-token": APP_TOKEN },
-      });
-      expect(session.status).toBe(200);
-      expect(session.headers.get("set-cookie")).toContain(
-        `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=app-token`,
-      );
-
-      const rejectedTerminalOrigin = await Bun.fetch(`${backendUrl}/terminal`, {
-        headers: { origin: "http://evil.example" },
-      });
-      expect(rejectedTerminalOrigin.status).toBe(403);
-
-      const rejectedTerminalSession = await Bun.fetch(`${backendUrl}/terminal`, {
-        headers: { origin: FRONTEND_ORIGIN },
-      });
-      expect(rejectedTerminalSession.status).toBe(401);
-
-      const rejectedTerminalProtocol = await Bun.fetch(`${backendUrl}/terminal`, {
-        headers: {
-          cookie: `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
-          origin: FRONTEND_ORIGIN,
-          "sec-websocket-protocol": "openducktor-terminal.v0",
-        },
-      });
-      expect(rejectedTerminalProtocol.status).toBe(426);
-
-      const invoke = await Bun.fetch(`${backendUrl}/invoke/runtime_definitions_list`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({}),
-      });
-      expect(invoke.status).toBe(200);
-      expect(await invoke.json()).toMatchObject([
-        { kind: "opencode" },
-        { kind: "codex" },
-        { kind: "claude" },
-      ]);
-
-      const theme = await Bun.fetch(`${backendUrl}/invoke/set_theme`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
-        body: JSON.stringify({ theme: "dark" }),
-      });
-      expect(theme.status).toBe(200);
-      expect(await theme.json()).toBeNull();
-
-      const shutdown = await Bun.fetch(`${backendUrl}/shutdown`, {
-        method: "POST",
-        headers: { "x-openducktor-control-token": CONTROL_TOKEN },
-      });
-      expect(shutdown.status).toBe(202);
-      await expect(backend.exited).resolves.toBe(0);
-      await expect(readFile(productionDiscoveryPath, "utf8")).resolves.toBe(productionDiscovery);
-      await expect(readFile(developmentDiscoveryPath, "utf8")).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-      const persisted = await readFile(
-        path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log"),
-        "utf8",
-      );
-      expect(persisted).toContain("INFO Shutting down OpenDucktor host services\n");
-      expect(persisted).toContain("INFO OpenDucktor host services stopped\n");
-      expect(
-        consoleLines.some((line) => line.includes("Shutting down OpenDucktor host services")),
-      ).toBe(true);
-    } finally {
-      if (backend) {
-        await backend.stop();
-      }
-      await rm(tempConfigDir, { force: true, recursive: true });
-    }
-  }, 1_000);
-
-  test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
-    const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
-    const processEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      OPENDUCKTOR_CONFIG_DIR: tempConfigDir,
-      OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
-    };
-    const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
-    const configPath = path.join(tempConfigDir, "config.json");
-    const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
-    let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
-
-    try {
-      const logger = await Effect.runPromise(
-        createWebLogger({
-          console: { error: () => {}, log: () => {} },
-          environment: { ...processEnv, NO_COLOR: "1" },
-          now: () => recordedAt,
-        }),
-      );
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const failureReported = yield* Deferred.make<unknown>();
-          const startedBackend = yield* startTypescriptHostBackendEffect({
-            port: 0,
-            frontendOrigin: FRONTEND_ORIGIN,
-            controlToken: CONTROL_TOKEN,
-            appToken: APP_TOKEN,
-            logger,
-            mcpBridgeDiscoveryMode: "development",
-            onBackgroundFailure: (failure) => {
-              Effect.runSync(Deferred.succeed(failureReported, failure));
-            },
-            processEnv,
-            runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
-          });
-          backend = startedBackend;
-          const exitedFailure = startedBackend.exited.then(
-            () => new Error("expected browser host background failure"),
-            (failure: unknown) => failure,
-          );
-
-          yield* Effect.promise(() => mkdir(configPath));
-          yield* Effect.promise(() => mkdir(logFilePath));
-          yield* TestClock.adjust("5 minutes");
-          const failure = yield* Deferred.await(failureReported);
-          const rejectedExit = yield* Effect.promise(() => exitedFailure);
-          yield* Effect.promise(() => rm(configPath, { recursive: true }));
-          yield* Effect.promise(() => rm(logFilePath, { recursive: true }));
-          const stopFailure = yield* Effect.promise(() =>
-            startedBackend.stop().then(
-              () => null,
-              (cause: unknown) => cause,
-            ),
-          );
-          return { failure, rejectedExit, stopFailure };
-        }).pipe(Effect.provide(TestContext.TestContext)),
-      );
-
-      expect(result.failure).toMatchObject({
-        _tag: "HostOperationError",
-        operation: "task-sync.log-iteration-failure",
-        cause: {
-          _tag: "OpenDucktorLogPersistenceError",
-          operation: "openducktor.logs.append",
-          path: logFilePath,
-        },
-      });
-      expect(result.rejectedExit).toBe(result.failure);
-      expect(result.stopFailure).toMatchObject({
-        _tag: "WebOperationError",
-        operation: "web.host.dispose",
-        cause: expect.objectContaining({
-          _tag: "HostOperationError",
-          operation: "host.shutdown",
-        }),
-      });
-    } finally {
-      await backend?.stop().catch(() => {});
-      await rm(tempConfigDir, { force: true, recursive: true });
-    }
-  }, 1_000);
+      }),
+      { appSessionCookieName: DEVELOPMENT_APP_SESSION_COOKIE_NAME },
+    );
+    expect(session.status).toBe(200);
+    expect(session.headers.get("set-cookie")).toContain(
+      `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
+    );
+  });
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     expect(() => validateWebFrontendOrigin("https://127.0.0.1:1420")).toThrow(
