@@ -273,6 +273,7 @@ export const useSettingsModalController = ({
   const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
     runtimeDefinitions,
     snapshotDraft,
+    checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
     ...(runtimeExecutableValidation.results.length > 0
       ? { runtimeExecutableResults: runtimeExecutableValidation.results }
       : {}),

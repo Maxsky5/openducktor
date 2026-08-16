@@ -281,51 +281,71 @@ describe("useSettingsModalController", () => {
 
   test("does not report runtime errors before initial executable validation completes", async () => {
     const originalCheck = host.runtimeExecutablesCheck;
-    const initialValidation = createDeferred<RuntimeExecutableCheck>();
-    const validationResult: RuntimeExecutableCheck = {
-      runtimes: [
-        {
-          kind: "opencode",
-          path: "/tools/opencode",
-          ok: true,
-          version: "1.0.0",
-          error: null,
+    settingsSnapshotFactory = () => {
+      const snapshot = createSettingsSnapshot();
+      return {
+        ...snapshot,
+        agentRuntimes: {
+          ...snapshot.agentRuntimes,
+          codex: {
+            ...snapshot.agentRuntimes.codex,
+            enabled: true,
+            executablePath: "/tools/codex",
+          },
         },
-        {
-          kind: "codex",
-          path: "",
-          ok: false,
-          version: null,
-          error: "Executable path is empty.",
-        },
-        {
-          kind: "claude",
-          path: "",
-          ok: false,
-          version: null,
-          error: "Executable path is empty.",
-        },
-      ],
+      };
     };
-    host.runtimeExecutablesCheck = mock(async () => initialValidation.promise);
+    const codexValidation = createDeferred<RuntimeExecutableCheck>();
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") throw new Error("Expected runtime validation");
+      const kind = knownRuntimeKindValues.find((candidate) =>
+        Object.hasOwn(input.paths, candidate),
+      );
+      if (!kind) throw new Error("Runtime validation kind is missing");
+      if (kind === "codex") return codexValidation.promise;
+      const path = input.paths[kind] ?? "";
+      return {
+        runtimes: [
+          {
+            kind,
+            path,
+            ok: kind === "opencode",
+            version: kind === "opencode" ? "1.0.0" : null,
+            error: kind === "opencode" ? null : "Executable path is empty.",
+          },
+        ],
+      };
+    });
     const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
 
     try {
       await harness.mount();
       await harness.waitFor(
-        (state) => state.snapshotDraft !== null && state.isLoadingRuntimeExecutables,
+        (state) =>
+          state.isLoadingRuntimeExecutables &&
+          state.runtimeExecutableValidation.results.some(({ kind }) => kind === "opencode"),
       );
 
       expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
       expect(harness.getLatest().settingsSectionErrorCountById.runtimes).toBe(0);
 
       await harness.run(() => {
-        initialValidation.resolve(validationResult);
+        codexValidation.resolve({
+          runtimes: [
+            {
+              kind: "codex",
+              path: "/tools/codex",
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        });
       });
       await harness.waitFor((state) => !state.isLoadingRuntimeExecutables);
       expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
     } finally {
-      initialValidation.resolve(validationResult);
+      codexValidation.resolve({ runtimes: [] });
       host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }

@@ -62,10 +62,12 @@ export const buildRuntimeAvailabilityValidationState = ({
   runtimeDefinitions,
   snapshotDraft,
   runtimeExecutableResults,
+  checkingRuntimeKinds = [],
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot;
   runtimeExecutableResults?: RuntimeExecutableValidationResult[];
+  checkingRuntimeKinds?: readonly RuntimeKind[];
 }): RuntimeAvailabilityValidationState => {
   if (runtimeDefinitions.length === 0) {
     return EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE;
@@ -92,6 +94,7 @@ export const buildRuntimeAvailabilityValidationState = ({
     workspaceErrorCount += errors.length;
   }
 
+  const checkingRuntimeKindSet = new Set(checkingRuntimeKinds);
   const runtimeExecutableErrors = runtimeExecutableResults
     ? runtimeDefinitions.flatMap((definition) => {
         if (!snapshotDraft.agentRuntimes[definition.kind].enabled) return [];
@@ -100,6 +103,7 @@ export const buildRuntimeAvailabilityValidationState = ({
           snapshotDraft.agentRuntimes[definition.kind].executablePath,
           runtimeExecutableResults,
         );
+        if (!result && checkingRuntimeKindSet.has(definition.kind)) return [];
         if (result?.ok) return [];
         return [result?.error ?? `${definition.label} needs a valid executable path.`];
       })
@@ -116,10 +120,12 @@ export const useSettingsModalRuntimeValidation = ({
   runtimeDefinitions,
   snapshotDraft,
   runtimeExecutableResults,
+  checkingRuntimeKinds,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   snapshotDraft: SettingsSnapshot | null;
   runtimeExecutableResults?: RuntimeExecutableValidationResult[];
+  checkingRuntimeKinds?: readonly RuntimeKind[];
 }): RuntimeAvailabilityValidationState => {
   return useMemo(() => {
     if (!snapshotDraft) {
@@ -129,6 +135,7 @@ export const useSettingsModalRuntimeValidation = ({
       runtimeDefinitions,
       snapshotDraft,
       ...(runtimeExecutableResults ? { runtimeExecutableResults } : {}),
+      ...(checkingRuntimeKinds ? { checkingRuntimeKinds } : {}),
     });
-  }, [runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
+  }, [checkingRuntimeKinds, runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
 };
