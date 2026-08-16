@@ -82,9 +82,11 @@ export const useTerminals = (
   {
     scope,
     isScopeLoading = false,
+    mountedScopeKeys,
   }: {
     scope: TerminalScope | null;
     isScopeLoading?: boolean;
+    mountedScopeKeys?: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): TerminalPanelModel => {
@@ -135,15 +137,16 @@ export const useTerminals = (
     const closingTabIdSet = new Set(visibleState.closingTabIds);
     return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
   }, [visibleState.closingTabIds, visibleState.tabs]);
-  const mountedTabs = useMemo(
-    () =>
-      visibleState.tabs.toSorted((left, right) => {
+  const mountedTabs = useMemo(() => {
+    const scopeKeys = mountedScopeKeys ?? (scopeKey ? [scopeKey] : []);
+    return scopeKeys
+      .flatMap((mountedScopeKey) => presentation.scopes[mountedScopeKey]?.tabs ?? [])
+      .toSorted((left, right) => {
         const leftCreatedAt = left.summary?.createdAt ?? `~${left.tabId}`;
         const rightCreatedAt = right.summary?.createdAt ?? `~${right.tabId}`;
         return leftCreatedAt.localeCompare(rightCreatedAt);
-      }),
-    [visibleState.tabs],
-  );
+      });
+  }, [mountedScopeKeys, presentation.scopes, scopeKey]);
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
     : visibleTabs.length > 0;

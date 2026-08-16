@@ -485,6 +485,51 @@ describe("useAgentStudioTerminals", () => {
     }
   }, 5_000);
 
+  test("keeps terminal viewports mounted only for open task tabs", async () => {
+    const dependencies = createTerminalTestDependencies();
+    type HookResult = ReturnType<typeof useAgentStudioTerminals>;
+    let latest: HookResult | null = null;
+    const getLatest = (): HookResult => {
+      if (!latest) throw new Error("Terminal hook result is not ready.");
+      return latest;
+    };
+    const ScopeHarness = ({
+      taskId,
+      mountedTaskIds,
+    }: {
+      taskId: string;
+      mountedTaskIds: string[];
+    }) => {
+      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId, mountedTaskIds }, dependencies);
+      return null;
+    };
+    const renderHarness = (taskId: string, mountedTaskIds: string[]) => (
+      <QueryProvider useIsolatedClient>
+        <ScopeHarness taskId={taskId} mountedTaskIds={mountedTaskIds} />
+      </QueryProvider>
+    );
+    const view = render(renderHarness("task-a", ["task-a", "task-b"]));
+
+    try {
+      await waitFor(() =>
+        expect(getLatest().mountedTabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-a"]),
+      );
+
+      view.rerender(renderHarness("task-b", ["task-a", "task-b"]));
+      await waitFor(() =>
+        expect(getLatest().mountedTabs.map((tab) => tab.terminalId)).toEqual([
+          "terminal-task-a",
+          "terminal-task-b",
+        ]),
+      );
+
+      view.rerender(renderHarness("task-b", ["task-b"]));
+      expect(getLatest().mountedTabs.map((tab) => tab.terminalId)).toEqual(["terminal-task-b"]);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("keeps one terminal transport while switching task scopes", async () => {
     const baseDependencies = createTerminalTestDependencies();
     let connectCalls = 0;

@@ -21,15 +21,19 @@ const defaultDependencies = (): AgentStudioTerminalDependencies => ({
 const legacyPreferenceKey = (repoPath: string, taskId: string): string =>
   `openducktor:agent-studio-terminals:${repoPath}:${taskId}`;
 
+const terminalScopeKey = (repoPath: string, taskId: string): string => `${repoPath}:${taskId}`;
+
 export const useAgentStudioTerminals = (
   {
     repoPath,
     taskId,
     taskVersion,
+    mountedTaskIds,
   }: {
     repoPath: string | null;
     taskId: string | null;
     taskVersion?: string | null;
+    mountedTaskIds?: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): AgentStudioTerminalPanelModel => {
@@ -55,17 +59,25 @@ export const useAgentStudioTerminals = (
     if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
   }, [repoPath, taskId]);
 
+  const mountedScopeKeys = useMemo(() => {
+    if (!repoPath) return [];
+    if (mountedTaskIds) {
+      return mountedTaskIds.map((mountedTaskId) => terminalScopeKey(repoPath, mountedTaskId));
+    }
+    return taskId ? [terminalScopeKey(repoPath, taskId)] : [];
+  }, [mountedTaskIds, repoPath, taskId]);
+
   const scope = useMemo((): TerminalScope | null => {
     if (!repoPath || !taskId) return null;
     return {
-      key: `${repoPath}:${taskId}`,
+      key: terminalScopeKey(repoPath, taskId),
       context: { repoPath, taskId },
       workingDirectory: worktreeQuery.data?.workingDirectory ?? null,
       workingDirectoryError: `Task ${taskId} has no available worktree.`,
     };
   }, [repoPath, taskId, worktreeQuery.data?.workingDirectory]);
   const terminalModel = useTerminals(
-    { scope, isScopeLoading: worktreeQuery.isLoading },
+    { scope, isScopeLoading: worktreeQuery.isLoading, mountedScopeKeys },
     dependencies,
   );
 
