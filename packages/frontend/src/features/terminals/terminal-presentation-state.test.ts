@@ -123,4 +123,36 @@ describe("terminalPresentationReducer", () => {
 
     expect(state.scopes[scopeKey]?.tabs).toEqual([]);
   });
+
+  test("does not restore a forgotten terminal from a stale host list", () => {
+    const scopeKey = "/repo:task-1";
+    let state = createTerminalPresentationState(scopeKey);
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+    state = terminalPresentationReducer(state, {
+      type: "terminalForgotten",
+      scopeKey,
+      terminalId: "terminal-a",
+      message: "Terminal terminal-a was forgotten.",
+    });
+    state = terminalPresentationReducer(state, {
+      type: "hostSynced",
+      scopeKey,
+      hostInstanceId: "host-1",
+      summaries: [summary("terminal-a")],
+    });
+
+    expect(state.scopes[scopeKey]?.tabs).toMatchObject([
+      {
+        tabId: "tab:terminal-a",
+        terminalId: null,
+        requestState: "lost",
+        sourceTerminalId: "terminal-a",
+      },
+    ]);
+  });
 });

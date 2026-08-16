@@ -17,6 +17,7 @@ type PendingTerminalTab = {
   label: string;
   error: string | null;
   requestState: "creating" | "creation_failed" | "unsupported_runtime" | "lost";
+  sourceTerminalId?: string;
 };
 
 export type TerminalTab = ReadyTerminalTab | PendingTerminalTab;
@@ -121,6 +122,7 @@ const toLostTab = (tab: ReadyTerminalTab, message: string): PendingTerminalTab =
   label: terminalTabLabel(tab),
   error: `${message} It cannot be recovered or recreated automatically.`,
   requestState: "lost",
+  sourceTerminalId: tab.terminalId,
 });
 
 const resolveActiveTabId = (
@@ -181,6 +183,11 @@ const reconcileHostTabs = (
     return summary ? [toHostTab(summary, tab)] : [];
   });
   const knownTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
+  for (const tab of transient) {
+    if (tab.requestState === "lost" && tab.sourceTerminalId) {
+      knownTerminalIds.add(tab.sourceTerminalId);
+    }
+  }
   for (const summary of summaries) {
     if (!knownTerminalIds.has(summary.terminalId)) {
       hostTabs.push(toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)));

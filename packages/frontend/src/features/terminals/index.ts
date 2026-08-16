@@ -1,5 +1,6 @@
 export { TerminalPanel } from "./terminal-panel";
 export type {
+  MountedTerminalTab,
   TerminalDependencies,
   TerminalPanelModel,
   TerminalScope,

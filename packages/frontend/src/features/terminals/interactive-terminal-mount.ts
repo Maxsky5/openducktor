@@ -1,7 +1,7 @@
 import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { type IDisposable, Terminal } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -11,7 +11,7 @@ import {
   handleTerminalMetadataFrame,
 } from "./interactive-terminal-policy";
 import {
-  attachInteractiveTerminalRenderer,
+  createActiveTerminalRenderer,
   createBufferedTerminalFitter,
 } from "./interactive-terminal-renderer";
 import {
@@ -26,10 +26,11 @@ import { createTerminalOptions } from "./terminal-xterm-options";
 
 export type InteractiveTerminalMount = {
   activate(focus: boolean): void;
+  setActive(active: boolean): void;
   dispose(): void;
 };
 
-type MountInteractiveTerminalInput = {
+export type MountInteractiveTerminalInput = {
   container: HTMLDivElement;
   terminalId: string;
   controller: TerminalTransportController;
@@ -48,7 +49,11 @@ type MountInteractiveTerminalInput = {
   onInteractionFailure: (title: string, cause: unknown) => void;
 };
 
-export const mountInteractiveTerminal = ({
+export type MountInteractiveTerminal = (
+  input: MountInteractiveTerminalInput,
+) => InteractiveTerminalMount;
+
+export const mountInteractiveTerminal: MountInteractiveTerminal = ({
   container,
   terminalId,
   controller,
@@ -65,7 +70,7 @@ export const mountInteractiveTerminal = ({
   onImageDragActiveChange,
   onRendererError,
   onInteractionFailure,
-}: MountInteractiveTerminalInput): InteractiveTerminalMount => {
+}) => {
   let disposed = false;
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);
@@ -76,16 +81,17 @@ export const mountInteractiveTerminal = ({
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(container);
-  let rendererSubscription: IDisposable;
+  const activeRenderer = createActiveTerminalRenderer({
+    terminal,
+    createRenderer: () => new WebglAddon(/* preserveDrawingBuffer */ true),
+    onContextLoss: () => {
+      if (!disposed) onRendererError("The terminal renderer stopped responding.");
+    },
+  });
   try {
-    rendererSubscription = attachInteractiveTerminalRenderer({
-      terminal,
-      renderer: new WebglAddon(/* preserveDrawingBuffer */ true),
-      onContextLoss: () => {
-        if (!disposed) onRendererError("The terminal renderer stopped responding.");
-      },
-    });
+    activeRenderer.setActive(isActive());
   } catch (cause) {
+    activeRenderer.dispose();
     fitAddon.dispose();
     terminal.dispose();
     throw cause;
@@ -212,6 +218,7 @@ export const mountInteractiveTerminal = ({
 
   return {
     activate: (focus) => activateViewport(focus ? () => terminal.focus() : null),
+    setActive: activeRenderer.setActive,
     dispose: () => {
       if (disposed) return;
       disposed = true;
@@ -228,7 +235,7 @@ export const mountInteractiveTerminal = ({
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();
-      rendererSubscription.dispose();
+      activeRenderer.dispose();
       fitAddon.dispose();
       terminal.dispose();
     },

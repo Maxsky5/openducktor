@@ -26,6 +26,60 @@ export const attachInteractiveTerminalRenderer = ({
   return contextLossSubscription;
 };
 
+export const createActiveTerminalRenderer = ({
+  terminal,
+  createRenderer,
+  onContextLoss,
+}: {
+  terminal: { loadAddon: (addon: ITerminalAddon) => void };
+  createRenderer: () => ContextAwareTerminalRenderer;
+  onContextLoss: () => void;
+}) => {
+  let attached:
+    | {
+        renderer: ContextAwareTerminalRenderer;
+        subscription: IDisposable;
+      }
+    | undefined;
+
+  const detach = (): void => {
+    const current = attached;
+    attached = undefined;
+    current?.subscription.dispose();
+    current?.renderer.dispose();
+  };
+
+  return {
+    setActive(active: boolean): void {
+      if (!active) {
+        detach();
+        return;
+      }
+      if (attached) return;
+
+      const renderer = createRenderer();
+      try {
+        const subscription = attachInteractiveTerminalRenderer({
+          terminal,
+          renderer,
+          onContextLoss: () => {
+            if (attached?.renderer === renderer) {
+              attached.subscription.dispose();
+              attached = undefined;
+            }
+            onContextLoss();
+          },
+        });
+        attached = { renderer, subscription };
+      } catch (cause) {
+        renderer.dispose();
+        throw cause;
+      }
+    },
+    dispose: detach,
+  };
+};
+
 const captureTerminalRendererFrame = (container: HTMLElement): IDisposable | null => {
   const source = container.querySelector<HTMLCanvasElement>(
     ".xterm-screen canvas:not(.xterm-link-layer)",

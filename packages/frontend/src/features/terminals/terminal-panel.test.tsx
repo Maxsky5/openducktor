@@ -30,7 +30,10 @@ const lostTab: TerminalTab = {
   requestState: "lost",
 };
 
-const tabsModel = (tabs: TerminalTab[]) => ({ tabs, mountedTabs: tabs });
+const tabsModel = (tabs: TerminalTab[]) => ({
+  tabs,
+  mountedTabs: tabs.map((tab) => ({ scopeKey: "/repo:task-1", tab })),
+});
 
 const readyTab = (
   summary: TerminalSummary,
@@ -94,7 +97,14 @@ describe("TerminalPanel", () => {
     const terminalViewport = screen.getByText("This terminal belonged to a previous host session.");
 
     view.rerender(
-      <TerminalPanel model={{ ...model, tabs: [], activeTabId: null, mountedTabs: [lostTab] }} />,
+      <TerminalPanel
+        model={{
+          ...model,
+          tabs: [],
+          activeTabId: null,
+          mountedTabs: [{ scopeKey: "/repo:task-1", tab: lostTab }],
+        }}
+      />,
     );
 
     expect(screen.queryByRole("tab", { name: "Shell 1, Lost after host restart" })).toBeNull();

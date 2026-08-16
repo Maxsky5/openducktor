@@ -8,9 +8,23 @@ import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
 import {
   type InteractiveTerminalMount,
+  type MountInteractiveTerminal,
   mountInteractiveTerminal,
 } from "./interactive-terminal-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
+
+export type InteractiveTerminalProps = {
+  terminalId: string;
+  controller: TerminalTransportController;
+  platform: AppPlatform | undefined;
+  active: boolean;
+  focusRequest: number;
+  onAttention: (message: string | null) => void;
+  onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
+  onForgotten: (message: string) => void;
+  onTitleChange: (title: string) => void;
+  mountTerminal?: MountInteractiveTerminal;
+};
 
 export function InteractiveTerminal({
   terminalId,
@@ -22,17 +36,8 @@ export function InteractiveTerminal({
   onLifecycle,
   onForgotten,
   onTitleChange,
-}: {
-  terminalId: string;
-  controller: TerminalTransportController;
-  platform: AppPlatform | undefined;
-  active: boolean;
-  focusRequest: number;
-  onAttention: (message: string | null) => void;
-  onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
-  onForgotten: (message: string) => void;
-  onTitleChange: (title: string) => void;
-}): ReactElement {
+  mountTerminal = mountInteractiveTerminal,
+}: InteractiveTerminalProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mountRef = useRef<InteractiveTerminalMount | null>(null);
   const platformRef = useRef(platform);
@@ -57,8 +62,9 @@ export function InteractiveTerminal({
     setIsImageDragActive(false);
     setRendererError(null);
     const interactionToastId = `terminal:${terminalId}:interaction`;
+    let interactionToastShown = false;
     try {
-      mountRef.current = mountInteractiveTerminal({
+      mountRef.current = mountTerminal({
         container,
         terminalId,
         controller,
@@ -81,6 +87,7 @@ export function InteractiveTerminal({
         onImageDragActiveChange: setIsImageDragActive,
         onRendererError: setRendererError,
         onInteractionFailure: (title, cause) => {
+          interactionToastShown = true;
           toast.error(title, { id: interactionToastId, description: errorMessage(cause) });
         },
       });
@@ -90,9 +97,17 @@ export function InteractiveTerminal({
     return () => {
       mountRef.current?.dispose();
       mountRef.current = null;
-      toast.dismiss(interactionToastId);
+      if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, terminalId]);
+  }, [controller, mountTerminal, terminalId]);
+
+  useEffect(() => {
+    try {
+      mountRef.current?.setActive(active);
+    } catch (cause) {
+      setRendererError(errorMessage(cause));
+    }
+  }, [active]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;

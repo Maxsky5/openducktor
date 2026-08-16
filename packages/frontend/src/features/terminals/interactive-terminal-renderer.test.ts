@@ -4,6 +4,7 @@ import type { IDisposable, IEvent, Terminal } from "@xterm/xterm";
 import {
   attachInteractiveTerminalRenderer,
   type ContextAwareTerminalRenderer,
+  createActiveTerminalRenderer,
   createBufferedTerminalFitter,
 } from "./interactive-terminal-renderer";
 
@@ -82,6 +83,76 @@ describe("attachInteractiveTerminalRenderer", () => {
       }),
     ).toThrow(failure);
     expect(contextLoss.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createActiveTerminalRenderer", () => {
+  test("keeps one WebGL renderer only while its terminal is active", () => {
+    const renderers: Array<{
+      contextLoss: ReturnType<typeof createContextLossEvent>;
+      dispose: ReturnType<typeof mock>;
+      renderer: ContextAwareTerminalRenderer;
+    }> = [];
+    const loadAddon = mock(() => undefined);
+    const activeRenderer = createActiveTerminalRenderer({
+      terminal: { loadAddon },
+      createRenderer: () => {
+        const contextLoss = createContextLossEvent();
+        const dispose = mock(() => undefined);
+        const renderer: ContextAwareTerminalRenderer = {
+          activate: (_terminal: Terminal) => undefined,
+          dispose,
+          onContextLoss: contextLoss.event,
+        };
+        renderers.push({ contextLoss, dispose, renderer });
+        return renderer;
+      },
+      onContextLoss: () => undefined,
+    });
+
+    activeRenderer.setActive(false);
+    expect(renderers).toHaveLength(0);
+
+    activeRenderer.setActive(true);
+    activeRenderer.setActive(true);
+    expect(renderers).toHaveLength(1);
+    expect(loadAddon).toHaveBeenCalledTimes(1);
+
+    activeRenderer.setActive(false);
+    expect(renderers[0]?.contextLoss.dispose).toHaveBeenCalledTimes(1);
+    expect(renderers[0]?.dispose).toHaveBeenCalledTimes(1);
+
+    activeRenderer.setActive(true);
+    expect(renderers).toHaveLength(2);
+    expect(loadAddon).toHaveBeenCalledTimes(2);
+
+    activeRenderer.dispose();
+    expect(renderers[1]?.contextLoss.dispose).toHaveBeenCalledTimes(1);
+    expect(renderers[1]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("disposes a renderer that fails to load", () => {
+    const contextLoss = createContextLossEvent();
+    const dispose = mock(() => undefined);
+    const renderer: ContextAwareTerminalRenderer = {
+      activate: (_terminal: Terminal) => undefined,
+      dispose,
+      onContextLoss: contextLoss.event,
+    };
+    const failure = new Error("WebGL unavailable");
+    const activeRenderer = createActiveTerminalRenderer({
+      terminal: {
+        loadAddon: () => {
+          throw failure;
+        },
+      },
+      createRenderer: () => renderer,
+      onContextLoss: () => undefined,
+    });
+
+    expect(() => activeRenderer.setActive(true)).toThrow(failure);
+    expect(contextLoss.dispose).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 });
 

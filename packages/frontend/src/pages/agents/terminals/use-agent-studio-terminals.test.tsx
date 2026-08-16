@@ -373,7 +373,7 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(2));
       act(() => {
-        getLatest().onTitleChange(first.terminalId, "pnpm run dev");
+        getLatest().onTitleChange("/repo:task-a", first.terminalId, "pnpm run dev");
         getLatest().onReorderTab("tab:terminal-task-a-2", "tab:terminal-task-a", "before");
       });
       expect(getLatest().tabs.map((tab) => tab.terminalId)).toEqual([
@@ -427,7 +427,7 @@ describe("useAgentStudioTerminals", () => {
         onForgotten: getLatest().onForgotten,
       };
 
-      act(() => getLatest().onTitleChange("terminal-task-a", "pnpm run dev"));
+      act(() => getLatest().onTitleChange("/repo:task-a", "terminal-task-a", "pnpm run dev"));
       await waitFor(() =>
         expect(terminalTabLabel(requireTab(getLatest().tabs[0]))).toBe("pnpm run dev"),
       );
@@ -498,7 +498,7 @@ describe("useAgentStudioTerminals", () => {
       try {
         await waitFor(() => expect(getLatest().tabs).toEqual([]));
         expect(getLatest().mountedTabs).toHaveLength(1);
-        expect(getLatest().mountedTabs[0]?.terminalId).toBe("terminal-task-a");
+        expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe("terminal-task-a");
         expect(getLatest().isVisible).toBe(false);
       } finally {
         resolveClose({ closed: true });
@@ -554,8 +554,8 @@ describe("useAgentStudioTerminals", () => {
       });
 
       await waitFor(() => expect(getLatest().tabs).toEqual([]));
-      expect(getLatest().mountedTabs[0]?.tabId).toBe(originalTab?.tabId);
-      expect(getLatest().mountedTabs[0]?.terminalId).toBe(originalTab?.terminalId);
+      expect(getLatest().mountedTabs[0]?.tab.tabId).toBe(originalTab?.tabId);
+      expect(getLatest().mountedTabs[0]?.tab.terminalId).toBe(originalTab?.terminalId);
       expect(getLatest().isVisible).toBe(false);
 
       resolveClose({ closed: false, confirmationRequired: true });
@@ -594,7 +594,7 @@ describe("useAgentStudioTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().tabs).toHaveLength(1));
       act(() => {
-        getLatest().onForgotten("terminal-task-a", "Terminal host restarted.");
+        getLatest().onForgotten("/repo:task-a", "terminal-task-a", "Terminal host restarted.");
       });
       await waitFor(() => expect(getLatest().tabs[0]?.requestState).toBe("lost"));
 

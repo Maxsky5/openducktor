@@ -44,6 +44,11 @@ export type TerminalScope = {
   workingDirectoryError: string;
 };
 
+export type MountedTerminalTab = {
+  scopeKey: string;
+  tab: TerminalTab;
+};
+
 const terminalListFilterForContext = (context: TerminalContext | null): TerminalListFilter => {
   if (context === null) return { kind: "all" };
   if ("taskId" in context) {
@@ -56,7 +61,7 @@ export type TerminalPanelModel = {
   scopeKey: string | null;
   isAvailable: boolean;
   tabs: TerminalTab[];
-  mountedTabs: TerminalTab[];
+  mountedTabs: MountedTerminalTab[];
   activeTabId: string | null;
   isVisible: boolean;
   isLoading: boolean;
@@ -72,10 +77,10 @@ export type TerminalPanelModel = {
   onCreate: () => void;
   onRetryCreate: (tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
-  onTitleChange: (terminalId: string, title: string) => void;
+  onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
   onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
-  onLifecycle: (terminalId: string, lifecycle: TerminalLifecycle) => void;
-  onForgotten: (terminalId: string, message: string) => void;
+  onLifecycle: (scopeKey: string, terminalId: string, lifecycle: TerminalLifecycle) => void;
+  onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
 };
 
 export const useTerminals = (
@@ -140,10 +145,15 @@ export const useTerminals = (
   const mountedTabs = useMemo(() => {
     const scopeKeys = mountedScopeKeys ?? (scopeKey ? [scopeKey] : []);
     return scopeKeys
-      .flatMap((mountedScopeKey) => presentation.scopes[mountedScopeKey]?.tabs ?? [])
+      .flatMap((mountedScopeKey) =>
+        (presentation.scopes[mountedScopeKey]?.tabs ?? []).map((tab) => ({
+          scopeKey: mountedScopeKey,
+          tab,
+        })),
+      )
       .toSorted((left, right) => {
-        const leftCreatedAt = left.summary?.createdAt ?? `~${left.tabId}`;
-        const rightCreatedAt = right.summary?.createdAt ?? `~${right.tabId}`;
+        const leftCreatedAt = left.tab.summary?.createdAt ?? `~${left.tab.tabId}`;
+        const rightCreatedAt = right.tab.summary?.createdAt ?? `~${right.tab.tabId}`;
         return leftCreatedAt.localeCompare(rightCreatedAt);
       });
   }, [mountedScopeKeys, presentation.scopes, scopeKey]);
@@ -270,10 +280,10 @@ export const useTerminals = (
     [scopeKey],
   );
   const changeTitle = useCallback(
-    (terminalId: string, title: string): void => {
-      if (scopeKey) dispatch({ type: "titleChanged", scopeKey, terminalId, title });
+    (ownerScopeKey: string, terminalId: string, title: string): void => {
+      dispatch({ type: "titleChanged", scopeKey: ownerScopeKey, terminalId, title });
     },
-    [scopeKey],
+    [],
   );
   const closeTerminal = useCallback(
     async (tab: TerminalTab, confirmTerminate: boolean): Promise<TerminalCloseResponse> => {
@@ -318,16 +328,16 @@ export const useTerminals = (
     [controller, dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
   const changeLifecycle = useCallback(
-    (terminalId: string, lifecycle: TerminalLifecycle): void => {
-      if (scopeKey) dispatch({ type: "lifecycleChanged", scopeKey, terminalId, lifecycle });
+    (ownerScopeKey: string, terminalId: string, lifecycle: TerminalLifecycle): void => {
+      dispatch({ type: "lifecycleChanged", scopeKey: ownerScopeKey, terminalId, lifecycle });
     },
-    [scopeKey],
+    [],
   );
   const forgetTerminal = useCallback(
-    (terminalId: string, message: string): void => {
-      if (scopeKey) dispatch({ type: "terminalForgotten", scopeKey, terminalId, message });
+    (ownerScopeKey: string, terminalId: string, message: string): void => {
+      dispatch({ type: "terminalForgotten", scopeKey: ownerScopeKey, terminalId, message });
     },
-    [scopeKey],
+    [],
   );
   const isLoading = terminalQuery.isLoading || isScopeLoading;
   const isCreating = visibleTabs.some((tab) => tab.requestState === "creating");
