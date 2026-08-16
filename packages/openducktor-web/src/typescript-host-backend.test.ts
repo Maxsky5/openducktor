@@ -412,7 +412,7 @@ describe("TypeScript web host backend", () => {
       }
       await rm(tempConfigDir, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, 1_000);
 
   test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
@@ -495,7 +495,7 @@ describe("TypeScript web host backend", () => {
       await backend?.stop().catch(() => {});
       await rm(tempConfigDir, { force: true, recursive: true });
     }
-  }, 5_000);
+  }, 1_000);
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
     expect(() => validateWebFrontendOrigin("https://127.0.0.1:1420")).toThrow(

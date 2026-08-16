@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { WebOperationError } from "./effect/web-errors";
-import {
-  createWebLauncherLifecycle,
-  type WebLauncherLifecycle,
-  type WebSignalShutdownRequest,
-} from "./launcher-lifecycle";
+import { createWebLauncherLifecycle, type WebSignalShutdownRequest } from "./launcher-lifecycle";
 import type { FrontendServer } from "./launcher-support";
 
 const frontendServer: FrontendServer = {
@@ -112,70 +108,7 @@ describe("createWebLauncherLifecycle", () => {
     expect(closeCalls).toBe(1);
   });
 
-  test("stops the host when Vite closes the frontend first", async () => {
-    let frontendCloseCalls = 0;
-    let hostStopCalls = 0;
-    const infoMessages: string[] = [];
-    const hostBackend = {
-      exited: Promise.resolve(0),
-      port: 14327,
-      stop: async () => {},
-    };
-    const lifecycle = await Effect.runPromise(
-      createWebLauncherLifecycle({
-        closeFrontend: () =>
-          Effect.sync(() => {
-            frontendCloseCalls += 1;
-          }),
-        logger: {
-          error: () => Effect.void,
-          info: (message) => Effect.sync(() => infoMessages.push(message)),
-          success: () => Effect.void,
-        },
-        onSignalShutdownFailure: () => {},
-        reportFailure: () => {},
-        runSignalShutdown: async () => {},
-        stopResources: ({ hostBackend: registeredHost }) =>
-          Effect.sync(() => {
-            if (registeredHost) {
-              hostStopCalls += 1;
-            }
-          }),
-      }),
-    );
-    await Effect.runPromise(lifecycle.registerFrontend(frontendServer));
-    await Effect.runPromise(lifecycle.registerHost(hostBackend));
-
-    await Effect.runPromise(lifecycle.frontendClosed());
-
-    expect(frontendCloseCalls).toBe(0);
-    expect(hostStopCalls).toBe(1);
-    expect(infoMessages).toEqual(["Stopping OpenDucktor TypeScript host services..."]);
-  });
-
-  test("does not wait on itself when lifecycle shutdown closes Vite", async () => {
-    let lifecycle: WebLauncherLifecycle | null = null;
-    lifecycle = await Effect.runPromise(
-      createWebLauncherLifecycle({
-        closeFrontend: () => lifecycle?.frontendClosed() ?? Effect.void,
-        logger: {
-          error: () => Effect.void,
-          info: () => Effect.void,
-          success: () => Effect.void,
-        },
-        onSignalShutdownFailure: () => {},
-        reportFailure: () => {},
-        runSignalShutdown: async () => {},
-        stopResources: ({ closeFrontend, frontendServer: registeredFrontend }) =>
-          closeFrontend(registeredFrontend),
-      }),
-    );
-    await Effect.runPromise(lifecycle.registerFrontend(frontendServer));
-
-    await Effect.runPromise(lifecycle.stop());
-  });
-
-  test("stops a host that registers after Vite shutdown", async () => {
+  test("stops a host that registers after launcher shutdown", async () => {
     let hostStopCalls = 0;
     const hostBackend = {
       exited: Promise.resolve(0),
@@ -202,7 +135,7 @@ describe("createWebLauncherLifecycle", () => {
       }),
     );
 
-    await Effect.runPromise(lifecycle.frontendClosed());
+    await Effect.runPromise(lifecycle.stop());
     await Effect.runPromise(lifecycle.registerHost(hostBackend));
 
     expect(hostStopCalls).toBe(1);

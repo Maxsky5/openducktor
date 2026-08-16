@@ -126,11 +126,9 @@ describe("configureElectronAppIdentity", () => {
       },
       {
         appName: customAppName,
+        developmentInstanceId: "electron-0123456789ab",
         profileKind: "development",
-        processEnv: {
-          OPENDUCKTOR_CONFIG_DIR: customConfigPath,
-          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
-        },
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
         createDirectory(profilePath) {
           calls.push(["mkdir", profilePath]);
         },
@@ -163,34 +161,27 @@ describe("configureElectronAppIdentity", () => {
   test.each([
     ["missing", undefined],
     ["malformed", "electron-invalid"],
-  ] as const)(
-    "wraps an invalid development instance from the environment: %s",
-    (_caseName, developmentInstanceId) => {
-      const processEnv: NodeJS.ProcessEnv = {
-        OPENDUCKTOR_CONFIG_DIR: customConfigPath,
-        ...(developmentInstanceId ? { OPENDUCKTOR_DEV_INSTANCE: developmentInstanceId } : {}),
-      };
-
-      expect(() =>
-        configureElectronAppIdentity(
-          {
-            setName() {},
-            setPath() {
-              throw new Error("setPath must not run for an invalid development instance");
-            },
+  ] as const)("wraps an invalid development instance: %s", (_caseName, developmentInstanceId) => {
+    expect(() =>
+      configureElectronAppIdentity(
+        {
+          setName() {},
+          setPath() {
+            throw new Error("setPath must not run for an invalid development instance");
           },
-          {
-            appName: customAppName,
-            profileKind: "development",
-            processEnv,
-            createDirectory() {
-              throw new Error("createDirectory must not run for an invalid development instance");
-            },
+        },
+        {
+          appName: customAppName,
+          developmentInstanceId,
+          profileKind: "development",
+          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+          createDirectory() {
+            throw new Error("createDirectory must not run for an invalid development instance");
           },
-        ),
-      ).toThrow(ElectronOperationError);
-    },
-  );
+        },
+      ),
+    ).toThrow(ElectronOperationError);
+  });
 
   test("expands quoted home-relative config directories before selecting the profile", () => {
     const calls: Array<[string, string]> = [];

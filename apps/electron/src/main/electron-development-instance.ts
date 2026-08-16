@@ -1,3 +1,4 @@
+import { OPENDUCKTOR_DEV_INSTANCE_ENV, resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect } from "effect";
 import {
   type ElectronError,
@@ -36,9 +37,29 @@ type PrepareElectronDevelopmentInstanceOptions = {
   appName: string;
   logger: ElectronDevelopmentInstanceLogger;
   processEnv?: NodeJS.ProcessEnv;
+  workspaceRoot: string;
 };
 
 export type ElectronDevelopmentInstanceClaim = "duplicate" | "primary";
+
+const resolveElectronDevelopmentInstanceIdEffect = (
+  profileKind: ElectronProfileKind,
+  workspaceRoot: string,
+) => {
+  if (profileKind === "production") {
+    return Effect.succeed(undefined);
+  }
+
+  return Effect.try({
+    try: () => resolveDevelopmentInstanceId("electron", workspaceRoot),
+    catch: (cause) =>
+      new ElectronLifecycleError({
+        operation: "electron.main.resolve-development-instance",
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
+};
 
 export const claimElectronDevelopmentInstanceEffect = ({
   logger,
@@ -83,19 +104,25 @@ export const prepareElectronDevelopmentInstanceEffect = ({
   app,
   appName,
   logger,
-  processEnv,
+  processEnv = process.env,
+  workspaceRoot,
 }: PrepareElectronDevelopmentInstanceOptions): Effect.Effect<
   ElectronDevelopmentInstanceClaim,
   ElectronError
 > =>
   Effect.gen(function* () {
     const profileKind = resolveElectronProfileKind(app.isPackaged);
+    const developmentInstanceId = yield* resolveElectronDevelopmentInstanceIdEffect(
+      profileKind,
+      workspaceRoot,
+    );
     yield* Effect.try({
       try: () =>
         configureElectronAppIdentity(app, {
           appName,
           profileKind,
-          ...(processEnv === undefined ? {} : { processEnv }),
+          processEnv,
+          ...(developmentInstanceId ? { developmentInstanceId } : {}),
         }),
       catch: (cause) =>
         isElectronError(cause)
@@ -106,6 +133,11 @@ export const prepareElectronDevelopmentInstanceEffect = ({
               cause,
             }),
     });
+    if (developmentInstanceId) {
+      yield* Effect.sync(() => {
+        processEnv[OPENDUCKTOR_DEV_INSTANCE_ENV] = developmentInstanceId;
+      });
+    }
     return yield* claimElectronDevelopmentInstanceEffect({
       logger,
       profileKind,

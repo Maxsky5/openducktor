@@ -265,19 +265,6 @@ describe("launcher internals", () => {
     expect(closeAllConnectionsCalls).toBe(1);
   });
 
-  test("keeps frontend shutdown bounded when close never resolves", async () => {
-    let timeoutMs = 0;
-    const frontendServer = {
-      close: () => new Promise<void>(() => {}),
-    };
-
-    await closeFrontendServer(frontendServer, async (durationMs) => {
-      timeoutMs = durationMs;
-    });
-
-    expect(timeoutMs).toBe(3_000);
-  });
-
   test("keeps the process alive while shutdown work is pending", async () => {
     let intervalCallback: (() => void) | null = null;
     const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;

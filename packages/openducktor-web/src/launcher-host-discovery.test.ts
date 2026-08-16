@@ -60,6 +60,6 @@ describe("web launcher MCP discovery composition", () => {
       } finally {
         await rm(configDirectory, { force: true, recursive: true });
       }
-    }, 10_000);
+    }, 1_000);
   }
 });

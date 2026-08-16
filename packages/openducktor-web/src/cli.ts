@@ -31,6 +31,29 @@ const DEFAULT_BACKEND_PORT = 14327;
 const createBrowserDevelopmentInstanceId = () =>
   validateDevelopmentInstanceId(`browser-${randomBytes(6).toString("hex")}`);
 
+export const createLauncherOptions = (
+  cliOptions: CliOptions,
+  packageRoot: string,
+): LauncherOptions => {
+  const commonOptions = {
+    packageRoot,
+    frontendPort: cliOptions.frontendPort,
+    backendPort: cliOptions.backendPort,
+  };
+  if (cliOptions.workspaceMode) {
+    return {
+      ...commonOptions,
+      developmentInstanceId: createBrowserDevelopmentInstanceId(),
+      workspaceMode: true,
+      workspaceRoot: path.resolve(packageRoot, "../.."),
+    };
+  }
+  return {
+    ...commonOptions,
+    workspaceMode: false,
+  };
+};
+
 const printHelp = (): void => {
   console.log(
     `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
@@ -131,27 +154,7 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
   Effect.gen(function* () {
     const __filename = fileURLToPath(import.meta.url);
     const packageRoot = path.resolve(path.dirname(__filename), "..");
-    const commonOptions = {
-      packageRoot,
-      frontendPort: cliOptions.frontendPort,
-      backendPort: cliOptions.backendPort,
-    };
-    let launcherOptions: LauncherOptions;
-    if (cliOptions.workspaceMode) {
-      const workspaceRoot = path.resolve(packageRoot, "../..");
-      launcherOptions = {
-        ...commonOptions,
-        developmentInstanceId: createBrowserDevelopmentInstanceId(),
-        workspaceMode: true,
-        workspaceRoot,
-      };
-    } else {
-      launcherOptions = {
-        ...commonOptions,
-        workspaceMode: false,
-      };
-    }
-    return yield* runLauncherEffect(launcherOptions, logger);
+    return yield* runLauncherEffect(createLauncherOptions(cliOptions, packageRoot), logger);
   });
 
 const runCli = async (): Promise<void> => {

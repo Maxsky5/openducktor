@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./startup-splash";
+import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./runtime";
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();

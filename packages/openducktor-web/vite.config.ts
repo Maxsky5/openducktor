@@ -1,4 +1,4 @@
-import { createOpenDucktorStartupSplashPlugin } from "@openducktor/build-tools/startup-splash";
+import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";

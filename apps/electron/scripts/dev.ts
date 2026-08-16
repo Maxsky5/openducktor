@@ -2,8 +2,12 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { OPENDUCKTOR_DEV_INSTANCE_ENV, resolveDevelopmentInstanceId } from "@openducktor/host";
+import { resolveDevelopmentInstanceId } from "@openducktor/host";
 import { Effect, Exit } from "effect";
+import {
+  createElectronRendererDevServerEffect,
+  type ElectronRendererDevServer,
+} from "../src/development/electron-renderer-dev-server";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   resolveRendererDevPortEffect,
@@ -20,10 +24,6 @@ import {
   copySqliteTaskStoreMigrationsEffect,
   resolveSqliteTaskStoreMigrationCopyPlan,
 } from "./build";
-import {
-  createElectronRendererDevServerEffect,
-  type ElectronRendererDevServer,
-} from "./electron-renderer-dev-server";
 
 export type ManagedElectronProcess = {
   readonly exited: Promise<number>;
@@ -800,9 +800,6 @@ export const mainEffect = (): Effect.Effect<
           cause,
           path: workspaceRoot,
         }),
-    });
-    yield* Effect.sync(() => {
-      process.env[OPENDUCKTOR_DEV_INSTANCE_ENV] = developmentInstanceId;
     });
     const electronExecutablePath = yield* resolveElectronDevExecutablePathEffect();
     const renderer = yield* createElectronRendererDevServerEffect({

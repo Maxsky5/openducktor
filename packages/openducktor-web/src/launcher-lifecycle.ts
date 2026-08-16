@@ -80,10 +80,7 @@ type TerminationState =
 
 export type WebLauncherLifecycle = {
   completeAfterHostExit(): Effect.Effect<void, WebError>;
-  ensureTermination(signal: NodeJS.Signals, exitCode: number): Promise<void>;
-  frontendClosed(): Effect.Effect<void, WebError>;
   handleTermination(signal: NodeJS.Signals, exitCode: number): Promise<void>;
-  markFrontendClosing(): void;
   registerFrontend(server: FrontendServer): Effect.Effect<void, WebError>;
   registerHost(backend: TypescriptHostBackend): Effect.Effect<void, WebError>;
   release(): Effect.Effect<void>;
@@ -217,55 +214,6 @@ export const createWebLauncherLifecycle = (
         );
       });
 
-    const frontendClosed = (): Effect.Effect<void, WebError> =>
-      Effect.suspend(() => {
-        frontendState = { _tag: "closed" };
-        if (stopState._tag !== "running") {
-          return Effect.void;
-        }
-        stopState = { _tag: "stopping" };
-        return settleStop(
-          Effect.gen(function* () {
-            const failures: WebError[] = [];
-            const hostBackend = hostState._tag === "open" ? hostState.backend : null;
-            if (hostBackend) {
-              const logExit = yield* Effect.exit(
-                writeWebLogEffect(
-                  options.logger,
-                  "info",
-                  "Stopping OpenDucktor TypeScript host services...",
-                ),
-              );
-              if (logExit._tag === "Failure") {
-                failures.push(causeToWebBoundaryError(logExit.cause));
-              }
-            }
-            hostState = { _tag: "closed" };
-            const stopExit = yield* Effect.exit(
-              options.stopResources({
-                closeFrontend: () => Effect.void,
-                frontendServer: null,
-                hostBackend,
-              }),
-            );
-            if (stopExit._tag === "Failure") {
-              failures.push(causeToWebBoundaryError(stopExit.cause));
-            }
-            if (failures.length === 0) {
-              yield* writeWebLogEffect(options.logger, "success", "OpenDucktor web stopped.");
-            }
-            const failure = combineWebErrors(
-              "web.launcher.lifecycle",
-              "OpenDucktor web lifecycle failed.",
-              failures,
-            );
-            if (failure) {
-              return yield* failure;
-            }
-          }),
-        );
-      });
-
     const closeDuplicateTerminationLogAdmission = (): void => {
       if (terminationState._tag === "active") {
         terminationState.admission = "closed";
@@ -318,12 +266,7 @@ export const createWebLauncherLifecycle = (
 
     return {
       completeAfterHostExit,
-      ensureTermination: startTermination,
-      frontendClosed,
       handleTermination,
-      markFrontendClosing() {
-        frontendState = { _tag: "closed" };
-      },
       registerFrontend: (server) =>
         Effect.suspend(() => {
           if (stopState._tag !== "running") {

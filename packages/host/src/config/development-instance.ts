@@ -3,15 +3,14 @@ import { realpathSync } from "node:fs";
 import {
   DEVELOPMENT_INSTANCE_ID_PATTERN,
   type DevelopmentInstanceId,
-  type DevelopmentInstanceMode,
   isDevelopmentInstanceId,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../effect/host-errors";
 
-export type { DevelopmentInstanceMode } from "@openducktor/contracts";
 export { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 
+export type DevelopmentInstanceMode = "browser" | "electron";
 type ResolveCanonicalPath = (workspaceRoot: string) => string;
 
 export const resolveDevelopmentInstanceId = (

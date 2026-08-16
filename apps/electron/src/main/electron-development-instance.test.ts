@@ -92,6 +92,9 @@ describe("claimElectronDevelopmentInstanceEffect", () => {
   test("configures the selected development profile before it claims ownership", async () => {
     const configDirectory = mkdtempSync(path.join(tmpdir(), "openducktor-electron-instance-"));
     const events: string[] = [];
+    const processEnv: NodeJS.ProcessEnv = {
+      OPENDUCKTOR_CONFIG_DIR: configDirectory,
+    };
 
     try {
       const result = await Effect.runPromise(
@@ -107,15 +110,48 @@ describe("claimElectronDevelopmentInstanceEffect", () => {
           },
           appName: "OpenDucktor",
           logger: { info: () => Effect.void },
-          processEnv: {
-            OPENDUCKTOR_CONFIG_DIR: configDirectory,
-            OPENDUCKTOR_DEV_INSTANCE: "electron-aaaaaaaaaaaa",
-          },
+          processEnv,
+          workspaceRoot: configDirectory,
         }),
       );
 
       expect(result).toBe("primary");
       expect(events).toEqual(["name", "path:userData", "path:sessionData", "claim"]);
+      expect(processEnv.OPENDUCKTOR_DEV_INSTANCE).toMatch(/^electron-[a-f0-9]{12}$/u);
+    } finally {
+      rmSync(configDirectory, { force: true, recursive: true });
+    }
+  });
+
+  test("does not create a development identity for a packaged app", async () => {
+    const configDirectory = mkdtempSync(path.join(tmpdir(), "openducktor-electron-instance-"));
+    const processEnv: NodeJS.ProcessEnv = {
+      OPENDUCKTOR_CONFIG_DIR: configDirectory,
+    };
+    let lockCalls = 0;
+
+    try {
+      const result = await Effect.runPromise(
+        prepareElectronDevelopmentInstanceEffect({
+          app: {
+            isPackaged: true,
+            requestSingleInstanceLock: () => {
+              lockCalls += 1;
+              return true;
+            },
+            setName() {},
+            setPath() {},
+          },
+          appName: "OpenDucktor",
+          logger: { info: () => Effect.void },
+          processEnv,
+          workspaceRoot: configDirectory,
+        }),
+      );
+
+      expect(result).toBe("primary");
+      expect(lockCalls).toBe(0);
+      expect(processEnv.OPENDUCKTOR_DEV_INSTANCE).toBeUndefined();
     } finally {
       rmSync(configDirectory, { force: true, recursive: true });
     }

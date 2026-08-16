@@ -1,10 +1,6 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import {
-  resolveDevelopmentInstanceIdFromEnvironment,
-  resolveOpenDucktorBaseDir,
-  validateDevelopmentInstanceId,
-} from "@openducktor/host";
+import { resolveOpenDucktorBaseDir, validateDevelopmentInstanceId } from "@openducktor/host";
 import { ElectronOperationError, errorMessage } from "../effect/electron-errors";
 
 type ElectronAppIdentity = {
@@ -23,6 +19,7 @@ export const resolveElectronProfileKind = (isPackaged: boolean): ElectronProfile
 type ConfigureElectronAppIdentityOptions = {
   appName: string;
   createDirectory?: CreateProfileDirectory;
+  developmentInstanceId?: string;
   profileKind: ElectronProfileKind;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
@@ -61,6 +58,7 @@ export const configureElectronAppIdentity = (
   {
     appName,
     createDirectory = createProfileDirectory,
+    developmentInstanceId,
     profileKind,
     processEnv = process.env,
     resolveConfigDirectory = resolveOpenDucktorBaseDir,
@@ -69,10 +67,6 @@ export const configureElectronAppIdentity = (
   app.setName(appName);
   let profilePath = "";
   try {
-    const developmentInstanceId =
-      profileKind === "development"
-        ? resolveDevelopmentInstanceIdFromEnvironment(processEnv)
-        : undefined;
     profilePath = resolveElectronProfilePath(
       resolveConfigDirectory(processEnv),
       profileKind,

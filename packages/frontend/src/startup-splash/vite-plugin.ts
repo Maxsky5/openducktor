@@ -1,5 +1,7 @@
-export const OPEN_DUCKTOR_STARTUP_BACKGROUND = "#ffffff";
-export const OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND = "#111318";
+import {
+  OPEN_DUCKTOR_STARTUP_BACKGROUND,
+  OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND,
+} from "@openducktor/frontend/startup-splash/theme";
 
 const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-600.woff2";
 

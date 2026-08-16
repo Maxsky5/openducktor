@@ -48,7 +48,6 @@ type ProcessKeepAliveDependencies = {
 export const LOCALHOST = "127.0.0.1";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const FRONTEND_CLOSE_TIMEOUT_MS = 3_000;
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
 export const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -123,36 +122,27 @@ const forceCloseFrontendConnections = (server: FrontendServer): void => {
 
 export const closeFrontendServerEffect = (
   server: FrontendServer | null,
-  sleep: SleepFunction = Bun.sleep,
 ): Effect.Effect<void, WebDependencyError> =>
-  Effect.gen(function* () {
-    if (!server) {
-      return;
-    }
-
-    // Capture only synchronous close-call failures here while preserving the
-    // close Promise for Promise.race; async rejections are handled below.
-    const closePromise = yield* Effect.try({
-      try: () => server.close(),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "frontend-server",
-          operation: "close",
-          message: errorMessage(cause),
-          cause,
-        }),
-    }).pipe(Effect.ensuring(Effect.sync(() => forceCloseFrontendConnections(server))));
-    yield* Effect.tryPromise({
-      try: () => Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "frontend-server",
-          operation: "close",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
-  });
+  server
+    ? Effect.tryPromise({
+        try: async () => {
+          let closePromise: Promise<void>;
+          try {
+            closePromise = server.close();
+          } finally {
+            forceCloseFrontendConnections(server);
+          }
+          await closePromise;
+        },
+        catch: (cause) =>
+          new WebDependencyError({
+            dependency: "frontend-server",
+            operation: "close",
+            message: errorMessage(cause),
+            cause,
+          }),
+      })
+    : Effect.void;
 
 const verifyBackendReadinessAttemptEffect = (
   backendUrl: string,
@@ -171,10 +161,8 @@ const verifyBackendReadinessAttemptEffect = (
     ({ timeout }) => Effect.sync(() => clearTimeout(timeout)),
   );
 
-export const closeFrontendServer = (
-  server: FrontendServer | null,
-  sleep: SleepFunction = Bun.sleep,
-): Promise<void> => runWebBoundary(closeFrontendServerEffect(server, sleep));
+export const closeFrontendServer = (server: FrontendServer | null): Promise<void> =>
+  runWebBoundary(closeFrontendServerEffect(server));
 
 export const waitForBackendEffect = (
   backendUrl: string,

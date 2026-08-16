@@ -1,17 +1,13 @@
 import path from "node:path";
 import { Effect } from "effect";
 import { createServer } from "vite";
-import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   ElectronOperationError,
   errorMessage,
   toElectronOperationError,
-} from "../src/effect/electron-errors";
+} from "../effect/electron-errors";
 
 const RENDERER_DEV_HOST = "127.0.0.1";
-const RENDERER_CLOSE_TIMEOUT_MS = 3_000;
-const sleep = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, durationMs));
 
 type ForceCloseableHttpServer = {
   closeAllConnections?: () => void;
@@ -25,7 +21,6 @@ export type ElectronDevRendererWatcher = {
 
 export type ElectronDevRendererServer = {
   close(): Promise<void>;
-  config: { server: { port?: number | null } };
   httpServer?: object | null;
   resolvedUrls?: { local: string[] } | null;
   watcher: ElectronDevRendererWatcher;
@@ -60,47 +55,28 @@ const forceCloseRendererConnections = (server: ElectronDevRendererServerHandle):
 
 export const closeRendererServerEffect = (
   server: ElectronDevRendererServerHandle | null,
-  closeSleep: (durationMs: number) => Promise<unknown> = sleep,
 ): Effect.Effect<void, ElectronOperationError> => {
   if (!server) {
     return Effect.void;
   }
 
-  return Effect.gen(function* () {
-    const closePromise = yield* Effect.try({
-      try: () => {
-        try {
-          return server.close();
-        } finally {
-          forceCloseRendererConnections(server);
-        }
-      },
-      catch: (cause) =>
-        new ElectronOperationError({
-          operation: "electron.dev.close-renderer-server",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
-    yield* Effect.tryPromise({
-      try: async () => {
-        await Promise.race([closePromise, closeSleep(RENDERER_CLOSE_TIMEOUT_MS)]);
-      },
-      catch: (cause) =>
-        new ElectronOperationError({
-          operation: "electron.dev.close-renderer-server",
-          message: errorMessage(cause),
-          cause,
-        }),
-    });
+  return Effect.tryPromise({
+    try: async () => {
+      let closePromise: Promise<void>;
+      try {
+        closePromise = server.close();
+      } finally {
+        forceCloseRendererConnections(server);
+      }
+      await closePromise;
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.dev.close-renderer-server",
+        message: errorMessage(cause),
+        cause,
+      }),
   });
-};
-
-export const closeRendererServer = async (
-  server: ElectronDevRendererServerHandle | null,
-  closeSleep: (durationMs: number) => Promise<unknown> = sleep,
-): Promise<void> => {
-  await runElectronEffect(closeRendererServerEffect(server, closeSleep));
 };
 
 export const resolveRendererDevUrl = (server: ElectronDevRendererServer): string => {
@@ -109,15 +85,10 @@ export const resolveRendererDevUrl = (server: ElectronDevRendererServer): string
     return localUrl.replace(/\/$/u, "");
   }
 
-  const configuredPort = server.config.server.port;
-  if (!configuredPort) {
-    throw new ElectronOperationError({
-      operation: "electron.dev.resolve-renderer-url",
-      message: "Vite renderer dev server did not expose a configured port.",
-    });
-  }
-
-  return `http://${RENDERER_DEV_HOST}:${configuredPort}`;
+  throw new ElectronOperationError({
+    operation: "electron.dev.resolve-renderer-url",
+    message: `Vite renderer dev server did not report a local URL for ${RENDERER_DEV_HOST}.`,
+  });
 };
 
 export const createElectronRendererDevServerEffect = ({

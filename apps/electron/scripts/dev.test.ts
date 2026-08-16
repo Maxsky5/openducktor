@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { Cause, Chunk, Effect, Exit, Fiber } from "effect";
+import type { ElectronRendererDevServer } from "../src/development/electron-renderer-dev-server";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError } from "../src/effect/electron-errors";
 import {
@@ -17,7 +18,6 @@ import {
   shouldRestartElectronForChange,
   stopElectronEffect,
 } from "./dev";
-import type { ElectronRendererDevServer } from "./electron-renderer-dev-server";
 
 const createFakeProcessHandlers = () => {
   const registered: Array<{ event: string; listener: () => void }> = [];

@@ -3,87 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveWebCliStopSignal } from "../scripts/dev";
-import { parseCliArgs } from "./cli";
-
-const waitForPersistedLogRecord = async (
-  logFilePath: string,
-  expectedRecord: string,
-): Promise<void> => {
-  const deadline = performance.now() + 2_000;
-  while (true) {
-    const persisted = await readFile(logFilePath, "utf8");
-    if (persisted.includes(expectedRecord)) {
-      return;
-    }
-    if (performance.now() >= deadline) {
-      break;
-    }
-    await Bun.sleep(20);
-  }
-  throw new Error(`Web launcher did not persist ${JSON.stringify(expectedRecord)}.`);
-};
-
-const captureWorkspaceInstanceId = async (
-  cliPath: string,
-  configDirectory: string,
-): Promise<string> => {
-  const subprocess = Bun.spawn(
-    [process.execPath, cliPath, "--workspace", "--port", "0", "--backend-port", "0"],
-    {
-      env: {
-        ...process.env,
-        NO_COLOR: "1",
-        OPENDUCKTOR_CONFIG_DIR: configDirectory,
-      },
-      stderr: "pipe",
-      stdout: "pipe",
-    },
-  );
-  const instanceId = Promise.withResolvers<string>();
-  let resolvedInstanceId = false;
-  const stdoutPump = (async () => {
-    const decoder = new TextDecoder();
-    const reader = subprocess.stdout.getReader();
-    let stdout = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      stdout += decoder.decode(value, { stream: true });
-      const match = stdout.match(/Instance:\s+(browser-[a-f0-9]{12})/u);
-      if (!resolvedInstanceId && match?.[1]) {
-        resolvedInstanceId = true;
-        instanceId.resolve(match[1]);
-      }
-    }
-    stdout += decoder.decode();
-    if (!resolvedInstanceId) {
-      instanceId.reject(
-        new Error(`Web launcher exited before logging its instance ID.\n${stdout}`),
-      );
-    }
-  })();
-  const stderrPromise = new Response(subprocess.stderr).text();
-  let readinessTimeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      instanceId.promise,
-      new Promise<never>((_, reject) => {
-        readinessTimeout = setTimeout(
-          () => reject(new Error("Web launcher did not log its instance ID.")),
-          15_000,
-        );
-      }),
-    ]);
-  } finally {
-    clearTimeout(readinessTimeout);
-    subprocess.kill("SIGKILL");
-    await subprocess.exited;
-    await Promise.all([stdoutPump, stderrPromise]);
-  }
-};
+import { createLauncherOptions, parseCliArgs } from "./cli";
 
 describe("web CLI argument parsing", () => {
   test("uses OS-assigned ports for workspace development", () => {
@@ -131,6 +51,39 @@ describe("web CLI argument parsing", () => {
     );
   });
 
+  test("creates a fresh valid identity for each workspace launch", () => {
+    const packageRoot = path.resolve("packages/openducktor-web");
+    const first = createLauncherOptions(
+      { workspaceMode: true, frontendPort: 0, backendPort: 0 },
+      packageRoot,
+    );
+    const second = createLauncherOptions(
+      { workspaceMode: true, frontendPort: 0, backendPort: 0 },
+      packageRoot,
+    );
+
+    expect(first.developmentInstanceId).toMatch(/^browser-[a-f0-9]{12}$/u);
+    expect(second.developmentInstanceId).toMatch(/^browser-[a-f0-9]{12}$/u);
+    expect(second.developmentInstanceId).not.toBe(first.developmentInstanceId);
+  });
+
+  test("builds isolated workspace launcher options without reading process environment", () => {
+    const packageRoot = path.resolve("packages/openducktor-web");
+    const options = createLauncherOptions(
+      { workspaceMode: true, frontendPort: 0, backendPort: 0 },
+      packageRoot,
+    );
+
+    expect(options).toMatchObject({
+      packageRoot,
+      frontendPort: 0,
+      backendPort: 0,
+      workspaceMode: true,
+      workspaceRoot: path.resolve(packageRoot, "../.."),
+    });
+    expect(options.developmentInstanceId).toMatch(/^browser-[a-f0-9]{12}$/u);
+  });
+
   test("rejects missing option values and unknown options", () => {
     const parseMissingPort = () => parseCliArgs(["--port"]);
     expect(parseMissingPort).toThrow("Missing value for --port.");
@@ -167,7 +120,7 @@ describe("web CLI argument parsing", () => {
 
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("OPENDUCKTOR_CONFIG_DIR");
-  }, 5_000);
+  }, 1_000);
 
   test("prints help without initializing persistent logging", async () => {
     const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
@@ -189,7 +142,7 @@ describe("web CLI argument parsing", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("Usage: openducktor-web [options]");
     expect(stderr).toBe("");
-  }, 5_000);
+  }, 1_000);
 
   test("persists invalid option errors through the web logger", async () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-cli-error-"));
@@ -227,174 +180,5 @@ describe("web CLI argument parsing", () => {
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
     }
-  }, 5_000);
-
-  test("runs the workspace CLI without a development instance environment variable", async () => {
-    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-launcher-"));
-    const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
-    const subprocessEnvironment: NodeJS.ProcessEnv = {
-      ...process.env,
-      NO_COLOR: "1",
-      OPENDUCKTOR_CONFIG_DIR: configDirectory,
-    };
-    delete subprocessEnvironment.OPENDUCKTOR_DEV_INSTANCE;
-    const subprocess = Bun.spawn(
-      [process.execPath, cliPath, "--workspace", "--port", "0", "--backend-port", "0"],
-      {
-        env: subprocessEnvironment,
-        stderr: "pipe",
-        stdout: "pipe",
-      },
-    );
-    let stdout = "";
-    const ready = Promise.withResolvers<void>();
-    const stdoutPump = (async () => {
-      const decoder = new TextDecoder();
-      const reader = subprocess.stdout.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        const chunk = value;
-        stdout += decoder.decode(chunk, { stream: true });
-        if (stdout.includes("Instance:")) {
-          ready.resolve();
-        }
-      }
-      stdout += decoder.decode();
-    })();
-    const stderrPromise = new Response(subprocess.stderr).text();
-    const exited = subprocess.exited.then(async (exitCode) => ({
-      exitCode,
-      stderr: await stderrPromise,
-    }));
-
-    try {
-      let readyTimeout: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const readiness = await Promise.race([
-          ready.promise.then(() => ({ _tag: "ready" as const })),
-          exited.then(({ exitCode, stderr }) => ({
-            _tag: "exited" as const,
-            exitCode,
-            stderr,
-          })),
-          new Promise<never>((_, reject) => {
-            readyTimeout = setTimeout(
-              () => reject(new Error("Web launcher did not become ready.")),
-              15_000,
-            );
-          }),
-        ]);
-        if (readiness._tag === "exited") {
-          throw new Error(
-            `Web launcher exited before readiness with code ${readiness.exitCode}.\n${readiness.stderr}`,
-          );
-        }
-      } finally {
-        clearTimeout(readyTimeout);
-      }
-      const instanceMatch = stdout.match(/Instance:\s+(browser-[a-f0-9]{12})/u);
-      expect(instanceMatch).not.toBeNull();
-      if (!instanceMatch) {
-        throw new Error("Expected the workspace CLI to print its development instance ID.");
-      }
-      const developmentInstanceId = instanceMatch[1];
-      if (!developmentInstanceId) {
-        throw new Error("Expected the workspace CLI instance log to contain an ID.");
-      }
-      const discoveryPath = path.join(
-        configDirectory,
-        "runtime",
-        "dev-instances",
-        developmentInstanceId,
-        "mcp-bridge.json",
-      );
-      await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
-      const logDirectory = path.join(configDirectory, "logs");
-      const logFileName = (await readdir(logDirectory)).find(
-        (name) => name.startsWith("openducktor-web-") && name.endsWith(".log"),
-      );
-      expect(logFileName).toBeDefined();
-      if (!logFileName) {
-        throw new Error("Expected the web launcher to create a daily log file.");
-      }
-      const logFilePath = path.join(logDirectory, logFileName);
-      await waitForPersistedLogRecord(logFilePath, `Instance: ${developmentInstanceId}`);
-
-      const shutdownSignal = resolveWebCliStopSignal();
-      subprocess.kill(shutdownSignal);
-      const { exitCode, stderr } = await exited;
-      await stdoutPump;
-
-      expect(exitCode).toBe(shutdownSignal === "SIGINT" ? 130 : 143);
-      expect(stderr).not.toContain("log persistence failed");
-      expect(stderr).not.toContain("OPENDUCKTOR_CONFIG_DIR");
-      const persisted = await readFile(logFilePath, "utf8");
-      const startupMessages = [
-        "Starting OpenDucktor TypeScript host...",
-        "Waiting for OpenDucktor TypeScript host readiness...",
-        "Starting OpenDucktor frontend server...",
-        "OpenDucktor web is ready:",
-      ];
-      for (const message of startupMessages) {
-        expect(stdout).toContain(message);
-        expect(persisted).toContain(message);
-      }
-      expect(stdout).toMatch(/Local:\s+http:\/\/localhost:\d+\//u);
-      expect(stdout).toMatch(/Backend:\s+http:\/\/127\.0\.0\.1:\d+/u);
-      expect(stdout).toMatch(/Instance:\s+browser-[a-f0-9]{12}/u);
-      expect(persisted).toMatch(/Local:\s+http:\/\/localhost:\d+\//u);
-      expect(persisted).toMatch(/Backend:\s+http:\/\/127\.0\.0\.1:\d+/u);
-      expect(persisted).toMatch(/Instance:\s+browser-[a-f0-9]{12}/u);
-      // Bun terminates Windows subprocesses without running this POSIX signal handler.
-      if (process.platform !== "win32") {
-        await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-        const shutdownConsoleMessages = [
-          `Stopping OpenDucktor web after ${shutdownSignal}...`,
-          "Stopping OpenDucktor frontend server...",
-        ];
-        for (const message of shutdownConsoleMessages) {
-          expect(stdout).toContain(message);
-        }
-        expect(stdout).not.toContain("shutdown is already in progress");
-        for (const message of [
-          ...shutdownConsoleMessages,
-          "Shutting down OpenDucktor host services",
-          "OpenDucktor host services stopped",
-          "OpenDucktor web stopped.",
-        ]) {
-          expect(persisted).toContain(message);
-        }
-      }
-    } finally {
-      subprocess.kill("SIGKILL");
-      await subprocess.exited;
-      await rm(configDirectory, { force: true, recursive: true });
-    }
-  }, 20_000);
-
-  test("assigns a fresh development identity to each workspace launch", async () => {
-    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-web-identities-"));
-    const cliPath = fileURLToPath(new URL("./cli.ts", import.meta.url));
-    try {
-      const firstInstanceId = await captureWorkspaceInstanceId(cliPath, configDirectory);
-      const secondInstanceId = await captureWorkspaceInstanceId(cliPath, configDirectory);
-
-      expect(secondInstanceId).not.toBe(firstInstanceId);
-      for (const developmentInstanceId of [firstInstanceId, secondInstanceId]) {
-        const discoveryPath = path.join(
-          configDirectory,
-          "runtime",
-          "dev-instances",
-          developmentInstanceId,
-          "mcp-bridge.json",
-        );
-        await expect(readFile(discoveryPath, "utf8")).resolves.toContain('"hostUrl"');
-      }
-    } finally {
-      await rm(configDirectory, { force: true, recursive: true });
-    }
-  }, 35_000);
+  }, 1_000);
 });

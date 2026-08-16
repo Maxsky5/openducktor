@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  developmentMcpBridgeDiscoveryPathSegments,
-  isDevelopmentInstanceId,
-  PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS,
-} from "./development-instance";
+import { isDevelopmentInstanceId } from "./development-instance";
 
 describe("development instance contract", () => {
   test.each(["browser-0123456789ab", "electron-abcdef012345"])(
@@ -21,20 +17,5 @@ describe("development instance contract", () => {
     "../browser-0123456789ab",
   ])("rejects development instance %s", (developmentInstanceId) => {
     expect(isDevelopmentInstanceId(developmentInstanceId)).toBe(false);
-  });
-
-  test("defines production and development MCP discovery paths", () => {
-    const developmentInstanceId = "browser-0123456789ab";
-    if (!isDevelopmentInstanceId(developmentInstanceId)) {
-      throw new Error("Expected a valid development instance fixture.");
-    }
-
-    expect(PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS).toEqual(["runtime", "mcp-bridge.json"]);
-    expect(developmentMcpBridgeDiscoveryPathSegments(developmentInstanceId)).toEqual([
-      "runtime",
-      "dev-instances",
-      "browser-0123456789ab",
-      "mcp-bridge.json",
-    ]);
   });
 });

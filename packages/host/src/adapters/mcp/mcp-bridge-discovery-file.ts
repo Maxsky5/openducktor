@@ -1,8 +1,8 @@
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  developmentMcpBridgeDiscoveryPathSegments,
-  PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS,
+  MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
+  mcpBridgeDevelopmentDiscoveryPathSegments,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { resolveDevelopmentInstanceIdFromEnvironment } from "../../config/development-instance";
@@ -27,12 +27,12 @@ export const resolveMcpBridgeDiscoveryPath = (
 ): string => {
   const baseDirectory = resolveOpenDucktorBaseDir(env);
   if (mode === "production") {
-    return path.resolve(baseDirectory, ...PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS);
+    return path.resolve(baseDirectory, ...MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS);
   }
   const developmentInstanceId = resolveDevelopmentInstanceIdFromEnvironment(env);
   return path.resolve(
     baseDirectory,
-    ...developmentMcpBridgeDiscoveryPathSegments(developmentInstanceId),
+    ...mcpBridgeDevelopmentDiscoveryPathSegments(developmentInstanceId),
   );
 };
 

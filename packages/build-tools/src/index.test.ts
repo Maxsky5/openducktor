@@ -3,11 +3,6 @@ import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanDirectory, markExecutable, runCommand } from "./index";
-import {
-  createOpenDucktorStartupSplashPlugin,
-  OPEN_DUCKTOR_STARTUP_BACKGROUND,
-  OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND,
-} from "./startup-splash";
 
 describe("build tools", () => {
   it("removes a directory tree", async () => {
@@ -24,7 +19,7 @@ describe("build tools", () => {
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
-  }, 5000);
+  });
 
   it("marks files executable on POSIX platforms", async () => {
     const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-build-tools-"));
@@ -64,39 +59,5 @@ describe("build tools", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Failing command failed with exit code 7.");
-  }, 5000);
-
-  it("creates the shared startup splash for Vite HTML", () => {
-    const plugin = createOpenDucktorStartupSplashPlugin();
-    const result = plugin.transformIndexHtml();
-    const fontPreload = result.tags.find((tag) => tag.attrs?.rel === "preload");
-    const styles = result.tags.find((tag) => tag.tag === "style");
-    const splash = result.tags.find((tag) => tag.attrs?.id === "openducktor-startup");
-
-    expect(plugin.enforce).toBe("pre");
-    expect(styles?.injectTo).toBe("head-prepend");
-    expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_BACKGROUND);
-    expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND);
-    expect(styles?.children).toContain("@media (prefers-color-scheme: dark)");
-    expect(styles?.children).toContain(":root.light");
-    expect(styles?.children).toContain(":root.dark");
-    expect(styles?.children).not.toContain("gradient");
-    expect(styles?.children).toContain('font-family: "Space Grotesk"');
-    expect(styles?.children).toContain("--odt-startup-title: #475569");
-    expect(fontPreload?.attrs?.href).toBe("./fonts/space-grotesk-latin-600.woff2");
-    expect(fontPreload?.attrs?.type).toBe("font/woff2");
-    expect(splash?.injectTo).toBe("body-prepend");
-    expect(splash?.attrs?.role).toBe("status");
-    expect(splash?.attrs?.["aria-live"]).toBeUndefined();
-    expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
-    expect(splash?.children).toContain('<div class="odt-startup__orbit" aria-hidden="true">');
-    expect(splash?.children).toContain('<div class="odt-startup__particles" aria-hidden="true">');
-    expect(
-      splash?.children?.match(/class="odt-startup__particle odt-startup__particle--/g),
-    ).toHaveLength(18);
-    expect(splash?.children).toContain("odt-startup__particle--ring");
-    expect(splash?.children).toContain("odt-startup__particle--spark");
-    expect(splash?.children).not.toContain("odt-startup__launch-panel");
-    expect(splash?.children).toContain("./favicon.svg");
   });
 });

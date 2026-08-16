@@ -5,7 +5,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css",
-    "./lib/*": "./src/lib/*"
+    "./lib/*": "./src/lib/*",
+    "./startup-splash/theme": "./src/startup-splash/theme.ts",
+    "./startup-splash/vite-plugin": "./src/startup-splash/vite-plugin.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

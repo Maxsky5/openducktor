@@ -2,10 +2,10 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   DEVELOPMENT_INSTANCE_ID_PATTERN,
-  developmentMcpBridgeDiscoveryPathSegments,
   isDevelopmentInstanceId,
+  MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
+  mcpBridgeDevelopmentDiscoveryPathSegments,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
-  PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 
@@ -61,7 +61,7 @@ const resolveOpenducktorBaseDir = (): string => {
 
 const resolveMcpBridgeDiscoveryRelativePath = (): readonly string[] => {
   if (!Object.hasOwn(process.env, OPENDUCKTOR_CHANNEL_ENV)) {
-    return PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS;
+    return MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS;
   }
   const channel = process.env[OPENDUCKTOR_CHANNEL_ENV];
   if (channel === "dev") {
@@ -76,7 +76,7 @@ const resolveMcpBridgeDiscoveryRelativePath = (): readonly string[] => {
         `${OPENDUCKTOR_DEV_INSTANCE_ENV} must match ${DEVELOPMENT_INSTANCE_ID_PATTERN.source}. Received ${JSON.stringify(developmentInstanceId)}.`,
       );
     }
-    return developmentMcpBridgeDiscoveryPathSegments(developmentInstanceId);
+    return mcpBridgeDevelopmentDiscoveryPathSegments(developmentInstanceId);
   }
   throw new Error(
     `OPENDUCKTOR_CHANNEL must be unset for production discovery or set to dev. Received ${JSON.stringify(channel)}.`,

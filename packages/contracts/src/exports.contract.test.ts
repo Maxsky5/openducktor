@@ -81,7 +81,6 @@ import type {
   ChatSettings,
   CodexReasoningEffort,
   CommitsAheadBehind,
-  DevelopmentInstanceMode,
   DirectoryEntry,
   DirectoryListing,
   ExternalTaskSyncEvent,
@@ -275,7 +274,7 @@ import * as contracts from "./index";
 const EXPECTED_RUNTIME_EXPORTS = [
   "DEVELOPMENT_INSTANCE_ID_PATTERN",
   "OPENDUCKTOR_DEV_INSTANCE_ENV",
-  "PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS",
+  "MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS",
   "acceptedAgentUserMessageSchema",
   "agentAttachmentReferenceSchema",
   "agentDescriptorSchema",
@@ -296,7 +295,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentToolNameSchema",
   "agentToolNameValues",
   "buildSessionBootstrapSchema",
-  "developmentMcpBridgeDiscoveryPathSegments",
+  "mcpBridgeDevelopmentDiscoveryPathSegments",
   "isDevelopmentInstanceId",
   "taskSessionBootstrapSchema",
   "LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT",
@@ -892,7 +891,6 @@ type ExportedTypeContract = {
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;
   CommitsAheadBehind: CommitsAheadBehind;
-  DevelopmentInstanceMode: DevelopmentInstanceMode;
   DirectoryEntry: DirectoryEntry;
   DirectoryListing: DirectoryListing;
   FilesystemListDirectoryInput: FilesystemListDirectoryInput;

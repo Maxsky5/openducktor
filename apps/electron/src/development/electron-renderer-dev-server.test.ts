@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { closeRendererServer, resolveRendererDevUrl } from "./electron-renderer-dev-server";
+import { Effect } from "effect";
+import { closeRendererServerEffect, resolveRendererDevUrl } from "./electron-renderer-dev-server";
 
 describe("Electron renderer dev server", () => {
   test("resolves the URL that Vite reports for its assigned port", () => {
     const url = resolveRendererDevUrl({
       close: async () => {},
-      config: { server: { port: 0 } },
       resolvedUrls: { local: ["http://127.0.0.1:49152/"] },
       watcher: { add() {}, on() {} },
     });
@@ -37,7 +37,7 @@ describe("Electron renderer dev server", () => {
       },
     };
 
-    await closeRendererServer(rendererServer);
+    await Effect.runPromise(closeRendererServerEffect(rendererServer));
 
     expect(closeCalls).toBe(1);
     expect(closeIdleConnectionsCalls).toBe(1);
@@ -61,21 +61,20 @@ describe("Electron renderer dev server", () => {
       },
     };
 
-    await expect(closeRendererServer(rendererServer)).rejects.toThrow("renderer close failed");
+    await expect(Effect.runPromise(closeRendererServerEffect(rendererServer))).rejects.toThrow(
+      "renderer close failed",
+    );
     expect(closeIdleConnectionsCalls).toBe(1);
     expect(closeAllConnectionsCalls).toBe(1);
   });
 
-  test("bounds renderer shutdown when close does not resolve", async () => {
-    let timeoutMs = 0;
-    const rendererServer = {
-      close: () => new Promise<void>(() => {}),
-    };
-
-    await closeRendererServer(rendererServer, async (durationMs) => {
-      timeoutMs = durationMs;
-    });
-
-    expect(timeoutMs).toBe(3_000);
+  test("fails when Vite does not report the local renderer URL", () => {
+    expect(() =>
+      resolveRendererDevUrl({
+        close: async () => {},
+        resolvedUrls: { local: [] },
+        watcher: { add() {}, on() {} },
+      }),
+    ).toThrow("Vite renderer dev server did not report a local URL");
   });
 });

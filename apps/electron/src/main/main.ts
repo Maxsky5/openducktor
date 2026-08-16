@@ -1,10 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  OPEN_DUCKTOR_STARTUP_BACKGROUND,
-  OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND,
-} from "@openducktor/build-tools/startup-splash";
-import {
   type AppUpdateCommandResult,
   type AppUpdateOperation,
   type AppUpdateState,
@@ -13,6 +9,10 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
 } from "@openducktor/contracts";
+import {
+  OPEN_DUCKTOR_STARTUP_BACKGROUND,
+  OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND,
+} from "@openducktor/frontend/startup-splash/theme";
 import {
   createHostEventBus,
   type EffectHostCommandRouter,
@@ -305,6 +305,7 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
       app,
       appName: APPLICATION_NAME,
       logger: electronMainLogger,
+      workspaceRoot,
     });
     if (developmentInstanceClaim === "duplicate") {
       return process.exit(0);

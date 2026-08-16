@@ -9,7 +9,7 @@ import {
   type OpenDucktorShellBootstrapOptions,
   runOpenDucktorShellBootstrap,
 } from "./shell-bootstrap-workflow";
-import { dismissOpenDucktorStartupSplash } from "./startup-splash";
+import { dismissOpenDucktorStartupSplash } from "./startup-splash/runtime";
 import { loadSettingsSnapshotFromQuery } from "./state/queries/workspace";
 
 const SETTINGS_PRELOAD_ERROR_MESSAGE = "Failed to preload settings snapshot before app bootstrap.";

@@ -22,7 +22,7 @@
     "dev:renderer": "vite --host 127.0.0.1 --strictPort",
     "package": "bun run scripts/package-build.ts",
     "release:artifact": "bun run scripts/package-build.ts --stage-release-artifacts",
-    "preview": "bun run scripts/preview.ts",
+    "preview": "electron dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000",
     "lint": "biome check src scripts vite.config.ts"
