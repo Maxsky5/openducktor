@@ -3,12 +3,20 @@ const STARTUP_SPLASH_STATUS_SELECTOR = "[data-odt-startup-status]";
 const STARTUP_SPLASH_LEAVING_CLASS = "odt-startup--leaving";
 const STARTUP_SPLASH_FAILED_CLASS = "odt-startup--failed";
 const STARTUP_FAILURE_MESSAGE = "OpenDucktor could not start. Check the application logs.";
+const STARTUP_SPLASH_MINIMUM_VISIBLE_MS = 1_000;
+const startupSplashFirstSeenAt = new WeakMap<HTMLElement, number>();
+const pendingStartupSplashDismissals = new WeakSet<HTMLElement>();
 
-const getStartupSplash = (): HTMLElement | null => document.getElementById(STARTUP_SPLASH_ID);
+const getStartupSplash = (): HTMLElement | null => {
+  const splash = document.getElementById(STARTUP_SPLASH_ID);
+  if (splash && !startupSplashFirstSeenAt.has(splash)) {
+    startupSplashFirstSeenAt.set(splash, performance.now());
+  }
+  return splash;
+};
 
-export const dismissOpenDucktorStartupSplash = (): void => {
-  const splash = getStartupSplash();
-  if (!splash || splash.classList.contains(STARTUP_SPLASH_LEAVING_CLASS)) {
+const beginStartupSplashDismissal = (splash: HTMLElement): void => {
+  if (splash.classList.contains(STARTUP_SPLASH_LEAVING_CLASS)) {
     return;
   }
 
@@ -29,6 +37,34 @@ export const dismissOpenDucktorStartupSplash = (): void => {
     },
     { once: true },
   );
+};
+
+if (typeof document !== "undefined") {
+  getStartupSplash();
+}
+
+export const dismissOpenDucktorStartupSplash = (): void => {
+  const splash = getStartupSplash();
+  if (
+    !splash ||
+    splash.classList.contains(STARTUP_SPLASH_LEAVING_CLASS) ||
+    pendingStartupSplashDismissals.has(splash)
+  ) {
+    return;
+  }
+
+  const firstSeenAt = startupSplashFirstSeenAt.get(splash) ?? performance.now();
+  const remainingVisibleMs = STARTUP_SPLASH_MINIMUM_VISIBLE_MS - (performance.now() - firstSeenAt);
+  if (remainingVisibleMs > 0) {
+    pendingStartupSplashDismissals.add(splash);
+    window.setTimeout(() => {
+      pendingStartupSplashDismissals.delete(splash);
+      beginStartupSplashDismissal(splash);
+    }, remainingVisibleMs);
+    return;
+  }
+
+  beginStartupSplashDismissal(splash);
 };
 
 export const showOpenDucktorStartupFailure = (): void => {

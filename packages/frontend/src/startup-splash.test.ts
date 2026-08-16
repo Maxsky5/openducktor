@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./startup-splash";
 
@@ -19,6 +19,31 @@ const renderStartupSplash = (): HTMLElement => {
   return splash;
 };
 
+const captureScheduledTimeout = () => {
+  let callback: (() => void) | null = null;
+  let delayMs: number | undefined;
+  const setTimeoutImplementation = ((handler: TimerHandler, timeout?: number) => {
+    if (typeof handler !== "function") {
+      throw new TypeError("Expected a timeout callback.");
+    }
+    callback = () => handler();
+    delayMs = timeout;
+    return 1;
+  }) as typeof window.setTimeout;
+  const timeoutSpy = spyOn(window, "setTimeout").mockImplementation(setTimeoutImplementation);
+
+  return {
+    delayMs: () => delayMs,
+    run: () => {
+      if (!callback) {
+        throw new Error("No timeout was scheduled.");
+      }
+      callback();
+    },
+    restore: () => timeoutSpy.mockRestore(),
+  };
+};
+
 beforeEach(() => {
   window.matchMedia = (query: string) =>
     ({
@@ -32,13 +57,25 @@ afterEach(() => {
 });
 
 describe("startup splash", () => {
-  test("leaves after the app commits its first paint", () => {
+  test("stays visible for one second while the app renders behind it", () => {
     const splash = renderStartupSplash();
+    const scheduledTimeout = captureScheduledTimeout();
 
-    dismissOpenDucktorStartupSplash();
+    try {
+      dismissOpenDucktorStartupSplash();
 
-    expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
-    expect(splash.getAttribute("aria-hidden")).toBe("true");
+      expect(splash.classList.contains("odt-startup--leaving")).toBe(false);
+      expect(splash.getAttribute("aria-hidden")).toBeNull();
+      expect(scheduledTimeout.delayMs()).toBeGreaterThan(950);
+      expect(scheduledTimeout.delayMs()).toBeLessThanOrEqual(1_000);
+
+      scheduledTimeout.run();
+
+      expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
+      expect(splash.getAttribute("aria-hidden")).toBe("true");
+    } finally {
+      scheduledTimeout.restore();
+    }
 
     const transitionEvent = new Event("transitionend") as TransitionEvent;
     Object.defineProperty(transitionEvent, "propertyName", { value: "opacity" });
@@ -47,17 +84,46 @@ describe("startup splash", () => {
     expect(document.getElementById("openducktor-startup")).toBeNull();
   });
 
-  test("removes immediately when reduced motion is enabled", () => {
+  test("starts leaving at once when startup already took one second", () => {
     const splash = renderStartupSplash();
+    let nowCallCount = 0;
+    const nowSpy = spyOn(performance, "now").mockImplementation(() => {
+      nowCallCount += 1;
+      return nowCallCount === 1 ? 0 : 1_001;
+    });
+    const timeoutSpy = spyOn(window, "setTimeout");
+
+    try {
+      dismissOpenDucktorStartupSplash();
+
+      expect(timeoutSpy).not.toHaveBeenCalled();
+      expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
+    } finally {
+      timeoutSpy.mockRestore();
+      nowSpy.mockRestore();
+    }
+  });
+
+  test("removes without a fade after the one-second hold when reduced motion is enabled", () => {
+    const splash = renderStartupSplash();
+    const scheduledTimeout = captureScheduledTimeout();
     window.matchMedia = (query: string) =>
       ({
         matches: true,
         media: query,
       }) as MediaQueryList;
 
-    dismissOpenDucktorStartupSplash();
+    try {
+      dismissOpenDucktorStartupSplash();
 
-    expect(splash.isConnected).toBe(false);
+      expect(splash.isConnected).toBe(true);
+
+      scheduledTimeout.run();
+
+      expect(splash.isConnected).toBe(false);
+    } finally {
+      scheduledTimeout.restore();
+    }
   });
 
   test("shows a clear startup failure", () => {
