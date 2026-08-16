@@ -233,6 +233,110 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps the current collection and reports a task-refresh association conflict", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+      });
+    }, []);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the persisted collection and reports an initial snapshot association conflict", async () => {
+    const state = createState(() => undefined);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the current collection and records a later delta association conflict", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const identity = {
+      externalSessionId: record.externalSessionId,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "session_upsert",
+          session: snapshot({ sessionAssociation: { kind: "repository" } }),
+        });
+      });
+
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.harness.getLatest().getSessionFault(identity)).toEqual({
+        message:
+          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("keeps observing transcript events while tasks synchronize", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });

@@ -236,17 +236,26 @@ export const useRepoSessionReadModel = ({
       return;
     }
 
-    taskSessionRecordsRef.current = {
-      repoPath: workspaceRepoPath,
-      records: taskSessionRecordsState.records,
-    };
-    commitSessionCollection((current) => ({
-      collection: applyTaskSessionRecords({
-        current,
-        taskSessionRecords: taskSessionRecordsState.records,
-      }),
-      result: undefined,
-    }));
+    try {
+      commitSessionCollection((current) => ({
+        collection: applyTaskSessionRecords({
+          current,
+          taskSessionRecords: taskSessionRecordsState.records,
+        }),
+        result: undefined,
+      }));
+      taskSessionRecordsRef.current = {
+        repoPath: workspaceRepoPath,
+        records: taskSessionRecordsState.records,
+      };
+    } catch (error: unknown) {
+      setSessionReadModelLoadState(
+        failedAgentSessionReadModelLoadState(
+          workspaceRepoPath,
+          `Failed to reconcile task session records for repo '${workspaceRepoPath}': ${errorMessage(error)}`,
+        ),
+      );
+    }
   }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
 
   useEffect(() => {
@@ -457,6 +466,24 @@ export const useRepoSessionReadModel = ({
         return;
       }
     };
+    const reportEnvelopeFailure = (envelope: AgentSessionLiveEnvelope, error: unknown): void => {
+      if (envelope.type === "session_upsert") {
+        recordSessionFault(
+          envelope.session.ref,
+          `Failed to apply live-session update: ${errorMessage(error)}`,
+        );
+        return;
+      }
+      if (envelope.type === "snapshot") {
+        failObservation(
+          `Failed to apply initial live-session snapshot for repo '${repoPath}': ${errorMessage(error)}`,
+        );
+        return;
+      }
+      failObservation(
+        `Failed to apply live-session '${envelope.type}' event for repo '${repoPath}': ${errorMessage(error)}`,
+      );
+    };
 
     observedRepoPathRef.current = repoPath;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
@@ -465,7 +492,11 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
-      applyEnvelope(envelope);
+      try {
+        applyEnvelope(envelope);
+      } catch (error: unknown) {
+        reportEnvelopeFailure(envelope, error);
+      }
     })
       .then((stopObserving) => {
         if (isStaleRepoOperation()) {

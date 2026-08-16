@@ -1,7 +1,10 @@
-import type {
-  AgentSessionHistoryMessage,
-  AgentSkillCatalog,
-  PolicyBoundSessionRef,
+import {
+  type AgentSessionHistoryMessage,
+  type AgentSessionScope,
+  type AgentSkillCatalog,
+  describeAgentSessionScope,
+  type PolicyBoundSessionRef,
+  resolveAgentSessionAssociationTransition,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
@@ -55,6 +58,43 @@ type RuntimeTranscriptSessionHistory = {
   isRetryingHistory: boolean;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
+};
+
+type TranscriptSessionScopeResolution =
+  | { kind: "resolved"; sessionScope: AgentSessionScope | null }
+  | { kind: "conflict"; message: string };
+
+const resolveTranscriptSessionScope = ({
+  matchingSession,
+  targetSessionScope,
+}: {
+  matchingSession: AgentSessionState | null;
+  targetSessionScope: AgentSessionScope | null;
+}): TranscriptSessionScopeResolution => {
+  if (matchingSession === null) {
+    return { kind: "resolved", sessionScope: targetSessionScope };
+  }
+  if (targetSessionScope === null) {
+    return {
+      kind: "resolved",
+      sessionScope: resolveSessionRuntimeScope(matchingSession.sessionAssociation),
+    };
+  }
+
+  const transition = resolveAgentSessionAssociationTransition(
+    matchingSession.sessionAssociation,
+    targetSessionScope,
+  );
+  if (transition.kind === "conflict") {
+    return {
+      kind: "conflict",
+      message: `Cannot load transcript history for session '${matchingSession.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+    };
+  }
+  return {
+    kind: "resolved",
+    sessionScope: resolveSessionRuntimeScope(transition.association),
+  };
 };
 
 const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
@@ -117,15 +157,18 @@ export function useRuntimeTranscriptSessionHistory({
       ? liveSession
       : null;
   const inheritedSessionScope = stableTarget?.sessionScope ?? null;
-  const sessionScope = useMemo(
+  const sessionScopeResolution = useMemo(
     () =>
-      matchingSession
-        ? resolveSessionRuntimeScope(matchingSession.sessionAssociation)
-        : inheritedSessionScope,
+      resolveTranscriptSessionScope({
+        matchingSession,
+        targetSessionScope: inheritedSessionScope,
+      }),
     [inheritedSessionScope, matchingSession],
   );
+  const sessionScope =
+    sessionScopeResolution.kind === "resolved" ? sessionScopeResolution.sessionScope : null;
   const runtimeSessionRefInput = useMemo(() => {
-    if (repoPath === null || stableTarget === null) {
+    if (repoPath === null || stableTarget === null || sessionScopeResolution.kind === "conflict") {
       return null;
     }
     return {
@@ -133,7 +176,7 @@ export function useRuntimeTranscriptSessionHistory({
       repoPath,
       sessionScope,
     };
-  }, [repoPath, sessionScope, stableTarget]);
+  }, [repoPath, sessionScope, sessionScopeResolution.kind, stableTarget]);
   const loadSettingsSnapshot = useCallback(
     () => queryClient.ensureQueryData(settingsSnapshotQueryOptions()),
     [queryClient],
@@ -184,6 +227,9 @@ export function useRuntimeTranscriptSessionHistory({
       : null;
   }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
+    if (sessionScopeResolution.kind === "conflict") {
+      return { kind: "failed", message: sessionScopeResolution.message };
+    }
     if (session !== null) {
       return { kind: "visible" };
     }
@@ -203,7 +249,14 @@ export function useRuntimeTranscriptSessionHistory({
       reason: "history",
       repoReadinessState,
     });
-  }, [emptyReason, historyQuery.error, repoReadinessState, runtimePolicyError, session]);
+  }, [
+    emptyReason,
+    historyQuery.error,
+    repoReadinessState,
+    runtimePolicyError,
+    session,
+    sessionScopeResolution,
+  ]);
   const retryHistory = useCallback(() => {
     void refetchHistory();
   }, [refetchHistory]);

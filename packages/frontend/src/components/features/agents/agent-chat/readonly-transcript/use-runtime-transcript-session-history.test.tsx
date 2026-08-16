@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionHistoryMessage, AgentSkillReference } from "@openducktor/core";
+import type {
+  AgentSessionHistoryMessage,
+  AgentSessionScope,
+  AgentSkillReference,
+} from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { createQueryClient } from "@/lib/query-client";
@@ -56,6 +60,7 @@ const operations = (
 const createHarness = (
   liveSession: AgentSessionState,
   readSessionHistory: AgentOperationsContextValue["readSessionHistory"],
+  targetSessionScope?: AgentSessionScope,
 ) => {
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
@@ -75,6 +80,7 @@ const createHarness = (
         externalSessionId: liveSession.externalSessionId,
         runtimeKind: liveSession.runtimeKind,
         workingDirectory: liveSession.workingDirectory,
+        ...(targetSessionScope ? { sessionScope: targetSessionScope } : {}),
       },
       repoReadinessState: "ready" as const,
       liveSession,
@@ -84,6 +90,92 @@ const createHarness = (
 };
 
 describe("useRuntimeTranscriptSessionHistory", () => {
+  test("accepts an explicit workflow scope for a matching unbound live session", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(
+      session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
+      readSessionHistory,
+      { kind: "workflow", taskId: "task-1", role: "build" },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("accepts an explicit repository scope for a matching unbound live session", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(
+      session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
+      readSessionHistory,
+      { kind: "repository" },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionScope: { kind: "repository" } }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("accepts equal explicit and live workflow scopes", async () => {
+    const readSessionHistory = mock(async () => []);
+    const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+    const harness = createHarness(
+      session({ runtimeKind: "opencode", sessionAssociation: workflowScope }),
+      readSessionHistory,
+      workflowScope,
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionScope: workflowScope }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects conflicting explicit and live workflow scopes", async () => {
+    const readSessionHistory = mock(async () => []);
+    const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory, {
+      kind: "workflow",
+      taskId: "task-2",
+      role: "qa",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.transcriptState.kind === "failed");
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().transcriptState).toEqual({
+        kind: "failed",
+        message:
+          "Cannot load transcript history for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the requested workflow scope for task 'task-2' and role 'qa'.",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("forwards repository scope unchanged to the history request", async () => {
     const readSessionHistory = mock(async () => []);
     const wrapper = ({ children }: PropsWithChildren) => (
