@@ -40,6 +40,7 @@ const buildRepoRuntimeAvailabilityErrors = ({
 }): string[] => {
   const errors: string[] = [];
   const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));
+  if (availableKinds.size === 0) return errors;
   if (!availableKinds.has(repoConfig.defaultRuntimeKind)) {
     errors.push(
       `Default agent runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, repoConfig.defaultRuntimeKind)}" is disabled.`,

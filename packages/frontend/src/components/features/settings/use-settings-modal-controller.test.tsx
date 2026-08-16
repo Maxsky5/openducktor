@@ -417,17 +417,59 @@ describe("useSettingsModalController", () => {
 
   test("fails closed when runtime executable validation cannot load", async () => {
     const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => {
-      throw new Error("Executable validation failed");
+    const requestedKinds: RuntimeKind[] = [];
+    const attemptCountByKind: Record<RuntimeKind, number> = {
+      opencode: 0,
+      codex: 0,
+      claude: 0,
+    };
+    const initialValidationByKind: Record<
+      RuntimeKind,
+      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
+    > = {
+      opencode: createDeferred<RuntimeExecutableCheck>(),
+      codex: createDeferred<RuntimeExecutableCheck>(),
+      claude: createDeferred<RuntimeExecutableCheck>(),
+    };
+    const repeatedValidationByKind: Record<
+      RuntimeKind,
+      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
+    > = {
+      opencode: createDeferred<RuntimeExecutableCheck>(),
+      codex: createDeferred<RuntimeExecutableCheck>(),
+      claude: createDeferred<RuntimeExecutableCheck>(),
+    };
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") throw new Error("Expected runtime validation");
+      const kind = knownRuntimeKindValues.find((candidate) =>
+        Object.hasOwn(input.paths, candidate),
+      );
+      if (!kind) throw new Error("Runtime validation kind is missing");
+      requestedKinds.push(kind);
+      attemptCountByKind[kind] += 1;
+      return attemptCountByKind[kind] === 1
+        ? initialValidationByKind[kind].promise
+        : repeatedValidationByKind[kind].promise;
     });
     saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
 
     try {
       await harness.mount();
+      await harness.waitFor(() => requestedKinds.length === knownRuntimeKindValues.length);
+      await harness.run(() => {
+        for (const kind of knownRuntimeKindValues) {
+          initialValidationByKind[kind].reject(new Error("Executable validation failed"));
+        }
+      });
       await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
+      await harness.run(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
 
       expect(harness.getLatest().runtimeExecutablesError).toBe("Executable validation failed");
+      expect(requestedKinds.toSorted()).toEqual(knownRuntimeKindValues.toSorted());
       let didSave = true;
       await harness.run(async (state) => {
         didSave = await state.submit();
@@ -436,6 +478,9 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().saveError).toContain("Executable validation failed");
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
     } finally {
+      for (const kind of knownRuntimeKindValues) {
+        repeatedValidationByKind[kind].resolve({ runtimes: [] });
+      }
       host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }

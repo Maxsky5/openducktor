@@ -72,6 +72,19 @@ describe("settings runtime availability validation", () => {
     expect(validation.totalErrorCount).toBe(0);
   });
 
+  test("allows dormant repository runtime references when every runtime is disabled", () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes.opencode.enabled = false;
+
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft,
+    });
+
+    expect(validation.errorsByWorkspaceId).toEqual({});
+    expect(validation.totalErrorCount).toBe(0);
+  });
+
   test("reports an enabled runtime whose saved executable path is invalid", () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.codex = {

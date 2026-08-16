@@ -19,7 +19,7 @@ export type RuntimeExecutableValidationState = {
   refetch: () => Promise<void>;
 };
 
-const activeValidationCountForKind = (
+const activeOtherValidationCountForKind = (
   kind: RuntimeKind,
   opencode: number,
   codex: number,
@@ -34,14 +34,20 @@ export const useRuntimeExecutableValidation = (
   runtimes: AgentRuntimes | null,
   enabled: boolean,
 ): RuntimeExecutableValidationState => {
+  const opencodePath = runtimes?.opencode.executablePath ?? "";
+  const codexPath = runtimes?.codex.executablePath ?? "";
+  const claudePath = runtimes?.claude.executablePath ?? "";
   const activeOpenCodeValidationCount = useIsFetching({
     queryKey: runtimeQueryKeys.executableKind("opencode"),
+    predicate: (query) => query.queryKey.at(-1) !== opencodePath,
   });
   const activeCodexValidationCount = useIsFetching({
     queryKey: runtimeQueryKeys.executableKind("codex"),
+    predicate: (query) => query.queryKey.at(-1) !== codexPath,
   });
   const activeClaudeValidationCount = useIsFetching({
     queryKey: runtimeQueryKeys.executableKind("claude"),
+    predicate: (query) => query.queryKey.at(-1) !== claudePath,
   });
   const inputs = knownRuntimeKindValues.map((kind) => ({
     kind,
@@ -53,7 +59,7 @@ export const useRuntimeExecutableValidation = (
       enabled:
         enabled &&
         runtimes !== null &&
-        activeValidationCountForKind(
+        activeOtherValidationCountForKind(
           kind,
           activeOpenCodeValidationCount,
           activeCodexValidationCount,
