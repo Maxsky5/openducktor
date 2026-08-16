@@ -9,12 +9,12 @@ import {
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import type { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, type HostValidationError } from "../../effect/host-errors";
 import { discoverToolFresh, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 export type RuntimeConfigInitializer = (
   legacyConfig: PersistedGlobalConfigV2 | null,
-) => Effect.Effect<LoadedGlobalConfig, HostOperationError>;
+) => Effect.Effect<LoadedGlobalConfig, HostOperationError | HostValidationError>;
 
 export const createRuntimeConfigInitializer =
   (toolDiscovery: ToolDiscoveryPort): RuntimeConfigInitializer =>
@@ -23,10 +23,21 @@ export const createRuntimeConfigInitializer =
       const discoveredPaths = yield* Effect.forEach(
         knownRuntimeKindValues,
         (kind) =>
-          Effect.either(discoverToolFresh(toolDiscovery, kind)).pipe(
-            Effect.map(
-              (result) => [kind, result._tag === "Right" ? result.right.path : ""] as const,
-            ),
+          discoverToolFresh(toolDiscovery, kind).pipe(
+            Effect.map((resolved) => [kind, resolved.path] as const),
+            Effect.catchTag("HostDependencyError", (error) => {
+              if (error.details?.requiredSource === true) {
+                return Effect.fail(
+                  new HostOperationError({
+                    operation: "runtimeConfig.initialize",
+                    message: error.message,
+                    cause: error,
+                    details: error.details,
+                  }),
+                );
+              }
+              return Effect.succeed([kind, ""] as const);
+            }),
           ),
         { concurrency: 3 },
       );

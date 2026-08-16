@@ -162,7 +162,7 @@ const missingRequiredSourceError = (
     message:
       source.requiredMissingMessage?.({ descriptor, directories }) ??
       `${descriptor.command} not found. Checked ${checked.join(", ")}. ${descriptor.installHint}`,
-    details: { directories },
+    details: { directories, requiredSource: true },
   });
 
 const discoverDescriptorToolPath = ({

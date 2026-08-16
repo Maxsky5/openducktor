@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ResolvedTool, ToolDiscoveryId } from "../../ports/tool-discovery-port";
 import { discoverToolFresh, validateExactToolPath } from "../../ports/tool-discovery-port";
@@ -277,18 +277,32 @@ describe("discoverToolPath", () => {
   });
 
   test("fails at a required bundled source before PATH", async () => {
-    await expect(
-      discoverBuiltInTool({
-        options: {
-          bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands({ available: ["opencode"] }),
-        toolId: "opencode",
-      }),
-    ).rejects.toThrow(
-      "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, bundled tool directory (/opt/OpenDucktor/bin). Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
-    );
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: {
+        bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
+        platform: "linux",
+      },
+      systemCommands: createSystemCommands({ available: ["opencode"] }),
+    });
+    const exit = await Effect.runPromiseExit(adapter.resolveToolPath("opencode"));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const failures = Array.from(Cause.failures(exit.cause));
+      expect(failures).toEqual([
+        expect.objectContaining({
+          _tag: "HostDependencyError",
+          details: {
+            directories: ["/opt/OpenDucktor/bin"],
+            requiredSource: true,
+          },
+        }),
+      ]);
+      expect(failures[0]?.message).toBe(
+        "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, bundled tool directory (/opt/OpenDucktor/bin). Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
+      );
+    }
   });
 
   test("uses SystemCommandRunner PATHEXT resolution for bundled directories", async () => {
