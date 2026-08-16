@@ -115,6 +115,7 @@ describe("createWebLauncherLifecycle", () => {
   test("stops the host when Vite closes the frontend first", async () => {
     let frontendCloseCalls = 0;
     let hostStopCalls = 0;
+    const infoMessages: string[] = [];
     const hostBackend = {
       exited: Promise.resolve(0),
       port: 14327,
@@ -128,7 +129,7 @@ describe("createWebLauncherLifecycle", () => {
           }),
         logger: {
           error: () => Effect.void,
-          info: () => Effect.void,
+          info: (message) => Effect.sync(() => infoMessages.push(message)),
           success: () => Effect.void,
         },
         onSignalShutdownFailure: () => {},
@@ -149,6 +150,7 @@ describe("createWebLauncherLifecycle", () => {
 
     expect(frontendCloseCalls).toBe(0);
     expect(hostStopCalls).toBe(1);
+    expect(infoMessages).toEqual(["Stopping OpenDucktor TypeScript host services..."]);
   });
 
   test("does not wait on itself when lifecycle shutdown closes Vite", async () => {

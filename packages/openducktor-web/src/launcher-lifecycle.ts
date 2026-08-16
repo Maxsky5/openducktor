@@ -227,18 +227,19 @@ export const createWebLauncherLifecycle = (
         return settleStop(
           Effect.gen(function* () {
             const failures: WebError[] = [];
-            for (const message of [
-              "Stopping OpenDucktor frontend server...",
-              "Stopping OpenDucktor TypeScript host services...",
-            ]) {
+            const hostBackend = hostState._tag === "open" ? hostState.backend : null;
+            if (hostBackend) {
               const logExit = yield* Effect.exit(
-                writeWebLogEffect(options.logger, "info", message),
+                writeWebLogEffect(
+                  options.logger,
+                  "info",
+                  "Stopping OpenDucktor TypeScript host services...",
+                ),
               );
               if (logExit._tag === "Failure") {
                 failures.push(causeToWebBoundaryError(logExit.cause));
               }
             }
-            const hostBackend = hostState._tag === "open" ? hostState.backend : null;
             hostState = { _tag: "closed" };
             const stopExit = yield* Effect.exit(
               options.stopResources({

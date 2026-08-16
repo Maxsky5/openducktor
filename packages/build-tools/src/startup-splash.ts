@@ -472,7 +472,6 @@ export const createOpenDucktorStartupSplashPlugin = () => ({
           class: "odt-startup",
           role: "status",
           "aria-label": "OpenDucktor is starting",
-          "aria-live": "polite",
         },
         children: STARTUP_SPLASH_MARKUP,
         injectTo: "body-prepend",

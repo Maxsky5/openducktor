@@ -60,6 +60,18 @@ describe("resolveElectronProfilePath", () => {
       path.resolve("./.openducktor-local", "electron-profile"),
     );
   });
+
+  test("rejects a missing development instance", () => {
+    expect(() => resolveElectronProfilePath(defaultConfigPath, "development")).toThrow(
+      ElectronOperationError,
+    );
+  });
+
+  test("rejects a malformed development instance", () => {
+    expect(() =>
+      resolveElectronProfilePath(defaultConfigPath, "development", "electron-invalid"),
+    ).toThrow("OPENDUCKTOR_DEV_INSTANCE must match");
+  });
 });
 
 describe("configureElectronAppIdentity", () => {
@@ -147,6 +159,38 @@ describe("configureElectronAppIdentity", () => {
 
     expect(first).not.toBe(second);
   });
+
+  test.each([
+    ["missing", undefined],
+    ["malformed", "electron-invalid"],
+  ] as const)(
+    "wraps an invalid development instance from the environment: %s",
+    (_caseName, developmentInstanceId) => {
+      const processEnv: NodeJS.ProcessEnv = {
+        OPENDUCKTOR_CONFIG_DIR: customConfigPath,
+        ...(developmentInstanceId ? { OPENDUCKTOR_DEV_INSTANCE: developmentInstanceId } : {}),
+      };
+
+      expect(() =>
+        configureElectronAppIdentity(
+          {
+            setName() {},
+            setPath() {
+              throw new Error("setPath must not run for an invalid development instance");
+            },
+          },
+          {
+            appName: customAppName,
+            profileKind: "development",
+            processEnv,
+            createDirectory() {
+              throw new Error("createDirectory must not run for an invalid development instance");
+            },
+          },
+        ),
+      ).toThrow(ElectronOperationError);
+    },
+  );
 
   test("expands quoted home-relative config directories before selecting the profile", () => {
     const calls: Array<[string, string]> = [];

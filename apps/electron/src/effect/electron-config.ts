@@ -40,7 +40,7 @@ export const resolveRendererDevPort = (
   }
 
   const port = Number(trimmedPort);
-  if (port < 0 || port > 65_535) {
+  if (port > 65_535) {
     throw new ElectronValidationError({
       operation,
       message: `ELECTRON_RENDERER_DEV_PORT must be an integer between 0 and 65535: ${rawPort}`,

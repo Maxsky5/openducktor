@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import {
   DEVELOPMENT_INSTANCE_ID_PATTERN,
+  type DevelopmentInstanceId,
   type DevelopmentInstanceMode,
   isDevelopmentInstanceId,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
@@ -17,7 +18,7 @@ export const resolveDevelopmentInstanceId = (
   mode: DevelopmentInstanceMode,
   workspaceRoot: string,
   resolveCanonicalPath: ResolveCanonicalPath = realpathSync.native,
-): string => {
+): DevelopmentInstanceId => {
   let canonicalWorkspaceRoot: string;
   try {
     canonicalWorkspaceRoot = resolveCanonicalPath(workspaceRoot);
@@ -30,10 +31,12 @@ export const resolveDevelopmentInstanceId = (
     });
   }
   const pathHash = createHash("sha256").update(canonicalWorkspaceRoot).digest("hex").slice(0, 12);
-  return `${mode}-${pathHash}`;
+  return validateDevelopmentInstanceId(`${mode}-${pathHash}`);
 };
 
-export const validateDevelopmentInstanceId = (developmentInstanceId: string): string => {
+export const validateDevelopmentInstanceId = (
+  developmentInstanceId: string,
+): DevelopmentInstanceId => {
   if (!isDevelopmentInstanceId(developmentInstanceId)) {
     throw new HostValidationError({
       message: `${OPENDUCKTOR_DEV_INSTANCE_ENV} must match ${DEVELOPMENT_INSTANCE_ID_PATTERN.source}.`,
@@ -46,7 +49,7 @@ export const validateDevelopmentInstanceId = (developmentInstanceId: string): st
 
 export const resolveDevelopmentInstanceIdFromEnvironment = (
   env: NodeJS.ProcessEnv = process.env,
-): string => {
+): DevelopmentInstanceId => {
   const developmentInstanceId = env[OPENDUCKTOR_DEV_INSTANCE_ENV]?.trim();
   if (!developmentInstanceId) {
     throw new HostValidationError({

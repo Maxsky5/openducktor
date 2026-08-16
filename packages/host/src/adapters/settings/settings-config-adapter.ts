@@ -52,6 +52,7 @@ const repoId = (repoPath: string): string => {
 
 export type CreateSettingsConfigAdapterInput = {
   configPath?: string;
+  environment?: NodeJS.ProcessEnv;
   initializeConfig?: (
     legacyConfig: PersistedGlobalConfigV2 | null,
   ) => Effect.Effect<LoadedGlobalConfig, SettingsConfigError>;
@@ -114,10 +115,11 @@ const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config
 
 export const createSettingsConfigAdapter = ({
   configPath,
+  environment,
   initializeConfig,
 }: CreateSettingsConfigAdapterInput = {}): SettingsConfigPort => {
   const resolvedConfigPath =
-    configPath ?? path.join(resolveOpenDucktorBaseDir(), USER_SETTINGS_FILENAME);
+    configPath ?? path.join(resolveOpenDucktorBaseDir(environment), USER_SETTINGS_FILENAME);
   const baseDir = path.dirname(resolvedConfigPath);
   let initializationFlight: SettingsInitializationFlight | null = null;
 

@@ -144,6 +144,7 @@ const makeNodeHostDefaultPorts = (
     const settingsConfig =
       input.settingsConfig ??
       createSettingsConfigAdapter({
+        environment: processEnv,
         initializeConfig: createRuntimeConfigInitializer(toolDiscovery),
       });
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();

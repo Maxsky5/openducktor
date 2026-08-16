@@ -24,8 +24,13 @@ describe("development instance contract", () => {
   });
 
   test("defines production and development MCP discovery paths", () => {
+    const developmentInstanceId = "browser-0123456789ab";
+    if (!isDevelopmentInstanceId(developmentInstanceId)) {
+      throw new Error("Expected a valid development instance fixture.");
+    }
+
     expect(PRODUCTION_MCP_BRIDGE_DISCOVERY_PATH_SEGMENTS).toEqual(["runtime", "mcp-bridge.json"]);
-    expect(developmentMcpBridgeDiscoveryPathSegments("browser-0123456789ab")).toEqual([
+    expect(developmentMcpBridgeDiscoveryPathSegments(developmentInstanceId)).toEqual([
       "runtime",
       "dev-instances",
       "browser-0123456789ab",

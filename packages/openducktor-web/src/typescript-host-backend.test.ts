@@ -167,9 +167,12 @@ describe("TypeScript web host backend", () => {
   });
 
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
-    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
-    const previousDevelopmentInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
+    const processEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      OPENDUCKTOR_CONFIG_DIR: tempConfigDir,
+      OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
+    };
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
     const consoleLines: string[] = [];
     const productionDiscoveryPath = path.join(tempConfigDir, "runtime", "mcp-bridge.json");
@@ -183,8 +186,6 @@ describe("TypeScript web host backend", () => {
     const productionDiscovery = '{"hostUrl":"http://127.0.0.1:1","hostToken":"prod","pid":1}\n';
 
     try {
-      process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
-      process.env.OPENDUCKTOR_DEV_INSTANCE = DEVELOPMENT_INSTANCE_ID;
       await mkdir(path.dirname(productionDiscoveryPath), { recursive: true });
       await writeFile(productionDiscoveryPath, productionDiscovery, "utf8");
       const logger = await Effect.runPromise(
@@ -193,7 +194,7 @@ describe("TypeScript web host backend", () => {
             error: (message) => consoleLines.push(message),
             log: (message) => consoleLines.push(message),
           },
-          environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+          environment: { ...processEnv, NO_COLOR: "1" },
           now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
         }),
       );
@@ -205,6 +206,7 @@ describe("TypeScript web host backend", () => {
         logger,
         mcpBridgeDiscoveryMode: "development",
         onBackgroundFailure: () => {},
+        processEnv,
         runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;
@@ -408,36 +410,27 @@ describe("TypeScript web host backend", () => {
       if (backend) {
         await backend.stop();
       }
-      if (previousConfigDir === undefined) {
-        delete process.env.OPENDUCKTOR_CONFIG_DIR;
-      } else {
-        process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
-      }
-      if (previousDevelopmentInstance === undefined) {
-        delete process.env.OPENDUCKTOR_DEV_INSTANCE;
-      } else {
-        process.env.OPENDUCKTOR_DEV_INSTANCE = previousDevelopmentInstance;
-      }
       await rm(tempConfigDir, { force: true, recursive: true });
     }
   }, 10_000);
 
   test("owns a scheduled task-sync disk-write failure through the browser host lifecycle", async () => {
-    const previousConfigDir = process.env.OPENDUCKTOR_CONFIG_DIR;
-    const previousDevelopmentInstance = process.env.OPENDUCKTOR_DEV_INSTANCE;
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-task-sync-"));
+    const processEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      OPENDUCKTOR_CONFIG_DIR: tempConfigDir,
+      OPENDUCKTOR_DEV_INSTANCE: DEVELOPMENT_INSTANCE_ID,
+    };
     const recordedAt = new Date(2026, 4, 13, 23, 45, 12, 345);
     const configPath = path.join(tempConfigDir, "config.json");
     const logFilePath = path.join(tempConfigDir, "logs", "openducktor-web-2026-05-13.log");
     let backend: Awaited<ReturnType<typeof startTypescriptHostBackend>> | undefined;
 
     try {
-      process.env.OPENDUCKTOR_CONFIG_DIR = tempConfigDir;
-      process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
       const logger = await Effect.runPromise(
         createWebLogger({
           console: { error: () => {}, log: () => {} },
-          environment: { OPENDUCKTOR_CONFIG_DIR: tempConfigDir, NO_COLOR: "1" },
+          environment: { ...processEnv, NO_COLOR: "1" },
           now: () => recordedAt,
         }),
       );
@@ -454,6 +447,7 @@ describe("TypeScript web host backend", () => {
             onBackgroundFailure: (failure) => {
               Effect.runSync(Deferred.succeed(failureReported, failure));
             },
+            processEnv,
             runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
           });
           backend = startedBackend;
@@ -499,16 +493,6 @@ describe("TypeScript web host backend", () => {
       });
     } finally {
       await backend?.stop().catch(() => {});
-      if (previousConfigDir === undefined) {
-        delete process.env.OPENDUCKTOR_CONFIG_DIR;
-      } else {
-        process.env.OPENDUCKTOR_CONFIG_DIR = previousConfigDir;
-      }
-      if (previousDevelopmentInstance === undefined) {
-        delete process.env.OPENDUCKTOR_DEV_INSTANCE;
-      } else {
-        process.env.OPENDUCKTOR_DEV_INSTANCE = previousDevelopmentInstance;
-      }
       await rm(tempConfigDir, { force: true, recursive: true });
     }
   }, 5_000);

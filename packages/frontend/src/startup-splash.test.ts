@@ -10,7 +10,7 @@ const originalMatchMedia = window.matchMedia;
 
 const renderStartupSplash = (): HTMLElement => {
   document.body.innerHTML = `
-    <div id="openducktor-startup" class="odt-startup" role="status">
+    <div id="openducktor-startup" class="odt-startup" role="status" aria-live="polite">
       <p data-odt-startup-status></p>
     </div>
   `;
@@ -23,6 +23,7 @@ const renderStartupSplash = (): HTMLElement => {
 
 const captureScheduledTimeout = () => {
   const scheduled: Array<{ callback: () => void; delayMs: number | undefined }> = [];
+  const cleared = new Set<unknown>();
   const setTimeoutImplementation = ((handler: TimerHandler, timeout?: number) => {
     if (typeof handler !== "function") {
       throw new TypeError("Expected a timeout callback.");
@@ -31,17 +32,29 @@ const captureScheduledTimeout = () => {
     return scheduled.length;
   }) as typeof window.setTimeout;
   const timeoutSpy = spyOn(window, "setTimeout").mockImplementation(setTimeoutImplementation);
+  const clearTimeoutSpy = spyOn(window, "clearTimeout").mockImplementation((timeoutId) => {
+    if (timeoutId !== undefined) {
+      cleared.add(timeoutId);
+    }
+  });
 
   return {
     delayMs: (index = 0) => scheduled[index]?.delayMs,
+    isCleared: (index = 0) => cleared.has(index + 1),
     run: (index = 0) => {
+      if (cleared.has(index + 1)) {
+        return;
+      }
       const timeout = scheduled[index];
       if (!timeout) {
         throw new Error("No timeout was scheduled.");
       }
       timeout.callback();
     },
-    restore: () => timeoutSpy.mockRestore(),
+    restore: () => {
+      clearTimeoutSpy.mockRestore();
+      timeoutSpy.mockRestore();
+    },
   };
 };
 
@@ -149,13 +162,25 @@ describe("startup splash", () => {
     }
   });
 
-  test("shows a clear startup failure", () => {
+  test("cancels pending dismissal and shows a clear startup failure", () => {
     const splash = renderStartupSplash();
+    const scheduledTimeout = captureScheduledTimeout();
 
-    showOpenDucktorStartupFailure();
+    try {
+      dismissOpenDucktorStartupSplash();
+      showOpenDucktorStartupFailure();
 
-    expect(splash.classList.contains("odt-startup--failed")).toBe(true);
-    expect(splash.getAttribute("role")).toBe("alert");
-    expect(splash.textContent).toContain("OpenDucktor could not start");
+      expect(scheduledTimeout.isCleared()).toBe(true);
+      expect(splash.classList.contains("odt-startup--failed")).toBe(true);
+      expect(splash.getAttribute("role")).toBe("alert");
+      expect(splash.getAttribute("aria-live")).toBeNull();
+      expect(splash.getAttribute("aria-hidden")).toBeNull();
+      expect(splash.textContent).toContain("OpenDucktor could not start");
+
+      scheduledTimeout.run();
+      expect(splash.isConnected).toBe(true);
+    } finally {
+      scheduledTimeout.restore();
+    }
   });
 });

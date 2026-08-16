@@ -26,11 +26,10 @@ describe("development instance identity", () => {
   });
 
   test("reads only valid development instance values from the environment", () => {
-    expect(
-      resolveDevelopmentInstanceIdFromEnvironment({
-        [OPENDUCKTOR_DEV_INSTANCE_ENV]: "browser-0123456789ab",
-      }),
-    ).toBe("browser-0123456789ab");
+    const developmentInstanceId: string = resolveDevelopmentInstanceIdFromEnvironment({
+      [OPENDUCKTOR_DEV_INSTANCE_ENV]: "browser-0123456789ab",
+    });
+    expect(developmentInstanceId).toBe("browser-0123456789ab");
 
     expect(() => resolveDevelopmentInstanceIdFromEnvironment({})).toThrow(
       "OPENDUCKTOR_DEV_INSTANCE is required",

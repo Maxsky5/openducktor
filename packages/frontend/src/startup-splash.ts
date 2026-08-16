@@ -6,7 +6,7 @@ const STARTUP_FAILURE_MESSAGE = "OpenDucktor could not start. Check the applicat
 const STARTUP_SPLASH_MINIMUM_VISIBLE_MS = 1_000;
 const STARTUP_SPLASH_REMOVAL_FALLBACK_MS = 250;
 const startupSplashFirstSeenAt = new WeakMap<HTMLElement, number>();
-const pendingStartupSplashDismissals = new WeakSet<HTMLElement>();
+const pendingStartupSplashDismissals = new WeakMap<HTMLElement, number>();
 
 const getStartupSplash = (): HTMLElement | null => {
   const splash = document.getElementById(STARTUP_SPLASH_ID);
@@ -45,6 +45,7 @@ const beginStartupSplashDismissal = (splash: HTMLElement): void => {
   );
 };
 
+// Module evaluation starts a conservative hold before the browser can paint the splash.
 if (typeof document !== "undefined") {
   getStartupSplash();
 }
@@ -62,11 +63,11 @@ export const dismissOpenDucktorStartupSplash = (): void => {
   const firstSeenAt = startupSplashFirstSeenAt.get(splash) ?? performance.now();
   const remainingVisibleMs = STARTUP_SPLASH_MINIMUM_VISIBLE_MS - (performance.now() - firstSeenAt);
   if (remainingVisibleMs > 0) {
-    pendingStartupSplashDismissals.add(splash);
-    window.setTimeout(() => {
+    const dismissalTimeout = window.setTimeout(() => {
       pendingStartupSplashDismissals.delete(splash);
       beginStartupSplashDismissal(splash);
     }, remainingVisibleMs);
+    pendingStartupSplashDismissals.set(splash, dismissalTimeout);
     return;
   }
 
@@ -79,9 +80,15 @@ export const showOpenDucktorStartupFailure = (): void => {
     return;
   }
 
+  const pendingDismissal = pendingStartupSplashDismissals.get(splash);
+  if (pendingDismissal !== undefined) {
+    window.clearTimeout(pendingDismissal);
+    pendingStartupSplashDismissals.delete(splash);
+  }
   splash.classList.add(STARTUP_SPLASH_FAILED_CLASS);
   splash.setAttribute("aria-label", STARTUP_FAILURE_MESSAGE);
   splash.setAttribute("role", "alert");
+  splash.removeAttribute("aria-live");
 
   const status = splash.querySelector<HTMLElement>(STARTUP_SPLASH_STATUS_SELECTOR);
   if (status) {
