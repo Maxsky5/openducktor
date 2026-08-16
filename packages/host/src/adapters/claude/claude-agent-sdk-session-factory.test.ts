@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
+import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
@@ -14,6 +15,13 @@ const deferred = <Value>() => {
   });
   return { promise, resolve };
 };
+
+const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"] => ({
+  discoverTool: () => Effect.die("unused"),
+  resolveTool: () => Effect.die("unused"),
+  resolveToolPath: () => Effect.succeed(process.execPath),
+  validateToolPath: () => Effect.die("unused"),
+});
 
 describe("createClaudeAgentSdkSession", () => {
   test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
@@ -57,10 +65,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
 
       await expect(
@@ -143,10 +149,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
 
       await expect(
@@ -236,10 +240,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
 
       await createClaudeAgentSdkSession({
@@ -338,10 +340,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
       const createPromise = createClaudeAgentSdkSession({
         emit: (_session, event) => events.push(event),
@@ -437,10 +437,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
 
       const summary = await createClaudeAgentSdkSession({
@@ -542,10 +540,8 @@ describe("createClaudeAgentSdkSession", () => {
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        toolDiscovery: {
-          resolveTool: () => Effect.die("unused"),
-          resolveToolPath: () => Effect.succeed(process.execPath),
-        },
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        toolDiscovery: createToolDiscovery(),
       };
 
       const creation = createClaudeAgentSdkSession({

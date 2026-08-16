@@ -27,6 +27,9 @@ type UseWorkspaceSelectionOperationsArgs = {
 
 type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
+  hasLoadedWorkspaceList: boolean;
+  isLoadingWorkspaces: boolean;
+  workspaceLoadError: Error | null;
   isSwitchingWorkspace: boolean;
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
@@ -106,6 +109,9 @@ export function useWorkspaceSelectionOperations({
   const activeWorkspaceRef = useRef(activeWorkspace);
   const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
   const workspaces = workspaceListQuery.data ?? [];
+  const workspaceLoadError = workspaceListQuery.error
+    ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
+    : null;
   const workspacesRef = useRef(workspaces);
 
   activeWorkspaceRef.current = activeWorkspace;
@@ -292,13 +298,15 @@ export function useWorkspaceSelectionOperations({
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
+        ...(input.defaultRuntimeKind ? { defaultRuntimeKind: input.defaultRuntimeKind } : {}),
       });
-      await Promise.all([refreshWorkspaceCachesAfterMutation(), refreshWorkspaces()]);
+      applyWorkspaceRecord(workspace);
+      await refreshWorkspaceCachesAfterMutation();
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
     },
-    [hostClient, refreshWorkspaceCachesAfterMutation, refreshWorkspaces],
+    [applyWorkspaceRecord, hostClient, refreshWorkspaceCachesAfterMutation],
   );
 
   const selectWorkspace = useCallback(
@@ -353,6 +361,9 @@ export function useWorkspaceSelectionOperations({
 
   return {
     workspaces,
+    hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
+    isLoadingWorkspaces: workspaceListQuery.isPending,
+    workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,
     addWorkspace,

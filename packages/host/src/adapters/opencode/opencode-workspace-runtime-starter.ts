@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Cause, Clock, Effect, Exit, Option, Scope } from "effect";
+import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import {
   type HostError,
   HostOperationError,
@@ -23,6 +24,7 @@ import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenCodeLiveSessionAdapterPreparer } from "../agent-sessions/opencode-live-session-adapter";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -50,6 +52,7 @@ type OpenCodeReadinessProbe = (
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
+  settingsConfig: SettingsConfigPort;
   runtimeDistribution: HostRuntimeDistribution;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   prepareLiveSessionAdapter: OpenCodeLiveSessionAdapterPreparer;
@@ -122,6 +125,7 @@ const buildManagedOpenCodeEnvironment = (
 
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   toolDiscovery,
+  settingsConfig,
   resolveMcpBridgeConnection,
   runtimeDistribution,
   liveSessionLifecycle,
@@ -189,7 +193,13 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             details: { runtimeKind: input.runtimeKind },
           }),
       });
-      const binary = yield* toolDiscovery.resolveToolPath("opencode");
+      const { configuredPath, executablePath: binary } = yield* resolveSavedRuntimeExecutableConfig(
+        {
+          kind: "opencode",
+          settingsConfig,
+          toolDiscovery,
+        },
+      );
       const port = yield* portAllocator().pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
@@ -431,6 +441,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
 
           return {
             runtime,
+            configuredExecutablePath: configuredPath,
             isAlive() {
               return !closed;
             },

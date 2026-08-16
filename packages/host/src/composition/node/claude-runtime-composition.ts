@@ -12,9 +12,10 @@ import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
 import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
 import type { HostOperationError } from "../../effect/host-errors";
+import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 type ClaudeRuntimeSessionOperations = Exclude<ClaudeRuntimeSessionOperationsPort, undefined>;
@@ -30,8 +31,9 @@ export type CreateClaudeRuntimeCompositionInput = {
   onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
+  runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
-  systemCommands: SystemCommandPort;
+  settingsConfig: SettingsConfigPort;
   toolDiscovery: ToolDiscoveryPort;
   workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
 };
@@ -41,8 +43,9 @@ export const createClaudeRuntimeComposition = ({
   onBackgroundFailure,
   processEnv,
   resolveMcpBridgeConnection,
+  runtimeExecutableProbe,
   runtimeDistribution,
-  systemCommands,
+  settingsConfig,
   toolDiscovery,
   workingDirectoryDependencies,
 }: CreateClaudeRuntimeCompositionInput): ClaudeRuntimeComposition => {
@@ -54,6 +57,7 @@ export const createClaudeRuntimeComposition = ({
     ...(processEnv ? { processEnv } : {}),
     resolveMcpBridgeConnection,
     runtimeDistribution,
+    settingsConfig,
     sessionStore,
     toolDiscovery,
   });
@@ -74,7 +78,8 @@ export const createClaudeRuntimeComposition = ({
     workspaceStarter: createClaudeWorkspaceRuntimeStarter({
       liveSessionLifecycle,
       prepareLiveSessionAdapter,
-      systemCommands,
+      runtimeExecutableProbe,
+      settingsConfig,
       toolDiscovery,
     }),
   };

@@ -1,10 +1,13 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { checksQueryKeys } from "../../queries/checks";
+import { runtimeQueryKeys } from "../../queries/runtime";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
@@ -18,6 +21,7 @@ type HookResult = ReturnType<typeof useRepoSettingsOperations>;
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: HookResult | null = null;
+  let queryClient: QueryClient | null = null;
   const currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: HookArgs }) => {
@@ -25,8 +29,16 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
+  const CaptureQueryClient = () => {
+    queryClient = useQueryClient();
+    return null;
+  };
+
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
+    <IsolatedQueryWrapper>
+      <CaptureQueryClient />
+      {children}
+    </IsolatedQueryWrapper>
   );
 
   const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });
@@ -48,6 +60,12 @@ const createHookHarness = (initialArgs: HookArgs) => {
         throw new Error("Hook not mounted");
       }
       return latest;
+    },
+    getQueryClient: () => {
+      if (!queryClient) {
+        throw new Error("Query client not mounted");
+      }
+      return queryClient;
     },
     unmount: async () => {
       await sharedHarness.unmount();
@@ -624,6 +642,58 @@ describe("use-repo-settings-operations", () => {
       expect(applyWorkspaceRecords).toHaveBeenCalledWith([createWorkspaceRecord()]);
       await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(normalizedSnapshot);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("keeps exact runtime validation data and refreshes diagnostics after saving settings", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const snapshot = createSettingsSnapshot();
+    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceGetSettingsSnapshot = mock(async () => snapshot);
+    const original = {
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      const refreshResult = createDeferred<void>();
+      const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+      const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
+        async (filters, options) => {
+          await originalInvalidateQueries(filters, options);
+          if (filters?.queryKey === checksQueryKeys.all) {
+            await refreshResult.promise;
+          }
+        },
+      );
+      const runtimeKey = runtimeQueryKeys.executable("opencode", "/tools/opencode");
+      const checksKey = checksQueryKeys.runtime();
+      queryClient.setQueryData(runtimeKey, { runtimes: [] });
+      queryClient.setQueryData(checksKey, { ok: true });
+
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
+
+      expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
+      expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
+      expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: checksQueryKeys.all,
+      });
+      refreshResult.resolve();
     } finally {
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;

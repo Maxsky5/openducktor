@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type SettingsSnapshot } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -10,7 +14,13 @@ import { host } from "../operations/host";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 import { AppRuntimeProvider } from "./app-runtime-provider";
 
-const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
+const createSettingsSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    agentRuntimes: {
+      ...DEFAULT_AGENT_RUNTIMES,
+      opencode: { enabled: true, executablePath: "/tools/opencode" },
+    },
+  });
 
 const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
   createElement(

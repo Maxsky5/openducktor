@@ -27,6 +27,12 @@ export type CreateRuntimeRegistryInput = {
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
   sessionOperations?: RuntimeSessionOperationsByKind;
+  hasActiveRuntimeSessions?: (
+    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
+  ) => Effect.Effect<boolean, RuntimeRegistryError>;
+  resolveRuntimeExecutablePath?: (
+    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
+  ) => Effect.Effect<string, RuntimeRegistryError>;
 };
 
 type RuntimeEnsureFlight = {
@@ -38,6 +44,8 @@ export const createRuntimeRegistry = ({
   runtimes = [],
   workspaceStarter,
   sessionOperations = createRuntimeSessionOperations(),
+  hasActiveRuntimeSessions,
+  resolveRuntimeExecutablePath,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const store = createRuntimeRegistryStore(runtimes);
   const handles = new Map<string, RuntimeWorkspaceHandle>();
@@ -126,90 +134,107 @@ export const createRuntimeRegistry = ({
         }),
       ),
     );
-  const registry: RuntimeRegistryPort = {
-    ensureWorkspaceRuntime(input) {
-      return Effect.gen(function* () {
-        const existingRuntime = yield* findRegisteredWorkspaceRuntime({
-          repoPath: input.repoPath,
-          runtimeKind: input.runtimeKind,
-        });
-        if (existingRuntime) {
-          const existingHandle = handles.get(existingRuntime.runtimeId);
-          if (existingHandle && !existingHandle.isAlive()) {
-            yield* stopRegisteredRuntime(existingRuntime.runtimeId);
-          } else {
-            const registeredRuntime = store.get(existingRuntime.runtimeId);
-            if (registeredRuntime) {
-              return yield* Effect.try({
-                try: () => runtimeInstanceSummarySchema.parse(registeredRuntime),
-                catch: (cause) =>
-                  new HostValidationError({
-                    message: cause instanceof Error ? cause.message : String(cause),
-                    cause,
-                    details: {
-                      runtimeId: registeredRuntime.runtimeId,
-                    },
-                  }),
-              });
-            }
+  const ensureWorkspaceRuntimeOnce = (
+    input: Parameters<RuntimeRegistryPort["ensureWorkspaceRuntime"]>[0],
+  ) =>
+    Effect.gen(function* () {
+      const existingRuntime = yield* findRegisteredWorkspaceRuntime({
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+      });
+      if (existingRuntime) {
+        const existingHandle = handles.get(existingRuntime.runtimeId);
+        let shouldRestart = existingHandle ? !existingHandle.isAlive() : false;
+        if (existingHandle && !shouldRestart && resolveRuntimeExecutablePath) {
+          const configuredExecutablePath = yield* resolveRuntimeExecutablePath(input);
+          const executablePathChanged =
+            existingHandle.configuredExecutablePath !== configuredExecutablePath;
+          if (executablePathChanged) {
+            const hasActiveSessions = hasActiveRuntimeSessions
+              ? yield* hasActiveRuntimeSessions(input)
+              : false;
+            shouldRestart = !hasActiveSessions;
           }
         }
-        if (!workspaceStarter) {
-          return yield* Effect.fail(
-            new HostResourceError({
-              resource: "runtimeWorkspaceStarter",
-              operation: "runtimeRegistry.ensureWorkspaceRuntime",
-              message: `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
-              details: {
-                runtimeKind: input.runtimeKind,
-                repoPath: input.repoPath,
-              },
-            }),
-          );
+        if (existingHandle && shouldRestart) {
+          yield* stopRegisteredRuntime(existingRuntime.runtimeId);
+        } else {
+          const registeredRuntime = store.get(existingRuntime.runtimeId);
+          if (registeredRuntime) {
+            return yield* Effect.try({
+              try: () => runtimeInstanceSummarySchema.parse(registeredRuntime),
+              catch: (cause) =>
+                new HostValidationError({
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  cause,
+                  details: { runtimeId: registeredRuntime.runtimeId },
+                }),
+            });
+          }
         }
-        const flightKey = runtimeWorkspaceKey({
-          runtimeKind: input.runtimeKind,
-          repoPath: input.repoPath,
-        });
-        return yield* Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            const reservation = yield* Effect.sync(() => {
-              const existingFlight = ensureFlights.get(flightKey);
-              if (existingFlight) {
-                return { _tag: "existing" as const, flight: existingFlight };
-              }
-              const flight = makeRuntimeEnsureFlight();
-              ensureFlights.set(flightKey, flight);
-              return { _tag: "created" as const, flight };
-            });
-            if (reservation._tag === "existing") {
-              return yield* restore(Deferred.await(reservation.flight.deferred));
-            }
-            const startEffect = Effect.gen(function* () {
-              const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
-              const parsed = yield* Effect.try({
-                try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
-                catch: (cause) =>
-                  new HostValidationError({
-                    message: cause instanceof Error ? cause.message : String(cause),
-                    cause,
-                    details: {
-                      runtimeKind: input.runtimeKind,
-                      repoPath: input.repoPath,
-                    },
-                  }),
-              });
-              store.upsert(parsed);
-              handles.set(parsed.runtimeId, handle);
-              return parsed;
-            });
-            yield* Effect.forkDaemon(
-              restore(completeRuntimeEnsureFlight(flightKey, reservation.flight, startEffect)),
-            );
-            return yield* restore(Deferred.await(reservation.flight.deferred));
+      }
+      if (!workspaceStarter) {
+        return yield* Effect.fail(
+          new HostResourceError({
+            resource: "runtimeWorkspaceStarter",
+            operation: "runtimeRegistry.ensureWorkspaceRuntime",
+            message: `Runtime kind ${input.runtimeKind} workspace startup is not configured in the TypeScript host.`,
+            details: {
+              runtimeKind: input.runtimeKind,
+              repoPath: input.repoPath,
+            },
           }),
         );
+      }
+      const handle = yield* workspaceStarter.startWorkspaceRuntime(input);
+      const parsed = yield* Effect.try({
+        try: () => runtimeInstanceSummarySchema.parse(handle.runtime),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+            details: {
+              runtimeKind: input.runtimeKind,
+              repoPath: input.repoPath,
+            },
+          }),
       });
+      store.upsert(parsed);
+      handles.set(parsed.runtimeId, handle);
+      return parsed;
+    });
+  const registry: RuntimeRegistryPort = {
+    ensureWorkspaceRuntime(input) {
+      const flightKey = runtimeWorkspaceKey({
+        runtimeKind: input.runtimeKind,
+        repoPath: input.repoPath,
+      });
+      return Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const reservation = yield* Effect.sync(() => {
+            const existingFlight = ensureFlights.get(flightKey);
+            if (existingFlight) {
+              return { _tag: "existing" as const, flight: existingFlight };
+            }
+            const flight = makeRuntimeEnsureFlight();
+            ensureFlights.set(flightKey, flight);
+            return { _tag: "created" as const, flight };
+          });
+          if (reservation._tag === "existing") {
+            return yield* restore(Deferred.await(reservation.flight.deferred));
+          }
+          yield* Effect.forkDaemon(
+            restore(
+              completeRuntimeEnsureFlight(
+                flightKey,
+                reservation.flight,
+                ensureWorkspaceRuntimeOnce(input),
+              ),
+            ),
+          );
+          return yield* restore(Deferred.await(reservation.flight.deferred));
+        }),
+      );
     },
     listRuntimes() {
       return Effect.succeed(store.list());

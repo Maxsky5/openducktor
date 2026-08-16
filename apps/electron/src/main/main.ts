@@ -53,6 +53,7 @@ import {
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { configureElectronAppIdentity, resolveElectronProfileKind } from "./electron-app-identity";
+import { resolveElectronAppVersion } from "./electron-app-version";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
@@ -91,6 +92,10 @@ import { createNodePtyPort } from "./terminals/node-pty-adapter";
 const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, protocol, session, shell } =
   electron;
 const APPLICATION_NAME = "OpenDucktor";
+const currentVersion = resolveElectronAppVersion({
+  isPackaged: app.isPackaged,
+  packagedVersion: app.getVersion(),
+});
 const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;
@@ -236,7 +241,7 @@ const createElectronHostCommandRouter = (
   runtimeDistribution: HostRuntimeDistribution,
 ): EffectNodeHostCommandRouter =>
   createElectronEffectHostCommandRouter({
-    clientVersion: app.getVersion(),
+    clientVersion: currentVersion,
     eventBus: hostEventBus,
     isPackaged: app.isPackaged,
     lifecycleLogger: electronLifecycleLogger,
@@ -880,7 +885,6 @@ const configureElectronReadyRuntimeEffect = ({
           message: "Electron app updater is already configured.",
         });
       }
-      const currentVersion = app.getVersion();
       const releaseSource = createGitHubReleaseSource({
         fetch: globalThis.fetch,
         owner: "Maxsky5",

@@ -14,6 +14,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         isLoadingSettings: false,
         hasSnapshotDraft: true,
         settingsError: null,
+        isLoadingRuntimeConfiguration: false,
       },
       validationSummary: {
         promptPlaceholderErrorCount: 0,
@@ -22,7 +23,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
         hasUnacknowledgedCodexDangerousSettings: false,
         repoScriptFieldErrorCount: 0,
       },
-      errors: { saveError: null, catalogError: null },
+      errors: { saveError: null, catalogError: null, runtimeExecutablesError: null },
       location: { section: "repositories", repositorySection: "configuration" },
       onCancel: () => {},
       onSave: () => {},
@@ -91,7 +92,7 @@ describe("SettingsModalFooter", () => {
     }
   });
 
-  test("disables save and shows runtime availability count", () => {
+  test("disables save and shows runtime executable error count", () => {
     const renderer = renderFooter({
       validationSummary: {
         promptPlaceholderErrorCount: 0,
@@ -106,7 +107,7 @@ describe("SettingsModalFooter", () => {
       expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
         true,
       );
-      expect(screen.getByText(/2 disabled runtime selections\./i)).toBeTruthy();
+      expect(screen.getByText(/2 runtime executable errors\./i)).toBeTruthy();
     } finally {
       renderer.unmount();
     }
@@ -129,6 +130,49 @@ describe("SettingsModalFooter", () => {
       );
       expect(
         screen.getByText(/Confirm the Codex safety acknowledgement before saving\./i),
+      ).toBeTruthy();
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("disables save while runtime configuration requests are pending", () => {
+    const renderer = renderFooter({
+      saveState: {
+        isSaving: false,
+        isLoadingSettings: false,
+        hasSnapshotDraft: true,
+        settingsError: null,
+        isLoadingRuntimeConfiguration: true,
+      },
+    });
+
+    try {
+      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
+        true,
+      );
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("disables save and shows runtime request errors", () => {
+    const renderer = renderFooter({
+      errors: {
+        saveError: null,
+        catalogError: "Definitions failed",
+        runtimeExecutablesError: "Executable check failed",
+      },
+      location: { section: "runtimes", repositorySection: "configuration" },
+    });
+
+    try {
+      expect(screen.getByRole("button", { name: /save settings/i }).hasAttribute("disabled")).toBe(
+        true,
+      );
+      expect(screen.getByText(/Runtime definitions unavailable: Definitions failed/i)).toBeTruthy();
+      expect(
+        screen.getByText(/Runtime executable check failed: Executable check failed/i),
       ).toBeTruthy();
     } finally {
       renderer.unmount();

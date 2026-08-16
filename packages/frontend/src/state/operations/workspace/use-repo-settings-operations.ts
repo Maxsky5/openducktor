@@ -11,6 +11,7 @@ import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
+import { checksQueryKeys } from "../../queries/checks";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
@@ -177,6 +178,7 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
+      void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
     },
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );

@@ -28,6 +28,7 @@ const runtimeHealth = (
   kind,
   enabled: true,
   ok: error === null,
+  executablePath: `/bin/${kind}`,
   version: error === null ? `${kind} 1.0.0` : null,
   error,
 });
@@ -203,6 +204,7 @@ const createSystemDiagnosticsServiceForTest = (
   });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
+    const runtimeHealthCalls: RuntimeHealth["kind"][] = [];
     const commandCalls: Array<{
       command: string;
       args: string[];
@@ -215,13 +217,21 @@ describe("createSystemDiagnosticsService", () => {
     }> = [];
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort({
-        codex: runtimeHealth("codex", "codex not found"),
-      }),
+      runtimeHealth: {
+        getRuntimeHealth: (kind) => {
+          runtimeHealthCalls.push(kind);
+          return Effect.succeed(runtimeHealth(kind));
+        },
+      },
       settingsConfig: createSettingsConfig({
         ...createDefaultGlobalConfig(),
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
+          opencode: {
+            ...DEFAULT_AGENT_RUNTIMES.opencode,
+            enabled: true,
+            executablePath: "/bin/opencode",
+          },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
         },
       }),
@@ -242,9 +252,10 @@ describe("createSystemDiagnosticsService", () => {
         kind: "codex",
         enabled: false,
         ok: false,
-        error: "codex not found",
+        error: null,
       }),
     ]);
+    expect(runtimeHealthCalls).toEqual(["opencode"]);
     expect(check.errors).toEqual([]);
     expect(commandCalls.find((call) => call.command === "gh")?.options?.env).toMatchObject({
       GH_PROMPT_DISABLED: "1",
@@ -285,6 +296,64 @@ describe("createSystemDiagnosticsService", () => {
     expect(first.gitVersion).toBe("git version 1.0.0");
     expect(cached.gitVersion).toBe("git version 1.0.0");
     expect(refreshed.gitVersion).toBe("git version 2.0.0");
+  });
+  test("runtimeCheck probes independent runtimes concurrently", async () => {
+    const startedKinds: RuntimeHealth["kind"][] = [];
+    let releaseProbes!: () => void;
+    const probesStarted = new Promise<void>((resolve) => {
+      releaseProbes = resolve;
+    });
+    const runtimeHealthPort: RuntimeHealthPort = {
+      getRuntimeHealth: (kind) =>
+        Effect.tryPromise({
+          try: async () => {
+            startedKinds.push(kind);
+            if (startedKinds.length === 2) releaseProbes();
+            await probesStarted;
+            return runtimeHealth(kind);
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.runtimeHealth",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        }),
+    };
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode", "codex"]),
+      runtimeHealth: runtimeHealthPort,
+      settingsConfig: createSettingsConfig({
+        ...createDefaultGlobalConfig(),
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/bin/opencode" },
+          codex: {
+            ...DEFAULT_AGENT_RUNTIMES.codex,
+            enabled: true,
+            executablePath: "/bin/codex",
+          },
+        },
+      }),
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(
+      service.runtimeCheck(true).pipe(
+        Effect.timeoutFail({
+          duration: "250 millis",
+          onTimeout: () =>
+            new HostOperationError({
+              operation: "test.runtimeHealth",
+              message: "Runtime probes did not start concurrently.",
+            }),
+        }),
+      ),
+    );
+
+    expect(startedKinds).toEqual(["opencode", "codex"]);
+    expect(check.runtimes.map(({ kind }) => kind)).toEqual(["opencode", "codex"]);
   });
   test("runtimeCheck reports missing gh without making it a blocking diagnostic error", async () => {
     const service = createSystemDiagnosticsServiceForTest({

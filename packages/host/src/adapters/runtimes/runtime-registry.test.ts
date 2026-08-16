@@ -82,8 +82,10 @@ const createRuntimeHandle = (
   runtime: RuntimeInstanceSummary,
   stop: () => Effect.Effect<void, HostOperationError> = () => Effect.succeed(undefined),
   isAlive = true,
+  executablePath = "/tools/opencode",
 ): RuntimeWorkspaceHandle => ({
   runtime,
+  configuredExecutablePath: executablePath,
   isAlive: () => isAlive,
   stop,
 });
@@ -287,6 +289,168 @@ describe("createRuntimeRegistry", () => {
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([freshRuntime]);
     expect(starts).toBe(2);
     expect(stops).toEqual(["runtime-stale"]);
+  });
+  test("restarts a registered workspace runtime when its executable path changes", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          if (starts === 1) {
+            return Effect.succeed(
+              createRuntimeHandle(
+                oldRuntime,
+                () =>
+                  Effect.sync(() => {
+                    stops.push(oldRuntime.runtimeId);
+                  }),
+                true,
+                "/tools/opencode-old",
+              ),
+            );
+          }
+          return Effect.succeed(
+            createRuntimeHandle(newRuntime, undefined, true, "/tools/opencode-new"),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    configuredExecutablePath = "/tools/opencode-new";
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      newRuntime,
+    );
+
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
+  });
+  test("defers an executable path restart until active sessions become idle", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let hasActiveSessions = true;
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      hasActiveRuntimeSessions: () => Effect.succeed(hasActiveSessions),
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          return Effect.succeed(
+            createRuntimeHandle(
+              starts === 1 ? oldRuntime : newRuntime,
+              () =>
+                Effect.sync(() => {
+                  stops.push(oldRuntime.runtimeId);
+                }),
+              true,
+              configuredExecutablePath,
+            ),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    configuredExecutablePath = "/tools/opencode-new";
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      oldRuntime,
+    );
+    expect(starts).toBe(1);
+    expect(stops).toEqual([]);
+
+    hasActiveSessions = false;
+    await expect(Effect.runPromise(registry.ensureWorkspaceRuntime(input))).resolves.toEqual(
+      newRuntime,
+    );
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
+  });
+  test("deduplicates concurrent executable path replacements", async () => {
+    const oldRuntime = createRuntime({ runtimeId: "runtime-old" });
+    const newRuntime = createRuntime({ runtimeId: "runtime-new" });
+    const stops: string[] = [];
+    let configuredExecutablePath = "/tools/opencode-old";
+    let activeSessionChecks = 0;
+    let markActiveSessionCheckStarted = (): void => undefined;
+    const activeSessionCheckStarted = new Promise<void>((resolve) => {
+      markActiveSessionCheckStarted = resolve;
+    });
+    let releaseActiveSessionCheck = (): void => undefined;
+    const activeSessionCheckBlocked = new Promise<void>((resolve) => {
+      releaseActiveSessionCheck = resolve;
+    });
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      hasActiveRuntimeSessions: () =>
+        Effect.promise(async () => {
+          activeSessionChecks += 1;
+          markActiveSessionCheckStarted();
+          await activeSessionCheckBlocked;
+          return false;
+        }),
+      resolveRuntimeExecutablePath: () => Effect.succeed(configuredExecutablePath),
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          starts += 1;
+          return Effect.succeed(
+            createRuntimeHandle(
+              starts === 1 ? oldRuntime : newRuntime,
+              () =>
+                Effect.sync(() => {
+                  stops.push(oldRuntime.runtimeId);
+                }),
+              true,
+              configuredExecutablePath,
+            ),
+          );
+        },
+      },
+    });
+    const input = {
+      runtimeKind: "opencode",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+
+    await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    configuredExecutablePath = "/tools/opencode-new";
+    const replacements = [
+      Effect.runPromise(registry.ensureWorkspaceRuntime(input)),
+      Effect.runPromise(registry.ensureWorkspaceRuntime(input)),
+    ];
+    await activeSessionCheckStarted;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    releaseActiveSessionCheck();
+    await expect(Promise.all(replacements)).resolves.toEqual([newRuntime, newRuntime]);
+
+    expect(activeSessionChecks).toBe(1);
+    expect(starts).toBe(2);
+    expect(stops).toEqual(["runtime-old"]);
   });
   test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({

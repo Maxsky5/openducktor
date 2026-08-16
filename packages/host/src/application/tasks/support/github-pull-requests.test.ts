@@ -64,6 +64,13 @@ describe("findGithubPullRequestForBranch", () => {
       },
     };
     const toolDiscovery: ToolDiscoveryPort = {
+      discoverTool() {
+        return Effect.succeed({
+          displayLabel: "System PATH",
+          path: "gh",
+          sourceCategory: "system_path",
+        });
+      },
       resolveTool() {
         return Effect.succeed({
           displayLabel: "System PATH",
@@ -73,6 +80,13 @@ describe("findGithubPullRequestForBranch", () => {
       },
       resolveToolPath() {
         return Effect.succeed("gh");
+      },
+      validateToolPath(_toolId, executablePath) {
+        return Effect.succeed({
+          displayLabel: "Saved path",
+          path: executablePath,
+          sourceCategory: "provided_path",
+        });
       },
     };
     const dependencies: GithubCommandDependencies = {

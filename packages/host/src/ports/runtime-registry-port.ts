@@ -28,6 +28,7 @@ export type RuntimeEnsureWorkspaceInput = {
 };
 export type RuntimeWorkspaceHandle = {
   runtime: RuntimeInstanceSummary;
+  configuredExecutablePath: string;
   isAlive(): boolean;
   stop(): Effect.Effect<void, HostOperationError>;
 };

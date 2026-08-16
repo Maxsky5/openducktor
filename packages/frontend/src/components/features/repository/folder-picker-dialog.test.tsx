@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { DirectoryListing } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -20,8 +20,11 @@ const createListing = (overrides: Partial<DirectoryListing> = {}): DirectoryList
   ...overrides,
 });
 
+type ListDirectoryInput = string | FilesystemListDirectoryInput | undefined;
+const pathFromInput = (input: ListDirectoryInput): string | undefined =>
+  typeof input === "string" ? input : input?.path;
 const filesystemListDirectoryMock = mock(
-  async (_path?: string): Promise<DirectoryListing> => createListing(),
+  async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
 
 describe("FolderPickerDialog", () => {
@@ -33,12 +36,15 @@ describe("FolderPickerDialog", () => {
     confirmLabel: string;
     initialPath?: string;
     requireGitRepo?: boolean;
+    selectionMode?: "directory" | "file";
     onConfirm: (path: string) => Promise<void>;
   }) => ReactNode;
 
   beforeEach(async () => {
     filesystemListDirectoryMock.mockReset();
-    filesystemListDirectoryMock.mockImplementation(async (_path?: string) => createListing());
+    filesystemListDirectoryMock.mockImplementation(async (_input?: ListDirectoryInput) =>
+      createListing(),
+    );
 
     mock.module("@/state/operations/host", () => ({
       host: {
@@ -65,6 +71,7 @@ describe("FolderPickerDialog", () => {
     props?: Partial<{
       onConfirm: (path: string) => Promise<void>;
       initialPath: string;
+      selectionMode: "directory" | "file";
     }>,
   ) => {
     return render(
@@ -76,6 +83,7 @@ describe("FolderPickerDialog", () => {
           description="Browse the filesystem"
           confirmLabel="Select Folder"
           onConfirm={props?.onConfirm ?? (async () => {})}
+          selectionMode={props?.selectionMode ?? "directory"}
           {...(props?.initialPath ? { initialPath: props.initialPath } : {})}
         />
       </QueryProvider>,
@@ -83,7 +91,8 @@ describe("FolderPickerDialog", () => {
   };
 
   test("loads directories, filters entries, and navigates into a child directory", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/Users/dev/apps") {
         return createListing({
           currentPath: "/Users/dev/apps",
@@ -143,10 +152,287 @@ describe("FolderPickerDialog", () => {
     }
   });
 
+  test("selects a file and requests file entries only in file mode", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      expect(typeof input === "object" ? input.includeFiles : false).toBe(true);
+      return createListing({
+        entries: [
+          {
+            name: "codex",
+            path: "/Users/dev/codex",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not keep a stale file selection when a new directory resolves", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let resolveNextDirectory = (_listing: DirectoryListing): void => undefined;
+    const nextDirectory = new Promise<DirectoryListing>((resolve) => {
+      resolveNextDirectory = resolve;
+    });
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      if (pathFromInput(input) === "/Users/dev/next") {
+        return nextDirectory;
+      }
+      return createListing({
+        entries: [
+          {
+            name: "old-cli",
+            path: "/Users/dev/old-cli",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+          {
+            name: "next",
+            path: "/Users/dev/next",
+            isDirectory: true,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, selectionMode: "file" });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
+      fireEvent.click(screen.getByRole("button", { name: "next" }));
+      fireEvent.click(screen.getByRole("button", { name: "old-cli" }));
+
+      await act(async () => {
+        resolveNextDirectory(
+          createListing({ currentPath: "/Users/dev/next", parentPath: "/Users/dev" }),
+        );
+      });
+      await screen.findByText("/Users/dev/next");
+
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("clears a file selection removed by a same-directory refresh", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
+    const refreshListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount > 1) return refreshListing;
+      return createListing({
+        entries: [
+          {
+            name: "codex",
+            path: "/Users/dev/codex",
+            isDirectory: false,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({
+      onConfirm,
+      initialPath: "/Users/dev",
+      selectionMode: "file",
+    });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      expect(requestCount).toBe(1);
+      expect(
+        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await waitFor(() => expect(requestCount).toBe(2));
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+
+      await act(async () => resolveRefresh(createListing()));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
+        expect(
+          (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        ).toBe(true);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("blocks directory confirmation when a same-directory refresh fails", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount > 1) {
+        throw new Error("Directory no longer exists: /Users/dev");
+      }
+      return createListing();
+    });
+    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+
+    try {
+      await screen.findByText("/Users/dev");
+      expect(
+        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await screen.findByText("Directory no longer exists: /Users/dev");
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("restores file confirmation only after a failed refresh succeeds", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let requestCount = 0;
+    const listing = createListing({
+      entries: [
+        {
+          name: "codex",
+          path: "/Users/dev/codex",
+          isDirectory: false,
+          isGitRepo: false,
+        },
+      ],
+    });
+    filesystemListDirectoryMock.mockImplementation(async () => {
+      requestCount += 1;
+      if (requestCount === 2) {
+        throw new Error("Failed to refresh /Users/dev");
+      }
+      return listing;
+    });
+    const rendered = renderDialog({
+      onConfirm,
+      initialPath: "/Users/dev",
+      selectionMode: "file",
+    });
+
+    try {
+      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await screen.findByText("Failed to refresh /Users/dev");
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await waitFor(() => {
+        expect(requestCount).toBe(3);
+        expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+      });
+      fireEvent.click(confirmButton);
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not restore a superseded directory after its refresh completes", async () => {
+    const onConfirm = mock(async (_path: string) => {});
+    let rootRequestCount = 0;
+    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
+    let rejectNextDirectory = (_error: Error): void => undefined;
+    const refreshListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const nextDirectory = new Promise<DirectoryListing>((_resolve, reject) => {
+      rejectNextDirectory = reject;
+    });
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
+      if (path === "/Users/dev/next") return nextDirectory;
+      if (path !== "/Users/dev") throw new Error(`Unexpected path: ${String(path)}`);
+
+      rootRequestCount += 1;
+      if (rootRequestCount > 1) return refreshListing;
+      return createListing({
+        entries: [
+          {
+            name: "next",
+            path: "/Users/dev/next",
+            isDirectory: true,
+            isGitRepo: false,
+          },
+        ],
+      });
+    });
+    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+
+    try {
+      const nextButton = await screen.findByRole("button", { name: "next" });
+      fireEvent.change(screen.getByLabelText("Open path"), {
+        target: { value: "/Users/dev" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      await waitFor(() => expect(rootRequestCount).toBe(2));
+
+      fireEvent.click(nextButton);
+      await act(async () => rejectNextDirectory(new Error("Failed to load next directory")));
+      await screen.findByText("Failed to load next directory");
+
+      await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
+
+      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
+      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(confirmButton);
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("supports parent and home navigation, manual path loading, and current-path confirmation", async () => {
     const onConfirm = mock(async (_path: string) => {});
 
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       switch (path) {
         case "/Users/dev/projects":
           return createListing({
@@ -223,7 +509,8 @@ describe("FolderPickerDialog", () => {
   });
 
   test("disables confirmation until the current folder is a git repository when required", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/Users/dev/repo-one") {
         return createListing({
           currentPath: "/Users/dev/repo-one",
@@ -284,10 +571,16 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("shows actionable errors for invalid manual paths and disables confirmation until a new path resolves", async () => {
-    filesystemListDirectoryMock.mockImplementation(async (path?: string) => {
+  test("retries the same manual path after an error and restores confirmation when it resolves", async () => {
+    let missingPathAttempts = 0;
+    filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
+      const path = pathFromInput(input);
       if (path === "/missing") {
-        throw new Error("Directory does not exist: /missing");
+        missingPathAttempts += 1;
+        if (missingPathAttempts === 1) {
+          throw new Error("Directory does not exist: /missing");
+        }
+        return createListing({ currentPath: "/missing" });
       }
 
       return createListing();
@@ -316,6 +609,16 @@ describe("FolderPickerDialog", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
       expect(onConfirm).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+
+      await waitFor(() => {
+        expect(missingPathAttempts).toBe(2);
+        expect(screen.getByText("/missing")).toBeTruthy();
+        expect(
+          (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+        ).toBe(false);
+      });
     } finally {
       rendered.unmount();
     }

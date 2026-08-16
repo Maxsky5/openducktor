@@ -107,6 +107,10 @@ export type { FilesystemPort } from "./ports/filesystem-port";
 export type { GitPort } from "./ports/git-port";
 export type { LocalAttachmentPort } from "./ports/local-attachment-port";
 export type { OpenInToolsPort } from "./ports/open-in-tools-port";
+export type {
+  RuntimeExecutableProbePort,
+  RuntimeExecutableProbesByKind,
+} from "./ports/runtime-executable-probe-port";
 export type { RuntimeHealthPort } from "./ports/runtime-health-port";
 export type {
   PreparedRuntimeLiveSessionAdapter,

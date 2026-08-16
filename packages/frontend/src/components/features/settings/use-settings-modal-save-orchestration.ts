@@ -1,17 +1,17 @@
-import type { SettingsSnapshot, SettingsSnapshotSaveInput } from "@openducktor/contracts";
+import type {
+  RuntimeKind,
+  SettingsSnapshot,
+  SettingsSnapshotSaveInput,
+} from "@openducktor/contracts";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { PromptValidationState } from "./settings-modal-controller.types";
 import {
-  buildCodexDangerousSettingsSaveError,
-  buildPromptValidationSaveError,
-  buildRepoScriptValidationSaveError,
-  buildReusablePromptValidationSaveError,
-  buildRuntimeAvailabilitySaveError,
+  getSettingsSaveBlocker,
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
+  type SettingsSaveValidation,
 } from "./settings-modal-save-policy";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import { prepareSettingsSnapshotForSave } from "./settings-save/settings-snapshot";
@@ -22,17 +22,8 @@ type UseSettingsModalSaveOrchestrationArgs = {
   loadedSnapshot: SettingsSnapshot | null;
   snapshotDraft: SettingsSnapshot | null;
   dirtySections: DirtySections;
-  hasPromptValidationErrors: boolean;
-  promptValidationState: PromptValidationState;
-  hasReusablePromptValidationErrors: boolean;
-  reusablePromptValidationErrorCount: number;
-  hasRuntimeAvailabilityErrors: boolean;
-  runtimeAvailabilityErrorCount: number;
-  hasUnacknowledgedCodexDangerousSettings: boolean;
-  hasRepoScriptValidationErrors: boolean;
-  repoScriptValidationErrorCount: number;
-  invalidRepoPathsWithDevServerErrors: string[];
-  selectedWorkspaceId: string | null;
+  validation: SettingsSaveValidation;
+  onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
   saveGlobalGitConfig: (config: SettingsSnapshot["git"]) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
 };
@@ -51,17 +42,8 @@ export const useSettingsModalSaveOrchestration = ({
   loadedSnapshot,
   snapshotDraft,
   dirtySections,
-  hasPromptValidationErrors,
-  promptValidationState,
-  hasReusablePromptValidationErrors,
-  reusablePromptValidationErrorCount,
-  hasRuntimeAvailabilityErrors,
-  runtimeAvailabilityErrorCount,
-  hasUnacknowledgedCodexDangerousSettings,
-  hasRepoScriptValidationErrors,
-  repoScriptValidationErrorCount,
-  invalidRepoPathsWithDevServerErrors,
-  selectedWorkspaceId,
+  validation,
+  onRuntimeAvailabilityError,
   saveGlobalGitConfig,
   saveSettingsSnapshot,
 }: UseSettingsModalSaveOrchestrationArgs): SettingsModalSaveOrchestration => {
@@ -69,7 +51,7 @@ export const useSettingsModalSaveOrchestration = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
   const [resetInputs, setResetInputs] = useState({
-    hasRepoScriptValidationErrors,
+    hasRepoScriptValidationErrors: validation.repoScripts.hasErrors,
     loadedSnapshot,
     open,
   });
@@ -86,10 +68,10 @@ export const useSettingsModalSaveOrchestration = ({
   if (
     resetInputs.open !== open ||
     resetInputs.loadedSnapshot !== loadedSnapshot ||
-    resetInputs.hasRepoScriptValidationErrors !== hasRepoScriptValidationErrors
+    resetInputs.hasRepoScriptValidationErrors !== validation.repoScripts.hasErrors
   ) {
     setResetInputs({
-      hasRepoScriptValidationErrors,
+      hasRepoScriptValidationErrors: validation.repoScripts.hasErrors,
       loadedSnapshot,
       open,
     });
@@ -99,7 +81,7 @@ export const useSettingsModalSaveOrchestration = ({
       setHasAttemptedRepoScriptSubmit(false);
     }
 
-    if (!hasRepoScriptValidationErrors) {
+    if (!validation.repoScripts.hasErrors) {
       setHasAttemptedRepoScriptSubmit(false);
     }
 
@@ -113,50 +95,16 @@ export const useSettingsModalSaveOrchestration = ({
       return false;
     }
 
-    if (hasPromptValidationErrors) {
-      const reason = buildPromptValidationSaveError(promptValidationState.totalErrorCount);
+    const blocker = getSettingsSaveBlocker(validation);
+    if (blocker) {
+      const { reason } = blocker;
       setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (hasReusablePromptValidationErrors) {
-      const reason = buildReusablePromptValidationSaveError(reusablePromptValidationErrorCount);
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (hasRuntimeAvailabilityErrors) {
-      const reason = buildRuntimeAvailabilitySaveError(runtimeAvailabilityErrorCount);
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (hasUnacknowledgedCodexDangerousSettings) {
-      const reason = buildCodexDangerousSettingsSaveError();
-      setSaveError(reason);
-      toast.error("Cannot save settings", {
-        description: reason,
-      });
-      return false;
-    }
-
-    if (hasRepoScriptValidationErrors) {
-      setHasAttemptedRepoScriptSubmit(true);
-      const reason = buildRepoScriptValidationSaveError({
-        invalidRepoPathsWithDevServerErrors,
-        repoScriptValidationErrorCount,
-        selectedWorkspaceId,
-      });
-      setSaveError(reason);
+      if (blocker.runtimeKind) {
+        onRuntimeAvailabilityError(blocker.runtimeKind);
+      }
+      if (blocker.showRepoScriptErrors) {
+        setHasAttemptedRepoScriptSubmit(true);
+      }
       toast.error("Cannot save settings", {
         description: reason,
       });
@@ -201,27 +149,19 @@ export const useSettingsModalSaveOrchestration = ({
     }
   }, [
     dirtySections,
-    reusablePromptValidationErrorCount,
-    hasPromptValidationErrors,
-    hasReusablePromptValidationErrors,
-    hasRuntimeAvailabilityErrors,
-    hasUnacknowledgedCodexDangerousSettings,
-    hasRepoScriptValidationErrors,
-    invalidRepoPathsWithDevServerErrors,
     loadedSnapshot,
-    promptValidationState.totalErrorCount,
-    repoScriptValidationErrorCount,
-    runtimeAvailabilityErrorCount,
+    onRuntimeAvailabilityError,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
-    selectedWorkspaceId,
     snapshotDraft,
+    validation,
   ]);
 
   return {
     isSaving,
     saveError,
-    showRepoScriptValidationErrors: hasAttemptedRepoScriptSubmit && hasRepoScriptValidationErrors,
+    showRepoScriptValidationErrors:
+      hasAttemptedRepoScriptSubmit && validation.repoScripts.hasErrors,
     clearSaveError,
     markRepoScriptSaveAttempt,
     submit,

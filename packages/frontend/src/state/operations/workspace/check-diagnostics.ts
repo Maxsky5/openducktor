@@ -65,6 +65,7 @@ export const buildRuntimeCheckErrorState = (
     kind: definition.kind,
     enabled: true,
     ok: false,
+    executablePath: null,
     version: null,
   })),
   errors: [runtimeCheckError],

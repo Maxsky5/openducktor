@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkspaceRecord } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { type ReactElement, useState } from "react";
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -17,12 +23,21 @@ import {
   WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import {
+  runtimeDefinitionsQueryOptions,
+  runtimeExecutableQueryOptions,
+} from "@/state/queries/runtime";
+import { platformQueryOptions } from "@/state/queries/system";
+import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
+  ActiveWorkspace,
   ChecksStateContextValue,
   TasksStateContextValue,
   WorkspaceBranchStateContextValue,
+  WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
 import { AppShell } from "./app-shell";
@@ -99,7 +114,9 @@ const installLocalStorage = (storage: Storage): void => {
   });
 };
 
-const createWorkspaceState = (): WorkspaceStateContextValue => ({
+const createWorkspaceState = (
+  overrides: Partial<WorkspaceStateContextValue> = {},
+): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   isLoadingBranches: false,
   isSwitchingBranch: false,
@@ -121,9 +138,12 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => undefined,
   saveSettingsSnapshot: async () => undefined,
+  ...overrides,
 });
 
-const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
+const createWorkspaceBranchState = (
+  overrides: Partial<WorkspaceBranchStateContextValue> = {},
+): WorkspaceBranchStateContextValue => ({
   activeWorkspace,
   branches: [],
   activeBranch: null,
@@ -131,12 +151,25 @@ const createWorkspaceBranchState = (): WorkspaceBranchStateContextValue => ({
   isSwitchingBranch: false,
   branchSyncDegraded: false,
   switchBranch: async () => undefined,
+  ...overrides,
 });
 
 type RenderAppShellForTestOptions = {
+  initialEntry?: string;
   isLoadingRuntimeDefinitions?: boolean;
   runtimeDefinitionsError?: string | null;
+  workspaceAdd?: (
+    input: Parameters<WorkspaceStateContextValue["addWorkspace"]>[0],
+  ) => Promise<WorkspaceRecord>;
+  workspacePresence?: Partial<WorkspacePresenceContextValue>;
+  prepareQueryClient?: (queryClient: QueryClient) => void;
 };
+
+function CurrentRoute(): ReactElement {
+  const location = useLocation();
+
+  return <div data-testid="current-route">{location.pathname}</div>;
+}
 
 const createChecksState = (): ChecksStateContextValue => ({
   runtimeCheck: null,
@@ -173,23 +206,66 @@ const createTasksState = (): TasksStateContextValue => ({
   humanRequestChangesTask: async () => undefined,
 });
 
-const renderAppShellForTest = (
-  options: RenderAppShellForTestOptions = {},
-): ReturnType<typeof render> => {
-  const queryClient = createQueryClient();
-  const settingsSnapshot = createSettingsSnapshotFixture();
-  queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
+function AppShellTestEnvironment({
+  options,
+  queryClient,
+  settingsSnapshot,
+}: {
+  options: RenderAppShellForTestOptions;
+  queryClient: ReturnType<typeof createQueryClient>;
+  settingsSnapshot: ReturnType<typeof createSettingsSnapshotFixture>;
+}): ReactElement {
+  const startsWithWorkspaces = options.workspacePresence?.hasWorkspaces ?? true;
+  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>(
+    startsWithWorkspaces ? [activeWorkspace] : [],
+  );
+  const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceRecord | null>(
+    startsWithWorkspaces ? activeWorkspace : null,
+  );
+  const [currentActiveWorkspace, setCurrentActiveWorkspace] = useState<ActiveWorkspace | null>(
+    startsWithWorkspaces ? activeWorkspace : null,
+  );
+  const publishesWorkspaceAfterAdd = options.workspaceAdd !== undefined;
+  const hasWorkspaces = publishesWorkspaceAfterAdd ? workspaces.length > 0 : startsWithWorkspaces;
+  const addWorkspace: WorkspaceStateContextValue["addWorkspace"] = async (input) => {
+    if (!options.workspaceAdd) return;
+    const workspace = await options.workspaceAdd(input);
+    setWorkspaces([workspace]);
+    setCurrentWorkspace(workspace);
+    setCurrentActiveWorkspace(workspace);
+  };
 
-  return render(
-    <MemoryRouter initialEntries={["/kanban"]} useTransitions>
+  return (
+    <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
+      <CurrentRoute />
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <ActiveWorkspaceContext.Provider
-            value={{ activeWorkspace, setActiveWorkspace: () => undefined }}
+            value={{
+              activeWorkspace: currentActiveWorkspace,
+              setActiveWorkspace: setCurrentActiveWorkspace,
+            }}
           >
-            <WorkspacePresenceContext.Provider value={{ hasWorkspaces: true }}>
-              <WorkspaceStateContext.Provider value={createWorkspaceState()}>
-                <WorkspaceBranchStateContext.Provider value={createWorkspaceBranchState()}>
+            <WorkspacePresenceContext.Provider
+              value={{
+                hasLoadedWorkspaceList: true,
+                isLoadingWorkspaces: false,
+                workspaceLoadError: null,
+                retryWorkspaces: async () => {},
+                ...options.workspacePresence,
+                hasWorkspaces,
+              }}
+            >
+              <WorkspaceStateContext.Provider
+                value={createWorkspaceState({
+                  workspaces,
+                  activeWorkspace: currentWorkspace,
+                  addWorkspace,
+                })}
+              >
+                <WorkspaceBranchStateContext.Provider
+                  value={createWorkspaceBranchState({ activeWorkspace: currentWorkspace })}
+                >
                   <RuntimeDefinitionsContext.Provider
                     value={{
                       runtimeDefinitions: [],
@@ -228,6 +304,10 @@ const renderAppShellForTest = (
                             <Routes>
                               <Route element={<AppShell />}>
                                 <Route path="/kanban" element={<main>Kanban</main>} />
+                                <Route
+                                  path="/onboarding"
+                                  element={<Navigate to="/kanban" replace />}
+                                />
                               </Route>
                             </Routes>
                           </AgentSessionsContext.Provider>
@@ -241,7 +321,45 @@ const renderAppShellForTest = (
           </ActiveWorkspaceContext.Provider>
         </ThemeProvider>
       </QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
+  );
+}
+
+const renderAppShellForTest = (
+  options: RenderAppShellForTestOptions = {},
+): ReturnType<typeof render> => {
+  const queryClient = createQueryClient();
+  const settingsSnapshot = createSettingsSnapshotFixture();
+  queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
+  queryClient.setQueryData(runtimeDefinitionsQueryOptions().queryKey, [
+    OPENCODE_RUNTIME_DESCRIPTOR,
+    CODEX_RUNTIME_DESCRIPTOR,
+    CLAUDE_RUNTIME_DESCRIPTOR,
+  ]);
+  for (const kind of ["opencode", "codex", "claude"] as const) {
+    queryClient.setQueryData(runtimeExecutableQueryOptions(kind, "").queryKey, {
+      kind,
+      path: "",
+      ok: false,
+      version: null,
+      error: "Path is empty.",
+    });
+  }
+  queryClient.setQueryData(filesystemQueryKeys.directory(), {
+    currentPath: "/repo",
+    currentPathIsGitRepo: true,
+    parentPath: "/",
+    homePath: "/repo",
+    entries: [],
+  });
+  options.prepareQueryClient?.(queryClient);
+
+  return render(
+    <AppShellTestEnvironment
+      options={options}
+      queryClient={queryClient}
+      settingsSnapshot={settingsSnapshot}
+    />,
   );
 };
 
@@ -258,6 +376,244 @@ describe("AppShell", () => {
     }
 
     Reflect.deleteProperty(globalThis, "localStorage");
+  });
+
+  test("waits for the workspace list before choosing an entry path", () => {
+    renderAppShellForTest({ workspacePresence: { isLoadingWorkspaces: true } });
+
+    expect(screen.getByRole("status").textContent).toContain("Loading workspaces");
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("shows the workspace load failure when no cached workspace exists", () => {
+    renderAppShellForTest({
+      workspacePresence: {
+        hasWorkspaces: false,
+        hasLoadedWorkspaceList: false,
+        workspaceLoadError: new Error("Workspace list unavailable"),
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("keeps a failed workspace retry on the recoverable error screen", async () => {
+    const retryWorkspaces = mock(async () => {
+      throw new Error("Workspace list still unavailable");
+    });
+    renderAppShellForTest({
+      workspacePresence: {
+        hasWorkspaces: false,
+        hasLoadedWorkspaceList: false,
+        workspaceLoadError: new Error("Workspace list unavailable"),
+        retryWorkspaces,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(retryWorkspaces).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeTruthy();
+  });
+
+  test("keeps cached workspaces visible after a background refresh fails", () => {
+    renderAppShellForTest({
+      workspacePresence: { workspaceLoadError: new Error("Workspace refresh unavailable") },
+    });
+
+    expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(
+      screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeNull();
+  });
+
+  test("keeps onboarding visible when a cached empty workspace list refresh fails", () => {
+    renderAppShellForTest({
+      initialEntry: "/onboarding",
+      workspacePresence: {
+        hasWorkspaces: false,
+        workspaceLoadError: new Error("Workspace refresh unavailable"),
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeNull();
+  });
+
+  test("redirects an empty workspace from kanban to onboarding", async () => {
+    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("redirects onboarding to kanban when a workspace exists", async () => {
+    renderAppShellForTest({ initialEntry: "/onboarding" });
+
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(
+      screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeNull();
+  });
+
+  test("exits onboarding only after workspace creation publishes the active workspace", async () => {
+    const workspaceAddResult = createDeferred<WorkspaceRecord>();
+    const initialTaskLoad = createDeferred<void>();
+    const platformLoad = createDeferred<void>();
+    const workspaceAdd = mock(async () => workspaceAddResult.promise);
+    const createdWorkspace = {
+      ...activeWorkspace,
+      workspaceId: "repo",
+      workspaceName: "repo",
+    } satisfies WorkspaceRecord;
+    renderAppShellForTest({
+      workspacePresence: { hasWorkspaces: false },
+      workspaceAdd,
+      prepareQueryClient: (queryClient) => {
+        void queryClient.fetchQuery({
+          ...repoTaskDataQueryOptions(
+            createdWorkspace.repoPath,
+            createSettingsSnapshotFixture().kanban.doneVisibleDays,
+          ),
+          queryFn: async () => {
+            await initialTaskLoad.promise;
+            return { tasks: [] };
+          },
+        });
+        void queryClient.fetchQuery({
+          ...platformQueryOptions(),
+          queryFn: async () => {
+            await platformLoad.promise;
+            return "darwin" as const;
+          },
+        });
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+    await screen.findByRole("heading", { name: "Configure coding agents" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
+    await screen.findByRole("heading", { name: "Open your first workspace" });
+    const selectionActions = await screen.findByTestId("onboarding-workspace-actions");
+    const workspaceContent = screen.getByTestId("onboarding-workspace-content");
+    const workspaceFooter = screen.getByTestId("onboarding-workspace-footer");
+    expect(workspaceContent.contains(workspaceFooter)).toBe(false);
+    expect(workspaceFooter.parentElement).toBe(workspaceContent.parentElement);
+    expect(workspaceFooter.contains(selectionActions)).toBe(true);
+    expect(
+      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
+    fireEvent.click(within(workspaceFooter).getByRole("button", { name: "Choose This Folder" }));
+    const submitActions = await screen.findByTestId("onboarding-workspace-actions");
+    expect(workspaceFooter.contains(submitActions)).toBe(true);
+    expect(
+      within(workspaceFooter).getByRole("button", { name: "Back to coding agents" }),
+    ).toBeTruthy();
+    expect(within(workspaceFooter).getByRole("button", { name: "Open repository" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+
+    expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Back to coding agents" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect(screen.queryByText("Kanban")).toBeNull();
+    expect(workspaceAdd).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      workspaceId: "repo",
+      workspaceName: "repo",
+    });
+
+    const mainFrames: string[] = [];
+    const frameObserver = new MutationObserver(() => {
+      mainFrames.push(document.querySelector("main")?.textContent ?? "");
+    });
+    frameObserver.observe(document.body, { childList: true, subtree: true });
+
+    await act(async () => {
+      workspaceAddResult.resolve(createdWorkspace);
+      await workspaceAddResult.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect(screen.getByText("Preparing your workspace…")).toBeTruthy();
+
+    await act(async () => {
+      initialTaskLoad.resolve();
+      await initialTaskLoad.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+
+    platformLoad.resolve();
+
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    frameObserver.disconnect();
+    expect(document.querySelector("main")?.textContent).toBe("Kanban");
+    expect(mainFrames).not.toContain("");
+    expect(screen.queryByRole("heading", { name: "Open your first workspace" })).toBeNull();
+  });
+
+  test("keeps the workspace draft in onboarding after a pending add fails", async () => {
+    const workspaceAddResult = createDeferred<WorkspaceRecord>();
+    const workspaceAdd = mock(async () => workspaceAddResult.promise);
+    renderAppShellForTest({
+      workspacePresence: { hasWorkspaces: false },
+      workspaceAdd,
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("current-route").textContent).toBe("/onboarding"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+    await screen.findByRole("heading", { name: "Configure coding agents" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
+    await screen.findByRole("heading", { name: "Open your first workspace" });
+    fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+
+    const backButton = screen.getByRole("button", { name: "Back to coding agents" });
+    expect((backButton as HTMLButtonElement).disabled).toBe(true);
+
+    workspaceAddResult.reject(new Error("Repository open failed"));
+
+    await screen.findByText("Repository open failed");
+    expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
+    expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
+    expect((backButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  test("moves from welcome to runtime setup without mounting the workspace shell", () => {
+    renderAppShellForTest({ workspacePresence: { hasWorkspaces: false } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+
+    expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
+    expect(screen.getAllByText("Executable path")).toHaveLength(3);
+    expect(screen.queryByText("Kanban")).toBeNull();
   });
 
   test("opens the sidebar by default when no preference is stored", () => {

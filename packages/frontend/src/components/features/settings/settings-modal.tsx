@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import { type ReactElement, useCallback, useState } from "react";
 import {
   Dialog,
@@ -18,6 +19,7 @@ import type {
 } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
+import { isSettingsInteractionDisabled } from "./settings-modal-model";
 import {
   INITIAL_SETTINGS_MODAL_NAVIGATION,
   resolveSettingsModalOpenState,
@@ -54,6 +56,10 @@ export function SettingsModal({
   const [navigation, setNavigation] = useState<SettingsModalNavigationState>(
     INITIAL_SETTINGS_MODAL_NAVIGATION,
   );
+  const handleRuntimeAvailabilityError = useCallback((runtimeKind: RuntimeKind): void => {
+    setNavigation((current) => ({ ...current, section: "runtimes" }));
+    setContentFocusRequest({ kind: "runtime-executable", runtimeKind });
+  }, []);
   const workspaceSelectionPolicy =
     activeDeepLinkResolution?.scope === "repository"
       ? activeDeepLinkResolution.workspaceSelectionPolicy
@@ -63,8 +69,9 @@ export function SettingsModal({
     shouldLoadCatalog:
       open && navigation.section === "repositories" && navigation.repositorySection === "agents",
     workspaceSelectionPolicy,
+    onRuntimeAvailabilityError: handleRuntimeAvailabilityError,
   });
-  const isInteractionDisabled = controller.isLoadingSettings || controller.isSaving;
+  const isInteractionDisabled = isSettingsInteractionDisabled(controller);
 
   const handleSectionChange = (section: SettingsSectionId): void => {
     setNavigation((current) => ({ ...current, section }));
@@ -176,6 +183,8 @@ export function SettingsModal({
             isLoadingSettings: controller.isLoadingSettings,
             hasSnapshotDraft: Boolean(controller.snapshotDraft),
             settingsError: controller.settingsError,
+            isLoadingRuntimeConfiguration:
+              controller.isLoadingRuntimeDefinitions || controller.isLoadingRuntimeExecutables,
           }}
           validationSummary={{
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
@@ -189,6 +198,7 @@ export function SettingsModal({
           errors={{
             saveError: controller.saveError,
             catalogError: controller.runtimeDefinitionsError,
+            runtimeExecutablesError: controller.runtimeExecutablesError,
           }}
           location={{
             section: navigation.section,

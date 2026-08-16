@@ -22,6 +22,8 @@ import {
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
+import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -40,14 +42,20 @@ import type { RuntimeAvailabilityValidationState } from "./use-settings-modal-ru
 import { useSettingsModalRuntimeValidation } from "./use-settings-modal-runtime-validation";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
+import { useSettingsRuntimeExecutableSetup } from "./use-settings-runtime-executable-setup";
 
 export type SettingsModalController = {
   isLoadingSettings: boolean;
   isLoadingRuntimeDefinitions: boolean;
+  isLoadingRuntimeExecutables: boolean;
+  isCheckingRuntimeExecutables: boolean;
   isLoadingCatalog: boolean;
   isSaving: boolean;
   settingsError: string | null;
   runtimeDefinitionsError: string | null;
+  runtimeExecutablesError: string | null;
+  runtimeDiscoveryError: string | null;
+  runtimeExecutableValidation: RuntimeExecutableValidationState;
   saveError: string | null;
   snapshotDraft: SettingsSnapshot | null;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -92,6 +100,8 @@ export type SettingsModalController = {
   setSelectedWorkspaceId: (next: string) => void;
   markRepoScriptSaveAttempt: () => void;
   retrySelectedRepoBranchesLoad: () => void;
+  retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   updateGlobalGitConfig: (
@@ -134,12 +144,14 @@ type UseSettingsModalControllerArgs = {
   open: boolean;
   shouldLoadCatalog: boolean;
   workspaceSelectionPolicy?: SettingsWorkspaceSelectionPolicy | undefined;
+  onRuntimeAvailabilityError: (runtimeKind: RuntimeKind) => void;
 };
 
 export const useSettingsModalController = ({
   open,
   shouldLoadCatalog,
   workspaceSelectionPolicy,
+  onRuntimeAvailabilityError,
 }: UseSettingsModalControllerArgs): SettingsModalController => {
   const workspaceState = useRequiredContext(WorkspaceStateContext, "useSettingsModalController");
   const checksState = useRequiredContext(ChecksStateContext, "useSettingsModalController");
@@ -167,6 +179,7 @@ export const useSettingsModalController = ({
     allRuntimeDefinitions: runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
+    refreshRuntimeDefinitions,
   } = useRuntimeAvailabilityContext();
 
   const {
@@ -217,6 +230,16 @@ export const useSettingsModalController = ({
         : [],
     [runtimeDefinitions, snapshotDraft],
   );
+  const runtimeExecutableSetup = useSettingsRuntimeExecutableSetup({
+    open,
+    runtimes: snapshotDraft?.agentRuntimes ?? null,
+  });
+  const runtimeExecutableValidation = runtimeExecutableSetup.validation;
+  const isLoadingRuntimeExecutables = runtimeExecutableSetup.isLoading;
+  const isCheckingRuntimeExecutables = runtimeExecutableSetup.isCheckingDiscovery;
+  const runtimeDiscoveryError = runtimeExecutableSetup.discoveryError;
+  const runtimeExecutablesError = runtimeExecutableSetup.error;
+  const runtimeRequestError = runtimeDefinitionsError ?? runtimeExecutablesError;
   const catalogRuntimeKinds = useMemo(
     () => getNeededCatalogRuntimeKinds(selectedRepoConfig, availableRuntimeDefinitions),
     [availableRuntimeDefinitions, selectedRepoConfig],
@@ -250,8 +273,16 @@ export const useSettingsModalController = ({
   const runtimeAvailabilityValidationState = useSettingsModalRuntimeValidation({
     runtimeDefinitions,
     snapshotDraft,
+    checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
+    ...(runtimeExecutableValidation.results.length > 0
+      ? { runtimeExecutableResults: runtimeExecutableValidation.results }
+      : {}),
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
+  const invalidRuntimeKind = snapshotDraft
+    ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)
+        ?.kind ?? null)
+    : null;
   const codexDangerAcknowledgementKey = useMemo(
     () =>
       snapshotDraft
@@ -332,14 +363,17 @@ export const useSettingsModalController = ({
       ...settingsSectionErrorCountById,
       repositories:
         settingsSectionErrorCountById.repositories +
-        runtimeAvailabilityValidationState.totalErrorCount +
+        runtimeAvailabilityValidationState.totalErrorCount -
+        runtimeAvailabilityValidationState.runtimeExecutableErrors.length +
         repoScriptValidationErrorCount,
+      runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
     }),
     [
       repoScriptValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
       runtimeAvailabilityValidationState.totalErrorCount,
+      runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       settingsSectionErrorCountById,
     ],
   );
@@ -356,17 +390,33 @@ export const useSettingsModalController = ({
     loadedSnapshot,
     snapshotDraft,
     dirtySections,
-    hasPromptValidationErrors,
-    promptValidationState,
-    hasReusablePromptValidationErrors: hasReusablePromptValidationErrors,
-    reusablePromptValidationErrorCount: reusablePromptValidationState.totalErrorCount,
-    hasRuntimeAvailabilityErrors,
-    runtimeAvailabilityErrorCount: runtimeAvailabilityValidationState.totalErrorCount,
-    hasUnacknowledgedCodexDangerousSettings,
-    hasRepoScriptValidationErrors,
-    repoScriptValidationErrorCount,
-    invalidRepoPathsWithDevServerErrors,
-    selectedWorkspaceId,
+    validation: {
+      prompt: {
+        hasErrors: hasPromptValidationErrors,
+        errorCount: promptValidationState.totalErrorCount,
+      },
+      reusablePrompts: {
+        hasErrors: hasReusablePromptValidationErrors,
+        errorCount: reusablePromptValidationState.totalErrorCount,
+      },
+      runtimeRequest: {
+        isPending: isLoadingRuntimeDefinitions || isLoadingRuntimeExecutables,
+        error: runtimeRequestError,
+      },
+      runtimeAvailability: {
+        hasErrors: hasRuntimeAvailabilityErrors,
+        errorCount: runtimeAvailabilityValidationState.totalErrorCount,
+        invalidKind: invalidRuntimeKind,
+      },
+      hasUnacknowledgedCodexDangerousSettings,
+      repoScripts: {
+        hasErrors: hasRepoScriptValidationErrors,
+        errorCount: repoScriptValidationErrorCount,
+        invalidRepoPaths: invalidRepoPathsWithDevServerErrors,
+        selectedWorkspaceId,
+      },
+    },
+    onRuntimeAvailabilityError,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
   });
@@ -421,6 +471,10 @@ export const useSettingsModalController = ({
     markDirty,
     draftActions,
   });
+  const checkRuntimeExecutablesAgain = useCallback(
+    () => runtimeExecutableSetup.checkAgain(updateAgentRuntimes),
+    [runtimeExecutableSetup.checkAgain, updateAgentRuntimes],
+  );
 
   const { detectSelectedRepoGithubRepository } = useSettingsModalRepositoryActions({
     selectedRepoPath: selectedWorkspaceRepoPath,
@@ -435,10 +489,15 @@ export const useSettingsModalController = ({
   return {
     isLoadingSettings,
     isLoadingRuntimeDefinitions,
+    isLoadingRuntimeExecutables,
+    isCheckingRuntimeExecutables,
     isLoadingCatalog,
     isSaving,
     settingsError,
     runtimeDefinitionsError,
+    runtimeExecutablesError,
+    runtimeDiscoveryError,
+    runtimeExecutableValidation,
     saveError,
     snapshotDraft,
     runtimeDefinitions,
@@ -483,6 +542,8 @@ export const useSettingsModalController = ({
     setSelectedWorkspaceId,
     markRepoScriptSaveAttempt,
     retrySelectedRepoBranchesLoad,
+    retryRuntimeDefinitions: refreshRuntimeDefinitions,
+    checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,

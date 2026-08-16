@@ -18,12 +18,14 @@ const createFakeFilesystem = ({
   canonical = {},
   entries = {},
   stats = {},
+  statErrors = {},
   existingPaths = new Set<string>(),
 }: {
   home?: string | null;
   canonical?: Record<string, string>;
   entries?: Record<string, FakeEntry[]>;
   stats?: Record<string, boolean>;
+  statErrors?: Record<string, Error>;
   existingPaths?: Set<string>;
 }): FilesystemPort => ({
   homeDirectory: () => home,
@@ -66,6 +68,9 @@ const createFakeFilesystem = ({
   stat: (path) =>
     Effect.tryPromise({
       try: async () => {
+        if (statErrors[path]) {
+          throw statErrors[path];
+        }
         if (stats[path] === undefined) {
           throw new Error(`Missing stat fixture for ${path}`);
         }
@@ -127,6 +132,82 @@ describe("createFilesystemService", () => {
       ["repo-a", true],
       ["zeta", false],
     ]);
+  });
+  test("includes files only when the caller requests them", async () => {
+    const filesystem = createFakeFilesystem({
+      canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
+      stats: {
+        "/workspace": true,
+        "/workspace/bin": true,
+        "/workspace/codex": false,
+      },
+      entries: {
+        "/workspace": [
+          { name: "codex", path: "/workspace/codex" },
+          { name: "bin", path: "/workspace/bin" },
+        ],
+      },
+    });
+
+    const listing = await Effect.runPromise(
+      createService(filesystem).listDirectory({ path: "/workspace", includeFiles: true }),
+    );
+
+    expect(listing.entries).toEqual([
+      { name: "bin", path: "/workspace/bin", isDirectory: true, isGitRepo: false },
+      { name: "codex", path: "/workspace/codex", isDirectory: false, isGitRepo: false },
+    ]);
+  });
+  test("omits directory entries whose targets disappeared before stat", async () => {
+    const missingTargetError = new Error("no such file or directory") as Error & {
+      code: string;
+    };
+    missingTargetError.code = "ENOENT";
+    const filesystem = createFakeFilesystem({
+      canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
+      stats: {
+        "/workspace": true,
+        "/workspace/claude": false,
+      },
+      statErrors: { "/workspace/hermes": missingTargetError },
+      entries: {
+        "/workspace": [
+          { name: "claude", path: "/workspace/claude" },
+          { name: "hermes", path: "/workspace/hermes" },
+        ],
+      },
+    });
+
+    const listing = await Effect.runPromise(
+      createService(filesystem).listDirectory({ path: "/workspace", includeFiles: true }),
+    );
+
+    expect(listing.entries).toEqual([
+      { name: "claude", path: "/workspace/claude", isDirectory: false, isGitRepo: false },
+    ]);
+  });
+  test("keeps non-missing entry stat failures actionable", async () => {
+    const accessError = new Error("permission denied") as Error & { code: string };
+    accessError.code = "EACCES";
+    const filesystem = createFakeFilesystem({
+      canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
+      stats: { "/workspace": true },
+      statErrors: { "/workspace/private": accessError },
+      entries: {
+        "/workspace": [{ name: "private", path: "/workspace/private" }],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        createService(filesystem).listDirectory({ path: "/workspace", includeFiles: true }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      kind: "read_failed",
+      message: "Failed to read directory '/workspace': HostOperationError: permission denied",
+    });
   });
   test("uses the home directory when path is omitted", async () => {
     const filesystem = createFakeFilesystem({

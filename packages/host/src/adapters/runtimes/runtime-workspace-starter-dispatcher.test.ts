@@ -25,6 +25,7 @@ const createStarter = (
         startedAt: "2026-07-18T10:00:00.000Z",
         descriptor: input.descriptor,
       },
+      configuredExecutablePath: `/tools/${input.runtimeKind}`,
       isAlive: () => true,
       stop: () => Effect.void,
     });

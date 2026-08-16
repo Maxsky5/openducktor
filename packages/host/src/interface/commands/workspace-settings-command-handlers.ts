@@ -1,6 +1,7 @@
 import {
   globalGitConfigSchema,
   repoHooksSchema,
+  runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
 } from "@openducktor/contracts";
@@ -47,6 +48,19 @@ const requireStringArray = (value: unknown, label: string): string[] => {
   return value;
 };
 
+const optionalRuntimeKind = (record: Record<string, unknown>) => {
+  if (record.defaultRuntimeKind === undefined) return undefined;
+  const parsed = runtimeKindSchema.safeParse(record.defaultRuntimeKind);
+  if (!parsed.success) {
+    throw new HostValidationError({
+      message: "defaultRuntimeKind must be a supported runtime kind.",
+      field: "defaultRuntimeKind",
+      details: { value: record.defaultRuntimeKind },
+    });
+  }
+  return parsed.data;
+};
+
 export const createWorkspaceSettingsCommandHandlers = (
   workspaceSettingsService: WorkspaceSettingsService,
 ): HostCommandHandlers => ({
@@ -56,10 +70,12 @@ export const createWorkspaceSettingsCommandHandlers = (
   },
   workspace_add: (args) => {
     const record = requireRecord(args, "workspace_add input");
+    const defaultRuntimeKind = optionalRuntimeKind(record);
     return workspaceSettingsService.addWorkspace({
       workspaceId: requireString(record.workspaceId, "workspaceId"),
       workspaceName: requireString(record.workspaceName, "workspaceName"),
       repoPath: requireString(record.repoPath, "repoPath"),
+      ...(defaultRuntimeKind ? { defaultRuntimeKind } : {}),
     });
   },
   workspace_select: (args) =>

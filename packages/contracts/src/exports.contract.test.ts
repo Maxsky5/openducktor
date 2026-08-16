@@ -89,6 +89,7 @@ import type {
   FileContent,
   FileDiff,
   FileStatus,
+  FilesystemListDirectoryInput,
   GeneralSettings,
   GitBranch,
   GitCommitAllRequest,
@@ -120,6 +121,7 @@ import type {
   IssueType,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
+  PersistedGlobalConfigV2,
   PlanSubtaskInput,
   PlanSubtaskIssueType,
   PlanSubtaskPriority,
@@ -163,6 +165,9 @@ import type {
   RuntimeCapabilityClass,
   RuntimeCapabilityKey,
   RuntimeCheck,
+  RuntimeExecutableCheck,
+  RuntimeExecutableCheckInput,
+  RuntimeExecutableCheckResult,
   RuntimeForkTarget,
   RuntimeHistoryCapabilities,
   RuntimeHistoryFidelity,
@@ -490,6 +495,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "createTaskResultSchema",
   "directoryEntrySchema",
   "directoryListingSchema",
+  "filesystemListDirectoryInputSchema",
   "directMergeRecordSchema",
   "gitDiffScopeSchema",
   "gitFetchRemoteRequestSchema",
@@ -528,6 +534,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "resolveHorizontalScrollbarVisibility",
   "generalSettingsSchema",
   "globalConfigSchema",
+  "persistedGlobalConfigV2Schema",
   "globalGitConfigSchema",
   "GetWorkspacesInputSchema",
   "getWorkspacesResultSchema",
@@ -612,6 +619,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeCapabilityClasses",
   "runtimeCapabilityKeySchema",
   "runtimeCapabilityKeyValues",
+  "runtimeExecutableCheckInputSchema",
+  "runtimeExecutableCheckResultSchema",
+  "runtimeExecutableCheckSchema",
   "runtimeDescriptorCatalogSchema",
   "runtimeDescriptorSchema",
   "runtimeForkTargetSchema",
@@ -878,6 +888,7 @@ type ExportedTypeContract = {
   CommitsAheadBehind: CommitsAheadBehind;
   DirectoryEntry: DirectoryEntry;
   DirectoryListing: DirectoryListing;
+  FilesystemListDirectoryInput: FilesystemListDirectoryInput;
   ExternalTaskSyncEvent: ExternalTaskSyncEvent;
   ExternalTaskSyncEventKind: ExternalTaskSyncEventKind;
   GitCommitAllRequest: GitCommitAllRequest;
@@ -910,6 +921,7 @@ type ExportedTypeContract = {
   GitWorktreeStatusSnapshot: GitWorktreeStatusSnapshot;
   GitWorktreeSummary: GitWorktreeSummary;
   GlobalConfig: GlobalConfig;
+  PersistedGlobalConfigV2: PersistedGlobalConfigV2;
   GeneralSettings: GeneralSettings;
   HorizontalScrollbarVisibility: HorizontalScrollbarVisibility;
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
@@ -940,6 +952,9 @@ type ExportedTypeContract = {
   SlashCommandDescriptor: SlashCommandDescriptor;
   SlashCommandSource: SlashCommandSource;
   RuntimeCheck: RuntimeCheck;
+  RuntimeExecutableCheck: RuntimeExecutableCheck;
+  RuntimeExecutableCheckInput: RuntimeExecutableCheckInput;
+  RuntimeExecutableCheckResult: RuntimeExecutableCheckResult;
   RuntimeCapabilities: RuntimeCapabilities;
   RuntimeCapabilityClass: RuntimeCapabilityClass;
   RuntimeCapabilityKey: RuntimeCapabilityKey;

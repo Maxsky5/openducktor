@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ResolvedTool, ToolDiscoveryId } from "../../ports/tool-discovery-port";
+import { discoverToolFresh, validateExactToolPath } from "../../ports/tool-discovery-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 import { createToolDiscoveryAdapter, type ToolDiscoveryPathOptions } from "./tool-discovery";
 
@@ -276,18 +277,32 @@ describe("discoverToolPath", () => {
   });
 
   test("fails at a required bundled source before PATH", async () => {
-    await expect(
-      discoverBuiltInTool({
-        options: {
-          bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands({ available: ["opencode"] }),
-        toolId: "opencode",
-      }),
-    ).rejects.toThrow(
-      "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, bundled tool directory (/opt/OpenDucktor/bin). Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
-    );
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: {
+        bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
+        platform: "linux",
+      },
+      systemCommands: createSystemCommands({ available: ["opencode"] }),
+    });
+    const exit = await Effect.runPromiseExit(adapter.resolveToolPath("opencode"));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      const failures = Array.from(Cause.failures(exit.cause));
+      expect(failures).toEqual([
+        expect.objectContaining({
+          _tag: "HostDependencyError",
+          details: {
+            directories: ["/opt/OpenDucktor/bin"],
+            requiredSource: true,
+          },
+        }),
+      ]);
+      expect(failures[0]?.message).toBe(
+        "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, bundled tool directory (/opt/OpenDucktor/bin). Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
+      );
+    }
   });
 
   test("uses SystemCommandRunner PATHEXT resolution for bundled directories", async () => {
@@ -476,5 +491,74 @@ describe("discoverToolPath", () => {
 
     await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe("/path/bun");
     expect(resolveCalls).toBe(1);
+  });
+
+  test("reruns automatic discovery only through the explicit fresh method", async () => {
+    let resolveCalls = 0;
+    const systemCommands = createSystemCommands({ available: ["codex"] });
+    const originalResolve = systemCommands.resolveCommandPath;
+    systemCommands.resolveCommandPath = (command, options) => {
+      resolveCalls += 1;
+      return originalResolve(command, options);
+    };
+    const adapter = createToolDiscoveryAdapter({ env: {}, systemCommands });
+
+    await Effect.runPromise(adapter.resolveTool("codex"));
+    await Effect.runPromise(adapter.resolveTool("codex"));
+    await Effect.runPromise(discoverToolFresh(adapter, "codex"));
+
+    expect(resolveCalls).toBe(2);
+  });
+
+  test("validates only the supplied executable path and never falls back", async () => {
+    await withTempDir(async (root) => {
+      const executableName = process.platform === "win32" ? "custom-codex.cmd" : "custom-codex";
+      const executable = join(root, executableName);
+      await writeExecutable(executable);
+      const adapter = createToolDiscoveryAdapter({
+        env: {},
+        options: { platform: process.platform },
+        systemCommands: createSystemCommandRunner({
+          env: { PATH: root },
+          platform: process.platform,
+        }),
+      });
+
+      await expect(
+        Effect.runPromise(validateExactToolPath(adapter, "codex", executable)),
+      ).resolves.toEqual({
+        displayLabel: "Saved path",
+        path: executable,
+        sourceCategory: "provided_path",
+      });
+      await expect(
+        Effect.runPromise(
+          validateExactToolPath(adapter, "codex", join(root, `missing-${executableName}`)),
+        ),
+      ).rejects.toThrow(`Saved Codex path points to a missing or non-executable file`);
+    });
+  });
+
+  test("rejects saved command names and relative paths without searching PATH", async () => {
+    let resolveCalls = 0;
+    const systemCommands = createSystemCommands({ available: ["codex"] });
+    const originalResolve = systemCommands.resolveCommandPath;
+    systemCommands.resolveCommandPath = (command, options) => {
+      resolveCalls += 1;
+      return originalResolve(command, options);
+    };
+    const adapter = createToolDiscoveryAdapter({
+      env: { PATH: "/tools" },
+      options: { platform: "linux" },
+      systemCommands,
+    });
+
+    await expect(
+      Effect.runPromise(validateExactToolPath(adapter, "codex", "codex")),
+    ).rejects.toThrow('Saved Codex path "codex" must be absolute');
+    await expect(
+      Effect.runPromise(validateExactToolPath(adapter, "codex", "bin/codex")),
+    ).rejects.toThrow('Saved Codex path "bin/codex" must be absolute');
+    expect(resolveCalls).toBe(0);
   });
 });

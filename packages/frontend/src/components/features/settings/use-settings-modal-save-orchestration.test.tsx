@@ -5,7 +5,7 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { EMPTY_PROMPT_VALIDATION_STATE } from "./settings-modal-controller.types";
+import type { SettingsSaveValidation } from "./settings-modal-save-policy";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
 
@@ -36,6 +36,23 @@ const createSnapshot = (): SettingsSnapshot =>
     },
   });
 
+const createValidation = (
+  overrides: Partial<SettingsSaveValidation> = {},
+): SettingsSaveValidation => ({
+  prompt: { hasErrors: false, errorCount: 0 },
+  reusablePrompts: { hasErrors: false, errorCount: 0 },
+  runtimeRequest: { isPending: false, error: null },
+  runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
+  hasUnacknowledgedCodexDangerousSettings: false,
+  repoScripts: {
+    hasErrors: false,
+    errorCount: 0,
+    invalidRepoPaths: [],
+    selectedWorkspaceId: "repo",
+  },
+  ...overrides,
+});
+
 const createArgs = (
   overrides: Partial<HookArgs> = {},
   dirtySections: DirtySections = EMPTY_DIRTY_SECTIONS,
@@ -44,17 +61,8 @@ const createArgs = (
   loadedSnapshot: createSnapshot(),
   snapshotDraft: createSnapshot(),
   dirtySections,
-  hasPromptValidationErrors: false,
-  promptValidationState: EMPTY_PROMPT_VALIDATION_STATE,
-  hasReusablePromptValidationErrors: false,
-  reusablePromptValidationErrorCount: 0,
-  hasRuntimeAvailabilityErrors: false,
-  runtimeAvailabilityErrorCount: 0,
-  hasUnacknowledgedCodexDangerousSettings: false,
-  hasRepoScriptValidationErrors: false,
-  repoScriptValidationErrorCount: 0,
-  invalidRepoPathsWithDevServerErrors: [],
-  selectedWorkspaceId: "repo",
+  validation: createValidation(),
+  onRuntimeAvailabilityError: () => {},
   saveGlobalGitConfig: mock(async () => {}),
   saveSettingsSnapshot: mock(async () => {}),
   ...overrides,
@@ -96,11 +104,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs({
-        hasPromptValidationErrors: true,
-        promptValidationState: {
-          ...EMPTY_PROMPT_VALIDATION_STATE,
-          totalErrorCount: 2,
-        },
+        validation: createValidation({ prompt: { hasErrors: true, errorCount: 2 } }),
         saveSettingsSnapshot,
       }),
     );
@@ -119,12 +123,13 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.unmount();
   });
 
-  test("blocks disabled runtime selections before persistence", async () => {
+  test("blocks runtime executable errors before persistence", async () => {
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs({
-        hasRuntimeAvailabilityErrors: true,
-        runtimeAvailabilityErrorCount: 2,
+        validation: createValidation({
+          runtimeAvailability: { hasErrors: true, errorCount: 2, invalidKind: null },
+        }),
         saveSettingsSnapshot,
       }),
     );
@@ -137,8 +142,30 @@ describe("useSettingsModalSaveOrchestration", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(harness.getLatest().saveError).toBe("Fix 2 disabled runtime selections before saving.");
+    expect(harness.getLatest().saveError).toBe("Fix 2 runtime executable errors before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+
+    await harness.unmount();
+  });
+
+  test("requests focus for the first invalid runtime when save is blocked", async () => {
+    const onRuntimeAvailabilityError = mock(() => {});
+    const harness = createHookHarness(
+      createArgs({
+        validation: createValidation({
+          runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "codex" },
+        }),
+        onRuntimeAvailabilityError,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    expect(onRuntimeAvailabilityError).toHaveBeenCalledTimes(1);
+    expect(onRuntimeAvailabilityError).toHaveBeenCalledWith("codex");
 
     await harness.unmount();
   });
@@ -147,7 +174,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     const saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(
       createArgs({
-        hasUnacknowledgedCodexDangerousSettings: true,
+        validation: createValidation({ hasUnacknowledgedCodexDangerousSettings: true }),
         saveSettingsSnapshot,
       }),
     );
@@ -206,9 +233,14 @@ describe("useSettingsModalSaveOrchestration", () => {
   test("blocks repo script validation errors, shows submit-gated errors, and resets the gate when validation clears", async () => {
     const harness = createHookHarness(
       createArgs({
-        hasRepoScriptValidationErrors: true,
-        repoScriptValidationErrorCount: 1,
-        invalidRepoPathsWithDevServerErrors: ["repo"],
+        validation: createValidation({
+          repoScripts: {
+            hasErrors: true,
+            errorCount: 1,
+            invalidRepoPaths: ["repo"],
+            selectedWorkspaceId: "repo",
+          },
+        }),
       }),
     );
 
@@ -230,9 +262,7 @@ describe("useSettingsModalSaveOrchestration", () => {
     await harness.update(
       createArgs(
         {
-          hasRepoScriptValidationErrors: false,
-          repoScriptValidationErrorCount: 0,
-          invalidRepoPathsWithDevServerErrors: [],
+          validation: createValidation(),
         },
         EMPTY_DIRTY_SECTIONS,
       ),

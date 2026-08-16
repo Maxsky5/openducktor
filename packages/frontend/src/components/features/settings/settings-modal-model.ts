@@ -28,6 +28,15 @@ type RepoAgentDefaultsInput = {
   qa?: RepoAgentDefaultLike | null | undefined;
 };
 
+export const isSettingsInteractionDisabled = ({
+  isLoadingSettings,
+  isSaving,
+}: {
+  isLoadingSettings: boolean;
+  isSaving: boolean;
+  isCheckingRuntimeExecutables: boolean;
+}): boolean => isLoadingSettings || isSaving;
+
 export const ROLE_DEFAULTS: ReadonlyArray<{
   role: RepoDefaultRole;
   label: string;

@@ -52,7 +52,7 @@ describe("createFilesystemCommandHandlers", () => {
       handlers: createFilesystemCommandHandlers(filesystemService),
     });
     await expect(router.invoke("filesystem_list_directory", { path: 123 })).rejects.toThrow(
-      "filesystem_list_directory expects optional string argument 'path'.",
+      "filesystem_list_directory received invalid arguments.",
     );
   });
 });

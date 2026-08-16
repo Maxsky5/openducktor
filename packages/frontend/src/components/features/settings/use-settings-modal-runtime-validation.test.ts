@@ -13,9 +13,9 @@ const createSnapshot = (): SettingsSnapshot =>
   createSettingsSnapshotFixture({
     autopilot: createDefaultAutopilotSettings(),
     agentRuntimes: {
-      opencode: { enabled: true },
+      opencode: { enabled: true, executablePath: "/bin/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-      claude: { enabled: false },
+      claude: { enabled: false, executablePath: "" },
     },
     workspaces: {
       repo: {
@@ -47,54 +47,96 @@ const createSnapshot = (): SettingsSnapshot =>
   });
 
 describe("settings runtime availability validation", () => {
-  test("reports disabled repo default and role runtimes", () => {
+  test("reports repository references to disabled runtimes", () => {
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       snapshotDraft: createSnapshot(),
     });
 
+    expect(validation.errorsByWorkspaceId).toEqual({
+      repo: [
+        'Default agent runtime "Codex" is disabled.',
+        'Builder agent runtime "Codex" is disabled.',
+      ],
+    });
+    expect(validation.errorCountByWorkspaceId).toEqual({ repo: 2 });
     expect(validation.totalErrorCount).toBe(2);
-    expect(validation.errorCountByWorkspaceId.repo).toBe(2);
-    expect(validation.errorsByWorkspaceId.repo).toEqual([
-      'Default agent runtime "Codex" is disabled.',
-      'Builder agent runtime "Codex" is disabled.',
-    ]);
   });
 
-  test("does not report disabled runtimes while runtime definitions are unavailable", () => {
+  test("does not require a runtime while runtime definitions are unavailable", () => {
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [],
       snapshotDraft: createSnapshot(),
     });
 
     expect(validation.totalErrorCount).toBe(0);
-    expect(validation.errorsByWorkspaceId).toEqual({});
   });
 
-  test("reports configured disabled runtimes without substituting another runtime", () => {
+  test("allows dormant repository runtime references when every runtime is disabled", () => {
     const snapshotDraft = createSnapshot();
-    snapshotDraft.agentRuntimes = {
-      opencode: { enabled: false },
-      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-      claude: { enabled: false },
-    };
-    const repoConfig = snapshotDraft.workspaces.repo;
-    if (!repoConfig) {
-      throw new Error("Fixture repo workspace is missing.");
-    }
-    snapshotDraft.workspaces = {
-      ...snapshotDraft.workspaces,
-      repo: { ...repoConfig, defaultRuntimeKind: "opencode" },
-    };
+    snapshotDraft.agentRuntimes.opencode.enabled = false;
 
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
       snapshotDraft,
     });
 
-    expect(validation.errorsByWorkspaceId.repo).toEqual([
-      'Default agent runtime "OpenCode" is disabled.',
-      'Builder agent runtime "Codex" is disabled.',
+    expect(validation.errorsByWorkspaceId).toEqual({});
+    expect(validation.totalErrorCount).toBe(0);
+  });
+
+  test("reports an enabled runtime whose saved executable path is invalid", () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentRuntimes.codex = {
+      ...snapshotDraft.agentRuntimes.codex,
+      enabled: true,
+      executablePath: "/bin/codex",
+    };
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft,
+      runtimeExecutableResults: [
+        {
+          kind: "opencode",
+          path: "/bin/opencode",
+          requestedPath: "/bin/opencode",
+          ok: false,
+          version: null,
+          error: "Executable does not exist: /bin/opencode",
+        },
+        {
+          kind: "codex",
+          path: "/bin/codex",
+          requestedPath: "/bin/codex",
+          ok: true,
+          version: "codex-cli 1.0.0",
+          error: null,
+        },
+      ],
+    });
+
+    expect(validation.runtimeExecutableErrors).toEqual([
+      "Executable does not exist: /bin/opencode",
     ]);
+    expect(validation.totalErrorCount).toBe(1);
+  });
+
+  test("does not accept a valid result for a previous executable path", () => {
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft: createSnapshot(),
+      runtimeExecutableResults: [
+        {
+          kind: "opencode",
+          path: "/previous/opencode",
+          requestedPath: "/previous/opencode",
+          ok: true,
+          version: "1.0.0",
+          error: null,
+        },
+      ],
+    });
+
+    expect(validation.runtimeExecutableErrors).toEqual(["OpenCode needs a valid executable path."]);
   });
 });

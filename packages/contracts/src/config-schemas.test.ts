@@ -15,10 +15,12 @@ import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
+  DEFAULT_KANBAN_SETTINGS,
   globalConfigSchema,
   HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
+  persistedGlobalConfigV2Schema,
   repoConfigSchema,
   resolveCodexEffectivePolicy,
   resolveHorizontalScrollbarVisibility,
@@ -46,6 +48,46 @@ const expectedDefaultChatSettings = {
 } as const;
 
 describe("config-schemas", () => {
+  test("uses version 3 runtime paths and retains an explicit version 2 migration schema", () => {
+    const current = globalConfigSchema.parse({ version: 3 });
+    const legacy = persistedGlobalConfigV2Schema.parse({
+      version: 2,
+      agentRuntimes: {
+        opencode: { enabled: true },
+        codex: { enabled: false },
+        claude: { enabled: true },
+      },
+    });
+
+    expect(current.version).toBe(3);
+    expect(current.agentRuntimes.opencode.executablePath).toBe("");
+    expect(current.agentRuntimes.codex.executablePath).toBe("");
+    expect(current.agentRuntimes.claude.executablePath).toBe("");
+    expect(legacy.agentRuntimes.opencode).toEqual({ enabled: true });
+    expect(globalConfigSchema.safeParse(legacy).success).toBe(false);
+  });
+
+  test("requires an executable path in current runtime settings", () => {
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        git: { defaultMergeMethod: "merge_commit" },
+        general: { openAgentStudioTabOnBackgroundSessionStart: true },
+        appearance: { horizontalScrollbarVisibility: "system" },
+        chat: expectedDefaultChatSettings,
+        reusablePrompts: [],
+        kanban: DEFAULT_KANBAN_SETTINGS,
+        autopilot: { rules: [] },
+        agentRuntimes: {
+          opencode: { enabled: true },
+          codex: { enabled: false },
+          claude: { enabled: false },
+        },
+        workspaces: {},
+        globalPromptOverrides: {},
+      }).success,
+    ).toBe(false);
+  });
+
   test("limits bulk settings saves to explicitly owned fields", () => {
     expect(settingsSnapshotSaveInputSchema.keyof().options).toEqual([
       "git",
@@ -174,7 +216,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 2,
+      version: 3,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -227,7 +269,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 2,
+      version: 3,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -235,7 +277,7 @@ describe("config-schemas", () => {
 
     expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
     expect(globalConfig.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
-    expect(DEFAULT_AGENT_RUNTIMES.claude).toEqual({ enabled: false });
+    expect(DEFAULT_AGENT_RUNTIMES.claude).toEqual({ enabled: false, executablePath: "" });
   });
 
   test("defaults missing and enabled-only codex runtime config", () => {
@@ -248,18 +290,20 @@ describe("config-schemas", () => {
     const enabledOnly = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      agentRuntimes: { codex: { enabled: true } },
+      agentRuntimes: { codex: { enabled: true, executablePath: "/bin/codex" } },
       workspaces: {},
       globalPromptOverrides: {},
     });
 
     expect(missing.agentRuntimes.codex).toEqual({
       enabled: false,
+      executablePath: "",
       defaults: DEFAULT_CODEX_RUNTIME_POLICY,
       roleOverrides: {},
     });
     expect(enabledOnly.agentRuntimes.codex).toEqual({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: DEFAULT_CODEX_RUNTIME_POLICY,
       roleOverrides: {},
     });
@@ -269,18 +313,28 @@ describe("config-schemas", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
-      agentRuntimes: { opencode: { enabled: false }, custom: { enabled: true } },
+      agentRuntimes: {
+        opencode: { enabled: false, executablePath: "/bin/opencode" },
+        custom: { enabled: true, executablePath: "/bin/custom" },
+      },
       workspaces: {},
       globalPromptOverrides: {},
     });
 
-    expect(parsed.agentRuntimes.opencode).toEqual({ enabled: false });
-    expect((parsed.agentRuntimes as Record<string, unknown>).custom).toEqual({ enabled: true });
+    expect(parsed.agentRuntimes.opencode).toEqual({
+      enabled: false,
+      executablePath: "/bin/opencode",
+    });
+    expect((parsed.agentRuntimes as Record<string, unknown>).custom).toEqual({
+      enabled: true,
+      executablePath: "/bin/custom",
+    });
   });
 
   test("accepts narrow codex policy values and role overrides", () => {
     const parsed = codexRuntimeConfigSchema.parse({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: {
         sandboxMode: "workspace-write",
         approvalPolicy: "on-request",
@@ -301,6 +355,7 @@ describe("config-schemas", () => {
   test("resolves codex policy with override precedence and builder inheritance adjustment", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: {
         sandboxMode: "read-only",
         approvalPolicy: "untrusted",
@@ -340,6 +395,7 @@ describe("config-schemas", () => {
   test("resolves codex policy from defaults when no workflow role is supplied", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: {
         sandboxMode: "workspace-write",
         approvalPolicy: "on-request",
@@ -363,6 +419,7 @@ describe("config-schemas", () => {
   test("allows dangerous explicit codex read-only role overrides", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,
+      executablePath: "/bin/codex",
       roleOverrides: {
         spec: { approvalPolicy: "never" },
         qa: { sandboxMode: "danger-full-access" },
@@ -382,6 +439,7 @@ describe("config-schemas", () => {
   test("allows dangerous inherited codex policy for read-only roles", () => {
     const config = codexRuntimeConfigSchema.parse({
       enabled: true,
+      executablePath: "/bin/codex",
       defaults: {
         sandboxMode: "danger-full-access",
         approvalPolicy: "never",
@@ -401,8 +459,11 @@ describe("config-schemas", () => {
   });
 
   test("creates fresh codex default policy objects for each parse", () => {
-    const first = codexRuntimeConfigSchema.parse({ enabled: true });
-    const second = codexRuntimeConfigSchema.parse({ enabled: true });
+    const first = codexRuntimeConfigSchema.parse({ enabled: true, executablePath: "/bin/codex" });
+    const second = codexRuntimeConfigSchema.parse({
+      enabled: true,
+      executablePath: "/bin/codex",
+    });
     const firstSnapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
@@ -427,6 +488,7 @@ describe("config-schemas", () => {
   test("rejects explicit builder read-only sandbox with field path", () => {
     const result = codexRuntimeConfigSchema.safeParse({
       enabled: true,
+      executablePath: "/bin/codex",
       roleOverrides: { build: { sandboxMode: "read-only" } },
     });
 
@@ -500,7 +562,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 2,
+      version: 3,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
@@ -532,7 +594,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 2,
+      version: 3,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       chat: {

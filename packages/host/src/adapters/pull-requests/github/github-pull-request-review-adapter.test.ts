@@ -59,6 +59,12 @@ const createGithubDependencies = () => {
     runCommandAllowFailure,
   };
   const toolDiscovery: ToolDiscoveryPort = {
+    discoverTool: () =>
+      Effect.succeed({
+        displayLabel: "GitHub CLI",
+        path: "gh",
+        sourceCategory: "system_path",
+      }),
     resolveTool: () =>
       Effect.succeed({
         displayLabel: "GitHub CLI",
@@ -66,6 +72,12 @@ const createGithubDependencies = () => {
         sourceCategory: "system_path",
       }),
     resolveToolPath: () => Effect.succeed("gh"),
+    validateToolPath: (_toolId, executablePath) =>
+      Effect.succeed({
+        displayLabel: "Saved path",
+        path: executablePath,
+        sourceCategory: "provided_path",
+      }),
   };
   const dependencies: GithubCommandDependencies = {
     resolveGithubCommand: () =>

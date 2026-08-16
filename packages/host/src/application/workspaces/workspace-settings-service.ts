@@ -70,7 +70,7 @@ const createUnserializedWorkspaceSettingsService = (
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: input.repoPath,
-        defaultRuntimeKind: "opencode",
+        defaultRuntimeKind: input.defaultRuntimeKind ?? "opencode",
       });
       const config = yield* loadGlobalConfig(settingsConfig);
 

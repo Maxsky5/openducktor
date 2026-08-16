@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryProvider } from "@/lib/query-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
 
@@ -15,10 +16,20 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
 const createMockController = (snapshot: SettingsSnapshot) => ({
   isLoadingSettings: false,
   isLoadingRuntimeDefinitions: false,
+  isLoadingRuntimeExecutables: false,
+  isCheckingRuntimeExecutables: false,
   isLoadingCatalog: false,
   isSaving: false,
   settingsError: null,
   runtimeDefinitionsError: null,
+  runtimeExecutablesError: null,
+  runtimeDiscoveryError: null,
+  runtimeExecutableValidation: {
+    results: [],
+    checkingRuntimeKinds: [],
+    error: null,
+    refetch: async () => {},
+  },
   saveError: null,
   snapshotDraft: snapshot,
   runtimeDefinitions: [],
@@ -53,6 +64,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   runtimeAvailabilityValidationState: {
     errorsByWorkspaceId: {},
     errorCountByWorkspaceId: {},
+    runtimeExecutableErrors: [],
     totalErrorCount: 0,
   },
   hasRuntimeAvailabilityErrors: false,
@@ -85,6 +97,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   setSelectedWorkspaceId: () => {},
   markRepoScriptSaveAttempt: () => {},
   retrySelectedRepoBranchesLoad: () => {},
+  retryRuntimeDefinitions: async () => [],
+  checkRuntimeExecutablesAgain: async () => {},
   detectSelectedRepoGithubRepository: async () => null,
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
@@ -371,23 +385,29 @@ describe("settings modal content", () => {
     };
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "runtimes",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "runtimes",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html.indexOf("OpenCode")).toBeLessThan(html.indexOf("Codex"));
-    expect(html).toContain("Local OpenCode runtime connected through the OpenDucktor MCP bridge.");
+    expect(html).not.toContain(
+      "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+    );
     expect(html).toContain("Codex");
     expect(html).toContain("Disabled");
     expect(html).not.toContain("Codex defaults");

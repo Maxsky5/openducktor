@@ -43,6 +43,7 @@ export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
+  defaultRuntimeKind?: RuntimeKind;
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
@@ -109,6 +110,10 @@ export type WorkspaceBranchStateContextValue = Pick<
 
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
+  hasLoadedWorkspaceList: boolean;
+  isLoadingWorkspaces: boolean;
+  workspaceLoadError: Error | null;
+  retryWorkspaces: () => Promise<void>;
 };
 
 export type ChecksStateContextValue = {

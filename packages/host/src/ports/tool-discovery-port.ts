@@ -27,9 +27,23 @@ export type ResolvedTool = {
 };
 
 export type ToolDiscoveryPort = {
+  discoverTool(toolId: ToolDiscoveryId): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
   resolveTool(toolId: ToolDiscoveryId): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
   resolveToolPath(toolId: ToolDiscoveryId): Effect.Effect<string, ToolDiscoveryError>;
+  validateToolPath(
+    toolId: ToolDiscoveryId,
+    executablePath: string,
+  ): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
 };
+
+export const discoverToolFresh = (port: ToolDiscoveryPort, toolId: ToolDiscoveryId) =>
+  port.discoverTool(toolId);
+
+export const validateExactToolPath = (
+  port: ToolDiscoveryPort,
+  toolId: ToolDiscoveryId,
+  executablePath: string,
+) => port.validateToolPath(toolId, executablePath);
 
 export class ToolDiscoveryPortTag extends Context.Tag("@openducktor/host/ToolDiscoveryPort")<
   ToolDiscoveryPortTag,

@@ -128,19 +128,26 @@ describe("terminalWebSocketHandler", () => {
   test("preserves client frame order while attach is asynchronous", async () => {
     const operations: string[] = [];
     let attached = false;
+    let releaseAttach = (): void => undefined;
+    let confirmAcknowledged = (): void => undefined;
+    const attachBlocked = new Promise<void>((resolve) => {
+      releaseAttach = resolve;
+    });
+    const acknowledged = new Promise<void>((resolve) => {
+      confirmAcknowledged = resolve;
+    });
     const terminalService = {
       attach: () =>
-        Effect.promise(
-          () =>
-            new Promise<void>((resolve) => {
-              setTimeout(() => {
-                attached = true;
-                operations.push("attach");
-                resolve();
-              }, 10);
-            }),
-        ),
-      acknowledge: () => Effect.sync(() => operations.push(attached ? "ack" : "ack-before-attach")),
+        Effect.promise(async () => {
+          await attachBlocked;
+          attached = true;
+          operations.push("attach");
+        }),
+      acknowledge: () =>
+        Effect.sync(() => {
+          operations.push(attached ? "ack" : "ack-before-attach");
+          confirmAcknowledged();
+        }),
     } as unknown as TerminalService;
     const harness = makeSocket(terminalService);
     const send = (message: Parameters<typeof encodeTerminalProtocolFrame>[0]["message"]): void => {
@@ -162,7 +169,8 @@ describe("terminalWebSocketHandler", () => {
       terminalId: "terminal-1",
       sequenceEnd: 0,
     });
-    await Bun.sleep(20);
+    releaseAttach();
+    await Effect.runPromise(Effect.promise(() => acknowledged).pipe(Effect.timeout("1 second")));
 
     expect(operations).toEqual(["attach", "ack"]);
   });

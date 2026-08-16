@@ -441,7 +441,7 @@ body {
   --electron-navigation-width: 7rem;
 }
 
-:is(.electron-platform-win32, .electron-platform-linux) .app-shell {
+:is(.electron-platform-win32, .electron-platform-linux) :is(.app-shell, .onboarding-shell) {
   --electron-left-controls-height: clamp(
     0px,
     env(titlebar-area-x, 0px),
@@ -451,6 +451,10 @@ body {
     0px,
     calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
   );
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .onboarding-shell {
+  --electron-navigation-width: 0px;
 }
 
 :is(.electron-platform-win32, .electron-platform-linux) .electron-titlebar-safe-area {
@@ -523,6 +527,34 @@ pre {
 
 .animate-rise-in {
   animation: rise-in 0.3s ease-out;
+}
+
+.onboarding-stage-content {
+  view-transition-name: onboarding-stage-content;
+}
+
+html.onboarding-stage-transition::view-transition-old(root),
+html.onboarding-stage-transition::view-transition-new(root) {
+  animation: none;
+}
+
+html.onboarding-stage-transition::view-transition-group(onboarding-stage-content),
+html.onboarding-stage-transition::view-transition-old(onboarding-stage-content),
+html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.onboarding-stage-transition::view-transition-group(onboarding-stage-content),
+  html.onboarding-stage-transition::view-transition-old(onboarding-stage-content),
+  html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) {
+    animation: none;
+  }
+}
+
+.electron-platform-darwin .onboarding-shell {
+  padding-top: var(--electron-titlebar-height);
 }
 
 .markdown-body pre code {
@@ -684,6 +716,7 @@ pre {
 
 @media (prefers-reduced-motion: reduce) {
   .agent-chat-row-motion,
+  .onboarding-stage-enter,
   .agent-studio-task-status-running-dot::before,
   .agent-studio-task-status-running-dot::after,
   .odt-border-ray-segment {

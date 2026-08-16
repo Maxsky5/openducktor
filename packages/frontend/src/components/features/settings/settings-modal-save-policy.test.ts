@@ -7,6 +7,7 @@ import {
   buildRepoScriptValidationSaveError,
   buildReusablePromptValidationSaveError,
   buildRuntimeAvailabilitySaveError,
+  getSettingsSaveBlocker,
   hasAnyDirtySections,
   hasSameSaveReadyGlobalGitConfig,
   isGlobalGitOnlySave,
@@ -67,7 +68,7 @@ describe("settings-modal-save-policy", () => {
       "Fix 1 reusable prompt field error before saving.",
     );
     expect(buildRuntimeAvailabilitySaveError(2)).toBe(
-      "Fix 2 disabled runtime selections before saving.",
+      "Fix 2 runtime executable errors before saving.",
     );
     expect(buildCodexDangerousSettingsSaveError()).toBe(
       "Confirm the Codex safety acknowledgement before saving.",
@@ -79,5 +80,67 @@ describe("settings-modal-save-policy", () => {
         selectedWorkspaceId: "repo",
       }),
     ).toBe("Fix 2 dev server field errors in the selected repository, `repo-two` before saving.");
+  });
+
+  test("selects the first settings save blocker and its required UI action", () => {
+    const blocker = getSettingsSaveBlocker({
+      prompt: { hasErrors: true, errorCount: 2 },
+      reusablePrompts: { hasErrors: true, errorCount: 3 },
+      runtimeRequest: { isPending: true, error: "request failed" },
+      runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "claude" },
+      hasUnacknowledgedCodexDangerousSettings: true,
+      repoScripts: {
+        hasErrors: true,
+        errorCount: 1,
+        invalidRepoPaths: ["repo"],
+        selectedWorkspaceId: "repo",
+      },
+    });
+
+    expect(blocker).toEqual({
+      reason: "Fix 2 prompt placeholder errors before saving.",
+      runtimeKind: null,
+      showRepoScriptErrors: false,
+    });
+  });
+
+  test("returns runtime focus metadata for an executable blocker", () => {
+    const blocker = getSettingsSaveBlocker({
+      prompt: { hasErrors: false, errorCount: 0 },
+      reusablePrompts: { hasErrors: false, errorCount: 0 },
+      runtimeRequest: { isPending: false, error: null },
+      runtimeAvailability: { hasErrors: true, errorCount: 1, invalidKind: "codex" },
+      hasUnacknowledgedCodexDangerousSettings: false,
+      repoScripts: {
+        hasErrors: false,
+        errorCount: 0,
+        invalidRepoPaths: [],
+        selectedWorkspaceId: null,
+      },
+    });
+
+    expect(blocker).toEqual({
+      reason: "Fix 1 runtime executable error before saving.",
+      runtimeKind: "codex",
+      showRepoScriptErrors: false,
+    });
+  });
+
+  test("returns no blocker for valid settings", () => {
+    expect(
+      getSettingsSaveBlocker({
+        prompt: { hasErrors: false, errorCount: 0 },
+        reusablePrompts: { hasErrors: false, errorCount: 0 },
+        runtimeRequest: { isPending: false, error: null },
+        runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
+        hasUnacknowledgedCodexDangerousSettings: false,
+        repoScripts: {
+          hasErrors: false,
+          errorCount: 0,
+          invalidRepoPaths: [],
+          selectedWorkspaceId: null,
+        },
+      }),
+    ).toBeNull();
   });
 });

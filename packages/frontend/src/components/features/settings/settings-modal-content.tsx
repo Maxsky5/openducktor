@@ -53,6 +53,13 @@ export function SettingsModalContent({
     settingsError,
     snapshotDraft,
     runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeDiscoveryError,
+    runtimeExecutableValidation,
+    retryRuntimeDefinitions,
+    checkRuntimeExecutablesAgain,
+    isCheckingRuntimeExecutables,
     requiresCodexDangerAcknowledgement,
     isCodexDangerAcknowledged,
     promptValidationState,
@@ -137,11 +144,22 @@ export function SettingsModalContent({
         agentRuntimes={snapshotDraft.agentRuntimes}
         runtimeDefinitions={runtimeDefinitions}
         runtimeCheck={controller.runtimeCheck}
+        isLoadingRuntimeDefinitions={isLoadingRuntimeDefinitions}
+        runtimeDefinitionsError={runtimeDefinitionsError}
+        runtimeDiscoveryError={runtimeDiscoveryError}
+        executableValidation={runtimeExecutableValidation}
+        onRetryRuntimeDefinitions={retryRuntimeDefinitions}
+        onCheckAgain={checkRuntimeExecutablesAgain}
+        isCheckingExecutables={isCheckingRuntimeExecutables}
         disabled={isInteractionDisabled}
         requiresCodexDangerAcknowledgement={requiresCodexDangerAcknowledgement}
         isCodexDangerAcknowledged={isCodexDangerAcknowledged}
         onCodexDangerAcknowledgedChange={setCodexDangerAcknowledged}
         onUpdateAgentRuntimes={updateAgentRuntimes}
+        focusRequest={
+          contentFocusRequest?.kind === "runtime-executable" ? contentFocusRequest : null
+        }
+        onFocusRequestHandled={onContentFocusRequestHandled}
       />
     );
   }

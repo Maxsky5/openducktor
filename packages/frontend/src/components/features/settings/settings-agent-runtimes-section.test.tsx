@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentRuntimes,
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -6,19 +6,48 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { fireEvent, screen, render as testingRender, waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 
 enableReactActEnvironment();
 
+const withQueryProvider = (ui: ReactNode): ReactNode => (
+  <QueryProvider useIsolatedClient>{ui}</QueryProvider>
+);
+
+const render = (ui: ReactNode) => {
+  const rendered = testingRender(withQueryProvider(ui));
+  return {
+    ...rendered,
+    rerender: (next: ReactNode) => rendered.rerender(withQueryProvider(next)),
+  };
+};
+
+const runtimeDefinitionRequestProps = {
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  runtimeDiscoveryError: null,
+  onRetryRuntimeDefinitions: async () => [],
+  onCheckAgain: async () => {},
+  isCheckingExecutables: false,
+  executableValidation: {
+    results: [],
+    checkingRuntimeKinds: [],
+    error: null,
+    refetch: async () => {},
+  },
+};
+
 const createSection = (
   agentRuntimes: AgentRuntimes = DEFAULT_AGENT_RUNTIMES,
   { requiresCodexDangerAcknowledgement = false } = {},
 ) =>
   createElement(AgentRuntimesSection, {
+    ...runtimeDefinitionRequestProps,
     agentRuntimes,
     runtimeDefinitions: [
       CLAUDE_RUNTIME_DESCRIPTOR,
@@ -46,8 +75,102 @@ const renderCodexSectionHtml = (
 };
 
 describe("AgentRuntimesSection", () => {
-  test("shows vertical runtime tabs with status badges and selects OpenCode first", () => {
-    const renderer = render(createSection());
+  test("shows runtime definition failures and retries them", async () => {
+    const retryRuntimeDefinitions = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [],
+        runtimeDefinitionsError: "Definitions failed",
+        isLoadingRuntimeDefinitions: false,
+        onRetryRuntimeDefinitions: retryRuntimeDefinitions,
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect(
+        screen.getByText(/Failed to load runtime definitions: Definitions failed/i),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry runtime definitions" }));
+      await waitFor(() => expect(retryRuntimeDefinitions).toHaveBeenCalledTimes(1));
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows runtime executable request failures and retries them", async () => {
+    const refetch = mock(async () => {});
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        executableValidation: {
+          results: [],
+          checkingRuntimeKinds: [],
+          error: new Error("Executable request failed"),
+          refetch,
+        },
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect(
+        screen.getByText(/Failed to check runtime executables: Executable request failed/i),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry executable check" }));
+      await waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows explicit rediscovery failures and retries through the controller action", async () => {
+    const checkAgain = mock(async () => {});
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeDiscoveryError: "Runtime rediscovery failed",
+        onCheckAgain: checkAgain,
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect(
+        screen.getByText(/Failed to check runtime executables: Runtime rediscovery failed/i),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry runtime detection" }));
+      await waitFor(() => expect(checkAgain).toHaveBeenCalledTimes(1));
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows one selected runtime editor with logo tabs and selects OpenCode first", () => {
+    const renderer = render(
+      createSection({
+        ...DEFAULT_AGENT_RUNTIMES,
+        opencode: { ...DEFAULT_AGENT_RUNTIMES.opencode, enabled: true },
+      }),
+    );
 
     try {
       const tabs = screen.getAllByRole("tab");
@@ -59,12 +182,137 @@ describe("AgentRuntimesSection", () => {
       expect(tabs[2]?.textContent).toContain("Codex");
       expect(tabs[2]?.textContent).toContain("Disabled");
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
-      expect(renderer.container.innerHTML).toContain(
+      expect(tabs[0]?.querySelector('[data-runtime-logo="opencode"]')).toBeTruthy();
+      expect(tabs[1]?.querySelector('[data-runtime-logo="claude"]')).toBeTruthy();
+      expect(tabs[2]?.querySelector('[data-runtime-logo="codex"]')).toBeTruthy();
+      expect(screen.getAllByLabelText("Executable path")).toHaveLength(1);
+      expect(screen.getByPlaceholderText("Path to OpenCode")).toBeTruthy();
+      expect(renderer.container.innerHTML).not.toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
+      );
+      expect(renderer.container.innerHTML).not.toContain(
+        "OpenDucktor uses these exact paths for checks and agent sessions.",
       );
       expect(renderer.container.innerHTML).not.toContain("Supports workspace, task, build");
       expect(renderer.container.innerHTML).not.toContain("Role override");
       expect(renderer.container.innerHTML).not.toContain("Sandbox mode");
+
+      fireEvent.click(screen.getByRole("tab", { name: /Codex/i }));
+      expect(screen.queryByPlaceholderText("Path to OpenCode")).toBeNull();
+      expect(screen.getByPlaceholderText("Path to Codex")).toBeTruthy();
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("selects and focuses the requested invalid runtime", async () => {
+    const focusRequest = { kind: "runtime-executable" as const, runtimeKind: "codex" as const };
+    const onFocusRequestHandled = mock(() => {});
+    const props = {
+      ...runtimeDefinitionRequestProps,
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+      runtimeDefinitions: [
+        CLAUDE_RUNTIME_DESCRIPTOR,
+        CODEX_RUNTIME_DESCRIPTOR,
+        OPENCODE_RUNTIME_DESCRIPTOR,
+      ],
+      disabled: false,
+      requiresCodexDangerAcknowledgement: false,
+      isCodexDangerAcknowledged: false,
+      onCodexDangerAcknowledgedChange: () => {},
+      onUpdateAgentRuntimes: () => {},
+      onFocusRequestHandled,
+    };
+    const renderer = render(createElement(AgentRuntimesSection, { ...props, focusRequest: null }));
+
+    try {
+      renderer.rerender(createElement(AgentRuntimesSection, { ...props, focusRequest }));
+      const codexInput = await screen.findByPlaceholderText("Path to Codex");
+      await waitFor(() => expect(document.activeElement).toBe(codexInput));
+      expect(screen.getByRole("tab", { name: /Codex/i }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+      expect(onFocusRequestHandled).toHaveBeenCalledWith(focusRequest);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("keeps runtime controls active while showing the selected runtime check", () => {
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        isCheckingExecutables: true,
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      expect((screen.getByRole("tab", { name: /OpenCode/i }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect((screen.getByRole("switch", { name: "Enabled" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect(
+        (screen.getByRole("textbox", { name: "Executable path" }) as HTMLInputElement).disabled,
+      ).toBe(false);
+      expect((screen.getByRole("button", { name: "Browse" }) as HTMLButtonElement).disabled).toBe(
+        false,
+      );
+      expect(
+        (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("shows only the version and aligns Check again with the runtime status", async () => {
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        executableValidation: {
+          ...runtimeDefinitionRequestProps.executableValidation,
+          results: [
+            {
+              kind: "opencode" as const,
+              path: "/opt/homebrew/bin/opencode",
+              requestedPath: "/opt/homebrew/bin/opencode",
+              ok: true,
+              version: "1.18.9",
+              error: null,
+            },
+          ],
+        },
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/opt/homebrew/bin/opencode" },
+        },
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: () => {},
+      }),
+    );
+
+    try {
+      await screen.findByText("1.18.9");
+      expect(screen.queryByText("1.18.9 at /opt/homebrew/bin/opencode")).toBeNull();
+      const statusRow = renderer.container.querySelector('[data-runtime-status-row="opencode"]');
+      expect(statusRow).toBeTruthy();
+      expect(statusRow?.contains(screen.getByRole("button", { name: "Check again" }))).toBe(true);
     } finally {
       renderer.unmount();
     }
@@ -81,6 +329,7 @@ describe("AgentRuntimesSection", () => {
     });
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
         runtimeCheck: {
@@ -91,7 +340,16 @@ describe("AgentRuntimesSection", () => {
           ghAuthOk: true,
           ghAuthLogin: null,
           ghAuthError: null,
-          runtimes: [{ kind: "claude", enabled: false, ok: true, version: "2.1.0", error: null }],
+          runtimes: [
+            {
+              kind: "claude",
+              enabled: false,
+              ok: true,
+              executablePath: "/bin/claude",
+              version: "2.1.0",
+              error: null,
+            },
+          ],
           errors: [],
         },
         disabled: false,
@@ -124,7 +382,7 @@ describe("AgentRuntimesSection", () => {
     const renderer = render(
       createSection({
         ...DEFAULT_AGENT_RUNTIMES,
-        opencode: { enabled: false },
+        opencode: { enabled: false, executablePath: "" },
       }),
     );
 
@@ -225,6 +483,7 @@ describe("AgentRuntimesSection", () => {
     const updates: AgentRuntimes[] = [];
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         disabled: false,
@@ -373,6 +632,7 @@ describe("AgentRuntimesSection", () => {
     let acknowledged = false;
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: {
           ...DEFAULT_AGENT_RUNTIMES,
           codex: {
@@ -407,6 +667,7 @@ describe("AgentRuntimesSection", () => {
   test("selects a valid runtime tab after definitions load asynchronously", () => {
     const renderer = render(
       createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [],
         disabled: false,
@@ -420,6 +681,7 @@ describe("AgentRuntimesSection", () => {
     try {
       renderer.rerender(
         createElement(AgentRuntimesSection, {
+          ...runtimeDefinitionRequestProps,
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
@@ -449,6 +711,7 @@ describe("AgentRuntimesSection", () => {
 
       renderer.rerender(
         createElement(AgentRuntimesSection, {
+          ...runtimeDefinitionRequestProps,
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
           disabled: false,
@@ -462,7 +725,7 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole("tab", { name: /OpenCode/i }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      expect(renderer.container.innerHTML).toContain(
+      expect(renderer.container.innerHTML).not.toContain(
         "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
       );
     } finally {

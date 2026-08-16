@@ -16,7 +16,7 @@ const packagesRoot = path.join(workspaceRoot, "packages");
 
 export const resolveAppVersion = (
   env: NodeJS.ProcessEnv = process.env,
-  packageJsonPath = path.resolve(__dirname, "package.json"),
+  packageJsonPath = path.resolve(workspaceRoot, "package.json"),
 ): string => {
   const versionOverride = env.ODT_APP_VERSION?.trim();
   return versionOverride || runElectronSync(readPackageVersionEffect(packageJsonPath));

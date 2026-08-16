@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { posix, win32 } from "node:path";
 import { normalizeUserPathInput } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
@@ -85,6 +86,18 @@ const invalidProvidedToolPathError = (
     details,
   });
 
+const invalidSavedToolPathError = (
+  descriptor: ToolDiscoveryDescriptor,
+  toolId: ToolDiscoveryId,
+  message: string,
+  details?: Record<string, unknown>,
+) =>
+  new HostValidationError({
+    field: `agentRuntimes.${toolId}.executablePath`,
+    message: `Saved ${descriptor.displayName} path ${message}`,
+    details,
+  });
+
 const resolveExplicitToolPathSource = ({
   context,
   detailKey,
@@ -149,7 +162,7 @@ const missingRequiredSourceError = (
     message:
       source.requiredMissingMessage?.({ descriptor, directories }) ??
       `${descriptor.command} not found. Checked ${checked.join(", ")}. ${descriptor.installHint}`,
-    details: { directories },
+    details: { directories, requiredSource: true },
   });
 
 const discoverDescriptorToolPath = ({
@@ -352,9 +365,37 @@ export const createToolDiscoveryAdapter = ({
   };
 
   return {
+    discoverTool(toolId) {
+      return discoverToolPath(toolId, systemCommands, env, options);
+    },
     resolveTool,
     resolveToolPath(toolId) {
       return resolveTool(toolId).pipe(Effect.map((resolvedTool) => resolvedTool.path));
+    },
+    validateToolPath(toolId, executablePath) {
+      const descriptor = TOOL_DISCOVERY_DESCRIPTORS[toolId];
+      const context = createToolDiscoveryContext(options);
+      const normalizedPath = normalizeUserPathInput(executablePath);
+      const resolvedPath = resolveUserPathForContext(normalizedPath, context);
+      const pathApi = context.platform === "win32" ? win32 : posix;
+      if (normalizedPath && !pathApi.isAbsolute(resolvedPath)) {
+        return Effect.fail(
+          invalidSavedToolPathError(descriptor, toolId, `"${resolvedPath}" must be absolute`, {
+            executablePath: resolvedPath,
+          }),
+        );
+      }
+      return resolveExplicitToolPathSource({
+        context,
+        detailKey: "executablePath",
+        displayLabel: "Saved path",
+        env,
+        invalidError: (message, details) =>
+          invalidSavedToolPathError(descriptor, toolId, message, details),
+        rawPath: executablePath,
+        sourceCategory: "provided_path",
+        systemCommands,
+      });
     },
   };
 };

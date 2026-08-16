@@ -1224,9 +1224,9 @@ describe("createElectronHostCommandRouter", () => {
       ghOk: true,
       ghAuthLogin: "octocat",
       runtimes: [
-        { kind: "opencode", ok: true },
-        { kind: "codex", ok: true },
-        { kind: "claude", ok: true, enabled: false },
+        { kind: "opencode", ok: false, enabled: false },
+        { kind: "codex", ok: false, enabled: false },
+        { kind: "claude", ok: false, enabled: false },
       ],
     });
     await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({

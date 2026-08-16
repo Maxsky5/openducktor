@@ -13,8 +13,9 @@ import {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,17 +25,34 @@ import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
+import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
+import { RuntimeExecutablePanel } from "./runtime-executable-panel";
+import type { SettingsContentFocusRequest } from "./settings-deep-link";
+
+type RuntimeExecutableFocusRequest = Extract<
+  SettingsContentFocusRequest,
+  { kind: "runtime-executable" }
+>;
 
 type AgentRuntimesSectionProps = {
   agentRuntimes: AgentRuntimes;
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheck?: RuntimeCheck | null;
+  isLoadingRuntimeDefinitions: boolean;
+  runtimeDefinitionsError: string | null;
+  runtimeDiscoveryError: string | null;
+  executableValidation: RuntimeExecutableValidationState;
+  onRetryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  onCheckAgain: () => Promise<void>;
+  isCheckingExecutables: boolean;
   disabled: boolean;
   requiresCodexDangerAcknowledgement: boolean;
   isCodexDangerAcknowledged: boolean;
   onCodexDangerAcknowledgedChange: (acknowledged: boolean) => void;
   onUpdateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
+  focusRequest?: RuntimeExecutableFocusRequest | null;
+  onFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
 };
 
 type CodexPolicyField = keyof CodexPolicyFields;
@@ -132,6 +150,7 @@ const sortRuntimeDefinitionsForSettings = (
 
 const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig => ({
   enabled: config.enabled,
+  executablePath: config.executablePath,
   defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY, ...config.defaults },
   roleOverrides: config.roleOverrides ?? {},
 });
@@ -197,38 +216,6 @@ function PolicyValueDropdown<T extends string | boolean>({
         wrapOptionLabels
         onValueChange={(nextValue) => onChange(policyValueFromOption(values, nextValue))}
       />
-    </div>
-  );
-}
-
-function RuntimeOverview({
-  definition,
-  enabled,
-  disabled,
-  onToggle,
-}: {
-  definition: RuntimeDescriptor;
-  enabled: boolean;
-  disabled: boolean;
-  onToggle: (enabled: boolean) => void;
-}): ReactElement {
-  return (
-    <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-[1fr_auto] sm:items-start">
-      <div className="min-w-0 space-y-2">
-        <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
-        <p className="text-xs text-muted-foreground">{definition.description}</p>
-      </div>
-      <div className="flex items-center gap-2 justify-self-start sm:justify-self-end">
-        <Label htmlFor={`agent-runtime-${definition.kind}`} className="text-xs">
-          Enable runtime
-        </Label>
-        <Switch
-          id={`agent-runtime-${definition.kind}`}
-          checked={enabled}
-          disabled={disabled}
-          onCheckedChange={onToggle}
-        />
-      </div>
     </div>
   );
 }
@@ -724,17 +711,34 @@ export function AgentRuntimesSection({
   agentRuntimes,
   runtimeDefinitions,
   runtimeCheck = null,
+  isLoadingRuntimeDefinitions,
+  runtimeDefinitionsError,
+  runtimeDiscoveryError,
+  executableValidation,
+  onRetryRuntimeDefinitions,
+  onCheckAgain,
+  isCheckingExecutables,
   disabled,
   requiresCodexDangerAcknowledgement,
   isCodexDangerAcknowledged,
   onCodexDangerAcknowledgedChange,
   onUpdateAgentRuntimes,
+  focusRequest = null,
+  onFocusRequestHandled,
 }: AgentRuntimesSectionProps): ReactElement {
   const sortedRuntimeDefinitions = sortRuntimeDefinitionsForSettings(runtimeDefinitions);
   const [selectedRuntimeKind, setSelectedRuntimeKind] = useState("");
+  const lastFocusedRuntimeKind = useRef<RuntimeKind | null>(null);
+  const requestedRuntimeKind = focusRequest?.runtimeKind ?? null;
+  const effectiveSelectedRuntimeKind =
+    requestedRuntimeKind ?? (selectedRuntimeKind || lastFocusedRuntimeKind.current);
+  const executableQueryError = executableValidation.error
+    ? errorMessage(executableValidation.error)
+    : null;
   const selectedDefinition =
-    sortedRuntimeDefinitions.find((definition) => definition.kind === selectedRuntimeKind) ??
-    sortedRuntimeDefinitions[0];
+    sortedRuntimeDefinitions.find(
+      (definition) => definition.kind === effectiveSelectedRuntimeKind,
+    ) ?? sortedRuntimeDefinitions[0];
 
   return (
     <div className="grid gap-4 p-4">
@@ -746,8 +750,62 @@ export function AgentRuntimesSection({
         </p>
       </div>
 
+      {runtimeDiscoveryError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to check runtime executables: {runtimeDiscoveryError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isCheckingExecutables}
+            onClick={() => void onCheckAgain()}
+          >
+            Retry runtime detection
+          </Button>
+        </div>
+      ) : null}
+
+      {runtimeDefinitionsError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to load runtime definitions: {runtimeDefinitionsError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || isLoadingRuntimeDefinitions}
+            onClick={() => {
+              void onRetryRuntimeDefinitions().catch((error) => {
+                toast.error("Failed to load runtime definitions", {
+                  description: errorMessage(error),
+                });
+              });
+            }}
+          >
+            Retry runtime definitions
+          </Button>
+        </div>
+      ) : null}
+
+      {executableQueryError ? (
+        <div className="flex items-center justify-between gap-3 text-sm" role="alert">
+          <span className="text-destructive">
+            Failed to check runtime executables: {executableQueryError}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || executableValidation.checkingRuntimeKinds.length > 0}
+            onClick={() => void executableValidation.refetch()}
+          >
+            Retry executable check
+          </Button>
+        </div>
+      ) : null}
+
       {selectedDefinition ? (
-        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[14rem_minmax(0,1fr)]">
+        <div className="grid gap-4 overflow-hidden rounded-md border border-border bg-card md:grid-cols-[15rem_minmax(0,1fr)]">
           <aside className="border-border bg-muted/50 p-3 md:border-r">
             <div className="space-y-1" role="tablist">
               {sortedRuntimeDefinitions.map((definition) => {
@@ -765,15 +823,26 @@ export function AgentRuntimesSection({
                     aria-selected={selectedDefinition.kind === definition.kind}
                     variant="ghost"
                     className={cn(
-                      "w-full justify-between gap-3 border text-left",
+                      "w-full justify-between gap-2 border px-3 text-left",
                       selectedDefinition.kind === definition.kind
                         ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                         : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground",
                     )}
                     disabled={disabled}
-                    onClick={() => setSelectedRuntimeKind(definition.kind)}
+                    onClick={() => {
+                      lastFocusedRuntimeKind.current = null;
+                      setSelectedRuntimeKind(definition.kind);
+                    }}
                   >
-                    <span className="truncate">{definition.label}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span
+                        data-runtime-logo={runtimeKind}
+                        className="flex size-5 shrink-0 items-center justify-center"
+                      >
+                        <AgentRuntimeIcon runtimeKind={runtimeKind} />
+                      </span>
+                      <span className="truncate">{definition.label}</span>
+                    </span>
                     <Badge
                       variant="outline"
                       className={cn(
@@ -793,7 +862,6 @@ export function AgentRuntimesSection({
 
           {(() => {
             const runtimeKind = selectedDefinition.kind as RuntimeKind;
-            const enabled = agentRuntimes[runtimeKind]?.enabled === true;
             const updateRuntime = (
               updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
             ) =>
@@ -809,19 +877,23 @@ export function AgentRuntimesSection({
                 aria-labelledby={`agent-runtime-tab-${selectedDefinition.kind}`}
                 className="min-w-0 space-y-4 p-3"
               >
-                <RuntimeOverview
-                  definition={selectedDefinition}
-                  enabled={enabled}
+                <RuntimeExecutablePanel
+                  runtimes={agentRuntimes}
+                  definitions={[selectedDefinition]}
+                  results={executableValidation.results}
                   disabled={disabled}
-                  onToggle={(nextEnabled) =>
-                    onUpdateAgentRuntimes((current) => ({
-                      ...current,
-                      [runtimeKind]: {
-                        ...(current[runtimeKind] ?? {}),
-                        enabled: nextEnabled,
-                      },
-                    }))
-                  }
+                  isChecking={isCheckingExecutables}
+                  checkingRuntimeKinds={executableValidation.checkingRuntimeKinds}
+                  checkAgainPlacement="runtime-status"
+                  focusRuntimeKind={requestedRuntimeKind}
+                  onFocusRuntimeHandled={(runtimeKind) => {
+                    lastFocusedRuntimeKind.current = runtimeKind;
+                    if (focusRequest?.runtimeKind === runtimeKind) {
+                      onFocusRequestHandled?.(focusRequest);
+                    }
+                  }}
+                  onChange={(next) => onUpdateAgentRuntimes(() => next)}
+                  onCheckAgain={() => void onCheckAgain()}
                 />
                 {selectedDefinition.kind === "codex" ? (
                   <CodexSettings

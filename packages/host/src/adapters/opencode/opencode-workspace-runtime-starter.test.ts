@@ -18,6 +18,7 @@ import type {
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
+import { createDiscoveredRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
@@ -29,12 +30,20 @@ type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
 >[0];
 type OpenCodeWorkspaceRuntimeStarterTestInput = Omit<
   OpenCodeWorkspaceRuntimeStarterInput,
-  "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "runtimeDistribution" | "toolDiscovery"
+  | "liveSessionLifecycle"
+  | "prepareLiveSessionAdapter"
+  | "runtimeDistribution"
+  | "settingsConfig"
+  | "toolDiscovery"
 > &
   Partial<
     Pick<
       OpenCodeWorkspaceRuntimeStarterInput,
-      "liveSessionLifecycle" | "prepareLiveSessionAdapter" | "runtimeDistribution" | "toolDiscovery"
+      | "liveSessionLifecycle"
+      | "prepareLiveSessionAdapter"
+      | "runtimeDistribution"
+      | "settingsConfig"
+      | "toolDiscovery"
     >
   > & {
     systemCommands?: SystemCommandPort;
@@ -50,6 +59,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
     liveSessionLifecycle,
     prepareLiveSessionAdapter,
     processEnv,
+    settingsConfig,
     systemCommands,
     toolDiscovery,
     ...starterInput
@@ -59,14 +69,17 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
     releaseRuntime: () => Effect.succeed([]),
     runAdapterMutation: (mutation) => Effect.map(mutation, (result) => result.value),
   };
+  const effectiveToolDiscovery =
+    toolDiscovery ??
+    createToolDiscoveryAdapter({
+      ...(processEnv === undefined ? {} : { env: processEnv }),
+      systemCommands: systemCommands ?? createSystemCommands(),
+    });
   return createEffectOpenCodeWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    toolDiscovery:
-      toolDiscovery ??
-      createToolDiscoveryAdapter({
-        ...(processEnv === undefined ? {} : { env: processEnv }),
-        systemCommands: systemCommands ?? createSystemCommands(),
-      }),
+    toolDiscovery: effectiveToolDiscovery,
+    settingsConfig:
+      settingsConfig ?? createDiscoveredRuntimeSettingsConfig("opencode", effectiveToolDiscovery),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??
@@ -110,6 +123,9 @@ const createSystemCommands = (): SystemCommandPort => ({
 const createFakeToolDiscovery = (
   paths: Partial<Record<ToolDiscoveryId, string>>,
 ): ToolDiscoveryPort => ({
+  discoverTool(toolId) {
+    return this.resolveTool(toolId);
+  },
   resolveTool(toolId) {
     const path = paths[toolId];
     return path === undefined
@@ -125,6 +141,16 @@ const createFakeToolDiscovery = (
     return path === undefined
       ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
       : Effect.succeed(path);
+  },
+  validateToolPath(toolId, executablePath) {
+    const expectedPath = paths[toolId];
+    return expectedPath === executablePath
+      ? Effect.succeed({
+          displayLabel: "Saved path",
+          path: executablePath,
+          sourceCategory: "provided_path",
+        })
+      : Effect.dieMessage(`Unexpected fake tool path for ${toolId}: ${executablePath}`);
   },
 });
 

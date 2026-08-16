@@ -354,9 +354,9 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitions({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: false },
+          opencode: { enabled: false, executablePath: "" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
-          claude: { enabled: false },
+          claude: { enabled: false, executablePath: "" },
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
@@ -365,9 +365,9 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitionsForStartMode({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: true },
+          opencode: { enabled: true, executablePath: "/bin/opencode" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-          claude: { enabled: false },
+          claude: { enabled: false, executablePath: "" },
         },
         startMode: "fresh",
       }).map((definition) => definition.kind),
@@ -377,9 +377,9 @@ describe("agent-runtime capability policies", () => {
       getAvailableRuntimeDefinitions({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         agentRuntimes: {
-          opencode: { enabled: false },
+          opencode: { enabled: false, executablePath: "" },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-          claude: { enabled: false },
+          claude: { enabled: false, executablePath: "" },
         },
       }).map((definition) => definition.kind),
     ).toEqual([]);

@@ -57,7 +57,7 @@ describe("RepositoryAgentsSection", () => {
           isSaving: false,
         },
         runtimeDefinitionsError: null,
-        runtimeAvailabilityErrors: [],
+        runtimeAvailabilityErrors: ['Default agent runtime "Codex" is disabled.'],
         getCatalogForRuntime: () => codexCatalog,
         getCatalogErrorForRuntime: () => null,
         isCatalogLoadingForRuntime: () => false,
@@ -71,5 +71,6 @@ describe("RepositoryAgentsSection", () => {
     expect(html).toContain("Runtime does not support agent profiles");
     expect(html).toContain("disabled");
     expect(html).toContain("o3");
+    expect(html).toContain("Default agent runtime &quot;Codex&quot; is disabled.");
   });
 });

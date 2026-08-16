@@ -1,171 +1,220 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
+import {
+  RuntimeExecutableIncompatibleError,
+  type RuntimeExecutableProbeError,
+  type RuntimeExecutableProbesByKind,
+} from "../../ports/runtime-executable-probe-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { ToolDiscoveryPathOptions } from "../system/tool-discovery";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
 
-const missingSystemCommands: SystemCommandPort = {
-  resolveCommandPath() {
-    return Effect.succeed(null);
+const executablePaths = {
+  claude: "/usr/local/bin/claude",
+  codex: "/usr/local/bin/codex",
+  opencode: "/usr/local/bin/opencode",
+} satisfies Record<RuntimeKind, string>;
+
+const createSystemCommands = ({
+  version = "runtime version output",
+}: {
+  version?: string | null;
+} = {}): SystemCommandPort => ({
+  resolveCommandPath(command) {
+    return Effect.succeed(Object.values(executablePaths).includes(command) ? command : null);
   },
   versionCommand() {
-    return Effect.succeed(null);
+    return Effect.succeed(version);
   },
   runCommandAllowFailure() {
     return Effect.succeed({ ok: false, stdout: "", stderr: "" });
   },
-};
-const createToolDiscovery = (
+});
+
+const createExecutableProbes = (
+  probeExecutable: (
+    kind: RuntimeKind,
+    executablePath: string,
+  ) => Effect.Effect<void, RuntimeExecutableProbeError> = () => Effect.void,
+): RuntimeExecutableProbesByKind => ({
+  claude: {
+    probeExecutable: (executablePath) => probeExecutable("claude", executablePath),
+  },
+  codex: {
+    probeExecutable: (executablePath) => probeExecutable("codex", executablePath),
+  },
+  opencode: {
+    probeExecutable: (executablePath) => probeExecutable("opencode", executablePath),
+  },
+});
+
+const createProbe = (
   systemCommands: SystemCommandPort,
-  options: ToolDiscoveryPathOptions = {},
+  executableProbes = createExecutableProbes(),
 ) =>
-  createToolDiscoveryAdapter({
-    env: {},
-    options,
-    systemCommands,
-  });
-const createMissingProbe = (options: ToolDiscoveryPathOptions = {}) =>
   createRuntimeHealthProbe(
-    missingSystemCommands,
-    createToolDiscovery(missingSystemCommands, options),
+    systemCommands,
+    createToolDiscoveryAdapter({ env: {}, systemCommands }),
+    executableProbes,
   );
 
 describe("createRuntimeHealthProbe", () => {
-  test("reports actionable missing OpenCode diagnostics", async () => {
-    const probe = createMissingProbe({
-      homeDir: "/missing/home",
-      platform: "linux",
-    });
+  test("reports an actionable error before probing a missing exact path", async () => {
+    const calls: string[] = [];
+    const systemCommands = createSystemCommands();
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes((_kind, executablePath) => {
+        calls.push(executablePath);
+        return Effect.void;
+      }),
+    );
 
-    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
+    const health = await Effect.runPromise(probe.getRuntimeHealth("codex", "/missing/bin/codex"));
 
     expect(health.ok).toBe(false);
-    expect(health.error).toContain("opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY");
-    expect(health.error).toContain("standard install directories (/missing/home/.opencode/bin)");
-    expect(health.error).toContain("PATH");
-    expect(health.error).toContain("Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.");
+    expect(health.executablePath).toBe("/missing/bin/codex");
+    expect(health.error).toContain("Saved Codex path points to a missing or non-executable file");
+    expect(calls).toEqual([]);
   });
 
-  test("reports unhealthy OpenCode status when version probing fails", async () => {
-    const systemCommands: SystemCommandPort = {
-      ...missingSystemCommands,
-      resolveCommandPath(command) {
-        return Effect.succeed(command === "opencode" ? "/usr/local/bin/opencode" : null);
-      },
-    };
-    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+  test("uses the matching protocol probe and keeps version output for display", async () => {
+    const calls: Array<[RuntimeKind, string]> = [];
+    const systemCommands = createSystemCommands({ version: "new-format version 42" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes((kind, executablePath) => {
+        calls.push([kind, executablePath]);
+        return Effect.void;
+      }),
+    );
 
-    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("claude", executablePaths.claude),
+    );
 
     expect(health).toEqual({
-      kind: "opencode",
+      kind: "claude",
       enabled: true,
-      ok: false,
-      version: null,
-      error: "Failed reading opencode --version from /usr/local/bin/opencode",
+      ok: true,
+      executablePath: executablePaths.claude,
+      version: "new-format version 42",
+      error: null,
+    });
+    expect(calls).toEqual([["claude", executablePaths.claude]]);
+  });
+
+  test("does not treat a successful version command as runtime identity", async () => {
+    const systemCommands = createSystemCommands({ version: "edgee 0.1.7" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes((kind, executablePath) =>
+        kind === "opencode"
+          ? Effect.fail(
+              new RuntimeExecutableIncompatibleError({
+                message: `OpenCode health protocol failed for ${executablePath}.`,
+              }),
+            )
+          : Effect.void,
+      ),
+    );
+
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("opencode", executablePaths.opencode),
+    );
+
+    expect(health.ok).toBe(false);
+    expect(health.version).toBeNull();
+    expect(health.error).toBe(
+      `The executable at ${executablePaths.opencode} is not a compatible OpenCode runtime.`,
+    );
+  });
+
+  test("returns a short user-facing error when the selected executable fails its runtime protocol", async () => {
+    const systemCommands = createSystemCommands({ version: "codex-cli 0.147.0" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes(() =>
+        Effect.fail(
+          new RuntimeExecutableIncompatibleError({
+            message:
+              "Claude Code process exited with code 2. stderr: \u001b[31merror: unexpected argument '--output-format' found\u001b[0m",
+          }),
+        ),
+      ),
+    );
+
+    const health = await Effect.runPromise(
+      probe.getRuntimeHealth("claude", executablePaths.claude),
+    );
+
+    expect(health.error).toBe(
+      `The executable at ${executablePaths.claude} is not a compatible Claude runtime.`,
+    );
+    expect(health.error).not.toContain("\u001b");
+    expect(health.error).not.toContain("unexpected argument");
+  });
+
+  test("propagates operational probe failures instead of reporting an incompatible runtime", async () => {
+    const systemCommands = createSystemCommands({ version: "1.18.9" });
+    const probe = createProbe(
+      systemCommands,
+      createExecutableProbes(() =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "opencodeExecutableProbe.cleanup",
+            message: "Failed to stop the probe process.",
+          }),
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(probe.getRuntimeHealth("opencode", executablePaths.opencode)),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "opencodeExecutableProbe.cleanup",
+      message: "Failed to stop the probe process.",
     });
   });
 
-  test("probes OpenCode version with non-interactive config and default command timeout", async () => {
-    const calls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
-    const systemCommands: SystemCommandPort = {
-      ...missingSystemCommands,
-      resolveCommandPath(command) {
-        return Effect.succeed(command === "opencode" ? "/usr/local/bin/opencode" : null);
-      },
-      versionCommand(...input) {
-        calls.push(input);
-        return Effect.succeed("1.16.2");
-      },
-    };
-    const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
+  test("keeps a protocol-ready runtime available when version display fails", async () => {
+    const systemCommands = createSystemCommands({ version: null });
+    const probe = createProbe(systemCommands);
 
-    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
+    const health = await Effect.runPromise(probe.getRuntimeHealth("codex", executablePaths.codex));
 
     expect(health.ok).toBe(true);
-    expect(calls).toEqual([
+    expect(health.version).toBeNull();
+    expect(health.error).toBeNull();
+  });
+
+  test("runs version display with a short bounded timeout", async () => {
+    const versionCalls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
+    const systemCommands: SystemCommandPort = {
+      ...createSystemCommands(),
+      versionCommand(...input) {
+        versionCalls.push(input);
+        return Effect.succeed("1.18.9");
+      },
+    };
+    const probe = createProbe(systemCommands);
+
+    await Effect.runPromise(probe.getRuntimeHealth("opencode", executablePaths.opencode));
+
+    expect(versionCalls).toEqual([
       [
-        "/usr/local/bin/opencode",
+        executablePaths.opencode,
         ["--version"],
         {
           env: { OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}' },
-          timeoutMs: 10_000,
+          timeoutMs: 2_000,
         },
       ],
     ]);
-  });
-
-  test("reports actionable missing Codex diagnostics", async () => {
-    const probe = createMissingProbe({
-      applicationsDir: "/missing/Applications",
-      homeDir: "/missing/home",
-      platform: "darwin",
-    });
-
-    const health = await Effect.runPromise(probe.getRuntimeHealth("codex"));
-
-    expect(health.ok).toBe(false);
-    expect(health.error).toContain("codex not found. Checked OPENDUCKTOR_CODEX_BINARY");
-    expect(health.error).toContain(
-      "standard install locations (/missing/Applications/Codex.app/Contents/Resources/codex, /missing/home/Applications/Codex.app/Contents/Resources/codex)",
-    );
-    expect(health.error).toContain("PATH");
-    expect(health.error).toContain("Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.");
-  });
-
-  test("probes Claude Code through tool discovery", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "openducktor-claude-health-"));
-    const executablePath = join(tempDir, "claude");
-    const calls: Array<Parameters<SystemCommandPort["versionCommand"]>> = [];
-    const systemCommands: SystemCommandPort = {
-      ...missingSystemCommands,
-      resolveCommandPath(command, options) {
-        if (options?.searchPath) {
-          return Effect.succeed(null);
-        }
-        if (command === "claude") {
-          return Effect.succeed(executablePath);
-        }
-        return Effect.succeed(null);
-      },
-      versionCommand(...input) {
-        calls.push(input);
-        return Effect.succeed("0.3.191");
-      },
-    };
-    try {
-      await writeFile(executablePath, "claude-sdk-binary");
-      const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));
-
-      const health = await Effect.runPromise(probe.getRuntimeHealth("claude"));
-
-      expect(health).toEqual({
-        kind: "claude",
-        enabled: true,
-        ok: true,
-        version: `0.3.191 (${executablePath})`,
-        error: null,
-      });
-      expect(calls).toEqual([[executablePath, ["--version"], { timeoutMs: 10_000 }]]);
-    } finally {
-      await rm(tempDir, { force: true, recursive: true });
-    }
-  });
-
-  test("reports missing Claude Code executable through tool discovery", async () => {
-    const probe = createRuntimeHealthProbe(
-      missingSystemCommands,
-      createToolDiscovery(missingSystemCommands),
-    );
-
-    const health = await Effect.runPromise(probe.getRuntimeHealth("claude"));
-
-    expect(health.ok).toBe(false);
-    expect(health.error).toContain("claude not found. Checked OPENDUCKTOR_CLAUDE_BINARY");
-    expect(health.error).toContain("Install Claude Code");
   });
 });

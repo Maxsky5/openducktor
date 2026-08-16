@@ -14,9 +14,9 @@ Adding a new CLI should mean adding a descriptor and wiring the consumer to `Too
 
 ## Short Version
 
-Consumers do not search the filesystem themselves.
+Consumers do not search the filesystem themselves. Git, GitHub CLI, and Bun consumers resolve tools through `ToolDiscoveryPort`. Agent runtime startup and health checks use the exact executable path saved in global settings.
 
-Most consumers call:
+Discovery consumers call:
 
 ```ts
 toolDiscovery.resolveToolPath("codex")
@@ -40,6 +40,14 @@ ToolDiscoveryPort
 
 The result is either an executable command path or a typed, actionable host error.
 
+## Persisted Agent Runtime Paths
+
+Global config version 3 stores `executablePath` beside `enabled` for OpenCode, Codex, and Claude. A new install runs discovery once, saves each valid path, and enables each runtime that it found. The version 2 migration keeps every existing enabled choice, discovers paths once, and saves an empty path when a runtime cannot be found.
+
+Runtime startup, version checks, and diagnostics validate and use the saved path. They never fall through to an environment override, a bundled path, a conventional location, or PATH when that saved path is invalid. The error tells the user to fix the runtime path in Settings.
+
+The onboarding page and Settings use `runtime_executables_check` for exact-path validation. The explicit **Check again** action runs fresh discovery and lets the user replace saved paths; normal app startup does not repeat discovery.
+
 ## Ownership Map
 
 | Concern | Owner |
@@ -50,6 +58,8 @@ The result is either an executable command path or a typed, actionable host erro
 | PATH, PATHEXT, executable-file checks | `packages/host/src/infrastructure/process/process-command-resolution.ts` |
 | Command resolution and version probing port | `packages/host/src/adapters/system/system-command-runner.ts` |
 | Node host wiring for Electron and web | `packages/host/src/composition/node/node-host-default-ports.ts` |
+| Runtime path initialization and migration | `packages/host/src/application/runtimes/runtime-config-initializer.ts` |
+| Runtime path validation command | `packages/host/src/application/runtimes/runtime-executable-check-service.ts` |
 | Distribution mode input | `packages/host/src/adapters/runtimes/runtime-distribution.ts` |
 | Electron distribution selection | `apps/electron/src/main/electron-runtime-distribution.ts` |
 | Web distribution selection | `packages/openducktor-web/src/web-runtime-distribution.ts` |
@@ -150,11 +160,11 @@ It uses `SystemCommandPort.resolveCommandPath`, so platform details stay central
 | Tool id | Command | Override variable | Extra descriptor sources | Main consumers |
 | --- | --- | --- | --- | --- |
 | `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode and web artifact OpenDucktor MCP command |
-| `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | Codex runtime startup and health |
-| `claude` | `claude` | `OPENDUCKTOR_CLAUDE_BINARY` | none; Claude Code is an external prerequisite | Claude Agent SDK runtime startup and health |
+| `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | initial setup and explicit rediscovery |
+| `claude` | `claude` | `OPENDUCKTOR_CLAUDE_BINARY` | none; Claude Code is an external prerequisite | initial setup and explicit rediscovery |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | none | Git adapter, diagnostics |
 | `githubCli` | `gh` | `OPENDUCKTOR_GH_PATH` | none | GitHub auth, PR detection and sync |
-| `opencode` | `opencode` | `OPENDUCKTOR_OPENCODE_BINARY` | bundled directory when provided, `~/.opencode/bin` | OpenCode runtime startup and health |
+| `opencode` | `opencode` | `OPENDUCKTOR_OPENCODE_BINARY` | bundled directory when provided, `~/.opencode/bin` | initial setup and explicit rediscovery |
 
 `OPENDUCKTOR_CLAUDE_BINARY`, `OPENDUCKTOR_CODEX_BINARY`, and
 `OPENDUCKTOR_OPENCODE_BINARY` are existing public names.

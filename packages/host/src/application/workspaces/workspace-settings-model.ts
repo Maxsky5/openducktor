@@ -5,6 +5,7 @@ import {
   type RepoConfig,
   type RepoDevServerScript,
   type RepoHooks,
+  type RuntimeKind,
   repoConfigSchema,
   repoHooksSchema,
   type SettingsSnapshot,
@@ -53,6 +54,7 @@ export type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;
+  defaultRuntimeKind?: RuntimeKind;
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {

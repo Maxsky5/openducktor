@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
@@ -31,7 +31,7 @@ export const buildReusablePromptValidationSaveError = (totalErrorCount: number):
 
 export const buildRuntimeAvailabilitySaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";
-  return `Fix ${totalErrorCount} disabled runtime selection${suffix} before saving.`;
+  return `Fix ${totalErrorCount} runtime executable error${suffix} before saving.`;
 };
 
 export const buildCodexDangerousSettingsSaveError = (): string =>
@@ -54,4 +54,78 @@ export const buildRepoScriptValidationSaveError = ({
     .join(", ");
 
   return `Fix ${repoScriptValidationErrorCount} dev server field error${suffix} in ${invalidRepoSummary} before saving.`;
+};
+
+export type SettingsSaveValidation = {
+  prompt: { hasErrors: boolean; errorCount: number };
+  reusablePrompts: { hasErrors: boolean; errorCount: number };
+  runtimeRequest: { isPending: boolean; error: string | null };
+  runtimeAvailability: {
+    hasErrors: boolean;
+    errorCount: number;
+    invalidKind: RuntimeKind | null;
+  };
+  hasUnacknowledgedCodexDangerousSettings: boolean;
+  repoScripts: {
+    hasErrors: boolean;
+    errorCount: number;
+    invalidRepoPaths: string[];
+    selectedWorkspaceId: string | null;
+  };
+};
+
+export type SettingsSaveBlocker = {
+  reason: string;
+  runtimeKind: RuntimeKind | null;
+  showRepoScriptErrors: boolean;
+};
+
+const saveBlocker = (
+  reason: string,
+  options: Pick<SettingsSaveBlocker, "runtimeKind" | "showRepoScriptErrors"> = {
+    runtimeKind: null,
+    showRepoScriptErrors: false,
+  },
+): SettingsSaveBlocker => ({ reason, ...options });
+
+export const getSettingsSaveBlocker = (
+  validation: SettingsSaveValidation,
+): SettingsSaveBlocker | null => {
+  if (validation.prompt.hasErrors) {
+    return saveBlocker(buildPromptValidationSaveError(validation.prompt.errorCount));
+  }
+  if (validation.reusablePrompts.hasErrors) {
+    return saveBlocker(
+      buildReusablePromptValidationSaveError(validation.reusablePrompts.errorCount),
+    );
+  }
+  if (validation.runtimeRequest.error) {
+    return saveBlocker(`Runtime configuration check failed: ${validation.runtimeRequest.error}`);
+  }
+  if (validation.runtimeRequest.isPending) {
+    return saveBlocker("Wait for runtime configuration checks to finish before saving.");
+  }
+  if (validation.runtimeAvailability.hasErrors) {
+    return saveBlocker(
+      buildRuntimeAvailabilitySaveError(validation.runtimeAvailability.errorCount),
+      {
+        runtimeKind: validation.runtimeAvailability.invalidKind,
+        showRepoScriptErrors: false,
+      },
+    );
+  }
+  if (validation.hasUnacknowledgedCodexDangerousSettings) {
+    return saveBlocker(buildCodexDangerousSettingsSaveError());
+  }
+  if (validation.repoScripts.hasErrors) {
+    return saveBlocker(
+      buildRepoScriptValidationSaveError({
+        invalidRepoPathsWithDevServerErrors: validation.repoScripts.invalidRepoPaths,
+        repoScriptValidationErrorCount: validation.repoScripts.errorCount,
+        selectedWorkspaceId: validation.repoScripts.selectedWorkspaceId,
+      }),
+      { runtimeKind: null, showRepoScriptErrors: true },
+    );
+  }
+  return null;
 };
