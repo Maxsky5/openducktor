@@ -113,20 +113,23 @@ const logFrontendAvailability = (
     }
   });
 
-const writeRuntimeConfigResponse = (
+export const writeRuntimeConfigResponse = (
   runtimeConfigState: BrowserRuntimeConfigState,
   response: {
     end(body: string): void;
     setHeader(name: string, value: string): void;
     statusCode: number;
   },
+  reportFailure: (cause: unknown) => void,
 ): Promise<void> => {
   response.setHeader("cache-control", "no-store");
-  return Promise.resolve(readBrowserRuntimeConfig(runtimeConfigState)).then((runtimeConfig) => {
-    response.statusCode = 200;
-    response.setHeader("content-type", "application/json; charset=utf-8");
-    response.end(runtimeConfig);
-  });
+  return Promise.resolve(readBrowserRuntimeConfig(runtimeConfigState))
+    .then((runtimeConfig) => {
+      response.statusCode = 200;
+      response.setHeader("content-type", "application/json; charset=utf-8");
+      response.end(runtimeConfig);
+    })
+    .catch(reportFailure);
 };
 
 const flushProcessOutput = async (): Promise<void> => {
@@ -312,7 +315,11 @@ const startViteServerEffect = (
                   name: "openducktor-runtime-config",
                   configureServer(devServer) {
                     devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
-                      void writeRuntimeConfigResponse(runtimeConfigState, response);
+                      void writeRuntimeConfigResponse(
+                        runtimeConfigState,
+                        response,
+                        defaultWebSignalProcessBoundary.reportFailure,
+                      );
                     });
                   },
                 },

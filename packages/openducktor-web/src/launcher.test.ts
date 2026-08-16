@@ -3,12 +3,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { WebOperationError } from "./effect/web-errors";
 import {
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
   resolveWebMcpBridgeDiscoveryMode,
   runWebSignalShutdown,
+  writeRuntimeConfigResponse,
 } from "./launcher";
 import {
   buildBrowserRuntimeConfigJson,
@@ -40,6 +42,27 @@ describe("launcher internals", () => {
 
   test("uses production discovery for installed static launches", () => {
     expect(resolveWebMcpBridgeDiscoveryMode(false)).toBe("production");
+  });
+
+  test("reports runtime-config response failures instead of rejecting without an owner", async () => {
+    const failure = new Error("client disconnected");
+    const reportedFailures: unknown[] = [];
+    const runtimeConfigState = createBrowserRuntimeConfigState();
+    runtimeConfigState.publish('{"backendUrl":"http://127.0.0.1:14327"}');
+
+    await writeRuntimeConfigResponse(
+      runtimeConfigState,
+      {
+        end: () => {
+          throw failure;
+        },
+        setHeader: () => {},
+        statusCode: 0,
+      },
+      (cause) => reportedFailures.push(cause),
+    );
+
+    expect(reportedFailures).toEqual([failure]);
   });
 
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
