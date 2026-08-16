@@ -6,7 +6,6 @@ import {
   getFiletypeFromFileName,
 } from "@pierre/diffs";
 import { Editor, type EditorOptions } from "@pierre/diffs/edit";
-import { CodeView, EditProvider, useWorkerPool } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import {
@@ -39,6 +38,7 @@ import {
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
 } from "./task-execution-file-explorer-model";
+import { CodeView, EditProvider, useWorkerPool } from "./task-execution-file-preview-pierre";
 import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
 
 export type TaskExecutionSelectedFilePreviewModel = {

@@ -105,7 +105,7 @@ const previewWorkerPool = {
   },
 };
 
-const actualDiffsReact = await import("@pierre/diffs/react");
+const actualPreviewPierre = await import("./task-execution-file-preview-pierre");
 const actualThemeProvider = await import("@/components/layout/theme-provider");
 const actualHost = await import("@/state/operations/host");
 
@@ -245,7 +245,7 @@ beforeEach(async () => {
     }),
   }));
 
-  mock.module("@pierre/diffs/react", () => ({
+  mock.module("./task-execution-file-preview-pierre", () => ({
     useWorkerPool: () => previewWorkerPool,
     EditProvider: ({ children, createEditor }: PropsWithChildren<{ createEditor: unknown }>) => {
       editProviderFactories.push(createEditor);
@@ -273,7 +273,7 @@ beforeEach(async () => {
 afterEach(async () => {
   document.documentElement.classList.remove("dark", "light");
   await restoreMockedModules([
-    ["@pierre/diffs/react", async () => actualDiffsReact],
+    ["./task-execution-file-preview-pierre", async () => actualPreviewPierre],
     ["@/components/layout/theme-provider", async () => actualThemeProvider],
     ["@/state/operations/host", async () => actualHost],
   ]);
