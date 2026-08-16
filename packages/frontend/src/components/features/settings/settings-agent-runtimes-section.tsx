@@ -326,7 +326,7 @@ function CodexSettings({
     value: CodexPolicyFields[Field] | undefined,
   ) =>
     onUpdate((current) => {
-      const draftRoleOverride = { ...(current.roleOverrides[role] ?? {}) };
+      const draftRoleOverride = { ...current.roleOverrides[role] };
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
@@ -355,7 +355,7 @@ function CodexSettings({
       const nextRoleOverrides = { ...current.roleOverrides };
 
       for (const role of AGENT_ROLE_ORDER) {
-        const draftRoleOverride = { ...(nextRoleOverrides[role] ?? {}) };
+        const draftRoleOverride = { ...nextRoleOverrides[role] };
         delete draftRoleOverride[field];
 
         const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
