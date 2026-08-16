@@ -22,6 +22,10 @@ export type TaskAssetFileOwnershipDependencies = {
 const execFileAsync = promisify(execFile);
 
 const readProcessStartedAtMs = async (processId: number): Promise<number> => {
+  if (processId === process.pid) {
+    return Math.floor(Date.now() - process.uptime() * 1_000);
+  }
+
   const { stdout } =
     process.platform === "win32"
       ? await execFileAsync(
