@@ -1,12 +1,24 @@
-import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentSessionAssociation,
+  RepoRuntimeRef,
+  RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  AgentTaskSessionBinding,
+} from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
+import { resolveSessionRuntimeScope } from "./session-runtime-scope";
 
-type SessionRuntimeDataSource =
-  | AgentSessionIdentity
-  | (AgentSessionIdentity & { selectedModel?: AgentSessionState["selectedModel"] });
+export type SessionRuntimeDataTarget = {
+  identity: AgentSessionIdentity;
+  selectedModel: AgentSessionState["selectedModel"];
+  taskBinding: AgentTaskSessionBinding | null;
+  liveSessionAssociation: AgentSessionAssociation | null;
+};
 
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
@@ -15,7 +27,7 @@ export type SessionRuntimeDataRefs =
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
-  selectedSessionIdentity: SessionRuntimeDataSource | null;
+  selectedSession: SessionRuntimeDataTarget | null;
   runtimePolicy: AgentSessionRuntimePolicy | null;
   runtimeDefinitions: RuntimeDescriptor[];
 };
@@ -39,11 +51,11 @@ const runtimeSupportsTodos = (
 
 export const resolveSessionRuntimeDataRefs = ({
   repoPath,
-  selectedSessionIdentity,
+  selectedSession,
   runtimePolicy,
   runtimeDefinitions,
 }: ResolveSessionRuntimeDataRefsInput): SessionRuntimeDataRefs => {
-  if (!selectedSessionIdentity) {
+  if (!selectedSession) {
     return emptySessionRuntimeDataRefs;
   }
 
@@ -56,10 +68,10 @@ export const resolveSessionRuntimeDataRefs = ({
 
   const catalogRef: RepoRuntimeRef = {
     repoPath,
-    runtimeKind: selectedSessionIdentity.runtimeKind,
+    runtimeKind: selectedSession.identity.runtimeKind,
   };
 
-  if (!runtimeSupportsTodos(runtimeDefinitions, selectedSessionIdentity)) {
+  if (!runtimeSupportsTodos(runtimeDefinitions, selectedSession.identity)) {
     return {
       kind: "available",
       catalogRef,
@@ -75,9 +87,15 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
+  const todosRef = toRuntimeSessionRefWithPolicy(
+    repoPath,
+    { ...selectedSession.identity, selectedModel: selectedSession.selectedModel },
+    runtimePolicy,
+  );
+  const sessionScope = resolveSessionRuntimeScope(selectedSession);
   return {
     kind: "available",
     catalogRef,
-    todosRef: toRuntimeSessionRefWithPolicy(repoPath, selectedSessionIdentity, runtimePolicy),
+    todosRef: sessionScope ? { ...todosRef, sessionScope } : todosRef,
   };
 };

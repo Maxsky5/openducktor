@@ -620,7 +620,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
   });
 
   for (const operation of ["start", "resume", "fork"] as const) {
-    test(`keeps the workflow association after ${operation} invalidation and refresh`, async () => {
+    test(`reports the latest runtime association after ${operation} invalidation and refresh`, async () => {
       const harness = createRuntimeHarness();
       const publishedChanges: AgentSessionLiveAdapterChange[] = [];
       const prepared = await Effect.runPromise(
@@ -679,7 +679,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual([
         expect.objectContaining({
           ref: controlRef,
-          sessionAssociation: controlSummary.sessionAssociation,
+          sessionAssociation: { kind: "unbound" },
         }),
       ]);
       await expect(
@@ -688,7 +688,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         type: "live",
         session: {
           ref: controlRef,
-          sessionAssociation: controlSummary.sessionAssociation,
+          sessionAssociation: { kind: "unbound" },
         },
       });
       expect(
@@ -702,7 +702,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           type: "session_upsert",
           snapshot: expect.objectContaining({
             ref: controlRef,
-            sessionAssociation: controlSummary.sessionAssociation,
+            sessionAssociation: { kind: "unbound" },
           }),
         },
       ]);

@@ -104,27 +104,35 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
-  test("rejects repository session controls before invoking the Claude SDK", async () => {
-    const service = createService(createSession());
+  test("resumes and sends through a retained repository session without a fake workflow role", async () => {
     const repositoryScope = { kind: "repository" } as const;
+    const mcpServerStatus = mock(async () => [{ name: "openducktor", status: "connected" }]);
+    const repositorySession = createSession({
+      input: {
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: repositoryScope,
+      },
+      summary: {
+        externalSessionId: "session-1",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        title: "Repository session",
+        sessionAssociation: repositoryScope,
+        startedAt: "2026-06-25T20:00:00.000Z",
+        status: "idle",
+      },
+      query: {
+        close: mock(() => {}),
+        getContextUsage: mock(async () => ({})),
+        mcpServerStatus,
+      } as unknown as ClaudeSession["query"],
+    });
+    const service = createService(repositorySession);
 
-    await expect(
-      Effect.runPromise(
-        service.startSession(
-          {
-            repoPath: "/repo/",
-            runtimeKind: "claude",
-            workingDirectory: "/repo/worktree/",
-            runtimePolicy: { kind: "claude" },
-            sessionScope: repositoryScope,
-            systemPrompt: "Build",
-          },
-          "runtime-claude",
-        ),
-      ),
-    ).rejects.toThrow(
-      "Cannot start Claude session with repository session context; workflow session context is required.",
-    );
     await expect(
       Effect.runPromise(
         service.resumeSession(
@@ -139,27 +147,7 @@ describe("createClaudeAgentSdkService", () => {
           "runtime-claude",
         ),
       ),
-    ).rejects.toThrow(
-      "Cannot resume Claude session with repository session context; workflow session context is required.",
-    );
-    await expect(
-      Effect.runPromise(
-        service.forkSession(
-          {
-            repoPath: "/repo/",
-            runtimeKind: "claude",
-            workingDirectory: "/repo/worktree/",
-            parentExternalSessionId: "session-1",
-            runtimePolicy: { kind: "claude" },
-            sessionScope: repositoryScope,
-            systemPrompt: "Build",
-          },
-          "runtime-claude",
-        ),
-      ),
-    ).rejects.toThrow(
-      "Cannot fork Claude session with repository session context; workflow session context is required.",
-    );
+    ).resolves.toMatchObject({ sessionAssociation: repositoryScope });
     await expect(
       Effect.runPromise(
         service.sendUserMessage(
@@ -175,9 +163,60 @@ describe("createClaudeAgentSdkService", () => {
           "runtime-claude",
         ),
       ),
-    ).rejects.toThrow(
-      "Cannot send Claude user message with repository session context; workflow session context is required.",
+    ).resolves.toMatchObject({ type: "user_message", externalSessionId: "session-1" });
+    await expect(
+      Effect.runPromise(
+        service.loadSessionContextUsage({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: repositoryScope,
+        }),
+      ),
+    ).resolves.toBeNull();
+    expect(mcpServerStatus).toHaveBeenCalledTimes(3);
+  });
+
+  test("rejects retained Claude session scope drift", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "repository" },
+        },
+        summary: {
+          externalSessionId: "session-1",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          title: "Repository session",
+          sessionAssociation: { kind: "repository" },
+          startedAt: "2026-06-25T20:00:00.000Z",
+          status: "idle",
+        },
+      }),
     );
+
+    await expect(
+      Effect.runPromise(
+        service.resumeSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          },
+          "runtime-claude",
+        ),
+      ),
+    ).rejects.toThrow("registered repository scope does not match requested workflow scope");
   });
 
   test("loads persisted history for resumed and forked live sessions before a new user turn", async () => {

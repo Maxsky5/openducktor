@@ -13,6 +13,13 @@ describe("OpencodeSdkAdapter event stream", () => {
   test("maps message.updated events into assistant parts and assistant message", async () => {
     const streamEvents: Event[] = [
       {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -92,6 +99,13 @@ describe("OpencodeSdkAdapter event stream", () => {
 
   test("synthesizes session_idle from terminal assistant completion when no idle event follows", async () => {
     const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
       {
         type: "message.updated",
         properties: {
@@ -217,6 +231,13 @@ describe("OpencodeSdkAdapter event stream", () => {
         type: "session.status",
         properties: {
           sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
           status: {
             type: "idle",
           },
@@ -277,7 +298,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
     await flushAsync();
 
-    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
+    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
     expect(events.filter((entry) => entry.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
@@ -286,6 +307,13 @@ describe("OpencodeSdkAdapter event stream", () => {
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
     const streamEvents: Event[] = [
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
       {
         type: "session.status",
         properties: {
@@ -343,7 +371,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
     await flushAsync();
 
-    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(1);
+    expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
 
@@ -602,6 +630,13 @@ describe("OpencodeSdkAdapter event stream", () => {
   test("maps completed MCP tool part with isError=true as error status", async () => {
     const streamEvents: Event[] = [
       {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -670,6 +705,13 @@ describe("OpencodeSdkAdapter event stream", () => {
   test("maps flattened MCP tool error JSON output as error status", async () => {
     const streamEvents: Event[] = [
       {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "busy" },
+        },
+      } as unknown as Event,
+      {
         type: "message.updated",
         properties: {
           info: {
@@ -721,9 +763,12 @@ describe("OpencodeSdkAdapter event stream", () => {
     const events: AgentEvent[] = [];
     await startDefaultSession(adapter, "planner");
 
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
-      events.push(event);
-    });
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "planner" }),
+      (event) => {
+        events.push(event);
+      },
+    );
     await flushAsync();
 
     const toolPartEvent = events.find((entry) => {

@@ -1,8 +1,4 @@
-import type {
-  HookCallback,
-  PermissionMode,
-  PreToolUseHookInput,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-session";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
@@ -16,14 +12,9 @@ const denyToolUse = (message: string) => ({
   },
 });
 
-const acceptsFileEdits = (permissionMode: string, toolName: string): boolean =>
-  permissionMode === "acceptEdits" && /^(Edit|MultiEdit|NotebookEdit|Write)$/iu.test(toolName);
-
 export const createClaudePreToolUseHook = ({
-  permissionMode,
   session,
 }: {
-  permissionMode: PermissionMode;
   session: ClaudeSessionContext;
 }): HookCallback => {
   return async (input, _toolUseId, { signal }) => {
@@ -53,23 +44,24 @@ export const createClaudePreToolUseHook = ({
       return denyToolUse(authorization.message);
     }
     const inputChanged = authorization.toolInput !== preToolUseInput.tool_input;
-    if (!inputChanged && !authorization.autoApprove) {
+    if (authorization.approval === "workflow_role") {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
+          ...(inputChanged ? { updatedInput: authorization.toolInput } : {}),
+        },
+      };
+    }
+    if (!inputChanged) {
       return {};
     }
-
-    const effectivePermissionMode = preToolUseInput.permission_mode ?? permissionMode;
-    const autoApprove =
-      authorization.autoApprove ||
-      effectivePermissionMode === "bypassPermissions" ||
-      acceptsFileEdits(effectivePermissionMode, preToolUseInput.tool_name);
     return {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
-        permissionDecision: autoApprove ? "allow" : "ask",
-        permissionDecisionReason: inputChanged
-          ? "OpenDucktor routed the tool input to the session worktree."
-          : "OpenDucktor approved this tool use.",
-        ...(inputChanged ? { updatedInput: authorization.toolInput } : {}),
+        permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
+        updatedInput: authorization.toolInput,
       },
     };
   };

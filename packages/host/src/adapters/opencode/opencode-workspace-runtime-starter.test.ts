@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  ODT_MCP_TOOL_NAMES,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
@@ -384,7 +384,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
               ODT_HOST_URL: "http://127.0.0.1:14327",
               ODT_HOST_TOKEN: "token-1",
               ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-              ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
+              ODT_ALLOWED_TOOLS: ODT_MCP_TOOL_NAMES.join(","),
             },
           },
         },

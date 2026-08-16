@@ -287,7 +287,17 @@ export const createPrepareOpencodeSessionRuntime = (
         requireActive();
         await syncEventSessions(sources);
         requireActive();
-        return sources;
+        return sources.map((source) => {
+          if (source.sessionAssociation.kind !== "unbound") {
+            return source;
+          }
+          const retainedAssociation = eventSessions.get(source.externalSessionId)?.summary
+            .sessionAssociation;
+          if (!retainedAssociation || retainedAssociation.kind === "unbound") {
+            return source;
+          }
+          return { ...source, sessionAssociation: retainedAssociation };
+        });
       });
       readSessionSourcesTail = read.then(
         () => undefined,

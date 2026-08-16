@@ -221,7 +221,7 @@ describe("OdtHostBridgeClient", () => {
       {
         path: ["workspaceId"],
         code: "forbidden_workspace_id",
-        message: "workspaceId is not allowed in workflow-scoped tool calls.",
+        message: "workspaceId is fixed by the startup workspace and is not allowed in tool input.",
       },
     ];
     const fetchImpl: typeof fetch = async () => {

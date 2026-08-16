@@ -1,3 +1,4 @@
+import type { AgentSessionAssociation } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -11,6 +12,11 @@ import {
   replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
+import {
+  type AgentSessionLiveAssociations,
+  emptyAgentSessionLiveAssociations,
+  getAgentSessionLiveAssociation,
+} from "@/state/agent-session-live-associations";
 import {
   type AgentActivitySessionsSnapshot,
   createAgentActivitySnapshot,
@@ -33,16 +39,24 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   collection: AgentSessionCollection;
   result: Result;
 };
+type AgentSessionLiveAssociationsUpdater = (
+  current: AgentSessionLiveAssociations,
+) => AgentSessionLiveAssociations;
 
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
+  subscribeLiveAssociations: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   listSessionSnapshots: () => AgentSessionState[];
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
+  getLiveAssociationSnapshot: (
+    identity: AgentSessionIdentity | null,
+  ) => AgentSessionAssociation | null;
   getVisiblePendingInputSnapshot: (
     identity: AgentSessionIdentity | null,
   ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
+  setLiveAssociations: (updater: AgentSessionLiveAssociationsUpdater) => void;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -58,6 +72,7 @@ export const createAgentSessionsStore = (
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
+  let liveAssociations = emptyAgentSessionLiveAssociations();
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
   let visiblePendingInputSnapshot: {
     collection: AgentSessionCollection;
@@ -65,6 +80,7 @@ export const createAgentSessionsStore = (
     snapshot: AgentSessionVisiblePendingInput;
   } | null = null;
   const listeners = new Set<Listener>();
+  const liveAssociationListeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
     for (const listener of [...listeners]) {
@@ -104,9 +120,17 @@ export const createAgentSessionsStore = (
         listeners.delete(listener);
       };
     },
+    subscribeLiveAssociations: (listener) => {
+      liveAssociationListeners.add(listener);
+      return () => {
+        liveAssociationListeners.delete(listener);
+      };
+    },
     getActivitySnapshot: () => activitySnapshot,
     listSessionSnapshots: () => listAgentSessions(sessionCollection),
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
+    getLiveAssociationSnapshot: (identity) =>
+      getAgentSessionLiveAssociation(liveAssociations, identity),
     getVisiblePendingInputSnapshot: (identity) => {
       const identityKey = identity ? agentSessionIdentityKey(identity) : null;
       if (
@@ -121,6 +145,16 @@ export const createAgentSessionsStore = (
       return snapshot;
     },
     commitSessionCollection,
+    setLiveAssociations: (updater) => {
+      const next = updater(liveAssociations);
+      if (next === liveAssociations) {
+        return;
+      }
+      liveAssociations = next;
+      for (const listener of [...liveAssociationListeners]) {
+        listener();
+      }
+    },
     setSessionCollection,
     replaceSession: (session) => {
       setSessionCollection((current) => replaceAgentSession(current, session));
@@ -147,8 +181,12 @@ export const createAgentSessionsStore = (
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = emptyAgentSessionCollection();
+      liveAssociations = emptyAgentSessionLiveAssociations();
       activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
       notifyListeners();
+      for (const listener of [...liveAssociationListeners]) {
+        listener();
+      }
     },
   };
 };

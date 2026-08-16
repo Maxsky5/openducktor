@@ -34,17 +34,20 @@ export const sessionRef = (externalSessionId = "session-opencode-1"): SessionRef
 
 export const sessionRuntimeRef = (
   externalSessionId = "session-opencode-1",
-  overrides: Partial<OpencodePolicyBoundSessionRef> = {},
-): OpencodePolicyBoundSessionRef => ({
-  externalSessionId,
-  repoPath: "/repo",
-  runtimeKind: "opencode",
-  workingDirectory: "/repo",
-  sessionScope: workflowAgentSessionScope("task-1", "spec" satisfies AgentRole),
-  runtimePolicy: { kind: "opencode" },
-  systemPrompt: "system prompt",
-  ...overrides,
-});
+  overrides: Partial<OpencodePolicyBoundSessionRef> & { role?: AgentRole } = {},
+): OpencodePolicyBoundSessionRef => {
+  const { role, ...sessionOverrides } = overrides;
+  return {
+    externalSessionId,
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+    sessionScope: workflowAgentSessionScope("task-1", role ?? "spec"),
+    runtimePolicy: { kind: "opencode" },
+    systemPrompt: "system prompt",
+    ...sessionOverrides,
+  };
+};
 
 const createDefaultRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind) => ({
   kind: runtimeKind,
@@ -86,6 +89,10 @@ export type MockSession = {
   commandCalls: unknown[];
   abortCalls: unknown[];
   getCalls: unknown[];
+  updateCalls: unknown[];
+  forkCalls: unknown[];
+  deleteCalls: unknown[];
+  updateResult: SessionUpdateMockResult;
   messagesCalls: unknown[];
   childrenCalls: unknown[];
   todoCalls: unknown[];
@@ -99,6 +106,12 @@ export type MockSession = {
     parts: Part[];
   }>;
   todoResult: TodoMockResult;
+};
+
+export type SessionUpdateMockResult = {
+  data?: unknown;
+  error?: unknown;
+  response?: unknown;
 };
 
 export type MockTool = {
@@ -186,6 +199,8 @@ export type CommandMockResult =
 export type MakeMockClientInput = {
   sessionId?: string;
   sessionIds?: string[];
+  forkSessionId?: string;
+  sessionUpdateResult?: SessionUpdateMockResult;
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
   streamEvents?: Event[];
@@ -211,6 +226,8 @@ export type MakeMockClientInput = {
 export const makeMockClient = ({
   sessionId = "session-opencode-1",
   sessionIds,
+  forkSessionId = "session-opencode-fork",
+  sessionUpdateResult = { data: { id: sessionId }, error: undefined },
   promptAsyncResult = { mode: "success" },
   commandResult = { mode: "success" },
   streamEvents = [],
@@ -249,7 +266,7 @@ export const makeMockClient = ({
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
   modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
-}: MakeMockClientInput): {
+}: MakeMockClientInput = {}): {
   client: OpencodeClient;
   session: MockSession;
   tool: MockTool;
@@ -265,6 +282,10 @@ export const makeMockClient = ({
     commandCalls: [],
     abortCalls: [],
     getCalls: [],
+    updateCalls: [],
+    forkCalls: [],
+    deleteCalls: [],
+    updateResult: sessionUpdateResult,
     messagesCalls: [],
     childrenCalls: [],
     todoCalls: [],
@@ -342,6 +363,18 @@ export const makeMockClient = ({
           },
           error: undefined,
         };
+      },
+      update: async (input: unknown) => {
+        session.updateCalls.push(input);
+        return session.updateResult;
+      },
+      fork: async (input: unknown) => {
+        session.forkCalls.push(input);
+        return { data: { id: forkSessionId }, error: undefined };
+      },
+      delete: async (input: unknown) => {
+        session.deleteCalls.push(input);
+        return { data: true, error: undefined };
       },
       messages: async (input: unknown) => {
         session.messagesCalls.push(input);

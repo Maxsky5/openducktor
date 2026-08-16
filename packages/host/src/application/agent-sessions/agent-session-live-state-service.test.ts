@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
+  RuntimeKind,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -15,7 +16,7 @@ import { createAgentSessionLiveStateService } from "./agent-session-live-state-s
 
 const sessionRef = (
   externalSessionId: string,
-  runtimeKind: "codex" | "opencode" = "codex",
+  runtimeKind: RuntimeKind = "codex",
 ): AgentSessionLiveRef => ({
   repoPath: "/repo",
   runtimeKind,
@@ -25,7 +26,7 @@ const sessionRef = (
 
 const liveSnapshot = (
   externalSessionId: string,
-  runtimeKind: "codex" | "opencode" = "codex",
+  runtimeKind: RuntimeKind = "codex",
 ): AgentSessionLiveSnapshot => ({
   ref: sessionRef(externalSessionId, runtimeKind),
   sessionAssociation: { kind: "unbound" },
@@ -39,7 +40,7 @@ const liveSnapshot = (
 
 const fakeAdapter = (input: {
   runtimeId: string;
-  runtimeKind?: "codex" | "opencode";
+  runtimeKind?: RuntimeKind;
   snapshots: () => ReadonlyArray<AgentSessionLiveSnapshot>;
   listEffect?: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   contextEffect?: AgentSessionLiveAdapterPort["loadContext"];
@@ -97,6 +98,75 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  for (const runtimeKind of ["codex", "opencode", "claude"] as const) {
+    test(`retains ${runtimeKind} binding on unbound observations and rejects scope drift`, async () => {
+      const { events, service } = createHarness();
+      const bound = {
+        ...liveSnapshot("session-1", runtimeKind),
+        sessionAssociation: { kind: "repository" } as const,
+      };
+      await Effect.runPromise(
+        service.registerRuntimeAdapter(
+          fakeAdapter({
+            runtimeId: `${runtimeKind}-runtime`,
+            runtimeKind,
+            snapshots: () => [bound],
+          }),
+        ),
+      );
+      events.length = 0;
+
+      await Effect.runPromise(
+        service.runAdapterMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [
+              {
+                type: "session_upsert" as const,
+                snapshot: { ...bound, sessionAssociation: { kind: "unbound" as const } },
+              },
+            ],
+          }),
+        ),
+      );
+
+      expect(events).toEqual([
+        {
+          type: "session_upsert",
+          session: expect.objectContaining({ sessionAssociation: { kind: "repository" } }),
+        },
+      ]);
+      events.length = 0;
+
+      const failure = await expectHostFailure(
+        service.runAdapterMutation(
+          Effect.succeed({
+            value: undefined,
+            changes: [
+              {
+                type: "session_upsert" as const,
+                snapshot: {
+                  ...bound,
+                  sessionAssociation: {
+                    kind: "workflow" as const,
+                    taskId: "task-1",
+                    role: "build" as const,
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+      );
+
+      expect(failure).toMatchObject({
+        _tag: "HostInvariantError",
+        invariant: "agent_session_live_association_is_stable",
+      });
+      expect(events).toEqual([]);
+    });
+  }
+
   test("preserves repository association across snapshots, list, read, and events", async () => {
     const { events, service } = createHarness();
     const snapshot = {
@@ -1022,5 +1092,36 @@ describe("createAgentSessionLiveStateService", () => {
 
     await expect(Effect.runPromise(service.sendUserMessage(input))).resolves.toEqual(accepted);
     expect(sendInput).toEqual(input);
+  });
+
+  test("fails scoped operations when the workspace has no live runtime", async () => {
+    const { service } = createHarness();
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "repository-session",
+      sessionScope: { kind: "repository" as const },
+    };
+    const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {
+      const error = await expectHostFailure(effect);
+      expect(error.message).toBe("No live codex runtime owns repo '/repo'.");
+    };
+
+    await expectMissingRoute(service.resumeSession(ref));
+    await expectMissingRoute(
+      service.forkSession({
+        repoPath: ref.repoPath,
+        runtimeKind: ref.runtimeKind,
+        workingDirectory: ref.workingDirectory,
+        parentExternalSessionId: ref.externalSessionId,
+        sessionScope: ref.sessionScope,
+        systemPrompt: "Use the repo rules.",
+      }),
+    );
+    await expectMissingRoute(
+      service.sendUserMessage({ ...ref, parts: [{ kind: "text", text: "Continue" }] }),
+    );
+    await expectMissingRoute(service.loadContext(ref));
   });
 });

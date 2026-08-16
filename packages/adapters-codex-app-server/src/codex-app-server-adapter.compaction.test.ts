@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   codexSessionRuntimeRef,
@@ -122,34 +122,36 @@ describe("CodexAppServerAdapter manual compaction", () => {
     expect(calls).toEqual([]);
   });
 
-  test("rejects repository scope before manual compaction side effects", async () => {
+  test("supports repository scope for manual compaction", async () => {
     const calls: CodexJsonRpcRequest[] = [];
-    const requireRepoRuntime = mock(async () => {
-      throw new Error("Runtime resolution should not run.");
-    });
-    const adapter = createAdapterWithTransport(
-      {
-        async request(request) {
-          calls.push(request);
+    const adapter = createAdapterWithTransport({
+      async request(request) {
+        calls.push(request);
+        if (request.method === "thread/resume") {
+          throw new Error("Unexpected method 'thread/resume'.");
+        }
+        if (request.method === "thread/compact/start") {
           return {};
-        },
+        }
+        if (request.method === "thread/name/set") {
+          return {};
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
       },
-      { repoRuntimeResolver: { requireRepoRuntime } },
-    );
+    });
 
-    await expect(
-      adapter.sendUserMessage(
-        codexUserMessageInput({
-          externalSessionId: "thread-1",
-          sessionScope: { kind: "repository" },
-          parts: [compactPart()],
-        }),
-      ),
-    ).rejects.toThrow(
-      "Cannot send Codex user message with repository session context; workflow session context is required.",
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-1",
+        sessionScope: { kind: "repository" },
+        parts: [compactPart()],
+      }),
     );
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-    expect(calls).toEqual([]);
+    expect(calls.map((call) => call.method)).toEqual([
+      "thread/resume",
+      "thread/name/set",
+      "thread/compact/start",
+    ]);
   });
 
   test("adds thread context to native request failures without a fallback turn", async () => {

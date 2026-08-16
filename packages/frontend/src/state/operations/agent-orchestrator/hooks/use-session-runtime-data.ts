@@ -4,7 +4,6 @@ import type {
   AgentSessionTodoItem,
   PolicyBoundSessionRef,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
@@ -21,20 +20,22 @@ import {
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentTaskSessionBinding } from "@/types/agent-orchestrator";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
 } from "@/types/selected-session-runtime-data";
+import type { SessionRuntimeDataTarget } from "../support/session-runtime-data-refs";
 import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
 import {
   resolveAgentSessionRuntimePolicyFromSnapshot,
   resolveSettingsIndependentAgentSessionRuntimePolicy,
 } from "../support/session-runtime-policy";
+import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
 
 type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
-  selectedSessionIdentity: (AgentSessionIdentity | AgentSessionState) | null;
+  selectedSession: SessionRuntimeDataTarget | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: RepoRuntimeReadinessState;
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
@@ -57,67 +58,45 @@ const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
 
 export const useSessionRuntimeData = ({
   repoPath,
-  selectedSessionIdentity,
+  selectedSession,
   runtimeDefinitions,
   repoReadinessState,
   loadRuntimeCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
-  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
-  const selectedRuntimeContext =
-    selectedSessionIdentity && "role" in selectedSessionIdentity ? selectedSessionIdentity : null;
-  const hasSelectedRuntimeContext = selectedRuntimeContext !== null;
-  const selectedExternalSessionId = selectedSessionIdentity?.externalSessionId ?? null;
-  const selectedRuntimeKind = selectedSessionIdentity?.runtimeKind ?? null;
-  const selectedWorkingDirectory = selectedSessionIdentity?.workingDirectory ?? null;
-  const selectedTaskId = selectedRuntimeContext?.taskId ?? null;
-  const selectedRole = selectedRuntimeContext?.role ?? null;
-  const selectedModel = selectedRuntimeContext?.selectedModel ?? null;
-  const stableSelectedSessionRuntimeContext = useMemo(() => {
-    if (
-      !hasSelectedRuntimeContext ||
-      selectedExternalSessionId === null ||
-      selectedRuntimeKind === null ||
-      selectedWorkingDirectory === null
-    ) {
+  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSession?.identity);
+  const selectedTaskId = selectedSession?.taskBinding?.taskId ?? null;
+  const selectedRole = selectedSession?.taskBinding?.role ?? null;
+  const selectedModel = selectedSession?.selectedModel ?? null;
+  const liveSessionAssociation = selectedSession?.liveSessionAssociation ?? null;
+  const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
+    if (!stableSelectedSessionIdentity) {
       return null;
     }
-
+    const taskBinding: AgentTaskSessionBinding | null =
+      selectedTaskId && selectedRole ? { taskId: selectedTaskId, role: selectedRole } : null;
     return {
-      externalSessionId: selectedExternalSessionId,
-      runtimeKind: selectedRuntimeKind,
-      workingDirectory: selectedWorkingDirectory,
+      identity: stableSelectedSessionIdentity,
+      taskBinding,
+      liveSessionAssociation,
       selectedModel,
-      ...(selectedTaskId !== null ? { taskId: selectedTaskId } : {}),
-      ...(selectedRole !== null ? { role: selectedRole } : {}),
     };
   }, [
-    hasSelectedRuntimeContext,
-    selectedExternalSessionId,
-    selectedRuntimeKind,
-    selectedWorkingDirectory,
-    selectedTaskId,
-    selectedRole,
+    liveSessionAssociation,
+    stableSelectedSessionIdentity,
     selectedModel,
+    selectedRole,
+    selectedTaskId,
   ]);
-  const sessionForRuntimeData =
-    stableSelectedSessionRuntimeContext ?? stableSelectedSessionIdentity;
   const runtimePolicyTarget = useMemo(() => {
-    if (stableSelectedSessionRuntimeContext === null) {
+    if (stableSelectedSession === null) {
       return null;
     }
     return {
-      runtimeKind: stableSelectedSessionRuntimeContext.runtimeKind,
-      sessionScope:
-        "taskId" in stableSelectedSessionRuntimeContext &&
-        "role" in stableSelectedSessionRuntimeContext
-          ? workflowAgentSessionScope(
-              stableSelectedSessionRuntimeContext.taskId,
-              stableSelectedSessionRuntimeContext.role,
-            )
-          : null,
+      runtimeKind: stableSelectedSession.identity.runtimeKind,
+      sessionScope: resolveSessionRuntimeScope(stableSelectedSession),
     };
-  }, [stableSelectedSessionRuntimeContext]);
+  }, [stableSelectedSession]);
   const settingsSnapshotQuery = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: runtimePolicyTarget?.runtimeKind === "codex",
@@ -158,11 +137,11 @@ export const useSessionRuntimeData = ({
   const runtimeDataRefs = useMemo(() => {
     return resolveSessionRuntimeDataRefs({
       repoPath,
-      selectedSessionIdentity: sessionForRuntimeData,
+      selectedSession: stableSelectedSession,
       runtimePolicy,
       runtimeDefinitions,
     });
-  }, [repoPath, runtimeDefinitions, runtimePolicy, sessionForRuntimeData]);
+  }, [repoPath, runtimeDefinitions, runtimePolicy, stableSelectedSession]);
   const isRuntimeReady = repoReadinessState === "ready";
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;

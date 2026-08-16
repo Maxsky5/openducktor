@@ -11,7 +11,7 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 
-const codexMcpToolApprovalRequest = (persist: unknown) => ({
+const codexMcpToolApprovalRequest = (persist: unknown, includeToolTitle = true) => ({
   id: 7,
   method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
   params: {
@@ -23,7 +23,7 @@ const codexMcpToolApprovalRequest = (persist: unknown) => ({
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      tool_name: "search",
+      ...(includeToolTitle ? { tool_title: "search" } : {}),
       persist,
     },
   },
@@ -103,6 +103,15 @@ describe("Codex MCP approval requests", () => {
     const approval = toMcpElicitationApprovalRequest(codexMcpToolApprovalRequest("session"));
 
     expect(approval?.supportedReplyOutcomes).toEqual(["approve_once", "approve_session", "reject"]);
+  });
+
+  test("uses the server fallback when the pinned producer omits a tool title", () => {
+    expect(
+      toMcpElicitationApprovalRequest(codexMcpToolApprovalRequest("session", false))?.tool,
+    ).toEqual({
+      name: "semble MCP tool",
+      title: "semble MCP tool",
+    });
   });
 
   test("maps persistent MCP approval outcomes to Codex elicitation response metadata", () => {

@@ -1,6 +1,5 @@
 import {
   ODT_MCP_TOOL_NAMES,
-  OPENCODE_ODT_TOOL_ID_PREFIXES,
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
@@ -10,6 +9,7 @@ import {
   isReadOnlyAgentRole,
   ODT_WORKFLOW_TOOL_NAMES,
 } from "@openducktor/core";
+import { resolveOpencodeBaseToolPolicy } from "./opencode-tool-policy";
 
 type PermissionAction = "allow" | "deny" | "ask";
 
@@ -19,37 +19,21 @@ export type OpencodePermissionRule = {
   action: PermissionAction;
 };
 
-const ODT_MCP_PERMISSION_WILDCARDS = OPENCODE_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}*`);
-const OPENCODE_SUBAGENT_TOOL_NAME = "task";
-const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
-
-const buildOdtToolDenyPermissions = (runtimeDescriptor: RuntimeDescriptor): Set<string> => {
-  const permissions = new Set<string>();
-
-  for (const toolName of ODT_MCP_TOOL_NAMES) {
-    for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
-      permissions.add(permission);
-    }
-  }
-
-  for (const toolName of ODT_WORKFLOW_TOOL_NAMES) {
-    for (const alias of runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? []) {
-      permissions.add(alias);
-    }
-  }
-
-  return permissions;
-};
-
-export const buildRoleScopedPermissionRules = (input: {
-  role: AgentRole;
+const buildScopePermissionRules = (input: {
+  role: AgentRole | null;
   runtimeDescriptor: RuntimeDescriptor;
 }): OpencodePermissionRule[] => {
   const { role, runtimeDescriptor } = input;
-  const allowedTools = new Set(AGENT_ROLE_TOOL_POLICY[role]);
+  const allowedTools = new Set(role ? AGENT_ROLE_TOOL_POLICY[role] : []);
   const rules: OpencodePermissionRule[] = [];
+  const repositoryOdtToolIds = new Set([
+    ...ODT_MCP_TOOL_NAMES.flatMap(toOpencodeExposedOdtToolIds),
+    ...ODT_WORKFLOW_TOOL_NAMES.flatMap(
+      (toolName) => runtimeDescriptor.workflowToolAliasesByCanonical[toolName] ?? [],
+    ),
+  ]);
 
-  if (isReadOnlyAgentRole(role)) {
+  if (role && isReadOnlyAgentRole(role)) {
     for (const toolId of new Set(runtimeDescriptor.readOnlyRoleBlockedTools)) {
       rules.push({
         permission: toolId,
@@ -59,33 +43,18 @@ export const buildRoleScopedPermissionRules = (input: {
     }
   }
 
-  if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
-    rules.push({
-      permission: OPENCODE_SUBAGENT_TOOL_NAME,
-      pattern: "*",
-      action: "allow",
-    });
-    for (const permission of OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES) {
-      rules.push({
-        permission,
-        pattern: "*",
-        action: "deny",
-      });
+  for (const entry of resolveOpencodeBaseToolPolicy({
+    runtimeDescriptor,
+    enableOdtTools: role === null,
+  })) {
+    let action: PermissionAction = "deny";
+    if (entry.enabled) {
+      action = repositoryOdtToolIds.has(entry.toolId) ? "ask" : "allow";
     }
-  }
-
-  for (const permission of ODT_MCP_PERMISSION_WILDCARDS) {
     rules.push({
-      permission,
+      permission: entry.toolId,
       pattern: "*",
-      action: "deny",
-    });
-  }
-  for (const permission of buildOdtToolDenyPermissions(runtimeDescriptor)) {
-    rules.push({
-      permission,
-      pattern: "*",
-      action: "deny",
+      action,
     });
   }
 
@@ -107,3 +76,16 @@ export const buildRoleScopedPermissionRules = (input: {
 
   return rules;
 };
+
+export const buildRoleScopedPermissionRules = (input: {
+  role: AgentRole;
+  runtimeDescriptor: RuntimeDescriptor;
+}): OpencodePermissionRule[] => buildScopePermissionRules(input);
+
+export const buildRepositoryScopedPermissionRules = (
+  runtimeDescriptor: RuntimeDescriptor,
+): OpencodePermissionRule[] =>
+  buildScopePermissionRules({
+    role: null,
+    runtimeDescriptor,
+  });

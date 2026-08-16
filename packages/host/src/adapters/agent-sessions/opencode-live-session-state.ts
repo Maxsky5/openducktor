@@ -97,10 +97,6 @@ export const createOpenCodeLiveSessionState = ({
       workingDirectory: source.workingDirectory,
       externalSessionId: source.externalSessionId,
     };
-    const sessionAssociation =
-      source.sessionAssociation.kind === "unbound"
-        ? (sessionsByRef.get(refKey(ref))?.snapshot.sessionAssociation ?? source.sessionAssociation)
-        : source.sessionAssociation;
     const pendingApprovals = source.pendingApprovals.map((request) =>
       pendingRequests.projectApproval(ref, request, activeNativeKeys),
     );
@@ -110,7 +106,7 @@ export const createOpenCodeLiveSessionState = ({
     return parseSnapshot(
       {
         ref,
-        sessionAssociation,
+        sessionAssociation: source.sessionAssociation,
         activity: classifyActivity({
           runtimeActivity: source.runtimeActivity,
           pendingApprovals,

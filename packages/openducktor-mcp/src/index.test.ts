@@ -383,7 +383,8 @@ describe("MCP server tool results", () => {
         {
           path: ["workspaceId"],
           code: "forbidden_workspace_id",
-          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          message:
+            "workspaceId is fixed by the startup workspace and is not allowed in tool input.",
         },
       ]);
       expect(error.details).toEqual({ toolName: "odt_read_task" });
@@ -391,6 +392,34 @@ describe("MCP server tool results", () => {
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/odt_get_workspaces", body: {} },
       ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("workspaceId-forbidden mode executes against the startup workspace", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, {
+      workspaceId: "repo",
+      forbidWorkspaceIdInput: true,
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = requireContentToolResult(
+        await client.callTool({
+          name: "odt_read_task",
+          arguments: { taskId: "task-1" },
+        }),
+      );
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toContainEqual({
+        url: "/invoke/odt_read_task",
+        body: { workspaceId: "repo", taskId: "task-1" },
+      });
     } finally {
       await client.close();
     }
@@ -542,6 +571,28 @@ describe("MCP server tool results", () => {
         "odt_read_task",
         "odt_read_task_documents",
         "odt_build_completed",
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("advertises canonical tool names as stable approval titles", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, {
+      workspaceId: "repo",
+      allowedTools: "odt_read_task,odt_set_plan,odt_build_completed",
+    });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const tools = await client.listTools();
+
+      expect(tools.tools.map(({ name, title }) => ({ name, title }))).toEqual([
+        { name: "odt_read_task", title: "odt_read_task" },
+        { name: "odt_set_plan", title: "odt_set_plan" },
+        { name: "odt_build_completed", title: "odt_build_completed" },
       ]);
     } finally {
       await client.close();

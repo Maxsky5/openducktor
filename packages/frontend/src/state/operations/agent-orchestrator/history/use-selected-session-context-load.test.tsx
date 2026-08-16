@@ -1,6 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionAssociation } from "@openducktor/contracts";
 import type { PropsWithChildren } from "react";
-import { AgentOperationsContext } from "@/state/app-state-contexts";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionContextLoadTarget, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
@@ -24,6 +27,24 @@ const session = (externalSessionId: string): AgentSessionState => ({
   selectedModel: null,
 });
 
+const createWrapper = (
+  operations: AgentOperationsContextValue,
+  liveSession?: AgentSessionState,
+  liveAssociation?: AgentSessionAssociation,
+) => {
+  const sessionStore = createAgentSessionsStore("/repo");
+  if (liveSession && liveAssociation) {
+    sessionStore.setLiveAssociations(
+      () => new Map([[agentSessionIdentityKey(liveSession), liveAssociation]]),
+    );
+  }
+  return ({ children }: PropsWithChildren) => (
+    <AgentOperationsContext.Provider value={operations}>
+      <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
+    </AgentOperationsContext.Provider>
+  );
+};
+
 describe("useSelectedSessionContextLoad", () => {
   test("loads missing context for only the selected session", async () => {
     const loadAgentSessionContext = mock(
@@ -43,11 +64,7 @@ describe("useSelectedSessionContextLoad", () => {
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
     };
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <AgentOperationsContext.Provider value={operations}>
-        {children}
-      </AgentOperationsContext.Provider>
-    );
+    const wrapper = createWrapper(operations);
     const first = session("thread-1");
     const second = session("thread-2");
     const harness = createHookHarness(
@@ -91,11 +108,7 @@ describe("useSelectedSessionContextLoad", () => {
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
     };
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <AgentOperationsContext.Provider value={operations}>
-        {children}
-      </AgentOperationsContext.Provider>
-    );
+    const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       {
@@ -118,6 +131,46 @@ describe("useSelectedSessionContextLoad", () => {
     }
   });
 
+  test("forwards repository scope for a live repository session", async () => {
+    const loadAgentSessionContext = mock(
+      async (_target: AgentSessionContextLoadTarget) => undefined,
+    );
+    const operations: AgentOperationsContextValue = {
+      readSessionTodos: async () => [],
+      readSessionHistory: async () => [],
+      loadAgentSessionHistory: async () => null,
+      loadAgentSessionContext,
+      startAgentSession: async () => {
+        throw new Error("Not configured");
+      },
+      sendAgentMessage: async () => undefined,
+      stopAgentSession: async () => undefined,
+      updateAgentSessionModel: () => undefined,
+      replyAgentApproval: async () => undefined,
+      answerAgentQuestion: async () => undefined,
+    };
+    const repositorySession = { ...session("repository-thread"), taskId: "", role: null };
+    const wrapper = createWrapper(operations, repositorySession, { kind: "repository" });
+    const harness = createHookHarness(
+      useSelectedSessionContextLoad,
+      { session: repositorySession, repoReadinessState: "ready" as const },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => loadAgentSessionContext.mock.calls.length === 1);
+      expect(loadAgentSessionContext.mock.calls[0]?.[0]).toEqual({
+        externalSessionId: "repository-thread",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        sessionScope: { kind: "repository" },
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not load context when retained usage is already present", async () => {
     const loadAgentSessionContext = mock(async () => undefined);
     const operations: AgentOperationsContextValue = {
@@ -134,11 +187,7 @@ describe("useSelectedSessionContextLoad", () => {
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
     };
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <AgentOperationsContext.Provider value={operations}>
-        {children}
-      </AgentOperationsContext.Provider>
-    );
+    const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       {
@@ -174,11 +223,7 @@ describe("useSelectedSessionContextLoad", () => {
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
     };
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <AgentOperationsContext.Provider value={operations}>
-        {children}
-      </AgentOperationsContext.Provider>
-    );
+    const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       { session: session("thread-1"), repoReadinessState: "ready" as const },

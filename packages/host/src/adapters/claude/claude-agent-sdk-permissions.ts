@@ -39,7 +39,7 @@ type CreateClaudeCanUseToolInput = {
 export type ClaudeToolUseAuthorization =
   | {
       behavior: "allow";
-      autoApprove: boolean;
+      approval: "automatic" | "interactive" | "workflow_role";
       toolInput: Record<string, unknown>;
     }
   | {
@@ -198,7 +198,7 @@ export const authorizeClaudeToolUse = ({
   | Promise<ClaudeToolUseAuthorization> => {
   const effectiveToolInput = normalizeToolInputForSession(session, toolName, toolInput);
   if (isClaudeAskUserQuestionTool(toolName)) {
-    return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+    return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };
   }
 
   const role = claudeWorkflowRole(session.input);
@@ -210,7 +210,7 @@ export const authorizeClaudeToolUse = ({
         message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
       };
     }
-    return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+    return { behavior: "allow", approval: "workflow_role", toolInput: effectiveToolInput };
   }
 
   const mutation = mutationForTool(toolName, effectiveToolInput);
@@ -232,7 +232,7 @@ export const authorizeClaudeToolUse = ({
       };
     }
     if (mutation === "unknown") {
-      return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+      return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };
     }
     return findReadOnlyPathPolicyViolation(
       session,
@@ -246,7 +246,7 @@ export const authorizeClaudeToolUse = ({
           message: `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
         };
       }
-      return { behavior: "allow", autoApprove: true, toolInput: effectiveToolInput };
+      return { behavior: "allow", approval: "automatic", toolInput: effectiveToolInput };
     });
   }
 
@@ -259,13 +259,13 @@ export const authorizeClaudeToolUse = ({
     ).then(
       (pathViolation): ClaudeToolUseAuthorization => ({
         behavior: "allow",
-        autoApprove: !pathViolation,
+        approval: pathViolation ? "interactive" : "automatic",
         toolInput: effectiveToolInput,
       }),
     );
   }
 
-  return { behavior: "allow", autoApprove: false, toolInput: effectiveToolInput };
+  return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };
 };
 
 export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanUseTool => {
@@ -316,7 +316,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         });
       }
 
-      if (authorization.autoApprove) {
+      if (authorization.approval !== "interactive") {
         return withAllowedToolInput({ behavior: "allow" }, effectiveToolInput);
       }
       const mutation = mutationForTool(toolName, effectiveToolInput);

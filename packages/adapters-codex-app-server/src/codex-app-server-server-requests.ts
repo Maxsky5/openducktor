@@ -1,3 +1,4 @@
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -28,32 +29,54 @@ import type {
   CodexSessionState,
 } from "./types";
 
-const odtWorkflowToolRoleRejection = (
+type TrustedOdtToolDecision =
+  | { kind: "unmanaged" }
+  | { kind: "allow" }
+  | { kind: "reject"; reason: string };
+
+const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
+
+const decideTrustedOdtTool = (
   session: CodexSessionState,
   serverName: unknown,
   toolName: string | undefined,
-): string | null => {
+): TrustedOdtToolDecision => {
   if (serverName !== "openducktor") {
-    return null;
-  }
-
-  if (!toolName) {
-    return null;
-  }
-
-  const workflowTool = normalizeOdtWorkflowToolName(toolName);
-  if (!workflowTool) {
-    return null;
+    return { kind: "unmanaged" };
   }
 
   const sessionAssociation = session.summary.sessionAssociation;
+  if (sessionAssociation.kind === "repository") {
+    if (toolName && ODT_MCP_TOOL_NAME_SET.has(toolName)) {
+      return { kind: "unmanaged" };
+    }
+    return {
+      kind: "reject",
+      reason: "the trusted OpenDucktor MCP request did not identify a supported tool",
+    };
+  }
   if (sessionAssociation.kind !== "workflow") {
-    return `the ${sessionAssociation.kind} session context cannot use workflow tools`;
+    return {
+      kind: "reject",
+      reason: `the ${sessionAssociation.kind} session context cannot use workflow tools`,
+    };
   }
 
-  return AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)
-    ? null
-    : `role '${sessionAssociation.role}' is not allowed to use ${workflowTool}`;
+  const workflowTool = toolName ? normalizeOdtWorkflowToolName(toolName) : null;
+  if (!workflowTool) {
+    return {
+      kind: "reject",
+      reason: "the trusted OpenDucktor MCP request did not identify a supported workflow tool",
+    };
+  }
+
+  if (AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)) {
+    return { kind: "allow" };
+  }
+  return {
+    kind: "reject",
+    reason: `role '${sessionAssociation.role}' is not allowed to use ${workflowTool}`,
+  };
 };
 
 export type CodexServerRequestHandlerContext = {
@@ -214,12 +237,12 @@ export const handleCodexServerRequest = async (
       throw new Error("Codex MCP elicitation request is missing an id.");
     }
 
-    const roleRejection = odtWorkflowToolRoleRejection(
+    const workflowToolDecision = decideTrustedOdtTool(
       routeContext.policySession,
       mcpElicitationApproval.metadata?.serverName,
       mcpElicitationApproval.tool?.name,
     );
-    if (roleRejection) {
+    if (workflowToolDecision.kind === "reject") {
       markHandled();
       try {
         await context.respondServerRequest(
@@ -228,7 +251,7 @@ export const handleCodexServerRequest = async (
           codexApprovalResponseForRequest({
             outcome: "reject",
             request: rawRequest,
-            message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${roleRejection}.`,
+            message: `Codex MCP request '${mcpElicitationApproval.tool?.name}' was rejected because ${workflowToolDecision.reason}.`,
           }),
           undefined,
         );
@@ -240,8 +263,23 @@ export const handleCodexServerRequest = async (
         type: "session_error",
         externalSessionId: routeContext.policySession.threadId,
         timestamp: new Date().toISOString(),
-        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${roleRejection}.`,
+        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${workflowToolDecision.reason}.`,
       });
+      return false;
+    }
+    if (workflowToolDecision.kind === "allow") {
+      markHandled();
+      try {
+        await context.respondServerRequest(
+          routeContext.runtimeId,
+          requestId,
+          codexApprovalResponseForRequest({ outcome: "approve_once", request: rawRequest }),
+          undefined,
+        );
+      } catch (error) {
+        forgetHandled();
+        throw error;
+      }
       return false;
     }
 

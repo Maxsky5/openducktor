@@ -13,7 +13,8 @@ describe("tool result error normalization", () => {
           {
             path: ["workspaceId"],
             code: "forbidden_workspace_id",
-            message: "workspaceId is not allowed in workflow-scoped tool calls.",
+            message:
+              "workspaceId is fixed by the startup workspace and is not allowed in tool input.",
           },
         ],
       }),
@@ -33,7 +34,8 @@ describe("tool result error normalization", () => {
           {
             path: ["workspaceId"],
             code: "forbidden_workspace_id",
-            message: "workspaceId is not allowed in workflow-scoped tool calls.",
+            message:
+              "workspaceId is fixed by the startup workspace and is not allowed in tool input.",
           },
         ],
       },

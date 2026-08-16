@@ -28,7 +28,9 @@ describe("createOpenCodeRuntimeAdapter", () => {
           runtimeKind: "opencode",
           repoPath: "/repo",
         }),
-      ).rejects.toThrow("OpenCode runtime route 'stdio' is unsupported");
+      ).rejects.toThrow(
+        "OpenCode runtime 'runtime-1' is missing required route contract 'local_http' for repo '/repo' while attempting to list available models; received route 'stdio'.",
+      );
 
       expect(runtimeRequireCalls).toEqual([["/repo", "opencode"]]);
     } finally {

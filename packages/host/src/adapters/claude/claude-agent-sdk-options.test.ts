@@ -3,6 +3,7 @@ import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -56,6 +57,27 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   toolStartedAtMsByCallId: new Map(),
   todosById: new Map(),
 });
+
+const createRepositorySession = (): ClaudeSessionContext => {
+  const session = createSession();
+  session.input = {
+    repoPath: process.cwd(),
+    runtimeKind: "claude",
+    workingDirectory: process.cwd(),
+    runtimePolicy: { kind: "claude" },
+    sessionScope: { kind: "repository" },
+    systemPrompt: "Help with this repository",
+  };
+  session.summary = {
+    externalSessionId: "session-1",
+    runtimeKind: "claude",
+    workingDirectory: process.cwd(),
+    sessionAssociation: { kind: "repository" },
+    startedAt: "2026-06-25T20:00:00.000Z",
+    status: "starting",
+  };
+  return session;
+};
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
@@ -161,6 +183,30 @@ const preToolUseHook = async (
 };
 
 describe("buildClaudeAgentSdkOptions", () => {
+  test("keeps the full workspace-bound OpenDucktor catalog available for repository sessions", async () => {
+    const session = createRepositorySession();
+    const options = await buildOptions(session);
+
+    expect(options).not.toHaveProperty("allowedTools");
+    expect(options.disallowedTools).toBeUndefined();
+    expect(options.canUseTool).toBeFunction();
+    const openducktorServer = options.mcpServers?.openducktor;
+    expect(openducktorServer).toMatchObject({ alwaysLoad: true, type: "stdio" });
+    if (!openducktorServer || !("env" in openducktorServer)) {
+      throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
+    }
+    expect(openducktorServer.env).toMatchObject({
+      ODT_WORKSPACE_ID: "workspace-1",
+      ODT_HOST_URL: "http://127.0.0.1:1",
+      ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+    });
+    expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(ODT_MCP_TOOL_NAMES.join(","));
+    expect(openducktorServer.env?.ODT_ALLOWED_TOOLS?.split(",")).toEqual(
+      expect.arrayContaining(["odt_create_task", "odt_search_tasks"]),
+    );
+    session.abortController.abort();
+  });
+
   test("adds the OpenDucktor MCP server without overriding inherited Claude configuration", async () => {
     const session = createSession();
     const options = await buildOptions(session);
@@ -173,12 +219,19 @@ describe("buildClaudeAgentSdkOptions", () => {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
     }
     const openducktorEnv = openducktorServer.env;
+    const workflowAllowedTools = openducktorEnv?.ODT_ALLOWED_TOOLS;
     expect(openducktorEnv).toMatchObject({
       ODT_WORKSPACE_ID: "workspace-1",
       ODT_HOST_URL: "http://127.0.0.1:1",
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
     });
+    if (typeof workflowAllowedTools !== "string") {
+      throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
+    }
+    expect(workflowAllowedTools.split(",")).not.toEqual(
+      expect.arrayContaining(["odt_create_task", "odt_search_tasks"]),
+    );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
     expect(typeof hostTokenFile).toBe("string");
@@ -190,15 +243,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.forwardSubagentText).toBe(true);
     expect(options.includePartialMessages).toBe(true);
     expect(options).toHaveProperty("permissionMode");
-    expect(options.allowedTools).toEqual([
-      "mcp__openducktor__odt_read_task",
-      "mcp__openducktor__odt_read_task_assets",
-      "mcp__openducktor__odt_read_task_documents",
-      "mcp__openducktor__odt_build_blocked",
-      "mcp__openducktor__odt_build_resumed",
-      "mcp__openducktor__odt_build_completed",
-      "mcp__openducktor__odt_set_pull_request",
-    ]);
+    expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = options.systemPrompt;
     if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
@@ -236,17 +281,12 @@ describe("buildClaudeAgentSdkOptions", () => {
     session.abortController.abort();
   });
 
-  test("auto-allows every workflow tool assigned to the spec role", async () => {
+  test("keeps workflow tool availability separate from Claude approval policy", async () => {
     const session = createSession("spec");
 
     const options = await buildOptions(session);
 
-    expect(options.allowedTools).toEqual([
-      "mcp__openducktor__odt_read_task",
-      "mcp__openducktor__odt_read_task_assets",
-      "mcp__openducktor__odt_read_task_documents",
-      "mcp__openducktor__odt_set_spec",
-    ]);
+    expect(options).not.toHaveProperty("allowedTools");
     const openducktorServer = options.mcpServers?.openducktor;
     if (!openducktorServer || !("env" in openducktorServer)) {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
@@ -391,7 +431,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
-  test("explicitly allows safe reads when inherited dontAsk mode would skip permission prompts", async () => {
+  test("leaves approval decisions to Claude for permitted safe reads", async () => {
     const session = createSession("spec");
     const options = await buildOptions(session);
 
@@ -401,10 +441,24 @@ describe("buildClaudeAgentSdkOptions", () => {
         toolName: "Read",
         toolInput: { file_path: session.input.workingDirectory },
       }),
-    ).toMatchObject({
+    ).toEqual({});
+  });
+
+  test("auto-approves permitted workflow ODT tools before dontAsk can deny them", async () => {
+    const session = createSession("spec");
+    const options = await buildOptions(session);
+
+    expect(
+      await preToolUseHook(options, {
+        permissionMode: "dontAsk",
+        toolName: "mcp__openducktor__odt_read_task",
+        toolInput: { taskId: "task-1" },
+      }),
+    ).toEqual({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "allow",
+        permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
       },
     });
   });
@@ -439,7 +493,6 @@ describe("buildClaudeAgentSdkOptions", () => {
       expect(hookOutput).toMatchObject({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: "allow",
           permissionDecisionReason: "OpenDucktor routed the tool input to the session worktree.",
           updatedInput: {
             content: "export {};",
@@ -447,8 +500,14 @@ describe("buildClaudeAgentSdkOptions", () => {
         },
       });
       const hookSpecificOutput = (
-        hookOutput as { hookSpecificOutput?: { updatedInput?: Record<string, unknown> } }
+        hookOutput as {
+          hookSpecificOutput?: {
+            permissionDecision?: unknown;
+            updatedInput?: Record<string, unknown>;
+          };
+        }
       ).hookSpecificOutput;
+      expect(hookSpecificOutput).not.toHaveProperty("permissionDecision");
       const updatedInput = hookSpecificOutput?.updatedInput;
       expect(normalizePathForComparison(String(updatedInput?.file_path))).toBe(
         normalizePathForComparison(join(workingDirectory, "src", "index.ts")),

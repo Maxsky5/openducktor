@@ -124,7 +124,8 @@ Key boundary:
 
 - Desktop-managed and standalone MCP clients use the same host-bridge execution path.
 - SQLite task storage remains a host-owned infrastructure concern, not an agent runtime or MCP client concern.
-- Public MCP task tools such as `odt_get_workspaces`, `odt_create_task`, and `odt_search_tasks` are for external MCP clients. Role-scoped OpenDucktor agent sessions receive workflow tools only, and runtime adapters explicitly block the public/discovery tools.
+- Repository Sessions receive the full `ODT_MCP_TOOL_NAMES` catalog from the workspace-bound `openducktor` MCP server, and each Tool Call follows the Runtime's approval policy.
+- Task-bound workflow sessions keep their Workflow Role tool limits, so Public Task MCP Tools remain unavailable to them.
 
 ### 4. Generate A Pull Request
 

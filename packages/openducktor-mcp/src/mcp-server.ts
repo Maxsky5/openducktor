@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -44,7 +44,7 @@ type RegisteredToolSpecs = {
 type ToolResultContract =
   | {
       kind: "structured";
-      outputSchema: unknown;
+      outputSchema: (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[RegisteredToolName];
       formatResult(payload: unknown): ToolResult;
     }
   | {
@@ -52,15 +52,9 @@ type ToolResultContract =
       formatResult(payload: unknown): ToolResult;
     };
 
-type RegisterContractToolConfig =
-  | { description: string; inputSchema: unknown; outputSchema: unknown }
-  | { description: string; inputSchema: unknown };
-
-type RegisterContractTool = (
-  name: string,
-  config: RegisterContractToolConfig,
-  callback: (input: unknown) => Promise<ToolResult>,
-) => void;
+type RegisterToolCallback<Name extends RegisteredToolName> = ToolCallback<
+  (typeof ODT_TOOL_SCHEMAS)[Name]
+>;
 
 const structuredResult = (toolName: RegisteredToolName): ToolResultContract => ({
   kind: "structured",
@@ -126,15 +120,17 @@ const rejectForbiddenWorkspaceIdInput = (
     WORKSPACE_SCOPED_TOOL_NAMES.has(toolName) &&
     hasOwnWorkspaceIdInput(input)
   ) {
+    const message =
+      "workspaceId is fixed by the startup workspace and is not allowed in tool input.";
     throw new OdtToolError({
       code: "ODT_WORKSPACE_SCOPE_VIOLATION",
-      message: `Invalid arguments for tool ${toolName}: workspaceId is not allowed in workflow-scoped tool calls.`,
+      message: `Invalid arguments for tool ${toolName}: ${message}`,
       details: { toolName },
       issues: [
         {
           path: ["workspaceId"],
           code: "forbidden_workspace_id",
-          message: "workspaceId is not allowed in workflow-scoped tool calls.",
+          message,
         },
       ],
     });
@@ -148,20 +144,21 @@ const registerOdtTool = <Name extends RegisteredToolName>(
   options: { forbidWorkspaceIdInput: boolean },
 ): void => {
   const schema = ODT_TOOL_SCHEMAS[tool.name];
-  const registerContractTool = server.registerTool.bind(server) as RegisterContractTool;
   const config =
     tool.result.kind === "structured"
       ? {
+          title: tool.name,
           description: tool.description,
           inputSchema: schema,
           outputSchema: tool.result.outputSchema,
         }
       : {
+          title: tool.name,
           description: tool.description,
           inputSchema: schema,
         };
-
-  registerContractTool(tool.name, config, async (input: unknown) => {
+  // Indexed access loses the generic name/schema correlation, so restore it at this boundary.
+  const callback = (async (input: unknown) => {
     try {
       rejectForbiddenWorkspaceIdInput(tool.name, input, options);
       const parsedInput = schema.parse(input) as ToolInputByName<Name>;
@@ -170,7 +167,9 @@ const registerOdtTool = <Name extends RegisteredToolName>(
     } catch (error) {
       return toToolError(error);
     }
-  });
+  }) as RegisterToolCallback<Name>;
+
+  server.registerTool(tool.name, config, callback);
 };
 
 type ListedOdtTool = {
@@ -185,6 +184,7 @@ const toListedToolDefinition = (
 ) => {
   const definition = {
     name: tool.name,
+    title: tool.name,
     description: tool.description,
     inputSchema: getListedToolInputSchema(tool.name, {
       hideWorkspaceId: options.forbidWorkspaceIdInput,

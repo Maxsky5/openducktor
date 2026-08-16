@@ -128,6 +128,7 @@ const createLiveClientHarness = (
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
+      update: async () => ({ data: { id: externalSessionId }, error: undefined }),
     },
     permission: {
       list: async () => {
@@ -301,6 +302,25 @@ describe("OpenCode session runtime connection", () => {
     expect(prepared.initialSources).toHaveLength(1);
     expect(prepared.initialSources[0]?.pendingApprovals[0]?.requestId).toBe("native-request-1");
     expect(harness.messageCalls).toEqual([]);
+    await prepared.release();
+  });
+
+  test("preserves a retained repository association when runtime sources refresh", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+
+    await prepared.connection.resumeSession({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+    });
+
+    const sources = await prepared.connection.readSessionSources();
+
+    expect(sources[0]?.sessionAssociation).toEqual({ kind: "repository" });
     await prepared.release();
   });
 

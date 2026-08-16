@@ -16,6 +16,98 @@ const deferred = <Value>() => {
 };
 
 describe("createClaudeAgentSdkSession", () => {
+  test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
+    const streamFinished = deferred<void>();
+    const fakeQuery = {
+      close: () => streamFinished.resolve(),
+      initializationResult: async () => ({
+        account: {},
+        agents: [],
+        available_output_styles: [],
+        commands: [],
+        models: [],
+        output_style: "default",
+      }),
+      mcpServerStatus: async () => [
+        { name: "openducktor", status: "failed", error: "bridge unavailable" },
+      ],
+      return: async () => {
+        streamFinished.resolve();
+        return { done: true, value: undefined } as const;
+      },
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          await streamFinished.promise;
+          return { done: true, value: undefined };
+        },
+      }),
+    } as unknown as realClaudeSdk.Query;
+    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
+      ...realClaudeSdk,
+      query: () => fakeQuery,
+    }));
+
+    try {
+      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        onBackgroundFailure: () => Effect.void,
+        resolveMcpBridgeConnection: () => Effect.die("unused"),
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: { kind: "executable", executablePath: process.execPath },
+        }),
+        sessionStore,
+        toolDiscovery: {
+          resolveTool: () => Effect.die("unused"),
+          resolveToolPath: () => Effect.succeed(process.execPath),
+        },
+      };
+
+      await expect(
+        createClaudeAgentSdkSession({
+          emit: () => {},
+          input: {
+            repoPath: process.cwd(),
+            runtimeKind: "claude",
+            workingDirectory: process.cwd(),
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "repository" },
+            systemPrompt: "Help with this repository",
+          },
+          initialTodos: [],
+          now: () => "2026-06-25T20:00:00.000Z",
+          randomId: () => "id",
+          resolvedDependencies: {
+            claudeExecutablePath: process.execPath,
+            mcpBridgeConnection: {
+              workspaceId: "workspace-1",
+              hostUrl: "http://127.0.0.1:1",
+              hostToken: "bridge-secret-value",
+            },
+            mcpCommand: [process.execPath],
+          },
+          runtimeId: "runtime-1",
+          serviceInput,
+          sessionInput: {
+            externalSessionId: "session-repository",
+            options: { sessionId: "session-repository" },
+            startedMessage: "Started repository session",
+            title: "Repository session",
+          },
+          sessionStore,
+        }),
+      ).rejects.toMatchObject({
+        operation: "claudeRuntime.requireOpenDucktorMcp",
+        message:
+          "OpenDucktor MCP server is not connected for repository Claude session 'session-repository': failed (bridge unavailable).",
+      });
+      expect(sessionStore.get("session-repository")).toBeUndefined();
+    } finally {
+      streamFinished.resolve();
+      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+    }
+  });
+
   test("emits idle after starting an initialized session without a message", async () => {
     const streamFinished = deferred<void>();
     const fakeQuery = {

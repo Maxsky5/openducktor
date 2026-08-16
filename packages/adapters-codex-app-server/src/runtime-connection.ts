@@ -1,16 +1,12 @@
 import type { RepoRuntimeRef, RepoRuntimeRouteResolution } from "@openducktor/core";
-import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import { requireRepoRuntimeRef } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
-
-export type CodexRuntimeResolutionInput = RepoRuntimeRef & {
-  workingDirectory?: string | null;
-};
 
 export const resolveCodexRuntimeClientInput = (
   runtime: RepoRuntimeRouteResolution,
-  input: CodexRuntimeResolutionInput,
+  input: RepoRuntimeRef,
   action: string,
-): { runtimeId: string; workingDirectory?: string } => {
+): { runtimeId: string } => {
   const ref = requireRepoRuntimeRef(input, action);
   if (ref.runtimeKind !== "codex") {
     throw new Error(`Codex App Server can only ${action} for runtime 'codex'.`);
@@ -27,16 +23,9 @@ export const resolveCodexRuntimeClientInput = (
   }
   if (runtime.runtimeRoute.type !== "stdio") {
     throw new Error(
-      `Codex runtime route '${runtime.runtimeRoute.type}' is unsupported for ${action}; stdio is required for repo '${ref.repoPath}'.`,
+      `Codex runtime '${runtime.runtimeId}' is missing required route contract 'stdio' for repo '${ref.repoPath}' while attempting to ${action}; received route '${runtime.runtimeRoute.type}'.`,
     );
   }
 
-  const workingDirectory =
-    input.workingDirectory !== undefined && input.workingDirectory !== null
-      ? requireSessionWorkingDirectory(input.workingDirectory, action)
-      : undefined;
-  return {
-    runtimeId: runtime.runtimeId,
-    ...(workingDirectory ? { workingDirectory } : {}),
-  };
+  return { runtimeId: runtime.runtimeId };
 };

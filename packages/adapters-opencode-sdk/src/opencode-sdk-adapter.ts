@@ -8,7 +8,6 @@ import type {
   AgentCatalogPort,
   AgentEvent,
   AgentModelCatalog,
-  AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimePolicy,
@@ -38,8 +37,6 @@ import {
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
   classifySystemSlashCommandInvocation,
-  formatWorkflowAgentSessionTitle,
-  requireWorkflowAgentSessionScope,
   toAgentSessionRuntimeSnapshot,
   withAgentSessionRef,
 } from "@openducktor/core";
@@ -72,6 +69,15 @@ import {
 } from "./live-session-snapshots";
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
+import {
+  adoptPreparedOpencodeSessionPolicy,
+  applyRuntimeContextToSession,
+  applySessionPolicy,
+  requireOpencodeSessionPolicyRuntime,
+  resolveOpencodePolicyBoundSession,
+  synchronizeOpencodeSessionPolicy,
+} from "./opencode-session-binding";
+import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -79,7 +85,9 @@ import {
   resolveOpencodeRuntimeClientInput,
 } from "./runtime-connection";
 import {
+  clearAwaitingRuntimeTurnStart,
   finishUserMessageSend,
+  isStreamTurnIdle,
   markStreamTurnIdle,
   startUserMessageSend,
 } from "./session-activity";
@@ -102,43 +110,14 @@ import type {
   SessionRecord,
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
-import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
 import {
   ensureTrustedOdtMcpServerConnected,
+  resolveRepositoryToolSelection,
   resolveWorkflowToolSelection,
 } from "./workflow-tool-selection";
 
-const requireWorkflowRole = (session: SessionRecord): AgentRole => {
-  return requireWorkflowAgentSessionScope(
-    session.input.sessionScope,
-    `send message for session ${session.summary.externalSessionId}`,
-  ).role;
-};
-
 const toExistingSessionInput = (input: PolicyBoundSessionRef): SessionInput => {
   return toSessionInput(input);
-};
-
-const applyRuntimeContextToSession = (
-  session: SessionRecord,
-  input: PolicyBoundSessionRef,
-): void => {
-  session.input = { ...session.input };
-  const sessionScope = (input as { sessionScope?: SessionInput["sessionScope"] }).sessionScope;
-  if (sessionScope) {
-    session.input.sessionScope = sessionScope;
-  }
-  session.input.runtimePolicy = input.runtimePolicy;
-  if (input.model !== undefined) {
-    if (input.model) {
-      session.input.model = input.model;
-    } else {
-      delete session.input.model;
-    }
-  }
-  if (input.systemPrompt !== undefined) {
-    session.input.systemPrompt = input.systemPrompt;
-  }
 };
 
 const assertOpenCodeRuntimePolicyBinding = (
@@ -195,17 +174,23 @@ export class OpencodeSdkAdapter
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "start OpenCode session");
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "start OpenCode session");
     const runtimeDefinition = this.getRuntimeDefinition();
+    const policy = resolveOpencodeSessionPolicy(
+      input.sessionScope,
+      runtimeDefinition,
+      "start OpenCode session",
+    );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "start session");
     const client = this.createClient(runtimeClientInput);
+    await requireOpencodeSessionPolicyRuntime({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const created = await client.session.create({
       directory: input.workingDirectory,
-      title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
-      permission: buildRoleScopedPermissionRules({
-        role: scope.role,
-        runtimeDescriptor: runtimeDefinition,
-      }),
+      title: policy.title,
+      permission: policy.permission,
     });
     const createdData = unwrapData(created, "create session");
     const externalSessionId = createdData.id;
@@ -221,7 +206,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Started ${scope.role} session`,
+      startedMessage: `Started ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -230,7 +215,12 @@ export class OpencodeSdkAdapter
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "resume OpenCode session");
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "resume OpenCode session");
+    const runtimeDefinition = this.getRuntimeDefinition();
+    const policy = resolveOpencodeSessionPolicy(
+      input.sessionScope,
+      runtimeDefinition,
+      "resume OpenCode session",
+    );
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       const registeredSessionRef = opencodeSessionRef(existing);
@@ -239,22 +229,33 @@ export class OpencodeSdkAdapter
           `Cannot resume OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
         );
       }
-      applyRuntimeContextToSession(existing, input);
-      existing.summary = {
-        ...existing.summary,
-        title: formatWorkflowAgentSessionTitle(scope.role, scope.taskId),
-        sessionAssociation: scope,
-      };
+      await synchronizeOpencodeSessionPolicy({
+        action: "resume session",
+        policy,
+        request: input,
+        session: existing,
+      });
       return existing.summary;
     }
 
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "resume session");
     const client = this.createClient(runtimeClientInput);
+    await requireOpencodeSessionPolicyRuntime({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
     });
     const detailData = unwrapData(detail, "get session");
+    await applySessionPolicy({
+      client,
+      externalSessionId: input.externalSessionId,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const startedAt = toIsoFromEpoch(
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
@@ -270,7 +271,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage: `Resumed ${scope.role} session`,
+      startedMessage: `Resumed ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -281,16 +282,58 @@ export class OpencodeSdkAdapter
     assertOpenCodeRuntimePolicyBinding(input, "ensure OpenCode session state");
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
+      const registeredSessionRef = opencodeSessionRef(existing);
+      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+        throw new Error(
+          `Cannot ensure OpenCode session state for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+        );
+      }
+      if (input.sessionScope) {
+        await synchronizeOpencodeSessionPolicy({
+          action: "ensure session state",
+          policy: resolveOpencodeSessionPolicy(
+            input.sessionScope,
+            this.getRuntimeDefinition(),
+            "ensure OpenCode session state",
+          ),
+          request: input,
+          session: existing,
+        });
+      } else {
+        applyRuntimeContextToSession(existing, input, "ensure session state");
+      }
       return existing.summary;
     }
 
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "ensure session state");
     const client = this.createClient(runtimeClientInput);
+    const policy = input.sessionScope
+      ? resolveOpencodeSessionPolicy(
+          input.sessionScope,
+          this.getRuntimeDefinition(),
+          "ensure OpenCode session state",
+        )
+      : null;
+    if (policy) {
+      await requireOpencodeSessionPolicyRuntime({
+        client,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    }
     const detail = await client.session.get({
       directory: input.workingDirectory,
       sessionID: input.externalSessionId,
     });
     const detailData = unwrapData(detail, "get session");
+    if (policy) {
+      await applySessionPolicy({
+        client,
+        externalSessionId: input.externalSessionId,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    }
     const startedAt = toIsoFromEpoch(
       (detailData as { time?: { created?: unknown } }).time?.created,
       this.now,
@@ -338,6 +381,21 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
+  private policyBoundSessionState(
+    input: PolicyBoundSessionRef,
+    action: string,
+  ): SessionRecord | Promise<SessionRecord> {
+    return resolveOpencodePolicyBoundSession({
+      request: input,
+      action,
+      retainedSession: this.sessions.get(input.externalSessionId),
+      bindSession: async () => {
+        await this.ensureSessionState(input);
+        return requireSession(this.sessions, input.externalSessionId);
+      },
+    });
+  }
+
   async releaseSession(input: SessionRef): Promise<void> {
     const session = this.sessions.get(input.externalSessionId);
     if (!session) {
@@ -357,9 +415,18 @@ export class OpencodeSdkAdapter
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "fork OpenCode session");
-    const scope = requireWorkflowAgentSessionScope(input.sessionScope, "fork OpenCode session");
+    const policy = resolveOpencodeSessionPolicy(
+      input.sessionScope,
+      this.getRuntimeDefinition(),
+      "fork OpenCode session",
+    );
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "fork session");
     const client = this.createClient(runtimeClientInput);
+    await requireOpencodeSessionPolicyRuntime({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
@@ -367,6 +434,34 @@ export class OpencodeSdkAdapter
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
+    try {
+      await applySessionPolicy({
+        client,
+        externalSessionId,
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+    } catch (policyError) {
+      try {
+        const deleted = await client.session.delete({
+          directory: input.workingDirectory,
+          sessionID: externalSessionId,
+        });
+        if (deleted.data !== true) {
+          throw toOpenCodeRequestError(
+            `delete unregistered fork '${externalSessionId}'`,
+            deleted.error,
+            deleted.response,
+          );
+        }
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [policyError, cleanupError],
+          `Failed to apply ${policy.toolSelection.kind} policy to forked OpenCode session '${externalSessionId}' and delete the unregistered fork.`,
+        );
+      }
+      throw policyError;
+    }
     const sessionInput = toSessionInput(input);
 
     return registerSession({
@@ -379,7 +474,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt: this.now(),
-      startedMessage: `Forked ${scope.role} session`,
+      startedMessage: `Forked ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
       ...(this.logEvent ? { logEvent: this.logEvent } : {}),
@@ -500,6 +595,38 @@ export class OpencodeSdkAdapter
         session.externalSessionId === input.externalSessionId &&
         session.runtimeId === runtimeClientInput.runtimeId,
     );
+    for (const session of matchingSessions) {
+      const registeredSessionRef = opencodeSessionRef(session);
+      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+        throw new Error(
+          `Cannot load OpenCode session history for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+        );
+      }
+    }
+    if (input.sessionScope) {
+      const policy = resolveOpencodeSessionPolicy(
+        input.sessionScope,
+        this.getRuntimeDefinition(),
+        "load OpenCode session history",
+      );
+      await requireOpencodeSessionPolicyRuntime({
+        client: this.createClient(runtimeClientInput),
+        policy,
+        workingDirectory: input.workingDirectory,
+      });
+      for (const session of matchingSessions) {
+        await adoptPreparedOpencodeSessionPolicy({
+          action: "load session history",
+          policy,
+          request: input,
+          session,
+        });
+      }
+    } else {
+      for (const session of matchingSessions) {
+        applyRuntimeContextToSession(session, input, "load session history");
+      }
+    }
     const preservedDisplayPartsByMessageId = new Map(
       matchingSessions.flatMap((session) =>
         [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
@@ -520,6 +647,9 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
+    if (this.sessions.has(input.externalSessionId)) {
+      await this.policyBoundSessionState(input, "load todos for");
+    }
     return loadSessionTodos(this.createClient, {
       ...(await this.resolveRuntimeClientInput(input, "load session todos")),
       externalSessionId: input.externalSessionId,
@@ -575,30 +705,39 @@ export class OpencodeSdkAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<AcceptedAgentUserMessage> {
     assertOpenCodeRuntimePolicyBinding(input, "send OpenCode user message");
-    requireWorkflowAgentSessionScope(input.sessionScope, "send OpenCode user message");
+    resolveOpencodeSessionPolicy(
+      input.sessionScope,
+      this.getRuntimeDefinition(),
+      "send OpenCode user message",
+    );
     let systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>;
     try {
       systemInvocation = classifySystemSlashCommandInvocation(input.parts);
     } catch (error) {
       throw toOpenCodeRequestError("compact session", error);
     }
-    if (!this.sessions.has(input.externalSessionId)) {
-      await this.ensureSessionState(input);
-    }
-    const session = requireSession(this.sessions, input.externalSessionId);
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot send OpenCode session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    applyRuntimeContextToSession(session, input);
+    const session = this.policyBoundSessionState(input, "send");
+    return session instanceof Promise
+      ? session.then((boundSession) =>
+          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation),
+        )
+      : this.sendUserMessageFromBoundSession(input, session, systemInvocation);
+  }
+
+  private async sendUserMessageFromBoundSession(
+    input: SendAgentUserMessageInput,
+    session: SessionRecord,
+    systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
+  ): Promise<AcceptedAgentUserMessage> {
     const preserveActiveTurnOnFailure =
       systemInvocation.kind === "manual_session_compaction" &&
       session.streamTurnStatus === "active";
+    const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
+    if (!expectsPromptTurnStart) {
+      clearAwaitingRuntimeTurnStart(session);
+    }
     startUserMessageSend(session, {
-      expectRuntimeTurnStart:
-        session.activeAssistantMessageId === null && usesPromptAsyncTransport(input.parts),
+      expectRuntimeTurnStart: isStreamTurnIdle(session) && expectsPromptTurnStart,
     });
     this.emit(input.externalSessionId, {
       type: "session_status",
@@ -660,24 +799,22 @@ export class OpencodeSdkAdapter
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode approval");
-    if (!this.sessions.has(input.externalSessionId)) {
-      await this.ensureSessionState(input);
-    }
-    const session = requireSession(this.sessions, input.externalSessionId);
-    applyRuntimeContextToSession(session, input);
-    await replyApproval(session, input);
-    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    const reply = async (session: SessionRecord) => {
+      await replyApproval(session, input);
+      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    };
+    const session = this.policyBoundSessionState(input, "reply to approval for");
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     assertOpenCodeRuntimePolicyBinding(input, "reply to OpenCode question");
-    if (!this.sessions.has(input.externalSessionId)) {
-      await this.ensureSessionState(input);
-    }
-    const session = requireSession(this.sessions, input.externalSessionId);
-    applyRuntimeContextToSession(session, input);
-    await replyQuestion(session, input);
-    this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    const reply = async (session: SessionRecord) => {
+      await replyQuestion(session, input);
+      this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
+    };
+    const session = this.policyBoundSessionState(input, "reply to question for");
+    return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
   async subscribeEvents(
@@ -685,18 +822,10 @@ export class OpencodeSdkAdapter
     listener: (event: AgentEvent) => void,
   ): Promise<EventUnsubscribe> {
     assertOpenCodeRuntimePolicyBinding(input, "subscribe OpenCode session events");
-    if (!this.sessions.has(input.externalSessionId)) {
-      await this.ensureSessionState(input);
-    }
-
-    const session = requireSession(this.sessions, input.externalSessionId);
-    const registeredSessionRef = opencodeSessionRef(session);
-    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-      throw new Error(
-        `Cannot subscribe OpenCode session events for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-      );
-    }
-    return subscribeSessionEvents(this.listeners, registeredSessionRef, listener);
+    const subscribe = (session: SessionRecord) =>
+      subscribeSessionEvents(this.listeners, opencodeSessionRef(session), listener);
+    const session = this.policyBoundSessionState(input, "subscribe to events for");
+    return session instanceof Promise ? session.then(subscribe) : subscribe(session);
   }
 
   async stopSession(input: SessionRef): Promise<void> {
@@ -797,6 +926,20 @@ export class OpencodeSdkAdapter
   private async resolveSessionToolSelection(
     session: SessionRecord,
   ): Promise<Record<string, boolean>> {
+    const policy = resolveOpencodeSessionPolicy(
+      session.input.sessionScope,
+      this.getRuntimeDefinition(),
+      `resolve tools for session ${session.externalSessionId}`,
+    );
+    if (policy.toolSelection.kind === "repository") {
+      await requireOpencodeSessionPolicyRuntime({
+        client: session.client,
+        policy,
+        workingDirectory: session.input.workingDirectory,
+      });
+      return resolveRepositoryToolSelection(this.getRuntimeDefinition());
+    }
+
     const nowMs = Date.now();
     await ensureTrustedOdtMcpServerConnected({
       client: session.client,
@@ -824,7 +967,7 @@ export class OpencodeSdkAdapter
 
     const selection = await resolveWorkflowToolSelection({
       client: session.client,
-      role: requireWorkflowRole(session),
+      role: policy.toolSelection.role,
       runtimeDescriptor: this.getRuntimeDefinition(),
       workingDirectory: session.input.workingDirectory,
       skipMcpConnectionCheck: true,

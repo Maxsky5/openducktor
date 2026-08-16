@@ -7,6 +7,7 @@ import {
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
+import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -119,6 +120,10 @@ export const createClaudeAgentSdkSession = async ({
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
+    await requireClaudeOpenDucktorMcpForScope(input.sessionScope, sdkQuery, {
+      externalSessionId: session.externalSessionId,
+      runtimeId,
+    });
     if (sessionInput.options.resume && !sessionInput.options.forkSession) {
       await renameClaudeSessionIfNeeded({
         session,

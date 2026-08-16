@@ -70,11 +70,13 @@ const mcpToolApprovalRequest = ({
   serverName,
   toolName,
   threadId = "thread-spec",
+  includeToolTitle = true,
 }: {
   id: number;
   serverName: string;
   toolName: string;
   threadId?: string;
+  includeToolTitle?: boolean;
 }): CodexServerRequestRecord => ({
   id,
   method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
@@ -87,7 +89,7 @@ const mcpToolApprovalRequest = ({
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      tool_name: toolName,
+      ...(includeToolTitle ? { tool_title: toolName } : {}),
       persist: ["session"],
     },
   },
@@ -113,7 +115,7 @@ describe("handleCodexServerRequest", () => {
     };
     const request = mcpToolApprovalRequest({
       id: 28,
-      serverName: "openducktor",
+      serverName: "external",
       toolName: "odt_read_task",
       threadId: session.threadId,
     });
@@ -398,6 +400,163 @@ describe("handleCodexServerRequest", () => {
         type: "session_error",
         message: expect.stringContaining("role 'spec' is not allowed to use odt_set_plan"),
       }),
+    );
+  });
+
+  test("automatically approves OpenDucktor workflow MCP tools allowed for the bound role", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        createSession("build"),
+        mcpToolApprovalRequest({
+          id: 36,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: "thread-build",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-build", 36)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      36,
+      expect.objectContaining({ action: "accept" }),
+      undefined,
+    );
+    expect(events).toEqual([]);
+  });
+
+  test("routes known OpenDucktor MCP tools through user approval for repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 35,
+          serverName: "openducktor",
+          toolName: "odt_create_task",
+          threadId: "thread-repository",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(true);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 35)).toMatchObject({
+      kind: "approval",
+      entry: {
+        runtimeId: "runtime-live",
+        threadId: "thread-repository",
+        request: { tool: { name: "odt_create_task" } },
+      },
+    });
+    expect(respondServerRequest).not.toHaveBeenCalled();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "approval_required",
+      }),
+    );
+  });
+
+  test("rejects unknown trusted OpenDucktor tool identities for repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 39,
+          serverName: "openducktor",
+          toolName: "odt_unknown",
+          threadId: "thread-repository",
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 39)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      39,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
+    );
+  });
+
+  test("rejects producer-shaped OpenDucktor MCP approvals without titles for retained repository sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const repositorySession = createSession(null, "thread-repository");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        repositorySession,
+        mcpToolApprovalRequest({
+          id: 37,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: "thread-repository",
+          includeToolTitle: false,
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", "thread-repository", 37)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      37,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
+    );
+  });
+
+  test("rejects producer-shaped OpenDucktor MCP approvals without titles for workflow sessions", async () => {
+    const respondServerRequest = mock(async () => {});
+    const pendingInput = new CodexPendingInputState();
+    const events: unknown[] = [];
+    const session = createSession("build");
+
+    await expect(
+      handleCodexServerRequest(
+        createRequestContext({ events, pendingInput, respondServerRequest }),
+        session,
+        mcpToolApprovalRequest({
+          id: 38,
+          serverName: "openducktor",
+          toolName: "odt_read_task",
+          threadId: session.threadId,
+          includeToolTitle: false,
+        }),
+        new Set(),
+      ),
+    ).resolves.toBe(false);
+
+    expect(pendingInput.nativeRequest("runtime-live", session.threadId, 38)).toBeUndefined();
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      38,
+      expect.objectContaining({ action: "decline" }),
+      undefined,
     );
   });
 

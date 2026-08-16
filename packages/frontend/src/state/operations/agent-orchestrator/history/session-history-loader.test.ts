@@ -103,6 +103,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => true,
@@ -126,6 +127,7 @@ describe("session history loader", () => {
         },
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => stale,
@@ -145,6 +147,7 @@ describe("session history loader", () => {
         },
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -175,6 +178,7 @@ describe("session history loader", () => {
         },
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -203,6 +207,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -247,6 +252,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -284,6 +290,7 @@ describe("session history loader", () => {
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       taskRef: { current: [taskFixture] },
       loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
@@ -321,6 +328,7 @@ describe("session history loader", () => {
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       taskRef: { current: [] },
       loadRepoPromptOverrides,
@@ -356,6 +364,7 @@ describe("session history loader", () => {
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       taskRef: { current: [taskFixture] },
       loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
@@ -381,6 +390,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -406,6 +416,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       loadSystemPromptContext,
@@ -444,6 +455,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -480,6 +492,7 @@ describe("session history loader", () => {
           },
         },
         readSessionSnapshot: harness.readSessionSnapshot,
+        readLiveSessionAssociation: () => null,
         updateSession: harness.updateSession,
         identity: sessionTarget,
         isStaleRepoOperation: () => false,
@@ -516,6 +529,7 @@ describe("session history loader", () => {
         loadSessionHistory: async () => [],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -557,6 +571,7 @@ describe("session history loader", () => {
         ],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -581,6 +596,7 @@ describe("session history loader", () => {
         loadSessionHistory: async () => historyPromise,
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -637,6 +653,7 @@ describe("session history loader", () => {
         loadSessionHistory: async () => historyPromise,
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -705,6 +722,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -755,6 +773,7 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -804,6 +823,7 @@ describe("session history loader", () => {
         ],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -842,6 +862,7 @@ describe("session history loader", () => {
         ],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       isStaleRepoOperation: () => false,
@@ -876,6 +897,7 @@ describe("session history loader", () => {
         },
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       loadSystemPromptContext: async () => ({
@@ -898,6 +920,36 @@ describe("session history loader", () => {
     ]);
   });
 
+  test("forwards repository scope when loading a live repository session", async () => {
+    const repositorySession = { ...createSession(), taskId: "", role: null };
+    const harness = createHistoryLoadHarness(repositorySession);
+    let historyInput:
+      | Parameters<
+          Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
+        >[0]
+      | null = null;
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (input) => {
+          historyInput = input;
+          return [];
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => ({ kind: "repository" }),
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(historyInput).toMatchObject({
+      externalSessionId: "external-1",
+      sessionScope: { kind: "repository" },
+    });
+  });
+
   test("keeps the runtime-owned system prompt when history provides one", async () => {
     const harness = createHistoryLoadHarness();
 
@@ -915,6 +967,7 @@ describe("session history loader", () => {
         ],
       },
       readSessionSnapshot: harness.readSessionSnapshot,
+      readLiveSessionAssociation: () => null,
       updateSession: harness.updateSession,
       identity: sessionTarget,
       loadSystemPromptContext: async () => ({

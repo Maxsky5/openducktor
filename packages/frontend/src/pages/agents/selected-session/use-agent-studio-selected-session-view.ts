@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionAssociation, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import {
@@ -14,10 +14,13 @@ import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSession,
+  useAgentSessionLiveAssociation,
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { SessionRuntimeDataTarget } from "@/state/operations/agent-orchestrator/support/session-runtime-data-refs";
+import { toAgentTaskSessionBinding } from "@/state/operations/agent-orchestrator/support/workflow-session";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioRouteSessionResolution,
@@ -48,6 +51,25 @@ export type AgentStudioSelectedSessionView = {
   selectedSession: AgentStudioSelectedSessionState;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
+};
+
+const toSessionRuntimeDataTarget = (
+  session: AgentSessionState | null,
+  identity: AgentSessionIdentity | null,
+  liveSessionAssociation: AgentSessionAssociation | null,
+): SessionRuntimeDataTarget | null => {
+  if (session) {
+    return {
+      identity: session,
+      taskBinding: toAgentTaskSessionBinding(session),
+      liveSessionAssociation,
+      selectedModel: session.selectedModel,
+    };
+  }
+  if (identity) {
+    return { identity, taskBinding: null, liveSessionAssociation, selectedModel: null };
+  }
+  return null;
 };
 
 export function useAgentStudioSelectedSessionView({
@@ -101,6 +123,7 @@ export function useAgentStudioSelectedSessionView({
     ? null
     : selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
+  const liveSessionAssociation = useAgentSessionLiveAssociation(selectedSessionIdentity);
   const loadedSession = useMemo(
     () => (matchesAgentSessionIdentity(session, selectedSessionIdentity) ? session : null),
     [selectedSessionIdentity, session],
@@ -196,7 +219,11 @@ export function useAgentStudioSelectedSessionView({
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
-    selectedSessionIdentity: session ?? selectedSessionIdentity,
+    selectedSession: toSessionRuntimeDataTarget(
+      session,
+      selectedSessionIdentity,
+      liveSessionAssociation,
+    ),
     runtimeDefinitions,
     repoReadinessState,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,

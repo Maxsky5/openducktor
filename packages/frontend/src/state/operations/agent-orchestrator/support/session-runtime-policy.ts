@@ -1,4 +1,4 @@
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { AgentSessionAssociation, SettingsSnapshot } from "@openducktor/contracts";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import type {
   AgentSessionRuntimePolicy,
@@ -6,17 +6,19 @@ import type {
   PolicyBoundSessionRef,
   RuntimeKind,
 } from "@openducktor/core";
-import { workflowAgentSessionScope } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
-
-type RuntimeSessionContextSource = Pick<
+import type {
+  AgentSessionIdentity,
   AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory"
-> & {
-  taskId?: string;
-  role?: AgentSessionState["role"];
-  selectedModel?: AgentSessionState["selectedModel"];
+  AgentTaskSessionBinding,
+} from "@/types/agent-orchestrator";
+import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
+import { resolveSessionRuntimeScope } from "./session-runtime-scope";
+
+type RuntimeSessionContextSource = {
+  identity: AgentSessionIdentity;
+  selectedModel: AgentSessionState["selectedModel"];
+  taskBinding: AgentTaskSessionBinding | null;
+  liveSessionAssociation: AgentSessionAssociation | null;
 };
 
 export type LoadSettingsSnapshotForRuntimePolicy = () => Promise<SettingsSnapshot>;
@@ -69,12 +71,10 @@ export const resolveAgentSessionRuntimePolicyFromSnapshot = ({
   if (runtimeKind !== "codex") {
     throw new Error(`Unsupported runtime kind '${runtimeKind}' for session runtime policy.`);
   }
-  if (sessionScope && sessionScope.kind !== "workflow") {
-    throw new Error("Codex runtime policy requires workflow session scope.");
-  }
+  const role = sessionScope?.kind === "workflow" ? sessionScope.role : null;
   return {
     kind: "codex",
-    policy: resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, sessionScope?.role ?? null),
+    policy: resolveCodexEffectivePolicy(snapshot.agentRuntimes.codex, role),
   };
 };
 
@@ -83,15 +83,18 @@ export const resolveRuntimeSessionContextRef = async (
   session: RuntimeSessionContextSource,
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy,
 ): Promise<PolicyBoundSessionRef> => {
-  const sessionScope =
-    session.role && session.taskId ? workflowAgentSessionScope(session.taskId, session.role) : null;
+  const sessionScope = resolveSessionRuntimeScope(session);
   const runtimePolicy = await resolveAgentSessionRuntimePolicy({
-    runtimeKind: session.runtimeKind,
+    runtimeKind: session.identity.runtimeKind,
     sessionScope,
     loadSettingsSnapshot,
   });
   return {
-    ...toRuntimeSessionRefWithPolicy(repoPath, session, runtimePolicy),
+    ...toRuntimeSessionRefWithPolicy(
+      repoPath,
+      { ...session.identity, selectedModel: session.selectedModel },
+      runtimePolicy,
+    ),
     ...(sessionScope ? { sessionScope } : {}),
   };
 };

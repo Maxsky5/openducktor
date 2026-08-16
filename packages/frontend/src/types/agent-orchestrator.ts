@@ -205,6 +205,8 @@ export type WorkflowAgentSessionState = AgentSessionState & {
   role: AgentRole;
 };
 
+export type AgentTaskSessionBinding = Pick<WorkflowAgentSessionState, "taskId" | "role">;
+
 export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"

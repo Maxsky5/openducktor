@@ -61,6 +61,20 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   };
 };
 
+const identityTarget = (identity = sessionIdentity()) => ({
+  identity,
+  taskBinding: null,
+  liveSessionAssociation: null,
+  selectedModel: null,
+});
+
+const sessionTarget = (state = sessionState()) => ({
+  identity: sessionIdentity(state),
+  taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
+  liveSessionAssociation: null,
+  selectedModel: state.selectedModel,
+});
+
 const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
@@ -76,7 +90,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: null,
+        selectedSession: null,
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -110,7 +124,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -141,7 +155,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "checking",
         loadRuntimeCatalog,
@@ -171,7 +185,7 @@ describe("useSessionRuntimeData", () => {
     const readSessionTodos = mock(async () => [todoFixture]);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
-      selectedSessionIdentity: sessionState(),
+      selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       repoReadinessState: "ready",
       loadRuntimeCatalog,
@@ -181,7 +195,7 @@ describe("useSessionRuntimeData", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.todos.length === 1);
+      await harness.waitFor((latest) => latest.todos.length === 1, 1_000);
       expect(harness.getLatest().todos).toEqual([todoFixture]);
 
       await harness.update({
@@ -207,7 +221,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready" as const,
         loadRuntimeCatalog,
@@ -226,6 +240,7 @@ describe("useSessionRuntimeData", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         workingDirectory: "/repo",
       });
       expect(harness.getLatest().todos).toEqual([todoFixture]);
@@ -241,7 +256,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -272,7 +287,7 @@ describe("useSessionRuntimeData", () => {
     const readSessionTodos = mock(async () => [todoFixture]);
     const props: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
-      selectedSessionIdentity: sessionState(),
+      selectedSession: sessionTarget(),
       runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       repoReadinessState: "ready",
       loadRuntimeCatalog,
@@ -287,7 +302,7 @@ describe("useSessionRuntimeData", () => {
 
       await harness.update({
         ...props,
-        selectedSessionIdentity: sessionState(),
+        selectedSession: sessionTarget(),
       });
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
@@ -305,7 +320,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: null,
-        selectedSessionIdentity: sessionIdentity(),
+        selectedSession: identityTarget(),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,
@@ -334,7 +349,7 @@ describe("useSessionRuntimeData", () => {
       useSessionRuntimeData,
       {
         repoPath: "/repo",
-        selectedSessionIdentity: sessionState({ workingDirectory: "" }),
+        selectedSession: sessionTarget(sessionState({ workingDirectory: "" })),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
         repoReadinessState: "ready",
         loadRuntimeCatalog,

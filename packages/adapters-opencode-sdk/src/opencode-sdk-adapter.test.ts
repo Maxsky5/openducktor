@@ -189,81 +189,7 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
   expect(createClient).toHaveBeenCalledTimes(0);
 });
 
-test("rejects repository scope before workflow-only runtime side effects", async () => {
-  const createClient = mock(() => {
-    throw new Error("createClient should not be called");
-  });
-  const requireRepoRuntime = mock(async () => {
-    throw new Error("requireRepoRuntime should not be called");
-  });
-  const adapter = new OpencodeSdkAdapter({
-    createClient,
-    repoRuntimeResolver: { requireRepoRuntime },
-  });
-  const sessionScope = { kind: "repository" } as const;
-
-  await expect(
-    adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-      sessionScope,
-      runtimePolicy: opencodeRuntimePolicy,
-      systemPrompt: "system",
-    }),
-  ).rejects.toThrow(
-    "Cannot start OpenCode session with repository session context; workflow session context is required.",
-  );
-  await expect(
-    adapter.resumeSession({
-      ...sessionRef(),
-      sessionScope,
-      runtimePolicy: opencodeRuntimePolicy,
-      systemPrompt: "system",
-    }),
-  ).rejects.toThrow(
-    "Cannot resume OpenCode session with repository session context; workflow session context is required.",
-  );
-  await expect(
-    adapter.forkSession({
-      repoPath: "/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo",
-      parentExternalSessionId: "parent-session",
-      sessionScope,
-      runtimePolicy: opencodeRuntimePolicy,
-      systemPrompt: "system",
-    }),
-  ).rejects.toThrow(
-    "Cannot fork OpenCode session with repository session context; workflow session context is required.",
-  );
-  await expect(
-    adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-send", { sessionScope }),
-      parts: [{ kind: "text", text: "Continue" }],
-    }),
-  ).rejects.toThrow(
-    "Cannot send OpenCode user message with repository session context; workflow session context is required.",
-  );
-  await expect(
-    adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-compact", { sessionScope }),
-      parts: [
-        {
-          kind: "slash_command",
-          command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-        },
-      ],
-    }),
-  ).rejects.toThrow(
-    "Cannot send OpenCode user message with repository session context; workflow session context is required.",
-  );
-  expect(createClient).toHaveBeenCalledTimes(0);
-  expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-  expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
-});
-
-test("rejects missing resume scope before workflow-only runtime side effects", async () => {
+test("rejects missing resume scope before runtime side effects", async () => {
   const createClient = mock(() => {
     throw new Error("createClient should not be called");
   });
@@ -282,10 +208,23 @@ test("rejects missing resume scope before workflow-only runtime side effects", a
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     }),
-  ).rejects.toThrow("Cannot resume OpenCode session without workflow session context.");
+  ).rejects.toThrow("Cannot resume OpenCode session without session context.");
   expect(createClient).toHaveBeenCalledTimes(0);
   expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
   expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
+});
+
+test("loads unbound session history without applying a session policy", async () => {
+  const mockClient = makeMockClient();
+  const adapter = new OpencodeSdkAdapter({ createClient: () => mockClient.client });
+
+  await expect(
+    adapter.loadSessionHistory(
+      sessionRuntimeRef("unbound-history", {
+        sessionScope: undefined,
+      }),
+    ),
+  ).resolves.toEqual([]);
 });
 
 const makeMockClient = (
@@ -296,6 +235,11 @@ const makeMockClient = (
       response?: unknown;
     };
     questionReplyResult?: {
+      data?: unknown;
+      error?: unknown;
+      response?: unknown;
+    };
+    sessionUpdateResult?: {
       data?: unknown;
       error?: unknown;
       response?: unknown;
@@ -312,6 +256,12 @@ const makeMockClient = (
   permissionReplyCalls: unknown[];
   questionListCalls: unknown[];
   questionReplyCalls: unknown[];
+  updateCalls: unknown[];
+  forkCalls: unknown[];
+  promptAsyncCalls: unknown[];
+  mcpStatusCalls: unknown[];
+  mcpConnectCalls: unknown[];
+  toolIdCalls: unknown[];
 } => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
@@ -322,6 +272,12 @@ const makeMockClient = (
   const permissionReplyCalls: unknown[] = [];
   const questionListCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
+  const updateCalls: unknown[] = [];
+  const forkCalls: unknown[] = [];
+  const promptAsyncCalls: unknown[] = [];
+  const mcpStatusCalls: unknown[] = [];
+  const mcpConnectCalls: unknown[] = [];
+  const toolIdCalls: unknown[] = [];
 
   const client = {
     session: {
@@ -345,6 +301,25 @@ const makeMockClient = (
           error: undefined,
         };
       },
+      update: async (input: unknown) => {
+        updateCalls.push(input);
+        return (
+          options.sessionUpdateResult ?? {
+            data: { id: "external-session-1" },
+            error: undefined,
+          }
+        );
+      },
+      fork: async (input: unknown) => {
+        forkCalls.push(input);
+        return { data: { id: "external-session-fork" }, error: undefined };
+      },
+      promptAsync: async (input: unknown) => {
+        promptAsyncCalls.push(input);
+        return { data: undefined, error: undefined };
+      },
+      messages: async () => ({ data: [], error: undefined }),
+      children: async () => ({ data: [], error: undefined }),
       list: async (input?: unknown) => {
         listCalls.push(input);
         return {
@@ -463,6 +438,22 @@ const makeMockClient = (
         return options.questionReplyResult ?? { data: true, error: undefined };
       },
     },
+    mcp: {
+      status: async (input: unknown) => {
+        mcpStatusCalls.push(input);
+        return { data: { openducktor: { status: "connected" } }, error: undefined };
+      },
+      connect: async (input: unknown) => {
+        mcpConnectCalls.push(input);
+        return { data: true, error: undefined };
+      },
+    },
+    tool: {
+      ids: async (input: unknown) => {
+        toolIdCalls.push(input);
+        return { data: ["odt_read_task", "task"], error: undefined };
+      },
+    },
     global: {
       event: async () => {
         async function* iterator(): AsyncGenerator<{
@@ -489,6 +480,12 @@ const makeMockClient = (
     permissionReplyCalls,
     questionListCalls,
     questionReplyCalls,
+    updateCalls,
+    forkCalls,
+    promptAsyncCalls,
+    mcpStatusCalls,
+    mcpConnectCalls,
+    toolIdCalls,
   };
 };
 
@@ -1007,10 +1004,33 @@ describe("opencode-sdk-adapter", () => {
         workingDirectory: defaultRepoPath,
       }),
     ).rejects.toThrow(
-      "OpenCode runtime route 'stdio' is unsupported for list available slash commands; local_http is required for repo '/repo'.",
+      "OpenCode runtime 'runtime-opencode-1' is missing required route contract 'local_http' for repo '/repo'",
     );
 
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  test("fails repository history restoration on a missing bound OpenCode route", async () => {
+    const requireRepoRuntime = mock(async () => makeRuntimeSummary("stdio"));
+    const createClient = mock(() => {
+      throw new Error("createClient should not be called");
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient,
+      repoRuntimeResolver: { requireRepoRuntime },
+    });
+
+    await expect(
+      adapter.loadSessionHistory({
+        ...sessionRuntimeRef("repository-history", {
+          sessionScope: { kind: "repository" },
+        }),
+      }),
+    ).rejects.toThrow(
+      "runtime 'runtime-opencode-1' is missing required route contract 'local_http' for repo '/repo'",
+    );
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
+    expect(createClient).toHaveBeenCalledTimes(0);
   });
 
   test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {
@@ -1318,28 +1338,24 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    await adapter.startSession({
-      repoPath: defaultRepoPath,
-      runtimeKind: "opencode",
-      workingDirectory: defaultWorkingDirectory,
-      sessionScope: opencodeWorkflowScope("build"),
-      runtimePolicy: opencodeRuntimePolicy,
-      systemPrompt: "system",
-    });
+    const unsubscribe = await adapter.subscribeEvents(sessionRuntimeRef(), () => {});
+    try {
+      const snapshot = await adapter.readSessionRuntimeSnapshot({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+        workingDirectory: defaultWorkingDirectory,
+        externalSessionId: "external-session-1",
+      });
 
-    const snapshot = await adapter.readSessionRuntimeSnapshot({
-      repoPath: defaultRepoPath,
-      runtimeKind: "opencode",
-      workingDirectory: defaultWorkingDirectory,
-      externalSessionId: "external-session-1",
-    });
-
-    expect(snapshot).toMatchObject({
-      availability: "runtime",
-      classification: "idle",
-    });
-    expect(mock.listCalls).toEqual([undefined]);
-    expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
+      expect(snapshot).toMatchObject({
+        availability: "runtime",
+        classification: "idle",
+      });
+      expect(mock.listCalls).toEqual([undefined]);
+      expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("sendUserMessage keeps the runtime snapshot active while resolving workflow tools", async () => {
@@ -1502,7 +1518,9 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-1"),
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       parts: [{ kind: "text", text: "Continue" }],
     });
 
@@ -1536,6 +1554,85 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(promptAsyncCalls).toHaveLength(1);
+  });
+
+  test("sendUserMessage starts a new turn when an idle session retains its last assistant id", async () => {
+    const mock = makeMockClient();
+    const promptAsyncCalls: unknown[] = [];
+    const idleSessionClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return {
+            data: [
+              {
+                id: "external-session-1",
+                projectID: "project-1",
+                directory: defaultWorkingDirectory,
+                title: "BUILD task-1",
+                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
+              },
+            ],
+            error: undefined,
+          };
+        },
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return { data: { "external-session-1": { type: "idle" } }, error: undefined };
+        },
+        promptAsync: async (input: unknown) => {
+          promptAsyncCalls.push(input);
+          return { data: undefined, error: undefined };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      mcp: {
+        status: async () => ({ data: { openducktor: { status: "connected" } }, error: undefined }),
+        connect: async () => ({ data: true, error: undefined }),
+      },
+      tool: {
+        ids: async () => ({ data: ["odt_read_task"], error: undefined }),
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => idleSessionClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+    const unsubscribe = await adapter.subscribeEvents(sessionRuntimeRef(), () => {});
+    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    if (!session) {
+      throw new Error("Expected the idle session to be retained.");
+    }
+    session.streamTurnStatus = "idle";
+    session.activeAssistantMessageId = "assistant-from-previous-turn";
+
+    try {
+      await adapter.sendUserMessage({
+        ...sessionRuntimeRef(),
+        parts: [{ kind: "text", text: "Continue" }],
+      });
+      const snapshot = await adapter.readSessionRuntimeSnapshot(sessionRef());
+
+      expect(promptAsyncCalls).toHaveLength(1);
+      expect(snapshot).toMatchObject({ availability: "runtime", classification: "running" });
+    } finally {
+      unsubscribe();
+    }
   });
 
   test("sendUserMessage trusts runtime idle after turn start evidence while prompt async is still settling", async () => {
@@ -1598,7 +1695,9 @@ describe("opencode-sdk-adapter", () => {
     });
 
     const sendPromise = adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-1"),
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       parts: [{ kind: "text", text: "Continue" }],
     });
     await promptAsyncStarted.promise;
@@ -1692,9 +1791,12 @@ describe("opencode-sdk-adapter", () => {
     }
     session.activeAssistantMessageId = "assistant-active";
     session.streamTurnStatus = "active";
+    session.isAwaitingRuntimeTurnStart = false;
 
     await adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-1"),
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       parts: [{ kind: "text", text: "Queue behind current answer" }],
     });
 
@@ -1766,7 +1868,9 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-1"),
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       parts: [
         {
           kind: "slash_command",
@@ -1825,7 +1929,9 @@ describe("opencode-sdk-adapter", () => {
     session.isAwaitingRuntimeTurnStart = true;
 
     await adapter.sendUserMessage({
-      ...sessionRuntimeRef("external-session-1"),
+      ...sessionRuntimeRef("external-session-1", {
+        sessionScope: opencodeWorkflowScope("build"),
+      }),
       parts: [{ kind: "text", text: "Queue behind current answer" }],
     });
 
@@ -1910,7 +2016,7 @@ describe("opencode-sdk-adapter", () => {
     expect(snapshots).toMatchObject([
       {
         availability: "runtime",
-        classification: "running",
+        classification: "idle",
         ref: {
           externalSessionId: "external-session-1",
           workingDirectory: defaultWorkingDirectory,

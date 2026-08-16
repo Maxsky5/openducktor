@@ -1451,7 +1451,7 @@ describe("CodexRuntimeSessionEvents", () => {
           requestedSchema: { type: "object", properties: {} },
           _meta: {
             codex_approval_kind: "mcp_tool_call",
-            tool_name: "search",
+            tool_title: "search",
             persist: ["session"],
           },
         },
@@ -1502,6 +1502,65 @@ describe("CodexRuntimeSessionEvents", () => {
         sessionRef: codexSessionRef(grandchildSession),
       }),
     );
+  });
+
+  test("rejects producer-shaped OpenDucktor approvals for a retained repository thread before pending input", async () => {
+    let listener: RuntimeListener | null = null;
+    const repositorySession = createSession("repository-thread");
+    repositorySession.summary.sessionAssociation = { kind: "repository" };
+    repositorySession.role = null;
+    repositorySession.taskId = null;
+    const pendingInput = new CodexPendingInputState();
+    const responses: Array<{ requestId: unknown; response: unknown; runtimeId: string }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      respondServerRequest: async (runtimeId, requestId, response) => {
+        responses.push({ requestId, response, runtimeId });
+      },
+      sessions: new Map([[repositorySession.threadId, repositorySession]]),
+      pendingInput,
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "server_request",
+      message: {
+        id: "repository-odt-approval",
+        method: "mcpServer/elicitation/request",
+        params: {
+          threadId: repositorySession.threadId,
+          turnId: "repository-turn",
+          serverName: "openducktor",
+          mode: "form",
+          message: 'Allow the openducktor MCP server to run tool "odt_read_task"?',
+          requestedSchema: { type: "object", properties: {} },
+          _meta: {
+            codex_approval_kind: "mcp_tool_call",
+            persist: ["session"],
+          },
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    expect(
+      pendingInput.nativeRequest(
+        "runtime-1",
+        repositorySession.threadId,
+        "repository-odt-approval",
+      ),
+    ).toBeUndefined();
+    expect(responses).toEqual([
+      {
+        runtimeId: "runtime-1",
+        requestId: "repository-odt-approval",
+        response: expect.objectContaining({ action: "decline" }),
+      },
+    ]);
   });
 
   test("emits routed question lifecycle events once to retained child and parent", async () => {

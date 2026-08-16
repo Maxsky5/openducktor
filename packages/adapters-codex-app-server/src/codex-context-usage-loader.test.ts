@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -45,6 +46,29 @@ describe("CodexContextUsageLoader", () => {
     expect(transports.get("runtime-live")?.calls).not.toContainEqual(
       expect.objectContaining({ method: "thread/resume" }),
     );
+  });
+
+  test("rejects cached context usage for a retained unbound session", async () => {
+    const { adapter } = createHarness();
+    const started = await adapter.startSession(codexStartSessionInput());
+    const session = (
+      adapter as unknown as {
+        localSessions: {
+          get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
+        };
+      }
+    ).localSessions.get(started.externalSessionId);
+    if (!session) {
+      throw new Error("Expected the retained Codex session.");
+    }
+    session.summary.sessionAssociation = { kind: "unbound" };
+
+    await expect(
+      adapter.loadLiveSessionContextUsage({
+        runtimeId: "runtime-live",
+        externalSessionId: started.externalSessionId,
+      }),
+    ).rejects.toThrow("has no session context");
   });
 
   test("cancels cold loads for released sessions and runtimes without late retention", async () => {
@@ -238,6 +262,10 @@ describe("CodexContextUsageLoader", () => {
       expect.objectContaining({
         method: "thread/resume",
         params: expect.objectContaining({
+          config: {
+            "mcp_servers.openducktor.enabled": true,
+            "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+          },
           threadId: "grandchild-thread",
           cwd: "/repo",
           excludeTurns: false,

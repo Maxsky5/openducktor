@@ -201,6 +201,7 @@ export type CodexThreadStartParams = {
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
+  config?: Record<string, unknown>;
 };
 
 export type CodexThreadResumeParams = {
@@ -213,6 +214,7 @@ export type CodexThreadResumeParams = {
   model?: string;
   effort?: string;
   excludeTurns?: boolean;
+  config?: Record<string, unknown>;
 };
 
 export type CodexThreadForkParams = {
@@ -225,6 +227,7 @@ export type CodexThreadForkParams = {
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
+  config?: Record<string, unknown>;
 };
 
 export type CodexThreadSetNameParams = {

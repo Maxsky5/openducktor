@@ -1130,14 +1130,16 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
-      events.push(event);
-    });
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => {
+        events.push(event);
+      },
+    );
 
     await startDefaultSession(adapter, "build");
     const history = await adapter.loadSessionHistory({
-      ...defaultRepoRuntimeInput,
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
     const finishStream = releaseStream as (() => void) | null;
@@ -1262,14 +1264,16 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
-      events.push(event);
-    });
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => {
+        events.push(event);
+      },
+    );
 
     await startDefaultSession(adapter, "build");
     const history = await adapter.loadSessionHistory({
-      ...defaultRepoRuntimeInput,
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
     const finishStream = releaseStream as (() => void) | null;

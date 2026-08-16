@@ -1,4 +1,4 @@
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type OdtToolName, toClaudeOdtToolAliases } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -7,10 +7,14 @@ import type {
   AgentStreamPart,
   SessionRef,
 } from "@openducktor/core";
-import { normalizeOdtWorkflowToolName } from "@openducktor/core";
+import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { ClaudeAgentSdkServiceError, ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type {
+  ClaudeAgentSdkServiceError,
+  ClaudeSessionContext,
+  ClaudeSessionInput,
+} from "./claude-agent-sdk-types";
 
 export const INIT_TIMEOUT_MS = 60_000;
 export const FILE_SEARCH_LIMIT = 30;
@@ -76,15 +80,14 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const readStringProp = (value: unknown, key: string): string | undefined =>
   isRecord(value) ? readText(value[key]) : undefined;
 
-export const claudeWorkflowScope = (input: unknown): AgentSessionWorkflowScope | null => {
-  if (!isRecord(input)) {
-    return null;
-  }
-  const scope = input.sessionScope;
-  return isRecord(scope) && scope.kind === "workflow" ? (scope as AgentSessionWorkflowScope) : null;
+export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
+
+const claudeWorkflowScope = (input: ClaudeSessionInput): AgentSessionWorkflowScope | null => {
+  const scope = claudeSessionScope(input);
+  return scope?.kind === "workflow" ? scope : null;
 };
 
-export const claudeWorkflowRole = (input: unknown): AgentRole | null =>
+export const claudeWorkflowRole = (input: ClaudeSessionInput): AgentRole | null =>
   claudeWorkflowScope(input)?.role ?? null;
 
 export const claudeSessionRef = (session: ClaudeSessionContext): SessionRef => ({
@@ -97,12 +100,8 @@ export const claudeSessionRef = (session: ClaudeSessionContext): SessionRef => (
 export const isReadOnlyWorkflowRole = (role: AgentRole | null): boolean =>
   role !== null && role !== "build";
 
-export const canonicalOdtToolName = (toolName: string): string | null => {
-  return normalizeOdtWorkflowToolName(
-    toolName,
-    CLAUDE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-  );
-};
+export const canonicalOdtToolName = (toolName: string): OdtToolName | null =>
+  normalizeOdtToolName(toolName, toClaudeOdtToolAliases);
 
 export const permissionRequestTypeForTool = (
   toolName: string,
@@ -133,11 +132,8 @@ export const mutationForTool = (
     return "mutating";
   }
   const odtTool = canonicalOdtToolName(toolName);
-  if (odtTool && odtTool !== "odt_read_task" && odtTool !== "odt_read_task_documents") {
-    return "mutating";
-  }
   if (odtTool) {
-    return "read_only";
+    return isOdtMutationToolName(odtTool) ? "mutating" : "read_only";
   }
   return "unknown";
 };

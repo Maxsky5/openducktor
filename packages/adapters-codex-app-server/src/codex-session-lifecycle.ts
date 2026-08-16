@@ -7,14 +7,20 @@ import type {
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
 import {
-  type CodexThreadSnapshot,
+  agentSessionRefsEqual,
+  agentSessionStatusFromActivity,
+  describeAgentSessionScope,
+  resolveAgentSessionAssociationTransition,
+} from "@openducktor/core";
+import {
   codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
   toSessionSummary,
 } from "./codex-app-server-threads";
+import { codexSessionRef } from "./codex-session-ref";
+import { resolveCodexSessionScopePolicy } from "./codex-session-scope-policy";
 import type {
   CodexSessionState,
   CodexThreadForkResult,
@@ -51,15 +57,34 @@ const buildSessionState = (
   ...(liveStatus ? { liveStatus } : {}),
 });
 
-export const applyRuntimeContextToSession = (
+export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
+  action = "apply runtime context",
 ): void => {
-  const sessionScope = (input as { sessionScope?: StartAgentSessionInput["sessionScope"] })
-    .sessionScope;
+  const transition = resolveAgentSessionAssociationTransition(
+    session.summary.sessionAssociation,
+    input.sessionScope ?? { kind: "unbound" },
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
+};
+
+const applyRuntimeContextToSession = (
+  session: CodexSessionState,
+  input: PolicyBoundSessionRef,
+  action = "apply runtime context",
+): void => {
+  assertRuntimeContextCompatibleWithSession(session, input, action);
+  const sessionScope = input.sessionScope;
   if (sessionScope) {
+    const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
     session.summary = {
       ...session.summary,
+      ...(policy.kind === "repository" ? { title: policy.title } : {}),
       sessionAssociation: sessionScope,
     };
   }
@@ -71,6 +96,46 @@ export const applyRuntimeContextToSession = (
     session.model = input.model;
   }
 };
+
+type ResolveCodexPolicyBoundSessionInput = {
+  actions: { context: string; lookup: string };
+  bindSession: () => Promise<CodexSessionState>;
+  getSession: (externalSessionId: string) => CodexSessionState | undefined;
+  input: PolicyBoundSessionRef;
+};
+
+export function resolveCodexPolicyBoundSession(
+  resolution: ResolveCodexPolicyBoundSessionInput & { bindMissing: true },
+): CodexSessionState | Promise<CodexSessionState>;
+export function resolveCodexPolicyBoundSession(
+  resolution: ResolveCodexPolicyBoundSessionInput & { bindMissing: false },
+): CodexSessionState | undefined | Promise<CodexSessionState>;
+export function resolveCodexPolicyBoundSession(
+  resolution: ResolveCodexPolicyBoundSessionInput & { bindMissing: boolean },
+): CodexSessionState | undefined | Promise<CodexSessionState> {
+  const { actions, input } = resolution;
+  const session = resolution.getSession(input.externalSessionId);
+  if (session) {
+    const registeredSessionRef = codexSessionRef(session);
+    if (!agentSessionRefsEqual(registeredSessionRef, input)) {
+      throw new Error(
+        `Cannot ${actions.lookup} Codex session '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
+      );
+    }
+    assertRuntimeContextCompatibleWithSession(session, input, actions.lookup);
+    if (session.summary.sessionAssociation.kind !== "unbound" || !input.sessionScope) {
+      applyRuntimeContextToSession(session, input, actions.context);
+      return session;
+    }
+  } else if (!resolution.bindMissing) {
+    return undefined;
+  }
+
+  return resolution.bindSession().then((boundSession) => {
+    applyRuntimeContextToSession(boundSession, input, actions.context);
+    return boundSession;
+  });
+}
 
 export const sessionStateFromThreadStart = (
   input: StartAgentSessionInput,
@@ -126,22 +191,6 @@ export const sessionStateFromExistingThread = (
   const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
   delete session.liveStatus;
   return session;
-};
-
-export const sessionStateFromThreadSnapshot = (
-  input: PolicyBoundSessionRef,
-  runtimeId: string,
-  threadSnapshot: CodexThreadSnapshot,
-): CodexSessionState => {
-  const summary = toSessionSummary({
-    externalSessionId: threadSnapshot.id,
-    workingDirectory: input.workingDirectory,
-    startedAt: threadSnapshot.startedAt,
-    title: threadSnapshot.title,
-    sessionAssociation: inputAssociation(input),
-    status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
-  });
-  return buildSessionState(input, summary, runtimeId, undefined);
 };
 
 export const preserveRuntimeContextForExistingThread = (

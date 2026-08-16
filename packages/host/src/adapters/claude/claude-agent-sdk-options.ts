@@ -52,15 +52,6 @@ const CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
 const buildClaudeOpenDucktorRuntimePrompt = (workingDirectory: string): string =>
   `OpenDucktor starts this Claude Code session with cwd set to ${workingDirectory}. Use relative paths and do not prefix Bash commands with cd ${workingDirectory}; only change directories when that is the actual task.`;
 
-const allowedClaudeWorkflowTools = (role: ReturnType<typeof claudeWorkflowRole>): string[] => {
-  if (!role) {
-    return [];
-  }
-  return AGENT_ROLE_TOOL_POLICY[role].flatMap(
-    (toolName) => CLAUDE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical[toolName] ?? [],
-  );
-};
-
 export const buildClaudeAgentSdkBaseOptions = ({
   claudeExecutablePath,
   cwd,
@@ -127,13 +118,12 @@ export const buildClaudeAgentSdkOptions = async ({
     additionalDirectories: [input.workingDirectory],
     ...sessionOptions,
     abortController: session.abortController,
-    allowedTools: allowedClaudeWorkflowTools(workflowRole),
     forwardSubagentText: true,
     includePartialMessages: true,
     hooks: {
       PreToolUse: [
         {
-          hooks: [createClaudePreToolUseHook({ session, permissionMode })],
+          hooks: [createClaudePreToolUseHook({ session })],
         },
       ],
       PostToolUse: [

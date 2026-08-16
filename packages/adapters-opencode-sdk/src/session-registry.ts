@@ -1,6 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import { formatAgentSessionTitle } from "@openducktor/core";
 import {
   assertGlobalEventSupport,
   isRelevantSubscriberEvent,
@@ -373,18 +373,14 @@ export const registerSession = (
 ): AgentSessionSummary => {
   const startsActive = input.emitStartedEvent !== false;
   const sessionAssociation = input.sessionInput.sessionScope ?? { kind: "unbound" };
+  const title = input.sessionInput.sessionScope
+    ? formatAgentSessionTitle(input.sessionInput.sessionScope)
+    : undefined;
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(sessionAssociation.kind === "workflow"
-      ? {
-          title: formatWorkflowAgentSessionTitle(
-            sessionAssociation.role,
-            sessionAssociation.taskId,
-          ),
-        }
-      : {}),
+    ...(title ? { title } : {}),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
@@ -396,7 +392,7 @@ export const registerSession = (
     client: input.client,
     externalSessionId: input.externalSessionId,
     runtimeId: input.runtimeId,
-    streamTurnStatus: startsActive ? "active" : "idle",
+    streamTurnStatus: "idle",
     isSendingUserMessage: false,
     isAwaitingRuntimeTurnStart: false,
     activeAssistantMessageId: null,

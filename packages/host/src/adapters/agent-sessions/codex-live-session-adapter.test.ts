@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveSnapshot,
-  type AgentSessionWorkflowScope,
+  type AgentSessionScope,
   type CodexEffectivePolicy,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
@@ -53,7 +53,7 @@ const codexPolicy: CodexEffectivePolicy = {
   approvalsReviewerApplies: true,
 };
 
-const resolveRuntimePolicy = (_scope: AgentSessionWorkflowScope) => Effect.succeed(codexPolicy);
+const resolveRuntimePolicy = (_scope: AgentSessionScope) => Effect.succeed(codexPolicy);
 
 const noBackgroundFailure = () => Effect.void;
 
@@ -163,6 +163,7 @@ const createControllerHarness = ({
                 workingDirectory: input.workingDirectory,
                 externalSessionId: input.externalSessionId,
               },
+              sessionAssociation: input.sessionScope ?? { kind: "unbound" },
               contextUsage: usage,
             },
           ];
@@ -325,7 +326,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   });
 
   test("resolves and injects Codex policy behind the normalized control boundary", async () => {
-    const policyScopes: AgentSessionWorkflowScope[] = [];
+    const policyScopes: AgentSessionScope[] = [];
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
@@ -382,14 +383,18 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     }
   });
 
-  test("fails actionably when a direct Codex control lacks workflow context", async () => {
+  test("requires scope and accepts repository scope for direct Codex controls", async () => {
     const harness = createControllerHarness();
+    const policyScopes: AgentSessionScope[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
-        resolveRuntimePolicy,
+        resolveRuntimePolicy: (scope) => {
+          policyScopes.push(scope);
+          return Effect.succeed(codexPolicy);
+        },
         createController: harness.createController,
       })(runtime),
     );
@@ -401,21 +406,21 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
           parts: [{ kind: "text", text: "Hello" }],
         } as never),
       ),
-    ).rejects.toThrow(
-      "Cannot run Codex live-session control 'send-user-message' without workflow session context.",
+    ).rejects.toThrow("Codex live-session control 'send-user-message' requires session scope.");
+    await Effect.runPromise(
+      prepared.adapter.sendUserMessage({
+        ...ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Hello" }],
+      }),
     );
-    await expect(
-      Effect.runPromise(
-        prepared.adapter.sendUserMessage({
-          ...ref,
-          sessionScope: { kind: "repository" },
-          parts: [{ kind: "text", text: "Hello" }],
-        }),
-      ),
-    ).rejects.toThrow(
-      "Cannot run Codex live-session control 'send-user-message' with repository session context; workflow session context is required.",
-    );
-    expect(harness.controlInputs.sends).toEqual([]);
+    expect(policyScopes).toEqual([{ kind: "repository" }]);
+    expect(harness.controlInputs.sends).toEqual([
+      expect.objectContaining({
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: codexPolicy },
+      }),
+    ]);
   });
 
   test("releases through the host lifecycle without re-entering its coordinator", async () => {
@@ -902,7 +907,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   test("loads an unmatched persisted session with host-resolved workflow policy", async () => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     const harness = createControllerHarness({ initialSnapshots: [] });
-    const policyScopes: AgentSessionWorkflowScope[] = [];
+    const policyScopes: AgentSessionScope[] = [];
     const qaPolicy: CodexEffectivePolicy = {
       ...codexPolicy,
       approvalPolicy: "never",
@@ -916,7 +921,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         resolveRuntimePolicy: (scope) =>
           Effect.sync(() => {
             policyScopes.push(scope);
-            return scope.role === "qa" ? qaPolicy : codexPolicy;
+            return scope.kind === "workflow" && scope.role === "qa" ? qaPolicy : codexPolicy;
           }),
         createController: harness.createController,
       })(runtime),
@@ -968,7 +973,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const persistedRef = {
       ...ref,
       externalSessionId: "persisted-thread",
-      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+      sessionScope: { kind: "repository" } as const,
     };
     await expect(Effect.runPromise(prepared.adapter.loadContext(persistedRef))).resolves.toBeNull();
     expect(harness.liveContextLoads).toEqual([]);
@@ -982,12 +987,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       type: "session_upsert",
       snapshot: {
         ref: expect.objectContaining({ externalSessionId: "persisted-thread" }),
+        sessionAssociation: { kind: "repository" },
         contextUsage: null,
       },
     });
   });
 
-  test("rejects an unmatched context load without workflow scope", async () => {
+  test("rejects an unmatched context load without session scope", async () => {
     const harness = createControllerHarness({ initialSnapshots: [] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
@@ -1003,7 +1009,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       Effect.runPromise(
         prepared.adapter.loadContext({ ...ref, externalSessionId: "persisted-thread" }),
       ),
-    ).rejects.toThrow("requires workflow session scope");
+    ).rejects.toThrow("requires session scope");
     expect(harness.liveContextLoads).toEqual([]);
     expect(harness.policyBoundContextLoads).toEqual([]);
   });

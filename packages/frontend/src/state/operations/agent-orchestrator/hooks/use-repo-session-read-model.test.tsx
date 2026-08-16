@@ -65,7 +65,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
     workingDirectory: record.workingDirectory,
     externalSessionId: record.externalSessionId,
   },
-  sessionAssociation: { kind: "unbound" },
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "idle",
   title: "Builder",
   startedAt: record.startedAt,
@@ -135,6 +135,7 @@ const createState = (
     currentWorkspaceRepoPathRef: { current: "/repo" },
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
+    setLiveAssociations: sessionStore.setLiveAssociations,
     liveSessionPort,
     transcriptEvents,
     recoverTranscriptGap,
@@ -146,6 +147,12 @@ const createState = (
     callOrder,
     getSession: () =>
       sessionStore.getSessionSnapshot({
+        externalSessionId: record.externalSessionId,
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      }),
+    getLiveAssociation: () =>
+      sessionStore.getLiveAssociationSnapshot({
         externalSessionId: record.externalSessionId,
         runtimeKind: record.runtimeKind,
         workingDirectory: record.workingDirectory,
@@ -200,10 +207,35 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()?.pendingApprovals).toEqual([
         expect.objectContaining({ requestId: "opaque-1" }),
       ]);
+      expect(state.getLiveAssociation()).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
       expect(state.observeAgentSessionLive).toHaveBeenCalledWith(
         { repoPath: "/repo" },
         expect.any(Function),
       );
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps repository policy association outside the projected session", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+      });
+    }, []);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(state.getSession()).toMatchObject({ taskId: "", role: null });
+      expect(state.getLiveAssociation()).toEqual({ kind: "repository" });
     } finally {
       await state.harness.unmount();
     }
@@ -457,6 +489,11 @@ describe("useRepoSessionReadModel", () => {
           externalSessionId: sessionRecord.externalSessionId,
         },
         activity: "waiting_for_permission",
+        sessionAssociation: {
+          kind: "workflow",
+          taskId: "task-1",
+          role: sessionRecord.role,
+        },
         pendingApprovals: [
           {
             requestId: `approval-${sessionRecord.externalSessionId}`,

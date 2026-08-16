@@ -12,6 +12,11 @@ import {
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { asUnknownRecord, readStringProp } from "./guards";
+import {
+  OPENCODE_SUBAGENT_TOOL_NAME,
+  OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES,
+  resolveOpencodeBaseToolPolicy,
+} from "./opencode-tool-policy";
 import { toToolIdList } from "./payload-mappers";
 
 const OPENDUCKTOR_MCP_SERVER_NAME = "openducktor";
@@ -20,12 +25,19 @@ const CONNECTED_MCP_STATUS = "connected";
 const OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS = new Set<string>(
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES.flatMap(toOpencodeExposedOdtToolIds),
 );
-const OPENCODE_SUBAGENT_TOOL_NAME = "task";
-const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
-
 const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
   isOpencodeExposedOdtToolAlias(toolId) ||
   OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS.has(toolId);
+
+export const resolveRepositoryToolSelection = (
+  runtimeDescriptor: RuntimeDescriptor,
+): Record<string, boolean> =>
+  Object.fromEntries(
+    resolveOpencodeBaseToolPolicy({
+      runtimeDescriptor,
+      enableOdtTools: true,
+    }).map(({ toolId, enabled }) => [toolId, enabled]),
+  );
 
 type McpApi = {
   status?: (args: { directory: string }) => Promise<unknown>;

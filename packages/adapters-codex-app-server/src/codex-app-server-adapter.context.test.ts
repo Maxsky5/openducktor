@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexUserMessageInput,
   createDeferred,
   createHarness,
   createRuntimeStreamSubscription,
@@ -23,6 +25,30 @@ const tokenUsageNotification = (totalTokens: number, threadId = "thread/start-ru
 });
 
 describe("CodexAppServerAdapter context loading", () => {
+  test("applies workflow tool policy when context loading cold-resumes a session", async () => {
+    const { adapter, transports } = createHarness();
+
+    await adapter.loadSessionContextUsage(codexSessionRef("thread-idle"));
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread-idle",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        parts: [{ kind: "text", text: "Continue" }],
+      }),
+    );
+
+    const resumeCalls = transports
+      .get("runtime-live")
+      ?.calls.filter((call) => call.method === "thread/resume");
+    expect(resumeCalls).toHaveLength(1);
+    expect(resumeCalls?.[0]?.params).toMatchObject({
+      config: {
+        "mcp_servers.openducktor.enabled": true,
+        "mcp_servers.openducktor.enabled_tools": [...AGENT_ROLE_TOOL_POLICY.build],
+      },
+    });
+  });
+
   test("returns retained context without a Codex resume", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({

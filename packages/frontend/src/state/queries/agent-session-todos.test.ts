@@ -1,7 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionTodoItem, PolicyBoundSessionRef } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { agentSessionTodosQueryKeys, sessionTodosQueryOptions } from "./agent-session-todos";
+import {
+  agentSessionTodosQueryKeys,
+  sessionTodosQueryOptions,
+  updateSessionTodosQueryData,
+} from "./agent-session-todos";
 
 const sessionRefFixture: PolicyBoundSessionRef = {
   repoPath: "/repo",
@@ -19,13 +23,46 @@ const todoFixture: AgentSessionTodoItem = {
 };
 
 describe("agent session todos queries", () => {
-  test("keys todos by the concrete runtime session identity", () => {
+  test("keeps absent, repository, and workflow session scopes distinct", () => {
     expect(agentSessionTodosQueryKeys.todos(sessionRefFixture)).toEqual([
       "agent-session-todos",
       "/repo",
       "opencode",
       "/repo/worktree",
       "session-1",
+      null,
+      null,
+      null,
+    ]);
+    expect(
+      agentSessionTodosQueryKeys.todos({
+        ...sessionRefFixture,
+        sessionScope: { kind: "repository" },
+      }),
+    ).toEqual([
+      "agent-session-todos",
+      "/repo",
+      "opencode",
+      "/repo/worktree",
+      "session-1",
+      "repository",
+      null,
+      null,
+    ]);
+    expect(
+      agentSessionTodosQueryKeys.todos({
+        ...sessionRefFixture,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ).toEqual([
+      "agent-session-todos",
+      "/repo",
+      "opencode",
+      "/repo/worktree",
+      "session-1",
+      "workflow",
+      "task-1",
+      "build",
     ]);
   });
 
@@ -39,5 +76,30 @@ describe("agent session todos queries", () => {
 
     expect(todos).toEqual([todoFixture]);
     expect(readSessionTodos).toHaveBeenCalledWith(sessionRefFixture);
+  });
+
+  test("applies transcript updates to every cached scope for the session", () => {
+    const queryClient = new QueryClient();
+    const refs: PolicyBoundSessionRef[] = [
+      sessionRefFixture,
+      { ...sessionRefFixture, sessionScope: { kind: "repository" } },
+      {
+        ...sessionRefFixture,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      },
+    ];
+    for (const ref of refs) {
+      queryClient.setQueryData(agentSessionTodosQueryKeys.todos(ref), [todoFixture]);
+    }
+
+    updateSessionTodosQueryData(queryClient, sessionRefFixture, (current) =>
+      current.map((todo) => ({ ...todo, status: "completed" })),
+    );
+
+    for (const ref of refs) {
+      expect(
+        queryClient.getQueryData<AgentSessionTodoItem[]>(agentSessionTodosQueryKeys.todos(ref)),
+      ).toEqual([{ ...todoFixture, status: "completed" }]);
+    }
   });
 });

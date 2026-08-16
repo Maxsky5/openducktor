@@ -3,6 +3,7 @@ import type { AgentEvent } from "@openducktor/core";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import {
   createClaudeCanUseTool,
+  createClaudeRepositoryPermissionTestSession,
   createClaudePermissionTestSession as createSession,
 } from "./claude-agent-sdk-permissions.test-support";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
@@ -17,6 +18,72 @@ const addNestedSubagent = (session: ClaudeSessionContext): void => {
 };
 
 describe("createClaudeCanUseTool", () => {
+  test("requests approval for repository task creation as a mutating runtime tool", async () => {
+    const events: AgentEvent[] = [];
+    const session = createClaudeRepositoryPermissionTestSession();
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    const resultPromise = canUseTool(
+      "mcp__openducktor__odt_create_task",
+      { title: "New task" },
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool-use-1",
+        requestId: "sdk-request-1",
+      },
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "approval_required",
+        requestId: "request-1",
+        requestType: "runtime_tool",
+        mutation: "mutating",
+        tool: {
+          name: "mcp__openducktor__odt_create_task",
+          input: { title: "New task" },
+        },
+      }),
+    ]);
+    session.pendingApprovals.get("request-1")?.resolve({ behavior: "allow" });
+    await expect(resultPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { title: "New task" },
+    });
+  });
+
+  test("auto-allows repository task search as a read-only runtime tool", async () => {
+    const events: AgentEvent[] = [];
+    const session = createClaudeRepositoryPermissionTestSession();
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    await expect(
+      canUseTool(
+        "mcp__openducktor__odt_search_tasks",
+        { query: "repository chat" },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-use-1",
+          requestId: "sdk-request-1",
+        },
+      ),
+    ).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: { query: "repository chat" },
+    });
+    expect(events).toEqual([]);
+  });
+
   test("allows native Claude ODT read tool aliases for workflow roles", async () => {
     const events: AgentEvent[] = [];
     const session = createSession("build");
@@ -72,6 +139,34 @@ describe("createClaudeCanUseTool", () => {
     });
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
+  });
+
+  test("denies public repository tools in workflow sessions", async () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("build");
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: () => "request-1",
+      emit: (_session, event) => events.push(event),
+    });
+
+    await expect(
+      canUseTool(
+        "mcp__openducktor__odt_search_tasks",
+        { query: "task" },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-use-1",
+          requestId: "sdk-request-1",
+        },
+      ),
+    ).resolves.toEqual({
+      behavior: "deny",
+      decisionClassification: "user_reject",
+      message: "Tool odt_search_tasks is not allowed for build sessions.",
+    });
+    expect(events).toEqual([]);
   });
 
   test("delegates Bash permission decisions for read-only workflow roles", async () => {

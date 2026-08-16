@@ -13,7 +13,7 @@ export type ResolvedOpencodeRuntimeClientInput = OpencodeRuntimeClientInput & {
 };
 
 export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
-  workingDirectory?: string | null;
+  workingDirectory: string;
 };
 
 export type ResolveOpencodeRuntimeClientInputRequest = {
@@ -24,7 +24,7 @@ export type ResolveOpencodeRuntimeClientInputRequest = {
 
 const requireOpencodeRuntimeEndpoint = (
   runtime: RepoRuntimeRouteResolution,
-  input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
+  input: RepoRuntimeRef,
   action: string,
 ): string => {
   const ref = requireRepoRuntimeRef(input, action);
@@ -40,14 +40,14 @@ const requireOpencodeRuntimeEndpoint = (
   }
   if (runtime.runtimeRoute.type !== "local_http") {
     throw new Error(
-      `OpenCode runtime route '${runtime.runtimeRoute.type}' is unsupported for ${action}; local_http is required for repo '${ref.repoPath}'.`,
+      `OpenCode runtime '${runtime.runtimeId}' is missing required route contract 'local_http' for repo '${ref.repoPath}' while attempting to ${action}; received route '${runtime.runtimeRoute.type}'.`,
     );
   }
 
   const endpoint = runtime.runtimeRoute.endpoint.trim();
   if (endpoint.length === 0) {
     throw new Error(
-      `OpenCode runtime endpoint is required to ${action} for repo '${ref.repoPath}' and runtime '${ref.runtimeKind}'.`,
+      `OpenCode runtime '${runtime.runtimeId}' is missing required route contract 'local_http' for repo '${ref.repoPath}' while attempting to ${action}; route endpoint is empty.`,
     );
   }
 
@@ -58,7 +58,7 @@ const toOpencodeRuntimeClientInput = (input: {
   runtime: RepoRuntimeRouteResolution;
   repoPath: RepoRuntimeRef["repoPath"];
   runtimeKind: RepoRuntimeRef["runtimeKind"];
-  workingDirectory: string | null | undefined;
+  workingDirectory: string;
   action: string;
 }): OpencodeRuntimeClientInput => ({
   runtimeEndpoint: requireOpencodeRuntimeEndpoint(input.runtime, input, input.action),
@@ -72,7 +72,7 @@ export const resolveOpencodeRuntimeClientInput = async ({
 }: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
   if (!repoRuntimeResolver) {
     throw new Error(
-      `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+      `OpenCode runtime '<unresolved>' is missing required route contract 'local_http' for repo '${input.repoPath}' while attempting to ${action}; repo runtime resolver is unavailable.`,
     );
   }
 

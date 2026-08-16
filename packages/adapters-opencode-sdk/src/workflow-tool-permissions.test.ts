@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { buildRoleScopedPermissionRules } from "./workflow-tool-permissions";
+import {
+  ODT_MCP_TOOL_NAMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  toOpencodeExposedOdtToolIds,
+} from "@openducktor/contracts";
+import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
+import {
+  buildRepositoryScopedPermissionRules,
+  buildRoleScopedPermissionRules,
+} from "./workflow-tool-permissions";
 
 type PermissionRule = ReturnType<typeof buildRoleScopedPermissionRules>[number];
 
@@ -19,6 +27,49 @@ const findFinalExactAction = (rules: PermissionRule[], permission: string): stri
 };
 
 describe("workflow-tool-permissions", () => {
+  test("asks for approval across the complete trusted ODT catalog for repository scope", () => {
+    const rules = buildRepositoryScopedPermissionRules(OPENCODE_RUNTIME_DESCRIPTOR);
+
+    expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
+    expect(rules).toContainEqual({
+      permission: "functions.openducktor_*",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(rules).toContainEqual({ permission: "task", pattern: "*", action: "allow" });
+    expect(rules).not.toContainEqual({ permission: "edit", pattern: "*", action: "deny" });
+    for (const toolName of ODT_MCP_TOOL_NAMES) {
+      for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
+        expect(findFinalExactAction(rules, permission)).toBe("ask");
+      }
+    }
+    expect(findFinalExactAction(rules, "odt_create_task")).toBe("ask");
+    expect(findFinalExactAction(rules, "odt_search_tasks")).toBe("ask");
+  });
+
+  test("asks for approval for runtime-provided repository ODT aliases", () => {
+    const rules = buildRepositoryScopedPermissionRules({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      workflowToolAliasesByCanonical: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+        odt_set_plan: ["runtime_plan_alias"],
+      },
+    });
+
+    expect(findFinalExactAction(rules, "runtime_plan_alias")).toBe("ask");
+  });
+
+  test("keeps approval prompts out of every workflow role policy", () => {
+    for (const role of Object.keys(AGENT_ROLE_TOOL_POLICY) as AgentRole[]) {
+      const rules = buildRoleScopedPermissionRules({
+        role,
+        runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      });
+
+      expect(rules.filter((rule) => rule.action === "ask")).toEqual([]);
+    }
+  });
+
   test("builds runtime-provided read-only permission rules plus allow-specific odt permissions for spec role", () => {
     const rules = buildRoleScopedPermissionRules({
       role: "spec",

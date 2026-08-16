@@ -9,6 +9,7 @@ import {
   type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
   requireRepoRuntimeRef,
+  requireSessionWorkingDirectory,
   type SearchAgentFilesInput,
   type StartAgentSessionInput,
 } from "@openducktor/core";
@@ -54,6 +55,10 @@ export class CodexRuntimeClientResolver {
     runtimeId: string;
     client: CodexAppServerClient;
   }> {
+    if ("workingDirectory" in input) {
+      requireSessionWorkingDirectory(input.workingDirectory, action);
+    }
+
     const resolver = this.options.repoRuntimeResolver;
     if (!resolver) {
       throw new Error(
@@ -71,16 +76,7 @@ export class CodexRuntimeClientResolver {
     };
     const runtime = await resolver.requireRepoRuntime(runtimeRef);
 
-    const { runtimeId } = resolveCodexRuntimeClientInput(
-      runtime,
-      {
-        repoPath: runtimeRef.repoPath,
-        runtimeKind: runtimeRef.runtimeKind,
-        ...("workingDirectory" in input ? { workingDirectory: input.workingDirectory } : {}),
-      },
-      action,
-    );
-
+    const { runtimeId } = resolveCodexRuntimeClientInput(runtime, runtimeRef, action);
     return {
       runtimeId,
       client: this.clientForRuntime(runtimeId),
