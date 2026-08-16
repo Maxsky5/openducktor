@@ -30,7 +30,7 @@ export type InteractiveTerminalMount = {
   dispose(): void;
 };
 
-export type MountInteractiveTerminalInput = {
+type MountInteractiveTerminalInput = {
   container: HTMLDivElement;
   terminalId: string;
   controller: TerminalTransportController;
@@ -49,11 +49,7 @@ export type MountInteractiveTerminalInput = {
   onInteractionFailure: (title: string, cause: unknown) => void;
 };
 
-export type MountInteractiveTerminal = (
-  input: MountInteractiveTerminalInput,
-) => InteractiveTerminalMount;
-
-export const mountInteractiveTerminal: MountInteractiveTerminal = ({
+export const mountInteractiveTerminal = ({
   container,
   terminalId,
   controller,
@@ -70,7 +66,7 @@ export const mountInteractiveTerminal: MountInteractiveTerminal = ({
   onImageDragActiveChange,
   onRendererError,
   onInteractionFailure,
-}) => {
+}: MountInteractiveTerminalInput): InteractiveTerminalMount => {
   let disposed = false;
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);

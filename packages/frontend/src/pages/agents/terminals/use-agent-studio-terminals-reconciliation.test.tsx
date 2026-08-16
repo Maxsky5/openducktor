@@ -1,14 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { TerminalSummary } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { TerminalPanel, type TerminalTab } from "@/features/terminals";
-import type {
-  MountInteractiveTerminal,
-  MountInteractiveTerminalInput,
-} from "@/features/terminals/interactive-terminal-mount";
+import * as terminalMountModule from "@/features/terminals/interactive-terminal-mount";
 import {
   terminalTabLabel,
   terminalTabLifecycle,
@@ -502,36 +499,40 @@ describe("useAgentStudioTerminals", () => {
     let latest: HookResult | null = null;
     const probes = new Map<
       string,
-      {
+      Array<{
         disposals: number;
         mounts: number;
         active: boolean;
-        input: MountInteractiveTerminalInput;
-      }
+        input: Parameters<typeof terminalMountModule.mountInteractiveTerminal>[0];
+      }>
     >();
     const getLatest = (): HookResult => {
       if (!latest) throw new Error("Terminal hook result is not ready.");
       return latest;
     };
-    const mountTerminal: MountInteractiveTerminal = (input) => {
-      const probe = {
-        active: input.isActive(),
-        disposals: 0,
-        input,
-        mounts: 1,
-      };
-      probes.set(input.terminalId, probe);
-      input.onHydrated();
-      return {
-        activate: () => undefined,
-        setActive: (active) => {
-          probe.active = active;
-        },
-        dispose: () => {
-          probe.disposals += 1;
-        },
-      };
-    };
+    const mountSpy = spyOn(terminalMountModule, "mountInteractiveTerminal").mockImplementation(
+      (input) => {
+        const probe = {
+          active: input.isActive(),
+          disposals: 0,
+          input,
+          mounts: 1,
+        };
+        const terminalProbes = probes.get(input.terminalId) ?? [];
+        terminalProbes.push(probe);
+        probes.set(input.terminalId, terminalProbes);
+        input.onHydrated();
+        return {
+          activate: () => undefined,
+          setActive: (active) => {
+            probe.active = active;
+          },
+          dispose: () => {
+            probe.disposals += 1;
+          },
+        };
+      },
+    );
     const ScopeHarness = ({
       taskId,
       mountedTaskIds,
@@ -540,7 +541,7 @@ describe("useAgentStudioTerminals", () => {
       mountedTaskIds: string[];
     }) => {
       latest = useAgentStudioTerminals({ repoPath: "/repo", taskId, mountedTaskIds }, dependencies);
-      return <TerminalPanel model={latest} mountTerminal={mountTerminal} />;
+      return <TerminalPanel model={latest} />;
     };
     const renderHarness = (taskId: string, mountedTaskIds: string[]) => (
       <QueryProvider useIsolatedClient>
@@ -554,7 +555,7 @@ describe("useAgentStudioTerminals", () => {
         expect(getLatest().mountedTabs.map(({ tab }) => tab.terminalId)).toEqual([
           "terminal-task-a",
         ]);
-        expect(probes.get("terminal-task-a")?.mounts).toBe(1);
+        expect(probes.get("terminal-task-a")?.[0]?.mounts).toBe(1);
       });
 
       view.rerender(renderHarness("task-b", ["task-a", "task-b"]));
@@ -563,10 +564,18 @@ describe("useAgentStudioTerminals", () => {
           "terminal-task-a",
           "terminal-task-b",
         ]);
-        expect(probes.get("terminal-task-b")?.mounts).toBe(1);
+        expect(probes.get("terminal-task-b")?.[0]?.mounts).toBe(1);
       });
-      expect(probes.get("terminal-task-a")?.mounts).toBe(1);
-      expect([...probes.values()].filter(({ active }) => active)).toHaveLength(1);
+      const taskAProbe = probes.get("terminal-task-a")?.[0];
+      const taskBProbe = probes.get("terminal-task-b")?.[0];
+      if (!taskAProbe || !taskBProbe) throw new Error("Expected both terminal probes.");
+      expect(probes.get("terminal-task-a")).toHaveLength(1);
+      expect(probes.get("terminal-task-b")).toHaveLength(1);
+      expect([...probes.values()].flat().filter(({ active }) => active)).toHaveLength(1);
+      const mountedTabsBeforeSwitches = getLatest().mountedTabs;
+      const taskAMountedBeforeSwitches = mountedTabsBeforeSwitches.find(
+        ({ scopeKey }) => scopeKey === "/repo:task-a",
+      );
 
       const startedAt = performance.now();
       for (let index = 0; index < 40; index += 1) {
@@ -574,11 +583,12 @@ describe("useAgentStudioTerminals", () => {
       }
       const switchDurationMs = performance.now() - startedAt;
       expect(switchDurationMs).toBeLessThan(1_000);
-      expect(probes.get("terminal-task-a")?.mounts).toBe(1);
-      expect(probes.get("terminal-task-b")?.mounts).toBe(1);
-
-      const taskAProbe = probes.get("terminal-task-a");
-      if (!taskAProbe) throw new Error("Expected task A terminal probe.");
+      expect(probes.get("terminal-task-a")).toEqual([taskAProbe]);
+      expect(probes.get("terminal-task-b")).toEqual([taskBProbe]);
+      expect(getLatest().mountedTabs).toBe(mountedTabsBeforeSwitches);
+      expect(getLatest().mountedTabs.find(({ scopeKey }) => scopeKey === "/repo:task-a")).toBe(
+        taskAMountedBeforeSwitches,
+      );
       act(() => {
         taskAProbe.input.onTitleChange("Task A title");
         taskAProbe.input.onLifecycle("exited", "Task A exited.");
@@ -605,9 +615,10 @@ describe("useAgentStudioTerminals", () => {
       expect(getLatest().mountedTabs.map(({ tab }) => terminalTabLabel(tab))).toEqual([
         "Task A title",
       ]);
-      expect(probes.get("terminal-task-b")?.disposals).toBe(1);
+      expect(taskBProbe.disposals).toBe(1);
     } finally {
       view.unmount();
+      mountSpy.mockRestore();
     }
   }, 5_000);
 

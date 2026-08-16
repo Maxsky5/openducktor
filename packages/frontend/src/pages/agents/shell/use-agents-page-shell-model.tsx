@@ -149,15 +149,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     humanRequestChangesTask,
     setTaskTargetBranch,
   });
-  const mountedTerminalTaskIds = useMemo(
-    () => orchestration.agentStudioTaskTabsModel.tabs.map((tab) => tab.taskId),
-    [orchestration.agentStudioTaskTabsModel.tabs],
-  );
   const terminalPanel = useAgentStudioTerminals({
     repoPath: workspaceRepoPath,
     taskId: selection.view.selectedTask?.id ?? null,
     taskVersion: selection.view.selectedTask?.updatedAt ?? null,
-    mountedTaskIds: mountedTerminalTaskIds,
+    mountedTaskIds: selection.tabTaskIds,
   });
 
   const { isRightPanelVisible, rightPanelBridge, selectedFileRefresh } =

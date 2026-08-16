@@ -57,6 +57,7 @@ export type AgentStudioSelectionControllerResult = {
   queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
   isLoadingTasks: boolean;
   activeTaskTabId: string;
+  tabTaskIds: string[];
   availableTabTasks: TaskCard[];
   taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
   handleSelectTab: (nextTaskId: string) => void;
@@ -147,6 +148,7 @@ export function useAgentStudioSelectionController({
   }, [sessionsByTaskId]);
 
   const {
+    tabTaskIds,
     activeTaskTabId,
     availableTabTasks,
     taskTabs,
@@ -249,6 +251,7 @@ export function useAgentStudioSelectionController({
       queryUpdate: navigationState.queryUpdate,
       isLoadingTasks,
       activeTaskTabId,
+      tabTaskIds,
       availableTabTasks,
       taskTabs,
       handleSelectTab,
@@ -276,6 +279,7 @@ export function useAgentStudioSelectionController({
       selectedSessionViewWithContextError,
       sessions,
       taskTabs,
+      tabTaskIds,
     ],
   );
 }

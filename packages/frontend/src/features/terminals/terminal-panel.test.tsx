@@ -122,7 +122,7 @@ describe("TerminalPanel", () => {
     };
     const view = render(<TerminalPanel model={{ ...model, ...tabsModel([lostTab, secondTab]) }} />);
 
-    const panels = view.container.querySelectorAll<HTMLElement>('[data-slot="tabs-content"]');
+    const panels = view.container.querySelectorAll<HTMLElement>("[data-terminal-viewport]");
     const inactivePanel = Array.from(panels).find((panel) => panel.dataset.state === "inactive");
 
     expect(panels).toHaveLength(2);

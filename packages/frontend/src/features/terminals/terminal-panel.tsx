@@ -22,9 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { MountInteractiveTerminal } from "./interactive-terminal-mount";
 import { terminalTabLabel } from "./terminal-presentation-state";
 import { TerminalTabStrip } from "./terminal-tab-strip";
 import type { MountedTerminalTab, TerminalPanelModel, TerminalTab } from "./use-terminals";
@@ -36,7 +35,6 @@ const LazyInteractiveTerminal = lazy(async () => {
 
 const TerminalViewport = memo(function TerminalViewport({
   mountedTab,
-  mountTerminal,
   controller,
   focusRequest,
   active,
@@ -48,7 +46,6 @@ const TerminalViewport = memo(function TerminalViewport({
   onTitleChange,
 }: {
   mountedTab: MountedTerminalTab;
-  mountTerminal?: MountInteractiveTerminal;
   controller: TerminalPanelModel["controller"];
   focusRequest: number;
   active: boolean;
@@ -135,7 +132,6 @@ const TerminalViewport = memo(function TerminalViewport({
         onLifecycle={handleLifecycle}
         onForgotten={handleForgotten}
         onTitleChange={handleTitleChange}
-        {...(mountTerminal ? { mountTerminal } : {})}
       />
     </Suspense>
   );
@@ -144,11 +140,9 @@ const TerminalViewport = memo(function TerminalViewport({
 export function TerminalPanel({
   model,
   headerLeading,
-  mountTerminal,
 }: {
   model: TerminalPanelModel;
   headerLeading?: ReactNode;
-  mountTerminal?: MountInteractiveTerminal;
 }): ReactElement {
   const [pendingCloseCandidate, setPendingCloseCandidate] = useState<{
     scopeKey: string | null;
@@ -163,9 +157,15 @@ export function TerminalPanel({
     undefined,
   );
   const currentScopeKey = useRef(model.scopeKey);
+  const retryCreateRef = useRef(model.onRetryCreate);
   useLayoutEffect(() => {
     currentScopeKey.current = model.scopeKey;
-  }, [model.scopeKey]);
+    retryCreateRef.current = model.onRetryCreate;
+  }, [model.onRetryCreate, model.scopeKey]);
+  const retryTerminalCreation = useCallback(
+    (tabId: string): void => retryCreateRef.current(tabId),
+    [],
+  );
   const closeCandidate =
     pendingCloseCandidate?.scopeKey === model.scopeKey ? pendingCloseCandidate.tab : null;
   const closeError =
@@ -286,38 +286,36 @@ export function TerminalPanel({
       </div>
       {model.mountedTabs.length > 0 ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <Tabs
-            value={activeTab?.tabId ?? "pending-terminal-close"}
-            onValueChange={model.onSelectTab}
-            className="relative min-h-0 flex-1 gap-0 overflow-hidden"
-          >
-            {model.mountedTabs.map((mountedTab) => (
-              <TabsContent
-                key={`${mountedTab.scopeKey}:${mountedTab.tab.tabId}`}
-                value={mountedTab.tab.tabId}
-                forceMount
-                className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:inset-0 data-[state=inactive]:invisible"
-              >
-                <TerminalViewport
-                  mountedTab={mountedTab}
-                  {...(mountTerminal ? { mountTerminal } : {})}
-                  controller={model.controller}
-                  focusRequest={model.focusRequest}
-                  active={
-                    model.isVisible &&
-                    mountedTab.scopeKey === model.scopeKey &&
-                    mountedTab.tab.tabId === activeTab?.tabId
-                  }
-                  platform={model.platform}
-                  onRetryCreate={model.onRetryCreate}
-                  onAttention={setTabAttention}
-                  onLifecycle={setTerminalLifecycle}
-                  onForgotten={model.onForgotten}
-                  onTitleChange={model.onTitleChange}
-                />
-              </TabsContent>
-            ))}
-          </Tabs>
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {model.mountedTabs.map((mountedTab) => {
+              const active =
+                model.isVisible &&
+                mountedTab.scopeKey === model.scopeKey &&
+                mountedTab.tab.tabId === activeTab?.tabId;
+              return (
+                <div
+                  key={`${mountedTab.scopeKey}:${mountedTab.tab.tabId}`}
+                  data-terminal-viewport
+                  data-state={active ? "active" : "inactive"}
+                  aria-hidden={!active}
+                  className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:inset-0 data-[state=inactive]:invisible"
+                >
+                  <TerminalViewport
+                    mountedTab={mountedTab}
+                    controller={model.controller}
+                    focusRequest={active ? model.focusRequest : 0}
+                    active={active}
+                    platform={model.platform}
+                    onRetryCreate={retryTerminalCreation}
+                    onAttention={setTabAttention}
+                    onLifecycle={setTerminalLifecycle}
+                    onForgotten={model.onForgotten}
+                    onTitleChange={model.onTitleChange}
+                  />
+                </div>
+              );
+            })}
+          </div>
           {activeTab && attentionByTab[activeTab.tabId] ? (
             <p className="border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground">
               {attentionByTab[activeTab.tabId]}

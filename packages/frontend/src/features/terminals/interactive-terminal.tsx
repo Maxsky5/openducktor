@@ -8,7 +8,6 @@ import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { cn } from "@/lib/utils";
 import {
   type InteractiveTerminalMount,
-  type MountInteractiveTerminal,
   mountInteractiveTerminal,
 } from "./interactive-terminal-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
@@ -23,7 +22,6 @@ export type InteractiveTerminalProps = {
   onLifecycle: (lifecycle: TerminalLifecycle, exitText: string | null) => void;
   onForgotten: (message: string) => void;
   onTitleChange: (title: string) => void;
-  mountTerminal?: MountInteractiveTerminal;
 };
 
 export function InteractiveTerminal({
@@ -36,7 +34,6 @@ export function InteractiveTerminal({
   onLifecycle,
   onForgotten,
   onTitleChange,
-  mountTerminal = mountInteractiveTerminal,
 }: InteractiveTerminalProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mountRef = useRef<InteractiveTerminalMount | null>(null);
@@ -64,7 +61,7 @@ export function InteractiveTerminal({
     const interactionToastId = `terminal:${terminalId}:interaction`;
     let interactionToastShown = false;
     try {
-      mountRef.current = mountTerminal({
+      mountRef.current = mountInteractiveTerminal({
         container,
         terminalId,
         controller,
@@ -99,7 +96,7 @@ export function InteractiveTerminal({
       mountRef.current = null;
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, mountTerminal, terminalId]);
+  }, [controller, terminalId]);
 
   useEffect(() => {
     try {

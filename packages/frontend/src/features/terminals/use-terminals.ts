@@ -7,11 +7,23 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
 import { terminalListByFilterQueryOptions, terminalQueryKeys } from "@/state/queries/terminals";
+import {
+  createMountedTerminalTabsSelector,
+  type MountedTerminalTab,
+} from "./mounted-terminal-tabs";
 import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
 import {
   createTerminalPresentationState,
@@ -22,6 +34,7 @@ import {
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { useTerminalTransport } from "./use-terminal-transport";
 
+export type { MountedTerminalTab } from "./mounted-terminal-tabs";
 export type { TerminalTab } from "./terminal-presentation-state";
 
 export type TerminalDependencies = {
@@ -42,11 +55,6 @@ export type TerminalScope = {
   context: TerminalContext;
   workingDirectory: string | null;
   workingDirectoryError: string;
-};
-
-export type MountedTerminalTab = {
-  scopeKey: string;
-  tab: TerminalTab;
 };
 
 const terminalListFilterForContext = (context: TerminalContext | null): TerminalListFilter => {
@@ -103,6 +111,7 @@ export const useTerminals = (
     createTerminalPresentationState,
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
+  const [selectMountedTerminalTabs] = useState(createMountedTerminalTabsSelector);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const enabled = scope !== null;
   const listFilter = useMemo(
@@ -117,6 +126,9 @@ export const useTerminals = (
     ...terminalOptions,
     enabled,
   });
+  const syncedTerminalListByScopeRef = useRef(
+    new Map<string, NonNullable<typeof terminalQuery.data>>(),
+  );
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
   useLayoutEffect(() => {
@@ -125,6 +137,8 @@ export const useTerminals = (
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
+    if (syncedTerminalListByScopeRef.current.get(scopeKey) === terminalQuery.data) return;
+    syncedTerminalListByScopeRef.current.set(scopeKey, terminalQuery.data);
     dispatch({
       type: "hostSynced",
       scopeKey,
@@ -144,19 +158,8 @@ export const useTerminals = (
   }, [visibleState.closingTabIds, visibleState.tabs]);
   const mountedTabs = useMemo(() => {
     const scopeKeys = mountedScopeKeys ?? (scopeKey ? [scopeKey] : []);
-    return scopeKeys
-      .flatMap((mountedScopeKey) =>
-        (presentation.scopes[mountedScopeKey]?.tabs ?? []).map((tab) => ({
-          scopeKey: mountedScopeKey,
-          tab,
-        })),
-      )
-      .toSorted((left, right) => {
-        const leftCreatedAt = left.tab.summary?.createdAt ?? `~${left.tab.tabId}`;
-        const rightCreatedAt = right.tab.summary?.createdAt ?? `~${right.tab.tabId}`;
-        return leftCreatedAt.localeCompare(rightCreatedAt);
-      });
-  }, [mountedScopeKeys, presentation.scopes, scopeKey]);
+    return selectMountedTerminalTabs(scopeKeys, presentation.scopes);
+  }, [mountedScopeKeys, presentation.scopes, scopeKey, selectMountedTerminalTabs]);
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
     : visibleTabs.length > 0;
