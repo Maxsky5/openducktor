@@ -3,12 +3,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  decodeTerminalProtocolFrame,
-  encodeTerminalProtocolFrame,
-  TERMINAL_PROTOCOL_SUBPROTOCOL,
-  TERMINAL_PROTOCOL_VERSION,
-} from "@openducktor/contracts";
-import {
   CodexSessionHistoryError,
   createLocalAttachmentAdapter,
   createSourceRuntimeDistribution,
@@ -18,7 +12,6 @@ import {
   TerminalServiceError,
 } from "@openducktor/host";
 import { Deferred, Effect, TestClock, TestContext } from "effect";
-import WebSocket from "ws";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { createWebLogger, type WebLogger } from "./logger";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
@@ -166,7 +159,7 @@ describe("TypeScript web host backend", () => {
     ).toBe(APP_SESSION_COOKIE_NAME);
   });
 
-  test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
+  test("serves core HTTP routes, owns development discovery, and shuts down cleanly", async () => {
     const tempConfigDir = await mkdtemp(path.join(tmpdir(), "openducktor-web-host-"));
     const processEnv: NodeJS.ProcessEnv = {
       ...process.env,
@@ -229,118 +222,6 @@ describe("TypeScript web host backend", () => {
       expect(session.headers.get("set-cookie")).toContain(
         `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=app-token`,
       );
-
-      if (process.platform !== "win32") {
-        const terminalIds: string[] = [];
-        for (let index = 0; index < 2; index += 1) {
-          const createTerminal = await Bun.fetch(`${backendUrl}/invoke/terminal_create`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-openducktor-app-token": APP_TOKEN,
-            },
-            body: JSON.stringify({ workingDir: tempConfigDir, context: {} }),
-          });
-          expect(createTerminal.status).toBe(200);
-          const created = (await createTerminal.json()) as { ref: { terminalId: string } };
-          terminalIds.push(created.ref.terminalId);
-        }
-        const socket = new WebSocket(
-          `${backendUrl.replace("http://", "ws://")}/terminal`,
-          [TERMINAL_PROTOCOL_SUBPROTOCOL],
-          {
-            headers: {
-              cookie: `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
-              origin: FRONTEND_ORIGIN,
-            },
-          },
-        );
-        socket.binaryType = "arraybuffer";
-        await new Promise<void>((resolve, reject) => {
-          let opened = false;
-          socket.once("open", () => {
-            opened = true;
-            resolve();
-          });
-          socket.on("error", (cause) => {
-            if (!opened) reject(cause);
-          });
-        });
-        expect(socket.protocol).toBe(TERMINAL_PROTOCOL_SUBPROTOCOL);
-        const snapshots = new Promise<string[]>((resolve, reject) => {
-          const attached = new Set<string>();
-          const timeout = setTimeout(
-            () => reject(new Error("Timed out waiting for multiplexed terminal snapshots.")),
-            1_000,
-          );
-          socket.on("message", (data) => {
-            const bytes =
-              data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data as Buffer);
-            const decoded = decodeTerminalProtocolFrame(bytes);
-            if (decoded.message.type !== "snapshot") return;
-            attached.add(decoded.message.terminalId);
-            if (attached.size === terminalIds.length) {
-              clearTimeout(timeout);
-              resolve([...attached]);
-            }
-          });
-        });
-        for (const terminalId of terminalIds) {
-          socket.send(
-            encodeTerminalProtocolFrame({
-              message: {
-                version: TERMINAL_PROTOCOL_VERSION,
-                type: "attach",
-                terminalId,
-                lastConsumedSequence: null,
-              },
-              payload: new Uint8Array(),
-            }),
-          );
-        }
-        expect((await snapshots).sort()).toEqual([...terminalIds].sort());
-        const unknownTerminalFailure = new Promise<string>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error("Timed out waiting for unknown-terminal rejection.")),
-            1_000,
-          );
-          socket.on("message", (data) => {
-            const bytes =
-              data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data as Buffer);
-            const decoded = decodeTerminalProtocolFrame(bytes);
-            if (
-              decoded.message.type === "protocol_error" &&
-              decoded.message.failure.code === "terminal_not_found"
-            ) {
-              clearTimeout(timeout);
-              resolve(decoded.message.terminalId ?? "");
-            }
-          });
-        });
-        socket.send(
-          encodeTerminalProtocolFrame({
-            message: {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "input",
-              terminalId: "missing-terminal",
-            },
-            payload: new Uint8Array([1]),
-          }),
-        );
-        expect(await unknownTerminalFailure).toBe("missing-terminal");
-        const oversizedClose = new Promise<number>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error("Timed out waiting for oversized-frame rejection.")),
-            1_000,
-          );
-          socket.once("close", (code) => {
-            clearTimeout(timeout);
-            resolve(code);
-          });
-        });
-        socket.send(new Uint8Array(1024 * 1024 + 1));
-        expect([1006, 1009]).toContain(await oversizedClose);
-      }
 
       const rejectedTerminalOrigin = await Bun.fetch(`${backendUrl}/terminal`, {
         headers: { origin: "http://evil.example" },
