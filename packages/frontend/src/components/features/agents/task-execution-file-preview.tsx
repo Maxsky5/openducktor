@@ -472,6 +472,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     onFileSaved,
     onLeavePolicyChange,
   });
+  const { hasStaleConflict, isDirty, isSaving, save } = editor;
   const retainedSnapshot =
     committedSnapshot?.sessionKey === previewSessionKey ? committedSnapshot.snapshot : null;
   const currentEditorSnapshot = useMemo(() => {
@@ -606,10 +607,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       if (isSave) {
         event.preventDefault();
         if (hasPendingDiscard) return;
-        const canSave =
-          hasActiveEditorSession && editor.isDirty && !editor.isSaving && !editor.hasStaleConflict;
+        const canSave = hasActiveEditorSession && isDirty && !isSaving && !hasStaleConflict;
         if (canSave) {
-          void editor.save();
+          void save();
         }
         return;
       }
@@ -619,15 +619,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       event.preventDefault();
       onClose();
     },
-    [
-      editor.hasStaleConflict,
-      editor.isDirty,
-      editor.isSaving,
-      editor.save,
-      hasActiveEditorSession,
-      hasPendingDiscard,
-      onClose,
-    ],
+    [hasStaleConflict, hasActiveEditorSession, hasPendingDiscard, isDirty, isSaving, onClose, save],
   );
 
   if (!selectedFile) {
