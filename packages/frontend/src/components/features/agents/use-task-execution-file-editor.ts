@@ -12,7 +12,10 @@ import {
   workspaceTextFileQueryOptions,
   workspaceTextFileWriteMutationOptions,
 } from "@/state/queries/filesystem";
-import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import {
+  type TaskExecutionSelectedFile,
+  taskExecutionSelectedFileKey,
+} from "./task-execution-file-explorer-model";
 import type { TaskExecutionFilePreviewLeavePolicy } from "./task-execution-file-preview";
 
 type TextFileResult = Extract<WorkspaceTextFileReadResult, { kind: "text" }>;
@@ -39,6 +42,7 @@ type EditorState = {
 };
 
 type EditorAction =
+  | { type: "reset" }
   | { type: "seed"; id: string; result: TextFileResult }
   | { type: "adopt_clean_result"; result: TextFileResult }
   | { type: "edit"; isDirty: boolean }
@@ -83,6 +87,8 @@ const INITIAL_EDITOR_STATE: EditorState = {
 
 const editorStateReducer = (state: EditorState, action: EditorAction): EditorState => {
   switch (action.type) {
+    case "reset":
+      return INITIAL_EDITOR_STATE;
     case "seed":
       return {
         ...INITIAL_EDITOR_STATE,
@@ -207,9 +213,7 @@ export const useTaskExecutionFileEditor = ({
   const draftRef = useRef("");
   const saveInFlightRef = useRef(false);
   const stateRef = useRef(state);
-  const selectedFileId = selectedFile
-    ? `${selectedFile.rootPath}:${selectedFile.relativePath}`
-    : null;
+  const selectedFileId = selectedFile ? taskExecutionSelectedFileKey(selectedFile) : null;
   const selectedFileIdRef = useRef(selectedFileId);
 
   useLayoutEffect(() => {
@@ -221,8 +225,15 @@ export const useTaskExecutionFileEditor = ({
   }, [state]);
 
   useLayoutEffect(() => {
-    if (!selectedFile || !readyResult) return;
-    const id = `${selectedFile.rootPath}:${selectedFile.relativePath}`;
+    if (!selectedFile) {
+      if (state.session) {
+        draftRef.current = "";
+        dispatch({ type: "reset" });
+      }
+      return;
+    }
+    if (!readyResult) return;
+    const id = taskExecutionSelectedFileKey(selectedFile);
     if (!state.session || state.session.id !== id) {
       draftRef.current = readyResult.contents;
       dispatch({ type: "seed", id, result: readyResult });

@@ -20,6 +20,7 @@ export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
+export const ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL = "openducktor:editor-clipboard:read";
 export const ELECTRON_APP_UPDATE_GET_STATE_CHANNEL = "openducktor:app-update:get-state";
 export const ELECTRON_APP_UPDATE_CHECK_CHANNEL = "openducktor:app-update:check";
 export const ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL = "openducktor:app-update:download";
@@ -144,6 +145,6 @@ export type OpenDucktorElectronApi = {
   terminals: OpenDucktorElectronTerminalApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
   editorClipboard: {
-    readText(type?: EditorClipboardReadType): string;
+    readText(type?: EditorClipboardReadType): Promise<string>;
   };
 };

@@ -10,6 +10,7 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
+  ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
@@ -23,11 +24,10 @@ import {
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
 } from "../shared/electron-bridge-contract";
-import { readEditorClipboardText } from "./editor-clipboard";
 import { createElectronHostInvoke } from "./electron-host-invoke";
 import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
-const { clipboard, contextBridge, ipcRenderer } = electron;
+const { contextBridge, ipcRenderer } = electron;
 const invokeHost = createElectronHostInvoke(ipcRenderer);
 const taskStream = createElectronTaskStreamApi(ipcRenderer);
 
@@ -121,7 +121,7 @@ const electronApi: OpenDucktorElectronApi = {
   taskStream,
   editorClipboard: {
     readText(type) {
-      return readEditorClipboardText(clipboard, type);
+      return ipcRenderer.invoke(ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL, type);
     },
   },
 };

@@ -35,7 +35,10 @@ import {
 import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { workspaceTextFileQueryOptions } from "@/state/queries/filesystem";
-import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import {
+  type TaskExecutionSelectedFile,
+  taskExecutionSelectedFileKey,
+} from "./task-execution-file-explorer-model";
 import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
 
 export type TaskExecutionSelectedFilePreviewModel = {
@@ -119,7 +122,7 @@ const createFilePreviewSnapshot = (
     return { selectedFile, result, codeViewFile: null };
   }
 
-  const id = `${selectedFile.rootPath}:${selectedFile.relativePath}`;
+  const id = taskExecutionSelectedFileKey(selectedFile);
   const metrics = getContentMetrics(result.contents);
   const language = getFiletypeFromFileName(selectedFile.relativePath);
   return {
@@ -131,7 +134,7 @@ const createFilePreviewSnapshot = (
         name: selectedFile.relativePath,
         contents: result.contents,
         lang: language,
-        cacheKey: `${id}:${result.revision}`,
+        cacheKey: JSON.stringify([id, result.revision]),
       },
       numberColumnWidth: metrics.numberColumnWidth,
     },
@@ -461,7 +464,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     if (
       !selectedFile ||
       !editor.session ||
-      editor.session.id !== `${selectedFile.rootPath}:${selectedFile.relativePath}`
+      editor.session.id !== taskExecutionSelectedFileKey(selectedFile)
     ) {
       return readyCurrentSnapshot;
     }

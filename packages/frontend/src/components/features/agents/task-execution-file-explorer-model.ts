@@ -6,6 +6,9 @@ export type TaskExecutionSelectedFile = {
   relativePath: string;
 };
 
+export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): string =>
+  JSON.stringify([file.rootPath, file.relativePath]);
+
 export type TaskExecutionFileExplorerPanelModel = {
   rootPath: string | null;
   targetBranch: string | null;

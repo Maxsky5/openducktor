@@ -13,7 +13,10 @@ import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-util
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
-import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
+import {
+  type TaskExecutionSelectedFile,
+  taskExecutionSelectedFileKey,
+} from "./task-execution-file-explorer-model";
 import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-file-preview";
 
 enableReactActEnvironment();
@@ -522,6 +525,53 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
   });
 
+  test("keeps editor sessions distinct when file paths contain separators", async () => {
+    const firstCollisionFile = { rootPath: "/tmp/team:one", relativePath: "src/a.ts" };
+    const secondCollisionFile = { rootPath: "/tmp/team", relativePath: "one:src/a.ts" };
+    readTextFileMock.mockImplementation(
+      async (input: { rootPath: string; relativePath: string }) => {
+        const selectedFile =
+          input.rootPath === firstCollisionFile.rootPath ? firstCollisionFile : secondCollisionFile;
+        const contents = selectedFile === firstCollisionFile ? "first contents" : "second contents";
+        return textFileResult(selectedFile, contents);
+      },
+    );
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstCollisionFile, onClose }));
+    await screen.findByText("first contents");
+    const firstItem = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(firstItem, {
+        ...firstItem?.file,
+        contents: "first draft",
+      });
+    });
+    await waitForDirtyFile();
+
+    view.rerender(renderPreview({ selectedFile: secondCollisionFile, onClose }));
+
+    await screen.findByText("second contents");
+    expect(latestCodeViewProps?.items[0]?.id).not.toBe(firstItem?.id);
+  });
+
+  test("drops a discarded draft before the same file is reopened", async () => {
+    const onClose = mock(() => {});
+    const view = render(renderPreview({ selectedFile: firstFile, onClose }));
+    await screen.findByText("const first = true;");
+    const item = latestCodeViewProps?.items[0];
+    act(() => {
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "discard me" });
+    });
+    await waitForDirtyFile();
+
+    view.rerender(renderPreview({ selectedFile: null, onClose }));
+    view.rerender(renderPreview({ selectedFile: firstFile, onClose }));
+
+    await screen.findByText("const first = true;");
+    await waitForCleanFile();
+    expect(screen.queryByText("discard me")).toBeNull();
+  });
+
   test("keeps the live editor mounted when a background file refresh fails", async () => {
     const onClose = mock(() => {});
     render(renderPreview({ selectedFile: firstFile, onClose }));
@@ -601,7 +651,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(screen.queryByRole("status")).toBeNull();
     expect(firstItem?.version).toBe(1);
     expect(firstItem?.file.cacheKey).toBe(
-      `${firstFile.rootPath}:${firstFile.relativePath}:revision:const first = true;`,
+      JSON.stringify([taskExecutionSelectedFileKey(firstFile), "revision:const first = true;"]),
     );
     const providerFactory = editProviderFactories.at(-1);
     const editorOptions = latestCodeViewProps?.editorOptions;
@@ -953,9 +1003,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
 
     expect(screen.queryByRole("dialog", { name: "Review latest file" })).toBeNull();
-    expect(latestCodeViewProps?.items[0]?.id).toBe(
-      `${secondFile.rootPath}:${secondFile.relativePath}`,
-    );
+    expect(latestCodeViewProps?.items[0]?.id).toBe(taskExecutionSelectedFileKey(secondFile));
   });
 
   test("clears dirty state when the draft returns to the saved baseline", async () => {
