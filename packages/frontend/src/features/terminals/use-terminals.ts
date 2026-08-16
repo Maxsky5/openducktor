@@ -7,15 +7,11 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
 import { terminalListByFilterQueryOptions, terminalQueryKeys } from "@/state/queries/terminals";
-import {
-  createMountedTerminalTabsSelector,
-  type MountedTerminalTab,
-} from "./mounted-terminal-tabs";
 import { isTerminalToggleShortcut, toggleTerminalPanel } from "./terminal-panel-policy";
 import {
   createTerminalPresentationState,
@@ -26,8 +22,12 @@ import {
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { useTerminalTransport } from "./use-terminal-transport";
 
-export type { MountedTerminalTab } from "./mounted-terminal-tabs";
 export type { TerminalTab } from "./terminal-presentation-state";
+
+export type MountedTerminalTab = {
+  scopeKey: string;
+  tab: TerminalTab;
+};
 
 export type TerminalDependencies = {
   hostClient: Pick<
@@ -75,7 +75,7 @@ export type TerminalPanelModel = {
   onHide: () => void;
   onSelectTab: (tabId: string) => void;
   onCreate: () => void;
-  onRetryCreate: (tabId: string) => void;
+  onRetryCreate: (scopeKey: string, tabId: string) => void;
   onReorderTab: (draggedTabId: string, targetTabId: string, position: "before" | "after") => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
   onClose: (tab: TerminalTab, confirmTerminate: boolean) => Promise<TerminalCloseResponse>;
@@ -91,7 +91,7 @@ export const useTerminals = (
   }: {
     scope: TerminalScope | null;
     isScopeLoading?: boolean;
-    mountedScopeKeys?: readonly string[];
+    mountedScopeKeys: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): TerminalPanelModel => {
@@ -103,7 +103,6 @@ export const useTerminals = (
     createTerminalPresentationState,
   );
   const abandonedCreationTabIds = useRef(new Set<string>());
-  const [selectMountedTerminalTabs] = useState(createMountedTerminalTabsSelector);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const enabled = scope !== null;
   const listFilter = useMemo(
@@ -143,10 +142,22 @@ export const useTerminals = (
     const closingTabIdSet = new Set(visibleState.closingTabIds);
     return visibleState.tabs.filter((tab) => !closingTabIdSet.has(tab.tabId));
   }, [visibleState.closingTabIds, visibleState.tabs]);
-  const mountedTabs = useMemo(() => {
-    const scopeKeys = mountedScopeKeys ?? (scopeKey ? [scopeKey] : []);
-    return selectMountedTerminalTabs(scopeKeys, presentation.scopes);
-  }, [mountedScopeKeys, presentation.scopes, scopeKey, selectMountedTerminalTabs]);
+  const mountedTabs = useMemo(
+    () =>
+      mountedScopeKeys
+        .flatMap((ownerScopeKey) =>
+          (presentation.scopes[ownerScopeKey]?.tabs ?? []).map((tab) => ({
+            scopeKey: ownerScopeKey,
+            tab,
+          })),
+        )
+        .toSorted((left, right) => {
+          const leftCreatedAt = left.tab.summary?.createdAt ?? `~${left.tab.tabId}`;
+          const rightCreatedAt = right.tab.summary?.createdAt ?? `~${right.tab.tabId}`;
+          return leftCreatedAt.localeCompare(rightCreatedAt);
+        }),
+    [mountedScopeKeys, presentation.scopes],
+  );
   const isVisible = visibleState.visibility.isExplicit
     ? visibleState.visibility.value
     : visibleTabs.length > 0;
@@ -259,8 +270,11 @@ export const useTerminals = (
   );
   const startCreate = useCallback((): void => void createTerminal(), [createTerminal]);
   const retryCreate = useCallback(
-    (tabId: string): void => void createTerminal(tabId),
-    [createTerminal],
+    (ownerScopeKey: string, tabId: string): void => {
+      if (ownerScopeKey !== scopeKey) return;
+      void createTerminal(tabId);
+    },
+    [createTerminal, scopeKey],
   );
   const reorderTab = useCallback(
     (draggedTabId: string, targetTabId: string, position: "before" | "after"): void => {

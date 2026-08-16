@@ -90,6 +90,7 @@ describe("InteractiveTerminal policies", () => {
     let selected = true;
     let inputIdle = Promise.resolve();
     const sequenceInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         inputWrites.push([...data]);
       },
@@ -121,11 +122,30 @@ describe("InteractiveTerminal policies", () => {
     expect(failures).toEqual([]);
   });
 
+  test("drops queued input when its terminal is inactive", async () => {
+    const inputWrites: number[][] = [];
+    let active = false;
+    const sequenceInput = createTerminalInputSequencer({
+      isActive: () => active,
+      writeInput: async (data) => {
+        inputWrites.push([...data]);
+      },
+      reportFailure: () => undefined,
+    });
+
+    await sequenceInput(() => new Uint8Array([3]));
+    active = true;
+    await sequenceInput(() => new Uint8Array([4]));
+
+    expect(inputWrites).toEqual([[4]]);
+  });
+
   test("forwards image clipboard paste as Ctrl+V instead of empty input", async () => {
     const inputWrites: number[][] = [];
     const failures: unknown[] = [];
     let inputIdle = Promise.resolve();
     const sequenceInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         inputWrites.push([...data]);
       },
@@ -250,6 +270,7 @@ describe("InteractiveTerminal policies", () => {
     const inputWrites: number[][] = [];
     let inputIdle = Promise.resolve();
     const sequenceInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         inputWrites.push([...data]);
       },
@@ -281,6 +302,7 @@ describe("InteractiveTerminal policies", () => {
     const inputWrites: number[][] = [];
     let inputIdle = Promise.resolve();
     const sequenceInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         inputWrites.push([...data]);
       },
@@ -350,6 +372,7 @@ describe("InteractiveTerminal policies", () => {
     const failures: string[] = [];
     let inputIdle = Promise.resolve();
     const sequenceInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         inputWrites.push([...data]);
       },
@@ -450,6 +473,7 @@ describe("InteractiveTerminal policies", () => {
       clipboardState.resolve = resolve;
     });
     const enqueueInput = createTerminalInputSequencer({
+      isActive: () => true,
       writeInput: async (data) => {
         writes.push(new TextDecoder().decode(data));
       },

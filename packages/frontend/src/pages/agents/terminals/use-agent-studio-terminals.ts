@@ -33,7 +33,7 @@ export const useAgentStudioTerminals = (
     repoPath: string | null;
     taskId: string | null;
     taskVersion?: string | null;
-    mountedTaskIds?: readonly string[];
+    mountedTaskIds: readonly string[];
   },
   dependencies = defaultDependencies(),
 ): AgentStudioTerminalPanelModel => {
@@ -61,11 +61,8 @@ export const useAgentStudioTerminals = (
 
   const mountedScopeKeys = useMemo(() => {
     if (!repoPath) return [];
-    if (mountedTaskIds) {
-      return mountedTaskIds.map((mountedTaskId) => terminalScopeKey(repoPath, mountedTaskId));
-    }
-    return taskId ? [terminalScopeKey(repoPath, taskId)] : [];
-  }, [mountedTaskIds, repoPath, taskId]);
+    return mountedTaskIds.map((mountedTaskId) => terminalScopeKey(repoPath, mountedTaskId));
+  }, [mountedTaskIds, repoPath]);
 
   const scope = useMemo((): TerminalScope | null => {
     if (!repoPath || !taskId) return null;

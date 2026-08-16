@@ -88,6 +88,7 @@ export const mountInteractiveTerminal = ({
     },
   });
   const enqueueInput = createTerminalInputSequencer({
+    isActive,
     writeInput: (data) => controller.write(terminalId, data),
     reportFailure: (cause) => reportFailure("Terminal input failed", cause),
   });

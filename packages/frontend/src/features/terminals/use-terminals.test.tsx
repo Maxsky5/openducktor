@@ -56,6 +56,7 @@ describe("useTerminals", () => {
             workingDirectory: "/repo",
             workingDirectoryError: "The chat working directory is unavailable.",
           },
+          mountedScopeKeys: ["free-chat:chat-1"],
         },
         dependencies,
       );
@@ -116,6 +117,7 @@ describe("useTerminals", () => {
             workingDirectory: "/repo",
             workingDirectoryError: "The working directory is unavailable.",
           },
+          mountedScopeKeys: [scopeKey],
         },
         dependencies,
       );

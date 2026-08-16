@@ -16,11 +16,20 @@ type PendingTerminalTab = {
   summary: null;
   label: string;
   error: string | null;
-  requestState: "creating" | "creation_failed" | "unsupported_runtime" | "lost";
-  sourceTerminalId?: string;
+  requestState: "creating" | "creation_failed" | "unsupported_runtime";
 };
 
-export type TerminalTab = ReadyTerminalTab | PendingTerminalTab;
+type LostTerminalTab = {
+  tabId: string;
+  terminalId: null;
+  summary: null;
+  label: string;
+  error: string;
+  requestState: "lost";
+  sourceTerminalId: string;
+};
+
+export type TerminalTab = ReadyTerminalTab | PendingTerminalTab | LostTerminalTab;
 
 export const terminalTabLabel = (tab: TerminalTab): string =>
   tab.requestState === "ready" ? tab.summary.label : tab.label;
@@ -51,14 +60,22 @@ const terminalExitsEqual = (
   );
 };
 
+type TerminalSummaryComparator = (left: TerminalSummary, right: TerminalSummary) => boolean;
+
+const terminalSummaryComparators: Record<keyof TerminalSummary, TerminalSummaryComparator> = {
+  terminalId: (left, right) => left.terminalId === right.terminalId,
+  label: (left, right) => left.label === right.label,
+  context: (left, right) => terminalContextsEqual(left.context, right.context),
+  initialWorkingDir: (left, right) => left.initialWorkingDir === right.initialWorkingDir,
+  createdAt: (left, right) => left.createdAt === right.createdAt,
+  lifecycle: (left, right) => left.lifecycle === right.lifecycle,
+  exit: (left, right) => terminalExitsEqual(left.exit, right.exit),
+};
+
+const terminalSummaryFieldComparators = Object.values(terminalSummaryComparators);
+
 const terminalSummariesEqual = (left: TerminalSummary, right: TerminalSummary): boolean =>
-  left.terminalId === right.terminalId &&
-  left.label === right.label &&
-  terminalContextsEqual(left.context, right.context) &&
-  left.initialWorkingDir === right.initialWorkingDir &&
-  left.createdAt === right.createdAt &&
-  left.lifecycle === right.lifecycle &&
-  terminalExitsEqual(left.exit, right.exit);
+  terminalSummaryFieldComparators.every((compare) => compare(left, right));
 
 const arraysEqualByIdentity = <Value>(left: readonly Value[], right: readonly Value[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -158,7 +175,7 @@ export const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): Ter
   };
 };
 
-const toLostTab = (tab: ReadyTerminalTab, message: string): PendingTerminalTab => ({
+const toLostTab = (tab: ReadyTerminalTab, message: string): LostTerminalTab => ({
   tabId: tab.tabId,
   terminalId: null,
   summary: null,
@@ -232,7 +249,7 @@ const reconcileHostTabs = (
   });
   const knownTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
   for (const tab of transient) {
-    if (tab.requestState === "lost" && tab.sourceTerminalId) {
+    if (tab.requestState === "lost") {
       knownTerminalIds.add(tab.sourceTerminalId);
     }
   }

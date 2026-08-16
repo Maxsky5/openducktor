@@ -95,6 +95,7 @@ type SelectionState = {
   };
   activeTaskTabId: string;
   taskTabs: [];
+  tabTaskIds: string[];
   availableTabTasks: (typeof task)[];
   taskId: string;
   sessionsForTask: SessionFixture[];
@@ -264,6 +265,7 @@ let selectionState: SelectionState = {
   },
   activeTaskTabId: "task-1",
   taskTabs: [],
+  tabTaskIds: ["task-1"],
   availableTabTasks: [task],
   taskId: "task-1",
   sessionsForTask: [initialSelectionSession],
@@ -602,6 +604,7 @@ beforeEach(async () => {
     },
     activeTaskTabId: "task-1",
     taskTabs: [],
+    tabTaskIds: ["task-1"],
     availableTabTasks: [task],
     taskId: "task-1",
     sessionsForTask: [session],
@@ -714,6 +717,7 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
+      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -742,6 +746,7 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
+      tabTaskIds: [],
       view: {
         ...selectionState.view,
         taskId: "",
@@ -786,6 +791,7 @@ describe("useAgentsPageShellModel", () => {
 
       selectionState = {
         ...selectionState,
+        tabTaskIds: ["task-2"],
         view: {
           ...selectionState.view,
           taskId: "task-2",

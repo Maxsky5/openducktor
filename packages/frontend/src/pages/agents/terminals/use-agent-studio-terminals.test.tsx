@@ -70,7 +70,10 @@ describe("useAgentStudioTerminals", () => {
     const dependencies = createTerminalTestDependencies();
     let preferencePresentDuringLayout = false;
     const Harness = () => {
-      useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       useLayoutEffect(() => {
         preferencePresentDuringLayout = localStorage.getItem(legacyKey) !== null;
       }, []);
@@ -112,7 +115,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -160,7 +166,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -216,7 +225,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -281,7 +293,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -341,7 +356,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -385,7 +403,10 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       const queryClient = useQueryClient();
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       refresh = async () => {
         await queryClient.invalidateQueries();
       };
@@ -430,7 +451,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -502,7 +526,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -561,7 +588,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -609,7 +639,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(

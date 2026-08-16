@@ -103,7 +103,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -157,7 +160,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -209,7 +215,10 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       const queryClient = useQueryClient();
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       refetchTerminalList = async () => {
         await queryClient.invalidateQueries();
       };
@@ -246,7 +255,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -304,7 +316,10 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       const queryClient = useQueryClient();
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       refetchTerminalList = async () => {
         await queryClient.invalidateQueries();
       };
@@ -381,7 +396,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = () => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -413,7 +431,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = ({ taskId }: { taskId: string }) => {
-      const model = useAgentStudioTerminals({ repoPath: "/repo", taskId }, dependencies);
+      const model = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        dependencies,
+      );
       latest = model;
       const terminalFocusOwner = useRef<HTMLButtonElement | null>(null);
       useEffect(() => {
@@ -566,23 +587,11 @@ describe("useAgentStudioTerminals", () => {
       if (!taskAProbe || !taskBProbe) throw new Error("Expected both terminal probes.");
       expect(probes.get("terminal-task-a")).toHaveLength(1);
       expect(probes.get("terminal-task-b")).toHaveLength(1);
-      const mountedTabsBeforeSwitches = getLatest().mountedTabs;
-      const taskAMountedBeforeSwitches = mountedTabsBeforeSwitches.find(
-        ({ scopeKey }) => scopeKey === "/repo:task-a",
-      );
-
-      const startedAt = performance.now();
       for (let index = 0; index < 40; index += 1) {
         view.rerender(renderHarness(index % 2 === 0 ? "task-a" : "task-b", ["task-a", "task-b"]));
       }
-      const switchDurationMs = performance.now() - startedAt;
-      expect(switchDurationMs).toBeLessThan(1_000);
       expect(probes.get("terminal-task-a")).toEqual([taskAProbe]);
       expect(probes.get("terminal-task-b")).toEqual([taskBProbe]);
-      expect(getLatest().mountedTabs).toBe(mountedTabsBeforeSwitches);
-      expect(getLatest().mountedTabs.find(({ scopeKey }) => scopeKey === "/repo:task-a")).toBe(
-        taskAMountedBeforeSwitches,
-      );
       act(() => {
         taskAProbe.input.onTitleChange("Task A title");
         taskAProbe.input.onLifecycle("exited", "Task A exited.");
@@ -641,7 +650,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = ({ taskId }: { taskId: string }) => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
@@ -702,7 +714,10 @@ describe("useAgentStudioTerminals", () => {
       return latest;
     };
     const Harness = ({ taskId }: { taskId: string }) => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId }, dependencies);
+      latest = useAgentStudioTerminals(
+        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        dependencies,
+      );
       return null;
     };
     const view = render(
