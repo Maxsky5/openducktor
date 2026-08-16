@@ -265,9 +265,9 @@ describe("web CLI argument parsing", () => {
       expect(persisted).toMatch(/Local:\s+http:\/\/localhost:\d+\//u);
       expect(persisted).toMatch(/Backend:\s+http:\/\/127\.0\.0\.1:\d+/u);
       expect(persisted).toMatch(/Instance:\s+browser-[a-f0-9]{12}/u);
-      await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
       // Bun terminates Windows subprocesses without running this POSIX signal handler.
       if (process.platform !== "win32") {
+        await expect(readFile(discoveryPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
         const shutdownConsoleMessages = [
           "Stopping OpenDucktor web after SIGTERM...",
           "Stopping OpenDucktor frontend server...",

@@ -506,8 +506,6 @@ type ElectronDevLifecycleOptions = {
   startElectronProcess?: StartElectronProcess;
 };
 
-type ElectronDevShutdownOrigin = "lifecycle" | "vite";
-
 export const runElectronDevLifecycleEffect = ({
   buildBundles = buildElectronBundlesEffect,
   electronExecutablePath,
@@ -574,10 +572,7 @@ export const runElectronDevLifecycleEffect = ({
       });
     };
 
-    const shutdownEffect = (
-      exitCode: number,
-      origin: ElectronDevShutdownOrigin,
-    ): Effect.Effect<void, ElectronOperationError> =>
+    const shutdownEffect = (exitCode: number): Effect.Effect<void, ElectronOperationError> =>
       Effect.gen(function* () {
         if (shutdownStarted) {
           return;
@@ -588,19 +583,14 @@ export const runElectronDevLifecycleEffect = ({
           restartTimer = null;
         }
         yield* stopElectronEffect(electron);
-        if (origin === "lifecycle") {
-          yield* renderer.close();
-        }
+        yield* renderer.close();
         yield* Effect.sync(() => {
           settle(Effect.succeed(exitCode));
         });
       });
 
-    const runShutdown = (
-      exitCode: number,
-      origin: ElectronDevShutdownOrigin = "lifecycle",
-    ): Promise<void> => {
-      shutdownPromise ??= Effect.runPromiseExit(shutdownEffect(exitCode, origin)).then((exit) => {
+    const runShutdown = (exitCode: number): Promise<void> => {
+      shutdownPromise ??= Effect.runPromiseExit(shutdownEffect(exitCode)).then((exit) => {
         if (Exit.isFailure(exit)) {
           const cause = causeToElectronBoundaryError(exit.cause);
           completeFailure(cause);
@@ -733,8 +723,7 @@ export const runElectronDevLifecycleEffect = ({
         });
         registerProcessHandler("SIGTERM", () => {
           console.log("[electron:dev] Received SIGTERM, shutting down...");
-          const origin = renderer.isViteShutdownRequested() ? "vite" : "lifecycle";
-          void runShutdown(143, origin);
+          void runShutdown(143);
         });
         registerProcessHandler("exit", () => {
           if (electron) {
@@ -780,8 +769,6 @@ export const runElectronDevLifecycleEffect = ({
           removeRegisteredProcessHandlers({ keepExitHandler: false });
         });
       });
-
-    renderer.registerViteShutdown(() => runShutdown(143, "vite"));
 
     runLifecycleTask(
       Effect.gen(function* () {
@@ -855,13 +842,7 @@ export const mainEffect = (): Effect.Effect<
           "electron.dev.main",
         ),
       );
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          renderer.dispose();
-        }),
-      ),
-    );
+    });
   });
 
 if (import.meta.main) {

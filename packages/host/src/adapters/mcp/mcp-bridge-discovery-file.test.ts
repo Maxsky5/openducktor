@@ -167,4 +167,21 @@ describe("MCP bridge discovery file", () => {
       await rm(tempDir, { force: true, recursive: true });
     }
   });
+
+  test("reports the stable discovery path when claimed content is invalid", async () => {
+    const { discoveryPath, tempDir } = await createTempDiscoveryPath();
+
+    try {
+      await mkdir(path.dirname(discoveryPath), { recursive: true });
+      await writeFile(discoveryPath, JSON.stringify({ hostToken: "token", hostUrl: "", pid: 123 }));
+
+      await expect(
+        Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, discovery())),
+      ).rejects.toThrow(
+        `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,
+      );
+    } finally {
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
 });

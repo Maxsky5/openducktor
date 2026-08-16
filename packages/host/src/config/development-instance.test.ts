@@ -41,4 +41,14 @@ describe("development instance identity", () => {
       }),
     ).toThrow("OPENDUCKTOR_DEV_INSTANCE must match");
   });
+
+  test("reports the workspace root when canonical path resolution fails", () => {
+    const cause = new Error("path is unavailable");
+
+    expect(() =>
+      resolveDevelopmentInstanceId("browser", "/missing/worktree", () => {
+        throw cause;
+      }),
+    ).toThrow("Failed to resolve the canonical workspace path: /missing/worktree.");
+  });
 });

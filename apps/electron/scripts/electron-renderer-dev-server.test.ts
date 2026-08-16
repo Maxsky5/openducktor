@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  closeRendererServer,
-  createElectronViteShutdownBridge,
-  resolveRendererDevUrl,
-} from "./electron-renderer-dev-server";
+import { closeRendererServer, resolveRendererDevUrl } from "./electron-renderer-dev-server";
 
 describe("Electron renderer dev server", () => {
   test("resolves the URL that Vite reports for its assigned port", () => {
@@ -81,22 +77,5 @@ describe("Electron renderer dev server", () => {
     });
 
     expect(timeoutMs).toBe(3_000);
-  });
-
-  test("does not stop Electron when Vite closes without SIGTERM", async () => {
-    const shutdownBridge = createElectronViteShutdownBridge();
-    let stopCalls = 0;
-
-    try {
-      shutdownBridge.completeLifecycleStartup(async () => {
-        stopCalls += 1;
-      });
-
-      await shutdownBridge.stopElectronOnShutdown();
-
-      expect(stopCalls).toBe(0);
-    } finally {
-      shutdownBridge.dispose();
-    }
   });
 });

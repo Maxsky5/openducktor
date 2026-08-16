@@ -4,6 +4,11 @@ import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import {
+  type BrowserRuntimeConfigState,
+  createBrowserRuntimeConfigState,
+  readBrowserRuntimeConfig,
+} from "./browser-runtime-config-state";
+import {
   causeToWebBoundaryError,
   combineWebErrors,
   errorMessage,
@@ -87,10 +92,6 @@ export const startWebLauncherHostBackendEffect = ({
   });
 };
 
-type BrowserRuntimeConfigState = {
-  json: string | null;
-};
-
 type StartedFrontendServer = FrontendServer & {
   port: number;
 };
@@ -119,17 +120,13 @@ const writeRuntimeConfigResponse = (
     setHeader(name: string, value: string): void;
     statusCode: number;
   },
-): void => {
+): Promise<void> => {
   response.setHeader("cache-control", "no-store");
-  if (runtimeConfigState.json === null) {
-    response.statusCode = 503;
-    response.setHeader("content-type", "text/plain; charset=utf-8");
-    response.end("OpenDucktor runtime configuration is not ready.");
-    return;
-  }
-  response.statusCode = 200;
-  response.setHeader("content-type", "application/json; charset=utf-8");
-  response.end(runtimeConfigState.json);
+  return Promise.resolve(readBrowserRuntimeConfig(runtimeConfigState)).then((runtimeConfig) => {
+    response.statusCode = 200;
+    response.setHeader("content-type", "application/json; charset=utf-8");
+    response.end(runtimeConfig);
+  });
 };
 
 const flushProcessOutput = async (): Promise<void> => {
@@ -290,7 +287,6 @@ const cleanupStartedFrontendServerEffect = (
 const startViteServerEffect = (
   options: LauncherOptions,
   runtimeConfigState: BrowserRuntimeConfigState,
-  owner: WebLauncherLifecycle,
   logger: WebLogger,
 ): Effect.Effect<StartedFrontendServer, WebError> =>
   Effect.gen(function* () {
@@ -306,12 +302,6 @@ const startViteServerEffect = (
     });
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        let viteSigterm = false;
-        const markViteSigterm = (): void => {
-          viteSigterm = true;
-          owner.markFrontendClosing();
-        };
-        yield* Effect.sync(() => process.once("SIGTERM", markViteSigterm));
         const server = yield* Effect.tryPromise({
           try: () =>
             createServer({
@@ -322,15 +312,8 @@ const startViteServerEffect = (
                   name: "openducktor-runtime-config",
                   configureServer(devServer) {
                     devServer.middlewares.use(RUNTIME_CONFIG_PATH, (_request, response) => {
-                      writeRuntimeConfigResponse(runtimeConfigState, response);
+                      void writeRuntimeConfigResponse(runtimeConfigState, response);
                     });
-                  },
-                  closeBundle: async () => {
-                    if (!viteSigterm) {
-                      return;
-                    }
-                    await runWebBoundary(owner.frontendClosed());
-                    await owner.ensureTermination("SIGTERM", 143);
                   },
                 },
               ],
@@ -348,14 +331,8 @@ const startViteServerEffect = (
               cause,
               details: { frontendPort: options.frontendPort },
             }),
-        }).pipe(Effect.tapError(() => Effect.sync(() => process.off("SIGTERM", markViteSigterm))));
-        const close = async (): Promise<void> => {
-          try {
-            await server.close();
-          } finally {
-            process.off("SIGTERM", markViteSigterm);
-          }
-        };
+        });
+        const close = (): Promise<void> => server.close();
         const startedServer = { close, httpServer: server.httpServer };
 
         yield* restore(
@@ -441,19 +418,11 @@ const startStaticFrontendServerEffect = (
           Bun.serve({
             hostname: LOCALHOST,
             port: options.frontendPort,
-            fetch(request) {
+            async fetch(request) {
               const requestUrl = new URL(request.url);
               if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
-                if (runtimeConfigState.json === null) {
-                  return new Response("OpenDucktor runtime configuration is not ready.", {
-                    status: 503,
-                    headers: {
-                      "cache-control": "no-store",
-                      "content-type": "text/plain; charset=utf-8",
-                    },
-                  });
-                }
-                return new Response(runtimeConfigState.json, {
+                const runtimeConfig = await readBrowserRuntimeConfig(runtimeConfigState);
+                return new Response(runtimeConfig, {
                   headers: {
                     "cache-control": "no-store",
                     "content-type": "application/json; charset=utf-8",
@@ -511,11 +480,10 @@ const startStaticFrontendServerEffect = (
 const startFrontendServerEffect = (
   options: LauncherOptions,
   runtimeConfigState: BrowserRuntimeConfigState,
-  owner: WebLauncherLifecycle,
   logger: WebLogger,
 ): Effect.Effect<StartedFrontendServer, WebError> =>
   options.workspaceMode
-    ? startViteServerEffect(options, runtimeConfigState, owner, logger)
+    ? startViteServerEffect(options, runtimeConfigState, logger)
     : startStaticFrontendServerEffect(options, runtimeConfigState);
 
 export const preserveLauncherFailureAfterStop = (
@@ -629,16 +597,12 @@ const runStartedLauncherEffect = ({
 
 const runWithLauncherSignalsEffect = <Success, Failure>(
   owner: WebLauncherLifecycle,
-  workspaceMode: boolean,
   operation: Effect.Effect<Success, Failure>,
 ): Effect.Effect<Success, Failure> => {
   const handleSigint = (): void => {
     void owner.handleTermination("SIGINT", 130);
   };
   const handleSigterm = (): void => {
-    if (workspaceMode) {
-      owner.markFrontendClosing();
-    }
     void owner.handleTermination("SIGTERM", 143);
   };
 
@@ -665,7 +629,7 @@ export const runLauncherEffect = (
     const readinessTimeoutMs = options.readinessTimeoutMs ?? 60_000;
     const controlToken = randomUUID();
     const appToken = randomUUID();
-    const runtimeConfigState: BrowserRuntimeConfigState = { json: null };
+    const runtimeConfigState = createBrowserRuntimeConfigState();
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
     const runtimeDistribution = yield* resolveWebRuntimeDistributionEffect({
       packageRoot: options.packageRoot,
@@ -683,13 +647,11 @@ export const runLauncherEffect = (
 
     return yield* runWithLauncherSignalsEffect(
       owner,
-      options.workspaceMode,
       Effect.gen(function* () {
         yield* writeWebLogEffect(logger, "info", "Starting OpenDucktor frontend server...");
         const frontendServer = yield* startFrontendServerEffect(
           options,
           runtimeConfigState,
-          owner,
           logger,
         );
         yield* owner.registerFrontend(frontendServer);
@@ -719,7 +681,7 @@ export const runLauncherEffect = (
         yield* owner.registerHost(hostBackend);
         const backendUrl = buildBackendUrl(hostBackend.port);
         yield* Effect.sync(() => {
-          runtimeConfigState.json = buildBrowserRuntimeConfigJson(backendUrl, appToken);
+          runtimeConfigState.publish(buildBrowserRuntimeConfigJson(backendUrl, appToken));
         });
         return yield* runStartedLauncherEffect({
           appToken,

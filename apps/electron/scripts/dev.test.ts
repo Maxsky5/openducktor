@@ -17,10 +17,7 @@ import {
   shouldRestartElectronForChange,
   stopElectronEffect,
 } from "./dev";
-import {
-  createElectronViteShutdownBridge,
-  type ElectronRendererDevServer,
-} from "./electron-renderer-dev-server";
+import type { ElectronRendererDevServer } from "./electron-renderer-dev-server";
 
 const createFakeProcessHandlers = () => {
   const registered: Array<{ event: string; listener: () => void }> = [];
@@ -43,19 +40,11 @@ const createFakeProcessHandlers = () => {
 
 const createFakeRenderer = ({
   close = () => Effect.void,
-  isViteShutdownRequested = () => false,
-  registerViteShutdown = () => {},
   watcher = { add() {}, on() {} },
 }: Partial<
-  Pick<
-    ElectronRendererDevServer,
-    "close" | "isViteShutdownRequested" | "registerViteShutdown" | "watcher"
-  >
+  Pick<ElectronRendererDevServer, "close" | "watcher">
 > = {}): ElectronRendererDevServer => ({
   close,
-  dispose() {},
-  isViteShutdownRequested,
-  registerViteShutdown,
   url: "http://127.0.0.1:1430",
   watcher,
 });
@@ -246,8 +235,7 @@ describe("electron dev script", () => {
     ).toBe(false);
   });
 
-  test("waits for Electron shutdown when Vite handles SIGTERM", async () => {
-    const shutdownBridge = createElectronViteShutdownBridge();
+  test("closes Electron and the renderer when the lifecycle receives SIGTERM", async () => {
     const fakeProcessHandlers = createFakeProcessHandlers();
     const killSignals: Array<NodeJS.Signals | number | undefined> = [];
     let closeCalls = 0;
@@ -264,40 +252,37 @@ describe("electron dev script", () => {
         Effect.sync(() => {
           closeCalls += 1;
         }),
-      isViteShutdownRequested: shutdownBridge.isShutdownRequested,
-      registerViteShutdown: shutdownBridge.completeLifecycleStartup,
     });
 
-    try {
-      const lifecycle = runElectronEffect(
-        runElectronDevLifecycleEffect({
-          buildBundles: () => Effect.void,
-          electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
-          processHandlers: fakeProcessHandlers.processHandlers,
-          renderer,
-          startElectronProcess: () => {
-            markStarted();
-            return {
-              exited: electronExited,
-              kill(signal?: NodeJS.Signals | number) {
-                killSignals.push(signal);
-                resolveElectronExit(0);
-              },
-            };
-          },
-        }),
-      );
-      await started;
+    const lifecycle = runElectronEffect(
+      runElectronDevLifecycleEffect({
+        buildBundles: () => Effect.void,
+        electronExecutablePath: "/repo/node_modules/electron/dist/Electron",
+        processHandlers: fakeProcessHandlers.processHandlers,
+        renderer,
+        startElectronProcess: () => {
+          markStarted();
+          return {
+            exited: electronExited,
+            kill(signal?: NodeJS.Signals | number) {
+              killSignals.push(signal);
+              resolveElectronExit(0);
+            },
+          };
+        },
+      }),
+    );
+    await started;
 
-      shutdownBridge.requestShutdown();
-      await shutdownBridge.stopElectronOnShutdown();
-
-      expect(await lifecycle).toBe(143);
-      expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
-      expect(closeCalls).toBe(0);
-    } finally {
-      shutdownBridge.dispose();
+    const shutdownHandler = fakeProcessHandlers.registered.find(({ event }) => event === "SIGTERM");
+    if (!shutdownHandler) {
+      throw new Error("Expected the Electron dev lifecycle to register SIGTERM.");
     }
+    shutdownHandler.listener();
+
+    expect(await lifecycle).toBe(143);
+    expect(killSignals).toEqual([electronGracefulShutdownSignal(process.platform)]);
+    expect(closeCalls).toBe(1);
   });
 
   test("fails when Electron does not exit after forced shutdown", async () => {

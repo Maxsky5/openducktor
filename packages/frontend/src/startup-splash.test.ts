@@ -22,25 +22,24 @@ const renderStartupSplash = (): HTMLElement => {
 };
 
 const captureScheduledTimeout = () => {
-  let callback: (() => void) | null = null;
-  let delayMs: number | undefined;
+  const scheduled: Array<{ callback: () => void; delayMs: number | undefined }> = [];
   const setTimeoutImplementation = ((handler: TimerHandler, timeout?: number) => {
     if (typeof handler !== "function") {
       throw new TypeError("Expected a timeout callback.");
     }
-    callback = () => handler();
-    delayMs = timeout;
-    return 1;
+    scheduled.push({ callback: () => handler(), delayMs: timeout });
+    return scheduled.length;
   }) as typeof window.setTimeout;
   const timeoutSpy = spyOn(window, "setTimeout").mockImplementation(setTimeoutImplementation);
 
   return {
-    delayMs: () => delayMs,
-    run: () => {
-      if (!callback) {
+    delayMs: (index = 0) => scheduled[index]?.delayMs,
+    run: (index = 0) => {
+      const timeout = scheduled[index];
+      if (!timeout) {
         throw new Error("No timeout was scheduled.");
       }
-      callback();
+      timeout.callback();
     },
     restore: () => timeoutSpy.mockRestore(),
   };
@@ -76,6 +75,7 @@ describe("startup splash", () => {
 
       expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
       expect(splash.getAttribute("aria-hidden")).toBe("true");
+      expect(scheduledTimeout.delayMs(1)).toBe(250);
     } finally {
       scheduledTimeout.restore();
     }
@@ -94,15 +94,35 @@ describe("startup splash", () => {
       nowCallCount += 1;
       return nowCallCount === 1 ? 0 : 1_001;
     });
-    const timeoutSpy = spyOn(window, "setTimeout");
+    const scheduledTimeout = captureScheduledTimeout();
 
     try {
       dismissOpenDucktorStartupSplash();
 
-      expect(timeoutSpy).not.toHaveBeenCalled();
       expect(splash.classList.contains("odt-startup--leaving")).toBe(true);
+      expect(scheduledTimeout.delayMs()).toBe(250);
     } finally {
-      timeoutSpy.mockRestore();
+      scheduledTimeout.restore();
+      nowSpy.mockRestore();
+    }
+  });
+
+  test("removes the splash if the opacity transition event does not fire", () => {
+    const splash = renderStartupSplash();
+    let nowCallCount = 0;
+    const nowSpy = spyOn(performance, "now").mockImplementation(() => {
+      nowCallCount += 1;
+      return nowCallCount === 1 ? 0 : 1_001;
+    });
+    const scheduledTimeout = captureScheduledTimeout();
+
+    try {
+      dismissOpenDucktorStartupSplash();
+      scheduledTimeout.run();
+
+      expect(splash.isConnected).toBe(false);
+    } finally {
+      scheduledTimeout.restore();
       nowSpy.mockRestore();
     }
   });

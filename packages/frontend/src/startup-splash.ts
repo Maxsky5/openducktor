@@ -4,6 +4,7 @@ const STARTUP_SPLASH_LEAVING_CLASS = "odt-startup--leaving";
 const STARTUP_SPLASH_FAILED_CLASS = "odt-startup--failed";
 const STARTUP_FAILURE_MESSAGE = "OpenDucktor could not start. Check the application logs.";
 const STARTUP_SPLASH_MINIMUM_VISIBLE_MS = 1_000;
+const STARTUP_SPLASH_REMOVAL_FALLBACK_MS = 250;
 const startupSplashFirstSeenAt = new WeakMap<HTMLElement, number>();
 const pendingStartupSplashDismissals = new WeakSet<HTMLElement>();
 
@@ -28,11 +29,16 @@ const beginStartupSplashDismissal = (splash: HTMLElement): void => {
     return;
   }
 
+  const removeSplash = (): void => {
+    window.clearTimeout(removalFallback);
+    splash.remove();
+  };
+  const removalFallback = window.setTimeout(removeSplash, STARTUP_SPLASH_REMOVAL_FALLBACK_MS);
   splash.addEventListener(
     "transitionend",
     (event) => {
       if (event.target === splash && event.propertyName === "opacity") {
-        splash.remove();
+        removeSplash();
       }
     },
     { once: true },

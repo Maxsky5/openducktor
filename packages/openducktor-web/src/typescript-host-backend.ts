@@ -531,14 +531,6 @@ const localAttachmentPreviewResponse = (
       return yield* rejectWebHostRequest("Local attachment preview path is required.", 400);
     }
 
-    const metadata = yield* statLocalAttachmentPreview(requestedPath);
-    if (!metadata.isFile()) {
-      return yield* rejectWebHostRequest(
-        "Local attachment preview path must reference a file",
-        400,
-      );
-    }
-
     const canonicalDirectory = yield* localAttachmentPort
       .canonicalizePath(localAttachmentPort.stageDirectory())
       .pipe(
@@ -566,7 +558,15 @@ const localAttachmentPreviewResponse = (
       );
     }
 
-    const file = Bun.file(requestedPath);
+    const metadata = yield* statLocalAttachmentPreview(canonicalPath);
+    if (!metadata.isFile()) {
+      return yield* rejectWebHostRequest(
+        "Local attachment preview path must reference a file",
+        400,
+      );
+    }
+
+    const file = Bun.file(canonicalPath);
     return new Response(file, {
       headers: {
         ...corsHeaders,

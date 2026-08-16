@@ -18,7 +18,17 @@ export const resolveDevelopmentInstanceId = (
   workspaceRoot: string,
   resolveCanonicalPath: ResolveCanonicalPath = realpathSync.native,
 ): string => {
-  const canonicalWorkspaceRoot = resolveCanonicalPath(workspaceRoot);
+  let canonicalWorkspaceRoot: string;
+  try {
+    canonicalWorkspaceRoot = resolveCanonicalPath(workspaceRoot);
+  } catch (cause) {
+    throw new HostValidationError({
+      message: `Failed to resolve the canonical workspace path: ${workspaceRoot}.`,
+      field: "workspaceRoot",
+      cause,
+      details: { workspaceRoot },
+    });
+  }
   const pathHash = createHash("sha256").update(canonicalWorkspaceRoot).digest("hex").slice(0, 12);
   return `${mode}-${pathHash}`;
 };

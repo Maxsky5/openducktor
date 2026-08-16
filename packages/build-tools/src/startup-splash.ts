@@ -1,4 +1,5 @@
 export const OPEN_DUCKTOR_STARTUP_BACKGROUND = "#ffffff";
+export const OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND = "#111318";
 
 const STARTUP_FONT_PATH = "./fonts/space-grotesk-latin-600.woff2";
 
@@ -15,6 +16,23 @@ const STARTUP_SPLASH_STYLES = `
   --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
   --odt-startup-primary: #5100ff;
   --odt-startup-title: #475569;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND};
+    --odt-startup-title: #e2e8f0;
+  }
+}
+
+:root.light {
+  --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_BACKGROUND};
+  --odt-startup-title: #475569;
+}
+
+:root.dark {
+  --odt-startup-background: ${OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND};
+  --odt-startup-title: #e2e8f0;
 }
 
 html,

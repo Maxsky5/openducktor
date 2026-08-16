@@ -1,6 +1,6 @@
 import path from "node:path";
 import { Effect } from "effect";
-import { createServer, type Plugin } from "vite";
+import { createServer } from "vite";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   ElectronOperationError,
@@ -35,61 +35,8 @@ type ElectronDevRendererServerHandle = Pick<ElectronDevRendererServer, "close" |
 
 export type ElectronRendererDevServer = {
   close(): Effect.Effect<void, ElectronOperationError>;
-  dispose(): void;
-  isViteShutdownRequested(): boolean;
-  registerViteShutdown(stopElectron: () => Promise<void>): void;
   readonly url: string;
   readonly watcher: ElectronDevRendererWatcher;
-};
-
-type ElectronViteShutdownBridge = {
-  completeLifecycleStartup(stopElectron: (() => Promise<void>) | null): void;
-  dispose(): void;
-  isShutdownRequested(): boolean;
-  requestShutdown(): void;
-  stopElectronOnShutdown(): Promise<void>;
-  vitePlugin: Plugin;
-};
-
-export const createElectronViteShutdownBridge = (): ElectronViteShutdownBridge => {
-  let settleLifecycleStartup: ((stopElectron: (() => Promise<void>) | null) => void) | null = null;
-  const lifecycleStartup = new Promise<(() => Promise<void>) | null>((resolve) => {
-    settleLifecycleStartup = resolve;
-  });
-  let shutdownRequested = false;
-  const markShutdown = (): void => {
-    shutdownRequested = true;
-  };
-  process.once("SIGTERM", markShutdown);
-
-  const completeLifecycleStartup = (stopElectron: (() => Promise<void>) | null): void => {
-    settleLifecycleStartup?.(stopElectron);
-    settleLifecycleStartup = null;
-  };
-  const stopElectronOnShutdown = async (): Promise<void> => {
-    if (!shutdownRequested) {
-      return;
-    }
-    const stopElectron = await lifecycleStartup;
-    await stopElectron?.();
-  };
-
-  return {
-    completeLifecycleStartup,
-    dispose() {
-      process.off("SIGTERM", markShutdown);
-      completeLifecycleStartup(null);
-    },
-    isShutdownRequested() {
-      return shutdownRequested;
-    },
-    requestShutdown: markShutdown,
-    stopElectronOnShutdown,
-    vitePlugin: {
-      name: "openducktor-electron-shutdown",
-      closeBundle: stopElectronOnShutdown,
-    },
-  };
 };
 
 const callRendererConnectionCloseMethod = (
@@ -182,33 +129,23 @@ export const createElectronRendererDevServerEffect = ({
 }): Effect.Effect<ElectronRendererDevServer, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {
-      const shutdownBridge = createElectronViteShutdownBridge();
-      try {
-        const server = await createServer({
-          root: packageRoot,
-          configFile: path.join(packageRoot, "vite.config.ts"),
-          plugins: [shutdownBridge.vitePlugin],
-          server: {
-            host: RENDERER_DEV_HOST,
-            port,
-            strictPort: true,
-          },
-        });
-        await server.listen(port);
-        server.printUrls();
-        const url = resolveRendererDevUrl(server);
-        return {
-          close: () => closeRendererServerEffect(server),
-          dispose: shutdownBridge.dispose,
-          isViteShutdownRequested: shutdownBridge.isShutdownRequested,
-          registerViteShutdown: shutdownBridge.completeLifecycleStartup,
-          url,
-          watcher: server.watcher,
-        };
-      } catch (cause) {
-        shutdownBridge.dispose();
-        throw cause;
-      }
+      const server = await createServer({
+        root: packageRoot,
+        configFile: path.join(packageRoot, "vite.config.ts"),
+        server: {
+          host: RENDERER_DEV_HOST,
+          port,
+          strictPort: true,
+        },
+      });
+      await server.listen(port);
+      server.printUrls();
+      const url = resolveRendererDevUrl(server);
+      return {
+        close: () => closeRendererServerEffect(server),
+        url,
+        watcher: server.watcher,
+      };
     },
     catch: (cause) =>
       toElectronOperationError(cause, "electron.dev.create-renderer-server", { port }),

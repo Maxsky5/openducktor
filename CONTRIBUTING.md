@@ -64,6 +64,8 @@ Electron desktop:
 bun run electron:dev
 ```
 
+Run only one Electron development instance in each worktree. Different worktrees can run Electron at the same time because each worktree gets its own renderer port, profile, and MCP discovery file.
+
 Browser mode for UI validation against the real backend:
 
 ```sh

@@ -133,7 +133,7 @@ export const removeMcpBridgeDiscoveryFile = (
       try: () => readFile(claimedPath, "utf8"),
       catch: (error) => error,
     }).pipe(
-      Effect.map((payload) => parseDiscoveryFile(payload, claimedPath)),
+      Effect.map((payload) => parseDiscoveryFile(payload, discoveryPath)),
       Effect.tapError(() => restoreClaimedDiscoveryUnlessReplaced(discoveryPath, claimedPath)),
     );
 
