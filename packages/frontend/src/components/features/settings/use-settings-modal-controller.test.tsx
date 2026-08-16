@@ -392,6 +392,100 @@ describe("useSettingsModalController", () => {
     }
   });
 
+  test("does not retry a cached runtime path while another path probe is running", async () => {
+    const originalCheck = host.runtimeExecutablesCheck;
+    const initialPath = "/tools/opencode-a";
+    const pendingPath = "/tools/opencode-b";
+    const pendingValidation = createDeferred<RuntimeExecutableCheck>();
+    const repeatedInitialValidation = createDeferred<RuntimeExecutableCheck>();
+    const opencodeRequests: string[] = [];
+    settingsSnapshotFactory = () => {
+      const snapshot = createSettingsSnapshot();
+      return {
+        ...snapshot,
+        agentRuntimes: {
+          ...snapshot.agentRuntimes,
+          opencode: { enabled: true, executablePath: initialPath },
+          codex: { ...snapshot.agentRuntimes.codex, enabled: false },
+          claude: { ...snapshot.agentRuntimes.claude, enabled: false },
+        },
+      };
+    };
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") throw new Error("Expected runtime validation");
+      const kind = knownRuntimeKindValues.find((candidate) =>
+        Object.hasOwn(input.paths, candidate),
+      );
+      if (!kind) throw new Error("Runtime validation kind is missing");
+      const path = input.paths[kind] ?? "";
+      if (kind !== "opencode") {
+        return {
+          runtimes: [{ kind, path, ok: true, version: "1.0.0", error: null }],
+        };
+      }
+
+      opencodeRequests.push(path);
+      if (path === pendingPath) return pendingValidation.promise;
+      if (opencodeRequests.filter((request) => request === initialPath).length > 1) {
+        return repeatedInitialValidation.promise;
+      }
+      throw new Error("Initial OpenCode validation failed");
+    });
+    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.runtimeExecutablesError !== null);
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((current) => ({
+          ...current,
+          opencode: { ...current.opencode, executablePath: pendingPath },
+        }));
+      });
+      await harness.waitFor(() => opencodeRequests.includes(pendingPath));
+
+      await harness.run((state) => {
+        state.updateAgentRuntimes((current) => ({
+          ...current,
+          opencode: { ...current.opencode, executablePath: initialPath },
+        }));
+      });
+      await harness.waitFor((state) => state.runtimeExecutablesError !== null);
+      await harness.run((state) => {
+        void state.runtimeExecutableValidation.refetch();
+      });
+      await harness.run(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(opencodeRequests.filter((path) => path === initialPath)).toHaveLength(1);
+
+      await harness.run(() => {
+        pendingValidation.resolve({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: pendingPath,
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        });
+      });
+      await harness.waitFor(
+        () => opencodeRequests.filter((path) => path === initialPath).length === 2,
+      );
+    } finally {
+      pendingValidation.resolve({ runtimes: [] });
+      repeatedInitialValidation.resolve({ runtimes: [] });
+      host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
   test("fails closed when runtime definitions cannot load", async () => {
     saveSettingsSnapshot = mock(async () => {});
     const harness = createHookHarness(true, false, {

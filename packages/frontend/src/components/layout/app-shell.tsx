@@ -251,6 +251,10 @@ export const AppShell = memo(function AppShell(): ReactElement {
     navigate("/kanban", { replace: true, flushSync: true });
   }, [navigate]);
 
+  const retryWorkspaceLoad = useCallback((): void => {
+    void retryWorkspaces().catch(() => undefined);
+  }, [retryWorkspaces]);
+
   if (isLoadingWorkspaces) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
@@ -271,7 +275,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
         >
           <h1 className="font-semibold">OpenDucktor could not load your workspaces</h1>
           <p className="text-sm text-muted-foreground">{workspaceLoadError.message}</p>
-          <Button type="button" variant="outline" onClick={() => void retryWorkspaces()}>
+          <Button type="button" variant="outline" onClick={retryWorkspaceLoad}>
             Retry
           </Button>
         </div>

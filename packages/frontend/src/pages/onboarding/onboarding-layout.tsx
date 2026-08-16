@@ -65,7 +65,7 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
       className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
     >
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="flex items-center justify-between gap-4 pb-5">
+        <header className="electron-titlebar-safe-area flex items-center justify-between gap-4 pb-5">
           <div className="flex items-center gap-3">
             <span
               className="block size-9 shrink-0 bg-foreground"

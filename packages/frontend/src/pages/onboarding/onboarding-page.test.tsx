@@ -62,6 +62,12 @@ describe("OnboardingPage", () => {
     }
   });
 
+  test("marks the onboarding header as an Electron title-bar drag region", () => {
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
+
+    expect(screen.getByRole("banner").classList.contains("electron-titlebar-safe-area")).toBe(true);
+  });
+
   test("resets the onboarding scroll position when the stage changes", async () => {
     renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
     const onboardingShell = document.querySelector(".onboarding-shell");

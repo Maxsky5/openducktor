@@ -400,6 +400,27 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
+  test("keeps a failed workspace retry on the recoverable error screen", async () => {
+    const retryWorkspaces = mock(async () => {
+      throw new Error("Workspace list still unavailable");
+    });
+    renderAppShellForTest({
+      workspacePresence: {
+        hasWorkspaces: false,
+        hasLoadedWorkspaceList: false,
+        workspaceLoadError: new Error("Workspace list unavailable"),
+        retryWorkspaces,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(retryWorkspaces).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeTruthy();
+  });
+
   test("keeps cached workspaces visible after a background refresh fails", () => {
     renderAppShellForTest({
       workspacePresence: { workspaceLoadError: new Error("Workspace refresh unavailable") },

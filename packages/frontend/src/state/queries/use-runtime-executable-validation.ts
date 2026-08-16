@@ -4,7 +4,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
-import { useIsFetching, useQueries } from "@tanstack/react-query";
+import { useIsFetching, useQueries, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { runtimeExecutableQueryOptions, runtimeQueryKeys } from "./runtime";
 
@@ -34,6 +34,7 @@ export const useRuntimeExecutableValidation = (
   runtimes: AgentRuntimes | null,
   enabled: boolean,
 ): RuntimeExecutableValidationState => {
+  const queryClient = useQueryClient();
   const opencodePath = runtimes?.opencode.executablePath ?? "";
   const codexPath = runtimes?.codex.executablePath ?? "";
   const claudePath = runtimes?.claude.executablePath ?? "";
@@ -103,9 +104,17 @@ export const useRuntimeExecutableValidation = (
     checkingRuntimeKinds,
     error,
     refetch: async () => {
-      const failedQueries = queries.filter((query) => query.error !== null);
-      const queriesToRefetch = failedQueries.length > 0 ? failedQueries : queries;
-      await Promise.all(queriesToRefetch.map((query) => query.refetch()));
+      const failedInputs = inputs.filter((_, index) => queries[index]?.error !== null);
+      const inputsToRefetch = failedInputs.length > 0 ? failedInputs : inputs;
+      await Promise.all(
+        inputsToRefetch.map(({ kind, path }) =>
+          queryClient.refetchQueries({
+            queryKey: runtimeQueryKeys.executable(kind, path),
+            exact: true,
+            type: "active",
+          }),
+        ),
+      );
     },
   };
 };

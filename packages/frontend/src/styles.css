@@ -441,7 +441,7 @@ body {
   --electron-navigation-width: 7rem;
 }
 
-:is(.electron-platform-win32, .electron-platform-linux) .app-shell {
+:is(.electron-platform-win32, .electron-platform-linux) :is(.app-shell, .onboarding-shell) {
   --electron-left-controls-height: clamp(
     0px,
     env(titlebar-area-x, 0px),
@@ -451,6 +451,10 @@ body {
     0px,
     calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
   );
+}
+
+:is(.electron-platform-win32, .electron-platform-linux) .onboarding-shell {
+  --electron-navigation-width: 0px;
 }
 
 :is(.electron-platform-win32, .electron-platform-linux) .electron-titlebar-safe-area {
