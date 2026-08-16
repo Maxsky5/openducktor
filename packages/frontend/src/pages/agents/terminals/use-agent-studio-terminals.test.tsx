@@ -4,6 +4,7 @@ import type { TerminalSummary } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import type { TerminalTab } from "@/features/terminals";
 import { terminalTabLabel } from "@/features/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/lib/query-provider";
@@ -63,6 +64,32 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("removes the legacy terminal preference after layout work", async () => {
+    const legacyKey = "openducktor:agent-studio-terminals:/repo:task-a";
+    localStorage.setItem(legacyKey, "legacy");
+    const dependencies = createTerminalTestDependencies();
+    let preferencePresentDuringLayout = false;
+    const Harness = () => {
+      useAgentStudioTerminals({ repoPath: "/repo", taskId: "task-a" }, dependencies);
+      useLayoutEffect(() => {
+        preferencePresentDuringLayout = localStorage.getItem(legacyKey) !== null;
+      }, []);
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness />
+      </QueryProvider>,
+    );
+
+    try {
+      expect(preferencePresentDuringLayout).toBe(true);
+      await waitFor(() => expect(localStorage.getItem(legacyKey)).toBeNull());
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("reopens the panel when the host lists existing task terminals", async () => {
     localStorage.setItem(
       "openducktor:agent-studio-terminals:/repo:task-a",

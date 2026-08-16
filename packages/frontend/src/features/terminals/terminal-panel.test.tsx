@@ -114,7 +114,7 @@ describe("TerminalPanel", () => {
     );
   });
 
-  test("keeps inactive terminal viewports measurable while hiding them", () => {
+  test("keeps inactive terminal viewports measurable outside the clipped viewport", () => {
     const secondTab: TerminalTab = {
       ...lostTab,
       tabId: "lost:terminal-2",
@@ -128,8 +128,11 @@ describe("TerminalPanel", () => {
     expect(panels).toHaveLength(2);
     expect(inactivePanel).toBeTruthy();
     expect(inactivePanel?.className).toContain("data-[state=inactive]:absolute");
-    expect(inactivePanel?.className).toContain("data-[state=inactive]:invisible");
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:left-[calc(100%+1px)]");
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:top-0");
+    expect(inactivePanel?.className).toContain("data-[state=inactive]:w-full");
     expect(inactivePanel?.className).toContain("data-[state=inactive]:pointer-events-none");
+    expect(inactivePanel?.className).not.toContain("data-[state=inactive]:invisible");
     expect(inactivePanel?.className).not.toContain("data-[state=inactive]:hidden");
   });
 

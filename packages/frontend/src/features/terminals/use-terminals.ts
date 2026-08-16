@@ -7,15 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/host";
 import { platformQueryOptions } from "@/state/queries/system";
@@ -128,9 +120,9 @@ export const useTerminals = (
   });
   const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
 
-  useLayoutEffect(() => {
+  if (presentation.activeScopeKey !== scopeKey) {
     dispatch({ type: "scopeActivated", scopeKey });
-  }, [scopeKey]);
+  }
 
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;

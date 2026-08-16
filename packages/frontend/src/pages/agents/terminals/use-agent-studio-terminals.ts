@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLayoutEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { TerminalDependencies, TerminalPanelModel, TerminalScope } from "@/features/terminals";
 import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -55,7 +55,7 @@ export const useAgentStudioTerminals = (
     enabled,
   });
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (repoPath && taskId) localStorage.removeItem(legacyPreferenceKey(repoPath, taskId));
   }, [repoPath, taskId]);
 

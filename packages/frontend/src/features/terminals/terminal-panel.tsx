@@ -298,7 +298,7 @@ export function TerminalPanel({
                   data-terminal-viewport
                   data-state={active ? "active" : "inactive"}
                   aria-hidden={!active}
-                  className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:inset-0 data-[state=inactive]:invisible"
+                  className="h-full min-h-0 data-[state=inactive]:pointer-events-none data-[state=inactive]:absolute data-[state=inactive]:top-0 data-[state=inactive]:left-[calc(100%+1px)] data-[state=inactive]:w-full"
                 >
                   <TerminalViewport
                     mountedTab={mountedTab}
