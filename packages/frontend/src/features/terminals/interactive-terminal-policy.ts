@@ -37,7 +37,9 @@ export const createTerminalInputSequencer = ({
     inputQueue = inputQueue
       .then(async () => {
         if (!isActive()) return;
-        await writeInput(await operation());
+        const data = await operation();
+        if (!isActive()) return;
+        await writeInput(data);
       })
       .catch((cause) => reportFailure(cause));
     return inputQueue;

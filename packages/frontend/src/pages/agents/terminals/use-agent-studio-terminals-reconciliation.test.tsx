@@ -104,7 +104,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       return null;
@@ -161,7 +167,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       return null;
@@ -216,7 +228,13 @@ describe("useAgentStudioTerminals", () => {
     const Harness = () => {
       const queryClient = useQueryClient();
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       refetchTerminalList = async () => {
@@ -236,7 +254,7 @@ describe("useAgentStudioTerminals", () => {
       });
       expect(terminalTabLifecycle(requireTab(getLatest().tabs[0]))).toBe("running");
 
-      act(() => getLatest().onLifecycle("/repo:task-a", "terminal-task-a", "exited"));
+      act(() => getLatest().onLifecycle('["workspace-1","task-a"]', "terminal-task-a", "exited"));
       await act(refetchTerminalList);
 
       expect(terminalListCalls).toBeGreaterThanOrEqual(2);
@@ -256,7 +274,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       return null;
@@ -274,7 +298,7 @@ describe("useAgentStudioTerminals", () => {
 
       act(() =>
         getLatest().onForgotten(
-          "/repo:task-a",
+          '["workspace-1","task-a"]',
           "terminal-task-a",
           "Terminal terminal-task-a was forgotten.",
         ),
@@ -317,7 +341,13 @@ describe("useAgentStudioTerminals", () => {
     const Harness = () => {
       const queryClient = useQueryClient();
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       refetchTerminalList = async () => {
@@ -397,7 +427,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = () => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId: "task-a", mountedTaskIds: ["task-a"] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion: null,
+          mountedTaskIds: ["task-a"],
+        },
         dependencies,
       );
       return null;
@@ -432,7 +468,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = ({ taskId }: { taskId: string }) => {
       const model = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          taskVersion: null,
+          mountedTaskIds: [taskId],
+        },
         dependencies,
       );
       latest = model;
@@ -479,7 +521,7 @@ describe("useAgentStudioTerminals", () => {
           </QueryProvider>,
         ),
       );
-      expect(getLatest().scopeKey).toBe("/repo:task-b");
+      expect(getLatest().scopeKey).toBe('["workspace-1","task-b"]');
       expect(getLatest().tabs).toEqual([]);
       expect(getLatest().isVisible).toBe(false);
 
@@ -556,7 +598,16 @@ describe("useAgentStudioTerminals", () => {
       taskId: string;
       mountedTaskIds: string[];
     }) => {
-      latest = useAgentStudioTerminals({ repoPath: "/repo", taskId, mountedTaskIds }, dependencies);
+      latest = useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          taskVersion: null,
+          mountedTaskIds,
+        },
+        dependencies,
+      );
       return <TerminalPanel model={latest} />;
     };
     const renderHarness = (taskId: string, mountedTaskIds: string[]) => (
@@ -651,7 +702,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = ({ taskId }: { taskId: string }) => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          taskVersion: null,
+          mountedTaskIds: [taskId],
+        },
         dependencies,
       );
       return null;
@@ -676,7 +733,7 @@ describe("useAgentStudioTerminals", () => {
       ),
     );
     await waitFor(() => {
-      expect(getLatest().scopeKey).toBe("/repo:task-b");
+      expect(getLatest().scopeKey).toBe('["workspace-1","task-b"]');
       expect(getLatest().tabs[0]?.terminalId).toBe("terminal-task-b");
     });
 
@@ -715,7 +772,13 @@ describe("useAgentStudioTerminals", () => {
     };
     const Harness = ({ taskId }: { taskId: string }) => {
       latest = useAgentStudioTerminals(
-        { repoPath: "/repo", taskId, mountedTaskIds: [taskId] },
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId,
+          taskVersion: null,
+          mountedTaskIds: [taskId],
+        },
         dependencies,
       );
       return null;

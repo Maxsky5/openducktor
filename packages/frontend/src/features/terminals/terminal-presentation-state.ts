@@ -144,7 +144,7 @@ export const createTerminalPresentationState = (
   scopes: scopeKey ? { [scopeKey]: emptyTerminalScopePresentation() } : {},
 });
 
-export const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): TerminalTab => {
+const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): ReadyTerminalTab => {
   const previousSummary = previous?.requestState === "ready" ? previous.summary : null;
   const previousLabel = previous ? terminalTabLabel(previous) : null;
   const preserveLiveLifecycle =

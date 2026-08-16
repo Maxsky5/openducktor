@@ -150,6 +150,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     setTaskTargetBranch,
   });
   const terminalPanel = useAgentStudioTerminals({
+    workspaceId: activeWorkspaceId,
     repoPath: workspaceRepoPath,
     taskId: selection.view.selectedTask?.id ?? null,
     taskVersion: selection.view.selectedTask?.updatedAt ?? null,

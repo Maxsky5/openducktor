@@ -24,7 +24,7 @@ import { useTerminalTransport } from "./use-terminal-transport";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
-export type MountedTerminalTab = {
+type MountedTerminalTab = {
   scopeKey: string;
   tab: TerminalTab;
 };
@@ -86,11 +86,11 @@ export type TerminalPanelModel = {
 export const useTerminals = (
   {
     scope,
-    isScopeLoading = false,
+    isScopeLoading,
     mountedScopeKeys,
   }: {
     scope: TerminalScope | null;
-    isScopeLoading?: boolean;
+    isScopeLoading: boolean;
     mountedScopeKeys: readonly string[];
   },
   dependencies = defaultDependencies(),

@@ -122,9 +122,13 @@ describe("InteractiveTerminal policies", () => {
     expect(failures).toEqual([]);
   });
 
-  test("drops queued input when its terminal is inactive", async () => {
+  test("drops prepared input when its terminal becomes inactive", async () => {
     const inputWrites: number[][] = [];
-    let active = false;
+    let active = true;
+    let releaseInput: (data: Uint8Array) => void = () => undefined;
+    const preparedInput = new Promise<Uint8Array>((resolve) => {
+      releaseInput = resolve;
+    });
     const sequenceInput = createTerminalInputSequencer({
       isActive: () => active,
       writeInput: async (data) => {
@@ -133,11 +137,13 @@ describe("InteractiveTerminal policies", () => {
       reportFailure: () => undefined,
     });
 
-    await sequenceInput(() => new Uint8Array([3]));
-    active = true;
-    await sequenceInput(() => new Uint8Array([4]));
+    const pendingInput = sequenceInput(() => preparedInput);
+    await Promise.resolve();
+    active = false;
+    releaseInput(new Uint8Array([3]));
+    await pendingInput;
 
-    expect(inputWrites).toEqual([[4]]);
+    expect(inputWrites).toEqual([]);
   });
 
   test("forwards image clipboard paste as Ctrl+V instead of empty input", async () => {

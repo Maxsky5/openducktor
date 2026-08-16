@@ -44,10 +44,7 @@ const createController = () => {
   return { controller, listeners };
 };
 
-const sendStaleBuffer = async (
-  listener: TerminalFrameListener,
-  terminalId: string,
-): Promise<void> => {
+const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): void => {
   const payload = new TextEncoder().encode(
     `${terminalId} stale log\r\n`.repeat(STALE_BUFFER_LINES),
   );
@@ -73,7 +70,6 @@ const sendStaleBuffer = async (
     },
     payload,
   );
-  await nextFrame();
 };
 
 describe("retained terminal rendering", () => {
@@ -112,11 +108,12 @@ describe("retained terminal rendering", () => {
           onImageDragActiveChange: () => undefined,
           onInteractionFailure: () => undefined,
         });
+        retained.push({ container, mount, terminalId });
         const listener = listeners.get(terminalId);
         if (!listener) throw new Error(`Expected ${terminalId} to subscribe.`);
-        await sendStaleBuffer(listener, terminalId);
-        retained.push({ container, mount, terminalId });
+        sendStaleBuffer(listener, terminalId);
       }
+      await nextFrame();
 
       expect(retained).toHaveLength(RETAINED_TERMINAL_BOUND);
       for (const index of [0, RETAINED_TERMINAL_BOUND - 1]) {

@@ -124,17 +124,21 @@ describe("TerminalPanel", () => {
     const view = render(<TerminalPanel model={{ ...model, ...tabsModel([lostTab, secondTab]) }} />);
 
     const panels = view.container.querySelectorAll<HTMLElement>("[data-terminal-viewport]");
-    const inactivePanel = Array.from(panels).find((panel) => panel.dataset.state === "inactive");
+    const inactivePanel = Array.from(panels).find(
+      (panel) => panel.dataset.viewportState === "inactive",
+    );
 
     expect(panels).toHaveLength(2);
     if (!inactivePanel) throw new Error("Expected an inactive terminal viewport.");
-    expect(inactivePanel.className).toContain("data-[state=inactive]:absolute");
-    expect(inactivePanel.className).toContain("data-[state=inactive]:left-[calc(100%+1px)]");
-    expect(inactivePanel.className).toContain("data-[state=inactive]:top-0");
-    expect(inactivePanel.className).toContain("data-[state=inactive]:w-full");
-    expect(inactivePanel.className).toContain("data-[state=inactive]:pointer-events-none");
-    expect(inactivePanel.className).not.toContain("data-[state=inactive]:invisible");
-    expect(inactivePanel.className).not.toContain("data-[state=inactive]:hidden");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:absolute");
+    expect(inactivePanel.className).toContain(
+      "data-[viewport-state=inactive]:left-[calc(100%+1px)]",
+    );
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:top-0");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:w-full");
+    expect(inactivePanel.className).toContain("data-[viewport-state=inactive]:pointer-events-none");
+    expect(inactivePanel.className).not.toContain("data-[viewport-state=inactive]:invisible");
+    expect(inactivePanel.className).not.toContain("data-[viewport-state=inactive]:hidden");
     expect(inactivePanel.hasAttribute("inert")).toBe(true);
   });
 
@@ -170,7 +174,7 @@ describe("TerminalPanel", () => {
       />,
     );
     const inactiveViewport = view.container.querySelector<HTMLElement>(
-      '[data-terminal-viewport][data-state="inactive"]',
+      '[data-terminal-viewport][data-viewport-state="inactive"]',
     );
     if (!inactiveViewport) throw new Error("Expected an inactive terminal viewport.");
     expect(inactiveViewport.querySelector("button")).toBeNull();

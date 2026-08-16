@@ -12,7 +12,7 @@ import {
 } from "./interactive-terminal-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 
-export type InteractiveTerminalProps = {
+type InteractiveTerminalProps = {
   terminalId: string;
   controller: TerminalTransportController;
   platform: AppPlatform | undefined;
