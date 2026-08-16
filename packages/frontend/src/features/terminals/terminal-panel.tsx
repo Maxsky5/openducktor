@@ -149,6 +149,7 @@ export function TerminalPanel({
   model: TerminalPanelModel;
   headerLeading?: ReactNode;
 }): ReactElement {
+  const { onLifecycle } = model;
   const [pendingCloseCandidate, setPendingCloseCandidate] = useState<{
     scopeKey: string | null;
     tab: TerminalTab;
@@ -207,10 +208,10 @@ export function TerminalPanel({
       lifecycle: TerminalLifecycle,
       exitText: string | null,
     ): void => {
-      model.onLifecycle(scopeKey, terminalId, lifecycle);
+      onLifecycle(scopeKey, terminalId, lifecycle);
       if (exitText) setTabAttention(tabId, exitText);
     },
-    [model.onLifecycle, setTabAttention],
+    [onLifecycle, setTabAttention],
   );
   const closeTab = async (tab: TerminalTab): Promise<void> => {
     const scopeKey = model.scopeKey;

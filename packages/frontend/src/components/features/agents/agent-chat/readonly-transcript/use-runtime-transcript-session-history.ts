@@ -156,6 +156,7 @@ export function useRuntimeTranscriptSessionHistory({
       ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
+  const { refetch: refetchHistory } = historyQuery;
   const skillsQuery = useQuery(
     emptyReason === null &&
       repoReadinessState === "ready" &&
@@ -204,8 +205,8 @@ export function useRuntimeTranscriptSessionHistory({
     });
   }, [emptyReason, historyQuery.error, repoReadinessState, runtimePolicyError, session]);
   const retryHistory = useCallback(() => {
-    void historyQuery.refetch();
-  }, [historyQuery.refetch]);
+    void refetchHistory();
+  }, [refetchHistory]);
 
   return {
     session,

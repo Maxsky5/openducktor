@@ -340,12 +340,13 @@ describe("use-workspace-operations", () => {
       value: ReturnType<typeof useWorkspaceOperations>;
     }) => {
       const activeRepoPath = activeWorkspace?.repoPath ?? null;
+      const { refreshBranches } = value;
       useEffect(() => {
         if (!activeRepoPath) {
           return;
         }
-        void value.refreshBranches();
-      }, [activeRepoPath, value.refreshBranches]);
+        void refreshBranches();
+      }, [activeRepoPath, refreshBranches]);
 
       return null;
     };
@@ -719,6 +720,7 @@ describe("use-workspace-operations", () => {
         clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
+      const { refreshBranches } = value;
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
 
       latest = value;
@@ -736,8 +738,8 @@ describe("use-workspace-operations", () => {
           return;
         }
 
-        void value.refreshBranches();
-      }, [activeWorkspace, value.refreshBranches]);
+        void refreshBranches();
+      }, [activeWorkspace, refreshBranches]);
 
       return null;
     };
@@ -963,6 +965,7 @@ describe("use-workspace-operations", () => {
         clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
+      const { refreshBranches } = value;
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
       const hasSeededWorkspacesRef = useRef(false);
 
@@ -990,8 +993,8 @@ describe("use-workspace-operations", () => {
           return;
         }
 
-        void value.refreshBranches();
-      }, [activeWorkspace, value.refreshBranches]);
+        void refreshBranches();
+      }, [activeWorkspace, refreshBranches]);
 
       return null;
     };

@@ -271,6 +271,7 @@ export function useAgentsPageRightPanelModel({
     repoSettings,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
+  const { refreshWorktree: refreshBuildToolsWorktree } = buildToolsSnapshot;
 
   const detectedConflictedFiles = useMemo(
     () => collectUnmergedFilePaths(diffData.fileStatuses),
@@ -457,7 +458,7 @@ export function useAgentsPageRightPanelModel({
   );
   const refreshWorktree = useCallback<GitDiffRefresh>(
     async (mode): Promise<void> => {
-      const refreshes: Promise<unknown>[] = [buildToolsSnapshot.refreshWorktree(mode)];
+      const refreshes: Promise<unknown>[] = [refreshBuildToolsWorktree(mode)];
       const fileQueryRoots = new Set(
         [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
           (rootPath): rootPath is string => rootPath !== null,
@@ -468,7 +469,7 @@ export function useAgentsPageRightPanelModel({
       }
       await Promise.all(refreshes);
     },
-    [buildToolsSnapshot.refreshWorktree, fileExplorerRoot.rootPath, queryClient, selectedFile],
+    [fileExplorerRoot.rootPath, queryClient, refreshBuildToolsWorktree, selectedFile],
   );
 
   return {

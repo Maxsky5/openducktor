@@ -119,6 +119,7 @@ export function useAgentStudioChatModel({
   runtimeDefinitions,
   composer,
 }: UseAgentStudioChatModelArgs): AgentChatModel {
+  const { loadAgentSessionHistory } = sessionActions;
   const subagentPendingApprovalCountBySessionKey =
     selectedSession.pendingInput.subagentPendingApprovalCountBySessionKey;
   const subagentPendingQuestionCountBySessionKey =
@@ -163,6 +164,7 @@ export function useAgentStudioChatModel({
   const selectedSessionTranscriptState = selectedSessionState.transcriptState;
   const selectedSessionAuxiliaryError = selectedSessionState.sessionAuxiliaryError;
   const runtimeReadiness = selectedSessionState.runtimeReadiness;
+  const { refreshChecks: refreshRuntimeChecks } = runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
   const selectedSessionKey = selectedSessionIdentity
@@ -228,7 +230,7 @@ export function useAgentStudioChatModel({
       return {
         label: "Retry",
         onAction: () => {
-          void sessionActions.loadAgentSessionHistory(selectedSessionIdentity);
+          void loadAgentSessionHistory(selectedSessionIdentity);
         },
       };
     }
@@ -251,19 +253,19 @@ export function useAgentStudioChatModel({
     selectedSessionState.loadedSession,
     selectedSessionAuxiliaryError,
     selectedSessionTranscriptState,
-    sessionActions.loadAgentSessionHistory,
+    loadAgentSessionHistory,
     sessionReadModelLoadState.kind,
   ]);
   const runtimeBlockedAction = useMemo(
     () => ({
       label: "Recheck",
       onAction: () => {
-        void runtimeReadiness.refreshChecks();
+        void refreshRuntimeChecks();
       },
       disabled: runtimeReadiness.isLoadingChecks,
       isPending: runtimeReadiness.isLoadingChecks,
     }),
-    [runtimeReadiness.isLoadingChecks, runtimeReadiness.refreshChecks],
+    [refreshRuntimeChecks, runtimeReadiness.isLoadingChecks],
   );
   const chatReadiness = useMemo(
     () =>
