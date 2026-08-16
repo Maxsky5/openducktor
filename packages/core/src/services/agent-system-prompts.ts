@@ -46,6 +46,7 @@ export type AgentPromptGitContext = {
   operationLabel?: string;
   currentBranch?: string;
   targetBranch?: string;
+  pullRequestBaseBranch?: string;
   conflictedFiles?: string[];
   conflictOutput?: string;
 };
@@ -460,22 +461,25 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 5,
+    builtinVersion: 6,
     template: joinPromptBlocks(
       "Publish a review-ready pull request for the current Builder session.",
-      lineSection("Pull request context", ["- targetBranch: {{git.targetBranch}}"]),
+      lineSection("Pull request context", [
+        "- comparisonRef: {{git.targetBranch}}",
+        "- pullRequestBaseBranch: {{git.pullRequestBaseBranch}}",
+      ]),
       bulletSection("Prepare", [
-        "Treat the targetBranch above as the pull-request base branch for this task.",
+        "Use comparisonRef for git comparison and rebasing. Use pullRequestBaseBranch only as the provider pull-request base.",
         "Follow the repository's pull request conventions, including its contribution guidance and GitHub pull request template when present.",
-        "Inspect the current source branch, remote branch, existing pull-request state, task artifacts, and actual diff against targetBranch. Use live evidence instead of relying on the session summary.",
+        "Inspect the current source branch, remote branch, existing pull-request state, task artifacts, and actual diff against comparisonRef. Use live evidence instead of relying on the session summary.",
         "Run the repository-required checks. Diagnose check failures, fix their root causes, and rerun the affected checks until all required checks pass.",
-        "If the source branch is behind targetBranch, rebase it on targetBranch and resolve conflicts carefully.",
+        "If the source branch is behind comparisonRef, rebase it on comparisonRef and resolve conflicts carefully.",
       ]),
       bulletSection("Write and publish", [
-        "Use a concise Conventional Commit title that explains why the change matters.",
+        "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
         "Start the body with the problem, then explain the goal and the context reviewers need. Include key decisions or tradeoffs when they help review.",
         "Follow any repository pull request template and fill every relevant section. Do not lead with an implementation inventory or add a verification section.",
-        "Push the source branch, then create or update the pull request against the exact targetBranch above with provider-native tooling.",
+        "Push the source branch, then create or update the pull request against the exact pullRequestBaseBranch above with provider-native tooling.",
       ]),
       bulletSection("Finish", [
         "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
@@ -583,6 +587,7 @@ const buildPlaceholderValues = ({
           "git.operationLabel": compact(git.operationLabel),
           "git.currentBranch": compact(git.currentBranch),
           "git.targetBranch": compact(git.targetBranch),
+          "git.pullRequestBaseBranch": compact(git.pullRequestBaseBranch),
           "git.conflictedFiles": compactList(git.conflictedFiles),
           "git.conflictOutput": compact(git.conflictOutput),
         }
@@ -731,6 +736,12 @@ export const buildAgentKickoffPromptBundle = (
     if (!targetBranch) {
       throw new Error(
         'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
+      );
+    }
+    const pullRequestBaseBranch = input.git?.pullRequestBaseBranch?.trim();
+    if (!pullRequestBaseBranch) {
+      throw new Error(
+        'Missing required git context for "kickoff.build_pull_request_generation": pullRequestBaseBranch.',
       );
     }
   }

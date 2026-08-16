@@ -308,7 +308,8 @@ describe("settings-modal-model", () => {
         enabled: true,
       },
       "kickoff.build_pull_request_generation": {
-        template: "Bad {{task.foo}} and {{unknown.value}}",
+        template:
+          "Bad {{task.foo}} and {{unknown.value}} with {{git.targetBranch}} and {{git.pullRequestBaseBranch}}",
         baseVersion: 1,
         enabled: true,
       },

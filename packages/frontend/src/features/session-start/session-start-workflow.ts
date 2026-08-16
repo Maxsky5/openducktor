@@ -1,12 +1,17 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
+  AgentPromptGitContext,
   AgentRole,
   AgentSessionStartMode,
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
+import {
+  canonicalTargetBranch,
+  effectiveTaskTargetBranch,
+  UPSTREAM_TARGET_BRANCH,
+} from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -193,17 +198,22 @@ const buildPostStartMessage = async ({
   const repoDefaultTargetBranch = workspaceId
     ? (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch
     : null;
-  const git =
-    kickoffTemplateId === "kickoff.build_pull_request_generation"
-      ? {
-          targetBranch: canonicalTargetBranch(
-            effectiveTaskTargetBranch(
-              intent.targetBranch ?? task?.targetBranch,
-              repoDefaultTargetBranch,
-            ),
-          ),
-        }
-      : undefined;
+  let git: AgentPromptGitContext | undefined;
+  if (kickoffTemplateId === "kickoff.build_pull_request_generation") {
+    const targetBranch = effectiveTaskTargetBranch(
+      intent.targetBranch ?? task?.targetBranch,
+      repoDefaultTargetBranch,
+    );
+    if (targetBranch.branch === UPSTREAM_TARGET_BRANCH) {
+      throw new Error(
+        "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+      );
+    }
+    git = {
+      targetBranch: canonicalTargetBranch(targetBranch),
+      pullRequestBaseBranch: targetBranch.branch,
+    };
+  }
 
   return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
     overrides: promptOverrides ?? {},

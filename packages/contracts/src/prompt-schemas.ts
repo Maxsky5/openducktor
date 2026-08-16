@@ -36,6 +36,7 @@ export const agentPromptPlaceholderValues = [
   "git.operationLabel",
   "git.currentBranch",
   "git.targetBranch",
+  "git.pullRequestBaseBranch",
   "git.conflictedFiles",
   "git.conflictOutput",
 ] as const;
@@ -47,6 +48,7 @@ const REQUIRED_PLACEHOLDERS_BY_TEMPLATE: Partial<
   Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>
 > = {
   "kickoff.build_after_human_request_changes": ["humanFeedback"],
+  "kickoff.build_pull_request_generation": ["git.targetBranch", "git.pullRequestBaseBranch"],
 };
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;

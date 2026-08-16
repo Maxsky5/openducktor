@@ -109,7 +109,7 @@ describe("session-start-workflow", () => {
           workingDirectory: "/repo/worktree",
         },
         targetBranch: {
-          remote: "origin",
+          remote: "upstream",
           branch: "release/2026.04",
         },
         postStartAction: "kickoff",
@@ -137,14 +137,86 @@ describe("session-start-workflow", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
       expect.objectContaining({
         kind: "text",
-        text: expect.stringContaining("targetBranch: origin/release/2026.04"),
+        text: expect.stringContaining("comparisonRef: upstream/release/2026.04"),
       }),
     ]);
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).not.toContain("targetBranch: origin/main");
+    expect(sentText).toContain("pullRequestBaseBranch: release/2026.04");
+    expect(sentText).not.toContain("comparisonRef: origin/main");
+  });
+
+  test("uses the explicit branch name as the provider base for origin targets", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-origin"));
+
+    await startSessionWorkflow({
+      workspaceId: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-ORIGIN",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        startMode: "reuse",
+        sourceSession: sessionIdentity("builder-session-origin"),
+        postStartAction: "kickoff",
+      },
+      selection: null,
+      task: createTaskCardFixture({
+        id: "TASK-ORIGIN",
+        title: "Generate origin PR",
+        targetBranch: {
+          remote: "origin",
+          branch: "main",
+        },
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
+      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
+    >;
+    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    expect(sentText).toContain("comparisonRef: origin/main");
+    expect(sentText).toContain("pullRequestBaseBranch: main");
+  });
+
+  test("rejects upstream-relative targets before creating a pull request session", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-upstream"));
+
+    await expect(
+      startSessionWorkflow({
+        workspaceId: null,
+        queryClient: new QueryClient(),
+        intent: {
+          taskId: "TASK-UPSTREAM",
+          role: "build",
+          launchActionId: "build_pull_request_generation",
+          startMode: "reuse",
+          sourceSession: sessionIdentity("builder-session-upstream"),
+          targetBranch: {
+            branch: "@{upstream}",
+          },
+          postStartAction: "kickoff",
+        },
+        selection: null,
+        task: createTaskCardFixture({
+          id: "TASK-UPSTREAM",
+          title: "Generate upstream PR",
+        }),
+        startAgentSession,
+        sendAgentMessage,
+      }),
+    ).rejects.toThrow(
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+    );
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
   });
 
   test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {
