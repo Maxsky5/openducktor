@@ -91,7 +91,7 @@ export const useTaskExecutionFilePreviewController =
           return;
         }
         const storedTransition = pendingContextTransitionRef.current;
-        if (options?.force) {
+        if (options?.force && currentState.leavePolicy !== "defer") {
           pendingContextTransitionRef.current = null;
           dispatch({ type: "force_clear" });
           storedTransition?.cancel?.();

@@ -73,6 +73,17 @@ const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-scrollbar-gutter-override": "0px",
   "--diffs-tab-size": 2,
 } as CSSProperties;
+
+function EditorAttachmentLifecycle({
+  children,
+  onDetach,
+}: {
+  children: ReactElement;
+  onDetach(): void;
+}): ReactElement {
+  useLayoutEffect(() => onDetach, [onDetach]);
+  return children;
+}
 const CODE_VIEW_PREVIEW_UNSAFE_CSS = `
 [data-column-number],
 [data-gutter-buffer] {
@@ -477,7 +488,10 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     if (!mustKeepDraft && refreshedFileCannotStayEditable) {
       return readyCurrentSnapshot;
     }
-    return createFilePreviewSnapshot(selectedFile, editor.session.source);
+    const editorResult = attachedEditorRef.current
+      ? editor.session.source
+      : editor.session.baseline;
+    return createFilePreviewSnapshot(selectedFile, editorResult);
   }, [
     editor.isDirty,
     editor.isSaving,
@@ -528,6 +542,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
     codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
+  const handleEditorDetach = useCallback(() => {
+    attachedEditorRef.current = null;
+  }, []);
   const hasActiveEditorSession =
     codeViewFileId !== null &&
     editor.session?.id === codeViewFileId &&
@@ -626,17 +643,18 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     body = <FilePreviewState message={visibleSnapshot.result.message} />;
   } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
-      <EditProvider createEditor={createEditor}>
-        <CodeView
-          key={codeViewRenderKey}
-          className={CODE_VIEW_CLASS_NAME}
-          style={codeViewRootStyle}
-          items={codeViewItems}
-          options={codeViewOptions}
-          editorOptions={editorOptions}
-          onItemEditChange={editor.onItemEditChange}
-        />
-      </EditProvider>
+      <EditorAttachmentLifecycle key={codeViewRenderKey} onDetach={handleEditorDetach}>
+        <EditProvider createEditor={createEditor}>
+          <CodeView
+            className={CODE_VIEW_CLASS_NAME}
+            style={codeViewRootStyle}
+            items={codeViewItems}
+            options={codeViewOptions}
+            editorOptions={editorOptions}
+            onItemEditChange={editor.onItemEditChange}
+          />
+        </EditProvider>
+      </EditorAttachmentLifecycle>
     );
   } else {
     body = <FilePreviewState message="No file selected." />;

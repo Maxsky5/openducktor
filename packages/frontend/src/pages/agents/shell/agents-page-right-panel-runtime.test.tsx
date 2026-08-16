@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, PropsWithChildren } from "react";
+import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
@@ -18,6 +19,24 @@ let realRefreshModule: RefreshModule | null = null;
 const useBuildWorktreeRefreshMock = mock(
   (_args: Parameters<RefreshModule["useAgentStudioBuildWorktreeRefresh"]>[0]) => {},
 );
+
+function SeedQueryData({
+  children,
+  queryClientRef,
+  entries,
+}: PropsWithChildren<{
+  queryClientRef: { current: QueryClient | null };
+  entries: Array<{ queryKey: readonly unknown[]; data: unknown }>;
+}>) {
+  const queryClient = useQueryClient();
+  queryClientRef.current = queryClient;
+  for (const entry of entries) {
+    if (queryClient.getQueryData(entry.queryKey) === undefined) {
+      queryClient.setQueryData(entry.queryKey, entry.data);
+    }
+  }
+  return children;
+}
 
 beforeEach(async () => {
   useBuildWorktreeRefreshMock.mockClear();
@@ -62,7 +81,7 @@ test("observes builder mutations while the file explorer tab is active", () => {
 });
 
 test("invalidates the visible file when the panel is hidden", async () => {
-  const queryClient = new QueryClient();
+  const queryClientRef: { current: QueryClient | null } = { current: null };
   const selectedFile = {
     rootPath: "/repo/worktrees/task-1",
     relativePath: "src/index.ts",
@@ -72,22 +91,27 @@ test("invalidates the visible file when the panel is hidden", async () => {
     selectedFile.relativePath,
   );
   const unrelatedFileQueryKey = filesystemQueryKeys.textFile(selectedFile.rootPath, "src/other.ts");
-  queryClient.setQueryData(selectedFileQueryKey, { content: "before" });
-  queryClient.setQueryData(unrelatedFileQueryKey, { content: "other" });
-
   render(
-    <QueryClientProvider client={queryClient}>
-      <AgentsPageSelectedFileRefreshRuntime
-        selectedFile={selectedFile}
-        selectedView={{ role: "build", loadedSession: null }}
-      />
-    </QueryClientProvider>,
+    <QueryProvider useIsolatedClient>
+      <SeedQueryData
+        queryClientRef={queryClientRef}
+        entries={[
+          { queryKey: selectedFileQueryKey, data: { content: "before" } },
+          { queryKey: unrelatedFileQueryKey, data: { content: "other" } },
+        ]}
+      >
+        <AgentsPageSelectedFileRefreshRuntime
+          selectedFile={selectedFile}
+          selectedView={{ role: "build", loadedSession: null }}
+        />
+      </SeedQueryData>
+    </QueryProvider>,
   );
 
   const refreshWorktree = useBuildWorktreeRefreshMock.mock.calls[0]?.[0]?.refreshWorktree;
   expect(refreshWorktree).toBeFunction();
   await refreshWorktree?.("soft");
 
-  expect(queryClient.getQueryState(selectedFileQueryKey)?.isInvalidated).toBe(true);
-  expect(queryClient.getQueryState(unrelatedFileQueryKey)?.isInvalidated).toBe(false);
+  expect(queryClientRef.current?.getQueryState(selectedFileQueryKey)?.isInvalidated).toBe(true);
+  expect(queryClientRef.current?.getQueryState(unrelatedFileQueryKey)?.isInvalidated).toBe(false);
 });

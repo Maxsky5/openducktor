@@ -240,6 +240,11 @@ export const createWorkspaceTextFileService = (
       }
       const input = parsedInput.data;
       const bytes = TEXT_ENCODER.encode(input.contents);
+      if (TEXT_DECODER.decode(bytes) !== input.contents) {
+        return yield* Effect.fail(
+          unsupportedWrite("File contents must be valid UTF-8 text.", input),
+        );
+      }
       if (bytes.byteLength > MAX_WORKSPACE_TEXT_FILE_BYTES) {
         return yield* Effect.fail(
           unsupportedWrite(

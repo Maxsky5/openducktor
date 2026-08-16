@@ -718,6 +718,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
     const firstItem = latestCodeViewProps?.items[0];
+    const firstCacheKey = firstItem?.file.cacheKey;
+    (
+      latestCodeViewProps?.editorOptions as
+        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
+        | undefined
+    )?.onAttach?.({ focus: mock(() => {}) });
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
@@ -750,10 +756,16 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(latestCodeViewProps?.items[0]).toMatchObject({
       version: firstItem?.version,
       file: {
-        cacheKey: firstItem?.file.cacheKey,
         contents: "const first = false;",
       },
     });
+    expect(latestCodeViewProps?.items[0]?.file.cacheKey).not.toBe(firstCacheKey);
+    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toBe(
+      JSON.stringify([
+        taskExecutionSelectedFileKey(firstFile),
+        "revision:const first = true;:saved",
+      ]),
+    );
     expect(codeViewMountCount).toBe(2);
   });
 
@@ -967,10 +979,13 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(latestCodeViewProps?.items[0]).toMatchObject({
       version: firstItem?.version,
       file: {
-        cacheKey: firstItem?.file.cacheKey,
         contents: "const external = true;",
       },
     });
+    expect(latestCodeViewProps?.items[0]?.file.cacheKey).not.toBe(firstItem?.file.cacheKey);
+    expect(latestCodeViewProps?.items[0]?.file.cacheKey).toBe(
+      JSON.stringify([taskExecutionSelectedFileKey(firstFile), "revision:const external = true;"]),
+    );
     expect(codeViewMountCount).toBe(2);
   });
 

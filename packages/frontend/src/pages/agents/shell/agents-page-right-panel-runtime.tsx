@@ -19,9 +19,11 @@ import {
 
 export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
   refreshWorktreeRef,
+  renderPanel = true,
   ...args
 }: UseAgentsPageRightPanelModelArgs & {
   refreshWorktreeRef: WorktreeRefreshRef;
+  renderPanel?: boolean;
 }): ReactElement | null {
   const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
 
@@ -34,7 +36,9 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
     };
   }, [refreshWorktree, refreshWorktreeRef]);
 
-  return rightPanelModel ? <MemoizedTaskExecutionPanel model={rightPanelModel} /> : null;
+  return renderPanel && rightPanelModel ? (
+    <MemoizedTaskExecutionPanel model={rightPanelModel} />
+  ) : null;
 });
 
 export function AgentsPageBuildWorktreeRefreshRuntime({

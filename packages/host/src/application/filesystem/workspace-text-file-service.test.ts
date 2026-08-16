@@ -313,6 +313,32 @@ describe("createWorkspaceTextFileService", () => {
     expect(await readFile(filePath, "utf8")).toBe("before");
   });
 
+  test("rejects draft contents that cannot round trip through UTF-8", async () => {
+    const rootPath = await createRoot();
+    const filePath = path.join(rootPath, "file.txt");
+    await writeFile(filePath, "before");
+    const service = createWorkspaceTextFileService(
+      createFilesystemAdapter(),
+      createGitPort(["file.txt"]),
+    );
+    const loaded = await Effect.runPromise(
+      service.readTextFile({ rootPath, relativePath: "file.txt" }),
+    );
+    if (loaded.kind !== "text") throw new Error("Expected text.");
+
+    const failure = await writeFailure(
+      service.writeTextFile({
+        rootPath,
+        relativePath: "file.txt",
+        contents: "\ud800",
+        revision: loaded.revision,
+      }),
+    );
+
+    expect(failure.code).toBe("unsupported_file");
+    expect(await readFile(filePath, "utf8")).toBe("before");
+  });
+
   test("reports a stale revision before classifying changed current contents", async () => {
     const rootPath = await createRoot();
     const filePath = path.join(rootPath, "file.txt");

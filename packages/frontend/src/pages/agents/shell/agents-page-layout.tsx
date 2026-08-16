@@ -26,7 +26,10 @@ import {
   AgentsPageModalContent,
   type AgentsPageModalContentModel,
 } from "./agents-page-modal-content";
-import { AgentsPageSelectedFileRefreshRuntime } from "./agents-page-right-panel-runtime";
+import {
+  AgentsPageRightPanelRuntime,
+  AgentsPageSelectedFileRefreshRuntime,
+} from "./agents-page-right-panel-runtime";
 import { AgentsPageShell } from "./agents-page-shell";
 import type {
   AgentStudioRightPanelBridgeModel,
@@ -343,6 +346,13 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
 
   return (
     <>
+      {!isRightPanelVisible && rightPanelBridge ? (
+        <AgentsPageRightPanelRuntime
+          {...rightPanelBridge.rightPanel}
+          refreshWorktreeRef={refreshWorktreeRef}
+          renderPanel={false}
+        />
+      ) : null}
       {selectedFileRefresh ? (
         <AgentsPageSelectedFileRefreshRuntime {...selectedFileRefresh} />
       ) : null}

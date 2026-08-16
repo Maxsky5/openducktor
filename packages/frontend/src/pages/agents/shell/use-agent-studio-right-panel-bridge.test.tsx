@@ -144,7 +144,7 @@ describe("useAgentStudioRightPanelBridge", () => {
     }
   });
 
-  test("omits bridge props when the selected panel is closed", async () => {
+  test("keeps refresh bridge props when the selected panel is closed", async () => {
     const harness = createHookHarness(
       createArgs({
         panel: createPanelState({
@@ -165,7 +165,7 @@ describe("useAgentStudioRightPanelBridge", () => {
 
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(false);
-      expect(state.rightPanelBridge).toBeNull();
+      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
       expect(state.selectedFileRefresh).toBeNull();
     } finally {
       await harness.unmount();
@@ -194,7 +194,7 @@ describe("useAgentStudioRightPanelBridge", () => {
 
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(false);
-      expect(state.rightPanelBridge).toBeNull();
+      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
       expect(state.selectedFileRefresh).toEqual({
         selectedFile,
         selectedView: {
