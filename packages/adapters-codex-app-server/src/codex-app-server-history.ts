@@ -21,7 +21,7 @@ export const applyFinalAssistantTurnMetadata = (
   return {
     ...message,
     ...(turnTiming ? { durationMs: turnTiming.durationMs } : {}),
-    ...(tokenUsageFields ?? {}),
+    ...tokenUsageFields,
     ...(tokenUsageFields
       ? {
           parts: message.parts.map((part) =>

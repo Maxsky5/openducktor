@@ -121,12 +121,10 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
           }
           const entries = [...files.keys()]
             .filter((filePath) => filePath.startsWith(`${path}/`))
-            .map(
-              (filePath): LocalAttachmentEntry => ({
-                path: filePath,
-                fileName: filePath.slice(path.length + 1),
-              }),
-            );
+            .map((filePath): LocalAttachmentEntry => ({
+              path: filePath,
+              fileName: filePath.slice(path.length + 1),
+            }));
           await options.readDirectoryDelay?.();
           return entries;
         },

@@ -422,9 +422,10 @@ describe("use-workspace-operations", () => {
 
   test("refreshWorkspaces updates list and active repo", async () => {
     const setActiveRepo = mock(() => {});
-    const workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a"), workspace("/repo-b", true)],
-    );
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
+      workspace("/repo-a"),
+      workspace("/repo-b", true),
+    ]);
 
     const original = { workspaceList: workspaceHost.workspaceList };
     workspaceHost.workspaceList = workspaceList;
@@ -454,9 +455,9 @@ describe("use-workspace-operations", () => {
   test("addWorkspace trims path then refreshes", async () => {
     const setActiveRepo = mock(() => {});
     const workspaceAdd = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-new"));
-    const workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
-    );
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
+      workspace("/repo-new", true),
+    ]);
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceAdd = workspaceAdd;
     hostClient.workspaceList = workspaceList;
@@ -495,12 +496,12 @@ describe("use-workspace-operations", () => {
     const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-    hostClient.workspaceAdd = mock(
-      async (): Promise<WorkspaceRecord> => workspace("/repo-new", true),
+    hostClient.workspaceAdd = mock(async (): Promise<WorkspaceRecord> =>
+      workspace("/repo-new", true),
     );
-    hostClient.workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-new", true)],
-    );
+    hostClient.workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
+      workspace("/repo-new", true),
+    ]);
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
 
     const SettingsSnapshotProbe = () => {
@@ -558,9 +559,9 @@ describe("use-workspace-operations", () => {
     const clearTaskData = mock(() => {});
     const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
-    const workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
-    );
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
+      workspace("/repo-a", true),
+    ]);
 
     const original = {
       workspaceSelect: workspaceHost.workspaceSelect,
@@ -611,12 +612,12 @@ describe("use-workspace-operations", () => {
     const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-    hostClient.workspaceSelect = mock(
-      async (): Promise<WorkspaceRecord> => workspace("/repo-a", true),
+    hostClient.workspaceSelect = mock(async (): Promise<WorkspaceRecord> =>
+      workspace("/repo-a", true),
     );
-    hostClient.workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
-    );
+    hostClient.workspaceList = mock(async (): Promise<WorkspaceRecord[]> => [
+      workspace("/repo-a", true),
+    ]);
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
 
     const SettingsSnapshotProbe = () => {
@@ -673,11 +674,10 @@ describe("use-workspace-operations", () => {
       hasSelectedRepoA = true;
       return selectedWorkspace;
     });
-    const workspaceList = mock(
-      async (): Promise<WorkspaceRecord[]> =>
-        hasSelectedRepoA
-          ? [workspace("/repo-old"), workspace("/repo-a", true)]
-          : [workspace("/repo-old", true), workspace("/repo-a")],
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> =>
+      hasSelectedRepoA
+        ? [workspace("/repo-old"), workspace("/repo-a", true)]
+        : [workspace("/repo-old", true), workspace("/repo-a")],
     );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",

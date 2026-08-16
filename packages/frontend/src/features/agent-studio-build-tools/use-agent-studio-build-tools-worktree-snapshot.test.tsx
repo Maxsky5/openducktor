@@ -26,34 +26,32 @@ if (typeof document === "undefined") {
 
 const refreshDiffMock = mock(async (_mode?: string) => {});
 const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-const useAgentStudioDiffDataMock = mock(
-  (args: Record<string, unknown>): DiffDataState => ({
-    branch: "feature/task-24",
-    worktreePath: (args.worktreePath as string | null) ?? null,
-    targetBranch: "origin/main",
-    diffScope: "uncommitted",
-    gitConflict: null,
-    scopeStatesByScope: {
-      target: createEmptyScopeState(),
-      uncommitted: createEmptyScopeState(),
-    },
-    loadedScopesByScope: { target: false, uncommitted: false },
-    commitsAheadBehind: null,
-    upstreamAheadBehind: null,
-    upstreamStatus: "tracking",
-    fileDiffs: [],
-    fileStatuses: [],
-    statusSnapshotKey: null,
-    hashVersion: null,
-    statusHash: null,
-    diffHash: null,
-    uncommittedFileCount: 0,
-    isLoading: Boolean(args.isWorktreeResolutionResolving),
-    error: (args.worktreeResolutionError as string | null) ?? null,
-    refresh: refreshDiffMock,
-    setDiffScope: setDiffScopeMock,
-  }),
-);
+const useAgentStudioDiffDataMock = mock((args: Record<string, unknown>): DiffDataState => ({
+  branch: "feature/task-24",
+  worktreePath: (args.worktreePath as string | null) ?? null,
+  targetBranch: "origin/main",
+  diffScope: "uncommitted",
+  gitConflict: null,
+  scopeStatesByScope: {
+    target: createEmptyScopeState(),
+    uncommitted: createEmptyScopeState(),
+  },
+  loadedScopesByScope: { target: false, uncommitted: false },
+  commitsAheadBehind: null,
+  upstreamAheadBehind: null,
+  upstreamStatus: "tracking",
+  fileDiffs: [],
+  fileStatuses: [],
+  statusSnapshotKey: null,
+  hashVersion: null,
+  statusHash: null,
+  diffHash: null,
+  uncommittedFileCount: 0,
+  isLoading: Boolean(args.isWorktreeResolutionResolving),
+  error: (args.worktreeResolutionError as string | null) ?? null,
+  refresh: refreshDiffMock,
+  setDiffScope: setDiffScopeMock,
+}));
 const useAgentStudioDevServerPanelMock = mock((args: Record<string, unknown>) => ({
   mode: "unconfigured" as const,
   repoPath: args.repoPath,

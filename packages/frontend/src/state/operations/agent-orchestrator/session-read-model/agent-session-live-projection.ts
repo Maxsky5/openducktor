@@ -123,7 +123,7 @@ const toApprovalRequest = (
   ...(request.supportedReplyOutcomes !== undefined
     ? { supportedReplyOutcomes: request.supportedReplyOutcomes }
     : {}),
-  ...(routing ?? {}),
+  ...routing,
 });
 
 const toQuestionRequest = (
@@ -138,7 +138,7 @@ const toQuestionRequest = (
     ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
     ...(question.custom !== undefined ? { custom: question.custom } : {}),
   })),
-  ...(routing ?? {}),
+  ...routing,
 });
 
 export const toContextUsage = (

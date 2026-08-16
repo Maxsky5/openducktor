@@ -66,7 +66,7 @@ export const kickoffPromptForTemplate = (
     templateId,
     task: {
       taskId,
-      ...(options?.task ?? {}),
+      ...options?.task,
     },
     ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
     ...(options?.git ? { git: options.git } : {}),
@@ -98,7 +98,7 @@ export const buildGitConflictResolutionPrompt = (
     templateId: "message.build_rebase_conflict_resolution",
     task: {
       taskId,
-      ...(options?.task ?? {}),
+      ...options?.task,
     },
     ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},

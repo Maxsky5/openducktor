@@ -209,7 +209,7 @@ export const createTaskEventLeaseManager = ({
     delete: deleteLease,
     detach,
     dispose() {
-      for (const lease of [...leases.values()]) {
+      for (const lease of leases.values()) {
         deleteLease(lease);
       }
     },

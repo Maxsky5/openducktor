@@ -110,10 +110,11 @@ describe("agent session query cache helpers", () => {
     const queryClient = new QueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const newerSession = { ...sessionFixture, externalSessionId: "external-2" };
-    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
-      () => {
-        throw new Error("Batch resolver was not initialized.");
-      };
+    let resolveBatch: (
+      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
+    ) => void = () => {
+      throw new Error("Batch resolver was not initialized.");
+    };
     const readPort = createReadPort(
       () =>
         new Promise((resolve) => {
@@ -132,10 +133,11 @@ describe("agent session query cache helpers", () => {
   test("batch hydration does not overwrite an invalidation repeated while already invalidated", async () => {
     const queryClient = new QueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
-    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
-      () => {
-        throw new Error("Batch resolver was not initialized.");
-      };
+    let resolveBatch: (
+      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
+    ) => void = () => {
+      throw new Error("Batch resolver was not initialized.");
+    };
     const agentSessionsListForTasksMock = mock(
       () =>
         new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {
@@ -325,10 +327,11 @@ describe("agent session query cache helpers", () => {
     const queryClient = new QueryClient();
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const refreshedSession = { ...sessionFixture, externalSessionId: "external-2" };
-    let resolveBatch: (value: { taskId: string; agentSessions: AgentSessionRecord[] }[]) => void =
-      () => {
-        throw new Error("Batch resolver was not initialized.");
-      };
+    let resolveBatch: (
+      value: { taskId: string; agentSessions: AgentSessionRecord[] }[],
+    ) => void = () => {
+      throw new Error("Batch resolver was not initialized.");
+    };
     const batchList = mock(
       () =>
         new Promise<{ taskId: string; agentSessions: AgentSessionRecord[] }[]>((resolve) => {

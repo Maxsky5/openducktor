@@ -356,9 +356,8 @@ describe("createTaskService list and session reads", () => {
         });
       },
     };
-    const { createTaskCommandHandlers } = await import(
-      "../../interface/commands/task-command-handlers"
-    );
+    const { createTaskCommandHandlers } =
+      await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
     const handlers = createTaskCommandHandlers(service as unknown as TaskService);
     expect(() =>

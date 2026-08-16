@@ -27,22 +27,22 @@ export class TaskMetadataCache {
   }
 
   invalidateRepo(repoPath: string): void {
-    for (const cacheKey of [...this.cache.keys()]) {
+    for (const cacheKey of this.cache.keys()) {
       if (cacheKey.startsWith(`${repoPath}::`)) {
         this.cache.delete(cacheKey);
       }
     }
-    for (const cacheKey of [...this.inFlight.keys()]) {
+    for (const cacheKey of this.inFlight.keys()) {
       if (cacheKey.startsWith(`${repoPath}::`)) {
         this.inFlight.delete(cacheKey);
       }
     }
-    for (const cacheKey of [...this.forceFreshInFlight.keys()]) {
+    for (const cacheKey of this.forceFreshInFlight.keys()) {
       if (cacheKey.startsWith(`${repoPath}::`)) {
         this.forceFreshInFlight.delete(cacheKey);
       }
     }
-    for (const cacheKey of [...this.latestFetchTokenByKey.keys()]) {
+    for (const cacheKey of this.latestFetchTokenByKey.keys()) {
       if (cacheKey.startsWith(`${repoPath}::`)) {
         this.latestFetchTokenByKey.delete(cacheKey);
       }

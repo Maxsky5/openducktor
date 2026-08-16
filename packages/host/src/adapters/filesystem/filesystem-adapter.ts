@@ -132,12 +132,10 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
         catch: (cause) =>
           toHostOperationError(cause, "filesystem.readDirectory", { path: inputPath }),
       });
-      return entries.map(
-        (entry): FilesystemDirectoryEntry => ({
-          name: entry.name,
-          path: path.join(inputPath, entry.name),
-        }),
-      );
+      return entries.map((entry): FilesystemDirectoryEntry => ({
+        name: entry.name,
+        path: path.join(inputPath, entry.name),
+      }));
     });
   },
   readFileBytes(inputPath, maxBytes) {

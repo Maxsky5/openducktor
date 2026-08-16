@@ -22,7 +22,7 @@ export const createElectronMainRuntimeBindings = (logger: ElectronMainLogger) =>
         runElectronMainTask(operation, reportFailure),
     drainHostCommands(): Promise<void> {
       acceptsHostCommands = false;
-      return Promise.allSettled([...activeHostCommands]).then((results) => {
+      return Promise.allSettled(activeHostCommands).then((results) => {
         for (const result of results) {
           if (
             result.status === "rejected" &&

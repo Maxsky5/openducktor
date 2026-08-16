@@ -145,7 +145,7 @@ const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
   return {
     ...payload,
     properties: {
-      ...(payload.properties ?? {}),
+      ...payload.properties,
       directory: event.directory,
     },
   } as Event;

@@ -52,7 +52,7 @@ import { useAgentStudioSelectionController } from "./use-agent-studio-selection-
 enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
-  typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
+  (typeof import("./use-agent-studio-selection-controller"))["useAgentStudioSelectionController"];
 
 const sessionReadModelLoadStateRef: {
   current: AgentSessionReadModelLoadState;

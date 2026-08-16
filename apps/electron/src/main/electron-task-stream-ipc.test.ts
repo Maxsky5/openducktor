@@ -56,11 +56,13 @@ const createSender = (id: number, frameSend = mock(() => {})) => {
       return mainFrame;
     },
     emitLifecycle(event: "destroyed" | "render-process-gone") {
+      // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
       for (const listener of [...(listeners.get(event) ?? [])]) {
         (listener as LifecycleListener)();
       }
     },
     emitNavigation(details: NavigationDetails) {
+      // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
       for (const listener of [...(listeners.get("did-start-navigation") ?? [])]) {
         (listener as NavigationListener)(details);
       }

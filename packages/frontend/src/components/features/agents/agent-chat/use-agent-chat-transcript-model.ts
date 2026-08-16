@@ -214,11 +214,11 @@ const getIncrementalTranscriptModelPlan = ({
   const isTailAppend = firstChangedMessageIndex >= previousMessageCount;
   const isAssistantTailEdit = Boolean(
     previousChangedMessage &&
-      currentChangedMessage &&
-      firstChangedMessageIndex === previousMessageCount - 1 &&
-      previousChangedMessage.id === currentChangedMessage.id &&
-      previousChangedMessage.role === "assistant" &&
-      currentChangedMessage.role === "assistant",
+    currentChangedMessage &&
+    firstChangedMessageIndex === previousMessageCount - 1 &&
+    previousChangedMessage.id === currentChangedMessage.id &&
+    previousChangedMessage.role === "assistant" &&
+    currentChangedMessage.role === "assistant",
   );
 
   if (isAssistantTailEdit) {

@@ -122,6 +122,7 @@ export class TerminalSessionOutput {
 
   publish(message: TerminalServerMessage): TerminalOutputEvents {
     let events: TerminalOutputEvents = [];
+    // oxlint-disable-next-line unicorn/no-useless-spread -- delivery can change attachments
     for (const attachment of [...this.attachments.values()]) {
       events = mergeEvents(events, this.tryPublish(attachment, message).events);
     }
@@ -134,6 +135,7 @@ export class TerminalSessionOutput {
     for (let offset = 0; offset < data.byteLength; offset += OUTPUT_CHUNK_BYTES) {
       const bytes = data.slice(offset, Math.min(data.byteLength, offset + OUTPUT_CHUNK_BYTES));
       const chunk = this.append(bytes);
+      // oxlint-disable-next-line unicorn/no-useless-spread -- delivery can change attachments
       for (const attachment of [...this.attachments.values()]) {
         const delivered = this.deliver(attachment, chunk, false, handle);
         events = mergeEvents(events, delivered.events);
@@ -185,6 +187,7 @@ export class TerminalSessionOutput {
       yield* handle.resumeOutput();
       this.paused = false;
       let events: TerminalOutputEvents = [];
+      // oxlint-disable-next-line unicorn/no-useless-spread -- flushing can change attachments
       for (const attachment of [...this.attachments.values()]) {
         events = mergeEvents(events, this.flush(attachment, false, handle));
       }

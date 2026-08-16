@@ -183,13 +183,10 @@ export const isCodexContextualUserMessage = (payload: Record<string, unknown>): 
     return false;
   }
   const content = codexMessageContentItems(payload);
-  return (
-    content.length > 0 &&
-    content.some((entry) => {
-      const text = extractStringField(entry, ["text"]);
-      return Boolean(text && isCodexContextualUserTextFragment(text));
-    })
-  );
+  return content.some((entry) => {
+    const text = extractStringField(entry, ["text"]);
+    return Boolean(text && isCodexContextualUserTextFragment(text));
+  });
 };
 
 const stripShellQuotes = (value: string): string =>

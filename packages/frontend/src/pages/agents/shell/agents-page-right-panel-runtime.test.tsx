@@ -40,16 +40,14 @@ function SeedQueryData({
 
 beforeEach(async () => {
   useBuildWorktreeRefreshMock.mockClear();
-  realRefreshModule = await import(
-    "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh"
-  );
+  realRefreshModule =
+    await import("@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh");
   mock.module(
     "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh",
     () => ({ useAgentStudioBuildWorktreeRefresh: useBuildWorktreeRefreshMock }),
   );
-  ({ AgentsPageBuildWorktreeRefreshRuntime, AgentsPageSelectedFileRefreshRuntime } = await import(
-    "./agents-page-right-panel-runtime"
-  ));
+  ({ AgentsPageBuildWorktreeRefreshRuntime, AgentsPageSelectedFileRefreshRuntime } =
+    await import("./agents-page-right-panel-runtime"));
 });
 
 afterEach(async () => {

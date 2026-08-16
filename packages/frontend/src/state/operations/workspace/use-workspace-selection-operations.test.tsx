@@ -103,8 +103,8 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
 
 describe("use-workspace-selection-operations", () => {
   test("trims repo paths before adding a workspace", async () => {
-    const workspaceAdd = mock(
-      async (): Promise<ReturnType<typeof workspace>> => workspace("/repo-new"),
+    const workspaceAdd = mock(async (): Promise<ReturnType<typeof workspace>> =>
+      workspace("/repo-new"),
     );
     const workspaceList = mock(async () => [workspace("/repo-new", true)]);
     workspaceHost.workspaceAdd = workspaceAdd;

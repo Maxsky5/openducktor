@@ -23,7 +23,7 @@ export function useDiagnosticsToasts(
   useEffect(() => {
     const nextIssueIds = new Set(diagnosticsToastIssues.map((issue) => issue.id));
 
-    for (const issueId of [...issueSignatures.keys()]) {
+    for (const issueId of issueSignatures.keys()) {
       if (nextIssueIds.has(issueId)) {
         continue;
       }

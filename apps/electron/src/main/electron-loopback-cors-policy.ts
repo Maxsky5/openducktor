@@ -33,7 +33,7 @@ export const configureElectronLoopbackCorsPolicy = (
   session.webRequest.onHeadersReceived({ urls: LOOPBACK_RESPONSE_URLS }, (details, callback) => {
     callback({
       responseHeaders: {
-        ...(details.responseHeaders ?? {}),
+        ...details.responseHeaders,
         "Access-Control-Allow-Origin": [rendererOrigin],
         "Access-Control-Allow-Credentials": ["true"],
         "Access-Control-Allow-Headers": [CORS_ALLOW_HEADERS],

@@ -38,10 +38,7 @@ import { roleDefaultSelectionFor } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import { useSessionStartModalSelectionState } from "./use-session-start-modal-selection-state";
 
-export type {
-  SessionStartModalIntent,
-  SessionStartModalSource,
-} from "./session-start-modal-types";
+export type { SessionStartModalIntent, SessionStartModalSource } from "./session-start-modal-types";
 export type { SessionStartPostAction } from "./session-start-workflow";
 
 type UseSessionStartModalStateArgs = {

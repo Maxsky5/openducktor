@@ -211,19 +211,17 @@ export const agentRuntimesSchema = z
     claude: agentRuntimeEnabledConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
-  .transform(
-    (value): AgentRuntimes => ({
-      ...value,
-      opencode: value.opencode ?? { enabled: false, executablePath: "" },
-      codex: value.codex ?? {
-        enabled: false,
-        executablePath: "",
-        defaults: createDefaultCodexRuntimePolicy(),
-        roleOverrides: {},
-      },
-      claude: value.claude ?? { enabled: false, executablePath: "" },
-    }),
-  )
+  .transform((value): AgentRuntimes => ({
+    ...value,
+    opencode: value.opencode ?? { enabled: false, executablePath: "" },
+    codex: value.codex ?? {
+      enabled: false,
+      executablePath: "",
+      defaults: createDefaultCodexRuntimePolicy(),
+      roleOverrides: {},
+    },
+    claude: value.claude ?? { enabled: false, executablePath: "" },
+  }))
   .default(() => createDefaultAgentRuntimes());
 
 export type CodexEffectivePolicy = CodexPolicyFields & {

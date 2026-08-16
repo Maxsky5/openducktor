@@ -20,24 +20,18 @@ export const createFakeAppUpdateBridge = (initialState: AppUpdateState): FakeApp
   const listeners = new Set<(state: AppUpdateState) => void>();
   const bridge = {
     getState: mock(async () => currentState),
-    check: mock(
-      async (): Promise<AppUpdateCommandResult> => ({
-        accepted: true,
-        state: currentState,
-      }),
-    ),
-    download: mock(
-      async (): Promise<AppUpdateCommandResult> => ({
-        accepted: true,
-        state: currentState,
-      }),
-    ),
-    install: mock(
-      async (): Promise<AppUpdateCommandResult> => ({
-        accepted: true,
-        state: currentState,
-      }),
-    ),
+    check: mock(async (): Promise<AppUpdateCommandResult> => ({
+      accepted: true,
+      state: currentState,
+    })),
+    download: mock(async (): Promise<AppUpdateCommandResult> => ({
+      accepted: true,
+      state: currentState,
+    })),
+    install: mock(async (): Promise<AppUpdateCommandResult> => ({
+      accepted: true,
+      state: currentState,
+    })),
     subscribeState: async (listener: (state: AppUpdateState) => void) => {
       listeners.add(listener);
       return () => {

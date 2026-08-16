@@ -33,11 +33,9 @@ describe("build runtime queries", () => {
   });
 
   test("taskWorktreeQueryOptions loads the canonical working directory", async () => {
-    const taskWorktreeGet = mock(
-      async (): Promise<TaskWorktreeSummary> => ({
-        workingDirectory: "/repo/.worktrees/task-24",
-      }),
-    );
+    const taskWorktreeGet = mock(async (): Promise<TaskWorktreeSummary> => ({
+      workingDirectory: "/repo/.worktrees/task-24",
+    }));
 
     const result = await queryClient.fetchQuery(
       taskWorktreeQueryOptions({

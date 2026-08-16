@@ -15,7 +15,7 @@
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests --timeout 1000 --max-concurrency=1",
-    "lint": "biome check src"
+    "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

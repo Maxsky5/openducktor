@@ -12,7 +12,7 @@ import {
 enableReactActEnvironment();
 
 type UseAgentStudioBuildWorktreeRefreshHook =
-  typeof import("./use-agent-studio-build-worktree-refresh")["useAgentStudioBuildWorktreeRefresh"];
+  (typeof import("./use-agent-studio-build-worktree-refresh"))["useAgentStudioBuildWorktreeRefresh"];
 
 let useAgentStudioBuildWorktreeRefresh: UseAgentStudioBuildWorktreeRefreshHook;
 
@@ -78,9 +78,8 @@ const createBaseArgs = (
 });
 
 beforeAll(async () => {
-  ({ useAgentStudioBuildWorktreeRefresh } = await import(
-    "./use-agent-studio-build-worktree-refresh"
-  ));
+  ({ useAgentStudioBuildWorktreeRefresh } =
+    await import("./use-agent-studio-build-worktree-refresh"));
 });
 
 beforeEach(() => {

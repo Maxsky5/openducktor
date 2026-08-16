@@ -16,7 +16,7 @@ import {
 enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
-  typeof import("./use-agents-page-right-panel-model")["useAgentsPageRightPanelModel"];
+  (typeof import("./use-agents-page-right-panel-model"))["useAgentsPageRightPanelModel"];
 type BuildToolsSnapshotModule =
   typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
 type GitActionsModule = typeof import("../use-agent-studio-git-actions");
@@ -232,9 +232,8 @@ beforeEach(async () => {
   buildToolsSnapshotState.current = createSnapshot("A");
   gitActionsState.current = createGitActions("A");
 
-  realBuildToolsSnapshot = await import(
-    "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot"
-  );
+  realBuildToolsSnapshot =
+    await import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
   realGitActions = await import("../use-agent-studio-git-actions");
   const pullRequestReviewQueries = await import("@/state/queries/pull-request-review");
   realPullRequestReviewQueries = pullRequestReviewQueries;

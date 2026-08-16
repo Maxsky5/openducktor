@@ -16,7 +16,7 @@ const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 
 type UseAgentStudioGitConflictControllerHook =
-  typeof import("./use-agent-studio-git-conflict-controller")["useAgentStudioGitConflictController"];
+  (typeof import("./use-agent-studio-git-conflict-controller"))["useAgentStudioGitConflictController"];
 
 let useAgentStudioGitConflictController: UseAgentStudioGitConflictControllerHook;
 
@@ -57,9 +57,8 @@ beforeEach(async () => {
       error: toastErrorMock,
     },
   }));
-  ({ useAgentStudioGitConflictController } = await import(
-    "./use-agent-studio-git-conflict-controller"
-  ));
+  ({ useAgentStudioGitConflictController } =
+    await import("./use-agent-studio-git-conflict-controller"));
 });
 
 afterEach(async () => {

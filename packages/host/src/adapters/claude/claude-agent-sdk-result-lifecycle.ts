@@ -43,9 +43,9 @@ export const isFailedClaudeResult = (message: ClaudeResultLike): boolean => {
   const terminalReason = readClaudeResultTerminalReason(message);
   return Boolean(
     terminalReason &&
-      terminalReason !== "completed" &&
-      terminalReason !== "tool_deferred" &&
-      terminalReason !== "background_requested",
+    terminalReason !== "completed" &&
+    terminalReason !== "tool_deferred" &&
+    terminalReason !== "background_requested",
   );
 };
 

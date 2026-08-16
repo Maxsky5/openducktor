@@ -224,7 +224,7 @@ export const createAgentSessionTranscriptEventConsumer = (
     },
     close: () => {
       cancelScheduledFlush();
-      for (const sessionKey of [...queuedEventsBySession.keys()]) {
+      for (const sessionKey of queuedEventsBySession.keys()) {
         forceFlushSession(sessionKey);
       }
       dependencies.sessionTurnState.clearAll();

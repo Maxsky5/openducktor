@@ -83,6 +83,7 @@ export const createAgentSessionsStore = (
   const liveAssociationListeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...listeners]) {
       listener();
     }
@@ -151,6 +152,7 @@ export const createAgentSessionsStore = (
         return;
       }
       liveAssociations = next;
+      // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
       for (const listener of [...liveAssociationListeners]) {
         listener();
       }
@@ -184,6 +186,7 @@ export const createAgentSessionsStore = (
       liveAssociations = emptyAgentSessionLiveAssociations();
       activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
       notifyListeners();
+      // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
       for (const listener of [...liveAssociationListeners]) {
         listener();
       }

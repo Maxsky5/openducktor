@@ -51,10 +51,10 @@ export const shouldProbeExternalBranchChange = ({
 }: ProbeBranchChangeParams): boolean => {
   return Boolean(
     activeWorkspaceRepoPath &&
-      !isSwitchingWorkspace &&
-      !isSwitchingBranch &&
-      !isLoadingBranches &&
-      !isSyncInFlight,
+    !isSwitchingWorkspace &&
+    !isSwitchingBranch &&
+    !isLoadingBranches &&
+    !isSyncInFlight,
   );
 };
 

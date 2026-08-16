@@ -138,11 +138,11 @@ const findMissingRoleLabels = ({
       : null;
     const hasCompleteDefault = Boolean(
       value &&
-        runtimeDefinition &&
-        value.providerId.trim().length > 0 &&
-        value.modelId.trim().length > 0 &&
-        (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
-          (value.profileId?.trim().length ?? 0) > 0),
+      runtimeDefinition &&
+      value.providerId.trim().length > 0 &&
+      value.modelId.trim().length > 0 &&
+      (!runtimeDefinition.capabilities.optionalSurfaces.supportsProfiles ||
+        (value.profileId?.trim().length ?? 0) > 0),
     );
 
     if (!hasCompleteDefault) {

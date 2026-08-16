@@ -10,7 +10,7 @@ import { act } from "react";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("GitConfirmationDialog", () => {
-  let GitConfirmationDialog: typeof import("./git-confirmation-dialog")["GitConfirmationDialog"];
+  let GitConfirmationDialog: (typeof import("./git-confirmation-dialog"))["GitConfirmationDialog"];
 
   beforeEach(async () => {
     ({ GitConfirmationDialog } = await import("./git-confirmation-dialog"));

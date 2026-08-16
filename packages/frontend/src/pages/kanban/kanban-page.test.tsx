@@ -83,39 +83,37 @@ const resetTaskImplementationMock = mock(async () => {});
 const resetTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
-const loadRepoRuntimeCatalogMock = mock(
-  async (): Promise<AgentModelCatalog> => ({
-    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-    models: [
-      {
-        id: "openai/gpt-5",
-        providerId: "openai",
-        providerName: "OpenAI",
-        modelId: "gpt-5",
-        modelName: "GPT-5",
-        variants: ["default", "high"],
-        contextWindow: 200_000,
-        outputLimit: 8_192,
-      },
-    ],
-    defaultModelsByProvider: {
-      openai: "gpt-5",
+const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default", "high"],
+      contextWindow: 200_000,
+      outputLimit: 8_192,
     },
-    profiles: [
-      {
-        name: "spec-agent",
-        mode: "primary",
-        hidden: false,
-        color: "#f59e0b",
-      },
-      {
-        name: "build-agent",
-        mode: "primary",
-        hidden: false,
-      },
-    ],
-  }),
-);
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [
+    {
+      name: "spec-agent",
+      mode: "primary",
+      hidden: false,
+      color: "#f59e0b",
+    },
+    {
+      name: "build-agent",
+      mode: "primary",
+      hidden: false,
+    },
+  ],
+}));
 
 type PendingMergedPullRequestFixture = {
   taskId: string;
@@ -1308,9 +1306,8 @@ describe("KanbanPage session start modal flow", () => {
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("reuse");
-      const existingSessionOptions = renderer.getSessionStartModalModel()?.existingSessionOptions as
-        | Array<{ value: string }>
-        | undefined;
+      const existingSessionOptions = renderer.getSessionStartModalModel()
+        ?.existingSessionOptions as Array<{ value: string }> | undefined;
       const selectedSourceOption = existingSessionOptions?.[0];
       if (!selectedSourceOption) {
         throw new Error("Expected a reusable builder session option.");

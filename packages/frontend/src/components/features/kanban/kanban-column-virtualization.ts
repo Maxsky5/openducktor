@@ -44,7 +44,7 @@ export function buildVirtualColumnLayout(
   gapPx: number,
 ): { itemOffsets: number[]; totalHeight: number } {
   const safeGapPx = Math.max(0, gapPx);
-  const itemOffsets = new Array<number>(itemHeights.length);
+  const itemOffsets = Array.from({ length: itemHeights.length }, () => 0);
   let nextOffset = 0;
 
   for (let index = 0; index < itemHeights.length; index += 1) {

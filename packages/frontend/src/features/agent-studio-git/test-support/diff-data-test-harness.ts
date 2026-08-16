@@ -56,7 +56,7 @@ export const gitGetWorktreeStatusSummaryMock = mock(
 );
 
 type UseAgentStudioDiffDataHook =
-  typeof import("../use-agent-studio-diff-data")["useAgentStudioDiffData"];
+  (typeof import("../use-agent-studio-diff-data"))["useAgentStudioDiffData"];
 
 let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 

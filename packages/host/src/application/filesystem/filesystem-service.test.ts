@@ -51,12 +51,10 @@ const createFakeFilesystem = ({
   readDirectory: (path) =>
     Effect.tryPromise({
       try: async () => {
-        return (entries[path] ?? []).map(
-          (entry): FilesystemDirectoryEntry => ({
-            name: entry.name,
-            path: entry.path,
-          }),
-        );
+        return (entries[path] ?? []).map((entry): FilesystemDirectoryEntry => ({
+          name: entry.name,
+          path: entry.path,
+        }));
       },
       catch: (cause) =>
         new HostOperationError({

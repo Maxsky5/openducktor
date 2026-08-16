@@ -56,7 +56,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
     matches: (event: ClaudeAgentSdkEvent) => boolean,
   ): Effect.Effect<void, HostError> =>
     Effect.gen(function* () {
-      for (let index = 0; index < queuedEvents.length; ) {
+      for (let index = 0; index < queuedEvents.length;) {
         const queued = queuedEvents[index];
         if (!queued) {
           break;

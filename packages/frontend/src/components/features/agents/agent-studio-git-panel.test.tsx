@@ -15,7 +15,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type AgentStudioGitPanelComponent =
-  typeof import("./agent-studio-git-panel")["AgentStudioGitPanel"];
+  (typeof import("./agent-studio-git-panel"))["AgentStudioGitPanel"];
 type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGitPanelModel;
 type DiffScopeState = import("@/features/agent-studio-git/contracts").DiffScopeState;
 

@@ -13,7 +13,7 @@ const githubCliCommandOptions = (
 ): SystemCommandRunOptions => ({
   ...options,
   env: {
-    ...(options.env ?? {}),
+    ...options.env,
     ...GITHUB_CLI_MACHINE_ENV,
   },
 });

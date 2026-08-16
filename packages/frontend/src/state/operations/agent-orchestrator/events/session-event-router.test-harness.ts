@@ -256,6 +256,7 @@ export const createSessionEventRouter = ({
 
   const flushReady = (): number | null => {
     let nextDelayMs: number | null = null;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- flushing mutates the queue map
     for (const sessionKey of [...queuedEventsBySessionKey.keys()]) {
       const sessionDelayMs = flushSession(sessionKey);
       if (sessionDelayMs === null) {
@@ -267,6 +268,7 @@ export const createSessionEventRouter = ({
   };
 
   const flushAll = (): void => {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- flushing mutates the queue map
     for (const sessionKey of [...queuedEventsBySessionKey.keys()]) {
       flushSession(sessionKey, { force: true });
     }

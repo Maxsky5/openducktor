@@ -39,7 +39,7 @@ import {
 } from "./selected-session/selected-session-context";
 
 type UseAgentStudioPageModelsHook =
-  typeof import("./use-agent-studio-page-models")["useAgentStudioPageModels"];
+  (typeof import("./use-agent-studio-page-models"))["useAgentStudioPageModels"];
 
 enableReactActEnvironment();
 

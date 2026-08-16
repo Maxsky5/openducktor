@@ -810,7 +810,7 @@ const codexDynamicToolCallStreamParts = (
   const patch = isCodexApplyPatchTool(rawTool)
     ? codexPatchInputFromToolPayload(value, inputObject)
     : null;
-  const input = patch ? { ...(inputObject ?? {}), patch } : (inputObject ?? undefined);
+  const input = patch ? { ...inputObject, patch } : (inputObject ?? undefined);
   const fileDiffs = patch ? codexApplyPatchFileDiffs(patch) : [];
   const patchOutput = fileDiffsPatchOutput(fileDiffs);
   const resultPayload = codexDynamicToolDisplayPayload(value);

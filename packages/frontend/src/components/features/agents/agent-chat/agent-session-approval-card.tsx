@@ -49,12 +49,12 @@ export function AgentSessionApprovalCard({
 }: AgentSessionApprovalCardProps): ReactElement | null {
   const hasDisplayContent = Boolean(
     request.title ||
-      request.summary ||
-      request.details ||
-      request.command ||
-      request.action ||
-      request.tool ||
-      request.affectedPaths?.length,
+    request.summary ||
+    request.details ||
+    request.command ||
+    request.action ||
+    request.tool ||
+    request.affectedPaths?.length,
   );
   if (!hasDisplayContent) {
     return null;

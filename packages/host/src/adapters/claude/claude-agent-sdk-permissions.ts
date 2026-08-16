@@ -256,13 +256,11 @@ export const authorizeClaudeToolUse = ({
       effectiveToolInput,
       blockedPath,
       canonicalizePath,
-    ).then(
-      (pathViolation): ClaudeToolUseAuthorization => ({
-        behavior: "allow",
-        approval: pathViolation ? "interactive" : "automatic",
-        toolInput: effectiveToolInput,
-      }),
-    );
+    ).then((pathViolation): ClaudeToolUseAuthorization => ({
+      behavior: "allow",
+      approval: pathViolation ? "interactive" : "automatic",
+      toolInput: effectiveToolInput,
+    }));
   }
 
   return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };

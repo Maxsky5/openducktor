@@ -80,7 +80,6 @@ export function MarkdownMermaid({
           <div
             className="flex size-full items-center justify-center overflow-auto [&_svg]:max-h-full [&_svg]:max-w-full"
             // The SVG comes from Mermaid strict mode and passes through DOMPurify.
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized Mermaid SVG must be inserted as markup to render.
             dangerouslySetInnerHTML={{ __html: preview.svg }}
           />
         ) : null}

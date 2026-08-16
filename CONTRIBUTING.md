@@ -92,10 +92,7 @@ bun run test
 bun run build
 ```
 
-Use `bun run format` to apply Biome formatting across the repository. The `format:check`
-command is intentionally repo-wide and runs before linting in both CI and the local pre-commit
-hook. Biome is configured to honor Git ignore files, so generated outputs such as `dist`, `build`,
-`coverage`, and `.vite` are excluded from this gate.
+Use `bun run format` to apply Oxfmt formatting across the repository. The `format:check` command is intentionally repo-wide and runs before linting in both CI and the local pre-commit hook. Oxfmt honors Git ignore files, so generated outputs such as `dist`, `build`, `coverage`, and `.vite` are excluded from this gate. Oxlint checks JavaScript and TypeScript files in one repo-wide process; Oxfmt checks supported data and style files such as JSON and CSS. Neither tool checks SVG files.
 
 Useful focused commands:
 
@@ -112,7 +109,7 @@ bun run --filter @openducktor/host test
 
 Shared local Git hooks run on every commit once you have run `bun install`.
 
-- `pre-commit` runs `bun run format:check`, `bun run lint`, and `bun run typecheck` in that order.
+- `pre-commit` runs `bun run check`, which runs `format:check`, `lint`, and `typecheck` in that order.
 - `commit-msg` enforces Conventional Commits.
 - `bun run test` does not run during `pre-commit`.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.

@@ -22,7 +22,7 @@ import type { TaskExecutionSelectedFilePreviewModel } from "./task-execution-fil
 enableReactActEnvironment();
 
 type PreviewComponent =
-  typeof import("./task-execution-file-preview")["TaskExecutionSelectedFilePreview"];
+  (typeof import("./task-execution-file-preview"))["TaskExecutionSelectedFilePreview"];
 
 let TaskExecutionSelectedFilePreview: PreviewComponent;
 let readTextFileMock: ReturnType<typeof mock>;

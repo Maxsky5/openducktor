@@ -169,14 +169,15 @@ const createDirectRouterContext = ({
   const updateSession = createSessionUpdater(sessionsRef);
   const readSession = (identity: Parameters<typeof updateSession>[0]) =>
     getAgentSession(sessionsRef.current, identity);
-  const ensureSession: Parameters<typeof createSessionEventRouter>[0]["context"]["ensureSession"] =
-    (identity, createSession) => {
-      const current = readSession(identity);
-      if (current) {
-        return current;
-      }
-      return createSession();
-    };
+  const ensureSession: Parameters<
+    typeof createSessionEventRouter
+  >[0]["context"]["ensureSession"] = (identity, createSession) => {
+    const current = readSession(identity);
+    if (current) {
+      return current;
+    }
+    return createSession();
+  };
 
   return {
     context: {

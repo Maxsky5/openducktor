@@ -498,9 +498,8 @@ const isRunningBackgroundSubagentResult = (
 
 const omitEndedTiming = (
   timing: ReturnType<typeof extractPartTiming>,
-): ReturnType<typeof extractPartTiming> => ({
-  ...(typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {}),
-});
+): ReturnType<typeof extractPartTiming> =>
+  typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {};
 
 const resolveSubagentExternalSessionId = (...sources: unknown[]): string | undefined => {
   for (const source of sources) {

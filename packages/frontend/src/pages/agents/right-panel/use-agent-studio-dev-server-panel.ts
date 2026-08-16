@@ -411,9 +411,8 @@ export function useAgentStudioDevServerPanel({
     DevServerTaskScope,
     DevServerMutationContext
   >(
-    createScopedMutationOptions(
-      async (scope): Promise<DevServerGroupState> =>
-        hostClient.devServerStop(scope.repoPath, scope.taskId),
+    createScopedMutationOptions(async (scope): Promise<DevServerGroupState> =>
+      hostClient.devServerStop(scope.repoPath, scope.taskId),
     ),
   );
 
@@ -423,9 +422,8 @@ export function useAgentStudioDevServerPanel({
     DevServerTaskScope,
     DevServerMutationContext
   >(
-    createScopedMutationOptions(
-      async (scope): Promise<DevServerGroupState> =>
-        hostClient.devServerRestart(scope.repoPath, scope.taskId),
+    createScopedMutationOptions(async (scope): Promise<DevServerGroupState> =>
+      hostClient.devServerRestart(scope.repoPath, scope.taskId),
     ),
   );
 

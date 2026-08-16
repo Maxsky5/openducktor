@@ -155,9 +155,9 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
-const removeUndefinedFields = (
-  override: { [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined },
-): Partial<CodexPolicyFields> => {
+const removeUndefinedFields = (override: {
+  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
+}): Partial<CodexPolicyFields> => {
   const next: Partial<CodexPolicyFields> = {};
   for (const field of Object.keys(override) as CodexPolicyField[]) {
     if (override[field] !== undefined) {
