@@ -82,7 +82,13 @@ describe("build tools", () => {
     expect(fontPreload?.attrs?.type).toBe("font/woff2");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
-    expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
+    expect(splash?.children).toContain('<p class="odt-startup__title" aria-label="OpenDucktor">');
+    expect(splash?.children).toContain(
+      '<span class="odt-startup__title-open" aria-hidden="true">Open</span>',
+    );
+    expect(splash?.children).toContain(
+      '<span class="odt-startup__title-name" aria-hidden="true">Ducktor</span>',
+    );
     expect(splash?.children).toContain("./favicon.svg");
   });
 });

@@ -124,13 +124,38 @@ body {
 }
 
 .odt-startup__title {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
   margin: 0;
-  color: var(--odt-startup-title);
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
-  font-size: 1.875rem;
   font-weight: 600;
-  letter-spacing: -0.045em;
+}
+
+.odt-startup__title-open {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: rgba(81, 0, 255, 0.62);
+  font-size: 0.625rem;
+  letter-spacing: 0.38em;
   line-height: 1;
+  text-transform: uppercase;
+}
+
+.odt-startup__title-open::before,
+.odt-startup__title-open::after {
+  width: 1.375rem;
+  height: 1px;
+  background: rgba(81, 0, 255, 0.22);
+  content: "";
+}
+
+.odt-startup__title-name {
+  color: var(--odt-startup-title);
+  font-size: 2.25rem;
+  letter-spacing: -0.055em;
+  line-height: 0.9;
 }
 
 .odt-startup__failure {
@@ -234,7 +259,10 @@ const STARTUP_SPLASH_MARKUP = `
       <img src="./favicon.svg" alt="" width="112" height="112" />
     </div>
   </div>
-  <p class="odt-startup__title">OpenDucktor</p>
+  <p class="odt-startup__title" aria-label="OpenDucktor">
+    <span class="odt-startup__title-open" aria-hidden="true">Open</span>
+    <span class="odt-startup__title-name" aria-hidden="true">Ducktor</span>
+  </p>
 </div>
 <p class="odt-startup__failure" data-odt-startup-status></p>
 `;
