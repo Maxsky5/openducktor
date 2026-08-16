@@ -109,7 +109,7 @@ bun run --filter @openducktor/host test
 
 Shared local Git hooks run on every commit once you have run `bun install`.
 
-- `pre-commit` runs `bun run check`, which runs `format:check`, `lint`, and `typecheck` in that order.
+- `pre-commit` runs `bun run format:check`, `bun run lint`, and `bun run typecheck` in that order.
 - `commit-msg` enforces Conventional Commits.
 - `bun run test` does not run during `pre-commit`.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.

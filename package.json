@@ -25,7 +25,6 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "bun run frontend:boundary-guard && bun run host:architecture-guard && oxlint .",
-    "check": "bun run format:check && bun run lint && bun run typecheck",
     "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
     "host:architecture-guard": "bun run scripts/host-architecture-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
