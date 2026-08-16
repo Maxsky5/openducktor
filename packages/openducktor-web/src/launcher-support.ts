@@ -23,12 +23,10 @@ type BackendReadinessDependencies = {
 export type FrontendServer = {
   close(): Promise<void>;
 };
-type ForceCloseableHttpServer = {
-  closeAllConnections?: () => void;
-  closeIdleConnections?: () => void;
-};
-type FrontendServerWithHttpConnections = FrontendServer & {
-  httpServer?: ForceCloseableHttpServer | null;
+type ViteFrontendServer = FrontendServer & {
+  httpServer: {
+    closeAllConnections(): void;
+  };
 };
 type StopLauncherServicesInput = {
   frontendServer: FrontendServer | null;
@@ -114,26 +112,12 @@ const verifyBackendReadinessEffect = (
     }
   });
 
-const forceCloseFrontendConnections = (server: FrontendServer): void => {
-  const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
-  httpServer?.closeIdleConnections?.();
-  httpServer?.closeAllConnections?.();
-};
-
 export const closeFrontendServerEffect = (
   server: FrontendServer | null,
 ): Effect.Effect<void, WebDependencyError> =>
   server
     ? Effect.tryPromise({
-        try: async () => {
-          let closePromise: Promise<void>;
-          try {
-            closePromise = server.close();
-          } finally {
-            forceCloseFrontendConnections(server);
-          }
-          await closePromise;
-        },
+        try: () => server.close(),
         catch: (cause) =>
           new WebDependencyError({
             dependency: "frontend-server",
@@ -163,6 +147,13 @@ const verifyBackendReadinessAttemptEffect = (
 
 export const closeFrontendServer = (server: FrontendServer | null): Promise<void> =>
   runWebBoundary(closeFrontendServerEffect(server));
+
+export const closeViteFrontendServer = (server: ViteFrontendServer): Promise<void> => {
+  // Bun 1.3.x can retain an upgraded HMR WebSocket after Vite closes its Node sockets.
+  // Stop Bun's native connections before Vite awaits http.Server.close().
+  server.httpServer.closeAllConnections();
+  return server.close();
+};
 
 export const waitForBackendEffect = (
   backendUrl: string,

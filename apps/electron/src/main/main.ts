@@ -9,10 +9,7 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
 } from "@openducktor/contracts";
-import {
-  OPEN_DUCKTOR_STARTUP_BACKGROUND,
-  OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND,
-} from "@openducktor/frontend/startup-splash/theme";
+import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
   createHostEventBus,
   type EffectHostCommandRouter,
@@ -93,18 +90,8 @@ import {
 } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
-const {
-  app,
-  BrowserWindow,
-  clipboard,
-  ipcMain,
-  nativeImage,
-  nativeTheme,
-  net,
-  protocol,
-  session,
-  shell,
-} = electron;
+const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, protocol, session, shell } =
+  electron;
 const APPLICATION_NAME = "OpenDucktor";
 const currentVersion = resolveElectronAppVersion({
   isPackaged: app.isPackaged,
@@ -442,9 +429,7 @@ const createMainWindowEffect = (
           minWidth: 1024,
           minHeight: 720,
           autoHideMenuBar: process.platform !== "darwin",
-          backgroundColor: nativeTheme.shouldUseDarkColors
-            ? OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND
-            : OPEN_DUCKTOR_STARTUP_BACKGROUND,
+          backgroundColor: OPEN_DUCKTOR_STARTUP_BACKGROUND,
           title: "OpenDucktor",
           icon: resolveElectronWindowIcon(),
           ...resolveElectronWindowChromeOptions(electronAppPlatform),

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Server as HttpServer } from "node:http";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
@@ -24,6 +25,7 @@ import {
   buildFrontendDisplayUrls,
   buildFrontendUrl,
   closeFrontendServerEffect,
+  closeViteFrontendServer,
   type FrontendServer,
   indexStaticAssetPaths,
   keepProcessAliveDuringEffect,
@@ -339,8 +341,13 @@ const startViteServerEffect = (
               details: { frontendPort: options.frontendPort },
             }),
         });
-        const close = (): Promise<void> => server.close();
-        const startedServer = { close, httpServer: server.httpServer };
+        const httpServer = server.httpServer as HttpServer;
+        const close = (): Promise<void> =>
+          closeViteFrontendServer({
+            close: () => server.close(),
+            httpServer,
+          });
+        const startedServer = { close };
 
         yield* restore(
           Effect.tryPromise({
@@ -370,7 +377,7 @@ const startViteServerEffect = (
             ),
           ),
         );
-        const address = server.httpServer?.address();
+        const address = httpServer.address();
         if (!address || typeof address === "string") {
           return yield* preserveLauncherFailureAfterStop(
             new WebDependencyError({

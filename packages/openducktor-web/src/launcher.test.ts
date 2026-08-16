@@ -16,6 +16,7 @@ import {
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
   closeFrontendServer,
+  closeViteFrontendServer,
   indexStaticAssetPaths,
   keepProcessAliveDuring,
   resolveIndexedStaticAssetPath,
@@ -202,19 +203,14 @@ describe("launcher internals", () => {
     expect(stopCalls).toBe(1);
   });
 
-  test("forces open frontend server connections during Vite shutdown", async () => {
+  test("delegates frontend connection shutdown to the server", async () => {
     let closeAllConnectionsCalls = 0;
     let closeIdleConnectionsCalls = 0;
     let closeCalls = 0;
-    let resolveClose: () => void = () => {};
-    const closePromise = new Promise<void>((resolve) => {
-      resolveClose = resolve;
-    });
     const frontendServer = {
       httpServer: {
         closeAllConnections: () => {
           closeAllConnectionsCalls += 1;
-          resolveClose();
         },
         closeIdleConnections: () => {
           closeIdleConnectionsCalls += 1;
@@ -222,18 +218,18 @@ describe("launcher internals", () => {
       },
       close: () => {
         closeCalls += 1;
-        return closePromise;
+        return Promise.resolve();
       },
     };
 
     await closeFrontendServer(frontendServer);
 
     expect(closeCalls).toBe(1);
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
+    expect(closeIdleConnectionsCalls).toBe(0);
+    expect(closeAllConnectionsCalls).toBe(0);
   });
 
-  test("forces open frontend connections even when close throws synchronously", async () => {
+  test("reports a synchronous frontend close failure without forcing connections", async () => {
     let closeAllConnectionsCalls = 0;
     let closeIdleConnectionsCalls = 0;
     const frontendServer = {
@@ -261,8 +257,25 @@ describe("launcher internals", () => {
 
     expect(result.error).toMatchObject({ _tag: "WebDependencyError" });
     expect(result.error).toEqual(expect.objectContaining({ message: "close failed" }));
-    expect(closeIdleConnectionsCalls).toBe(1);
-    expect(closeAllConnectionsCalls).toBe(1);
+    expect(closeIdleConnectionsCalls).toBe(0);
+    expect(closeAllConnectionsCalls).toBe(0);
+  });
+
+  test("stops Bun HTTP connections before Vite shutdown", async () => {
+    const calls: string[] = [];
+
+    await closeViteFrontendServer({
+      httpServer: {
+        closeAllConnections: () => {
+          calls.push("close-connections");
+        },
+      },
+      close: async () => {
+        calls.push("close-vite");
+      },
+    });
+
+    expect(calls).toEqual(["close-connections", "close-vite"]);
   });
 
   test("keeps the process alive while shutdown work is pending", async () => {

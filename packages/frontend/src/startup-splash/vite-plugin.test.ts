@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPEN_DUCKTOR_STARTUP_BACKGROUND, OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND } from "./theme";
+import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "./theme";
 import { createOpenDucktorStartupSplashPlugin } from "./vite-plugin";
 
 describe("startup splash Vite plugin", () => {
@@ -13,10 +13,9 @@ describe("startup splash Vite plugin", () => {
     expect(plugin.enforce).toBe("pre");
     expect(styles?.injectTo).toBe("head-prepend");
     expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_BACKGROUND);
-    expect(styles?.children).toContain(OPEN_DUCKTOR_STARTUP_DARK_BACKGROUND);
-    expect(styles?.children).toContain("@media (prefers-color-scheme: dark)");
-    expect(styles?.children).toContain(":root.light");
-    expect(styles?.children).toContain(":root.dark");
+    expect(styles?.children).not.toContain("prefers-color-scheme");
+    expect(styles?.children).not.toContain(":root.light");
+    expect(styles?.children).not.toContain(":root.dark");
     expect(styles?.children).not.toContain("gradient");
     expect(styles?.children).toContain('font-family: "Space Grotesk"');
     expect(styles?.children).toContain("--odt-startup-title: #475569");
