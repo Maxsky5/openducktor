@@ -195,9 +195,19 @@ export const createSystemDiagnosticsService = ({
         runtimeDefinitionsService.listRuntimeDefinitions(),
         (definition) => {
           const runtimeConfig = config.agentRuntimes[definition.kind];
+          if (!runtimeConfig.enabled) {
+            return Effect.succeed({
+              kind: definition.kind,
+              enabled: false,
+              ok: false,
+              executablePath: runtimeConfig.executablePath || null,
+              version: null,
+              error: null,
+            } satisfies RuntimeHealth);
+          }
           return runtimeHealth
             .getRuntimeHealth(definition.kind, runtimeConfig.executablePath)
-            .pipe(Effect.map((health) => ({ ...health, enabled: runtimeConfig.enabled })));
+            .pipe(Effect.map((health) => ({ ...health, enabled: true })));
         },
         { concurrency: "unbounded" },
       );

@@ -206,13 +206,12 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
-  test("retries a failed runtime validation request", async () => {
+  test("keeps runtime controls available after a runtime validation request fails", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "" },
     };
-    let attempts = 0;
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
     const original = {
       runtimeExecutablesCheck: host.runtimeExecutablesCheck,
@@ -221,8 +220,7 @@ describe("useOnboardingRuntimeSetup", () => {
     };
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "validate" && Object.hasOwn(input.paths, "opencode")) {
-        attempts += 1;
-        if (attempts === 1) throw new Error("Runtime validation failed");
+        throw new Error("Runtime validation failed");
       }
       return createCheck(runtimes, true);
     });
@@ -236,15 +234,99 @@ describe("useOnboardingRuntimeSetup", () => {
         await Promise.resolve();
       });
       await screen.findByText("Runtime validation failed");
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-      await waitFor(() => expect(attempts).toBe(2));
-      await waitFor(() => expect(screen.queryByText("Runtime validation failed")).toBeNull());
-      await within(opencodeSection()).findByText("Available");
+      expect(screen.queryByText("Coding agent setup could not load")).toBeNull();
+      expect(
+        (
+          within(opencodeSection()).getByRole("textbox", {
+            name: "Executable path",
+          }) as HTMLInputElement
+        ).disabled,
+      ).toBe(false);
+      expect(
+        (within(opencodeSection()).getByRole("switch", { name: "Enabled" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
     } finally {
       host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
       host.runtimeDefinitionsList = original.runtimeDefinitionsList;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("waits for an active runtime validation before checking the latest edited path", async () => {
+    const runtimes: AgentRuntimes = {
+      opencode: { enabled: true, executablePath: "/initial/opencode" },
+      codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
+      claude: { enabled: false, executablePath: "" },
+    };
+    const initialValidation = createDeferred<RuntimeExecutableCheck>();
+    const latestValidation = createDeferred<RuntimeExecutableCheck>();
+    const opencodePaths: string[] = [];
+    const originalCheck = host.runtimeExecutablesCheck;
+    host.runtimeExecutablesCheck = mock(async (input) => {
+      if (input.mode !== "validate") return createCheck(runtimes, true);
+      const opencodePath = input.paths.opencode;
+      if (opencodePath !== undefined) {
+        opencodePaths.push(opencodePath);
+        if (opencodePath === "/initial/opencode") return initialValidation.promise;
+        return latestValidation.promise;
+      }
+      return createCheck(runtimes, true);
+    });
+
+    try {
+      renderOnboarding({ runtimes });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(opencodePaths).toEqual(["/initial/opencode"]));
+
+      const input = within(opencodeSection()).getByRole("textbox", { name: "Executable path" });
+      await act(async () => {
+        fireEvent.change(input, { target: { value: "/intermediate/opencode" } });
+        fireEvent.change(input, { target: { value: "/latest/opencode" } });
+        await Promise.resolve();
+      });
+      expect(opencodePaths).toEqual(["/initial/opencode"]);
+
+      await act(async () => {
+        initialValidation.resolve({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/initial/opencode",
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        });
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(opencodePaths).toEqual(["/initial/opencode", "/latest/opencode"]));
+      expect(opencodePaths).not.toContain("/intermediate/opencode");
+      await act(async () => {
+        latestValidation.resolve({
+          runtimes: [
+            {
+              kind: "opencode",
+              path: "/latest/opencode",
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        });
+        await Promise.resolve();
+      });
+      await within(opencodeSection()).findByText("Available");
+    } finally {
+      initialValidation.resolve(createCheck(runtimes, true));
+      latestValidation.resolve(createCheck(runtimes, true));
+      host.runtimeExecutablesCheck = originalCheck;
     }
   });
 
@@ -278,17 +360,32 @@ describe("useOnboardingRuntimeSetup", () => {
     }
   });
 
-  test("does not block onboarding while a disabled runtime validation is pending", async () => {
+  test("checks an edited enabled runtime while a disabled runtime validation is pending", async () => {
     const runtimes: AgentRuntimes = {
       opencode: { enabled: true, executablePath: "/valid/opencode" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/slow/claude" },
     };
     const claudeValidation = createDeferred<RuntimeExecutableCheck>();
+    const opencodePaths: string[] = [];
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "validate" && Object.hasOwn(input.paths, "claude")) {
         return claudeValidation.promise;
+      }
+      if (input.mode === "validate" && input.paths.opencode !== undefined) {
+        opencodePaths.push(input.paths.opencode);
+        return {
+          runtimes: [
+            {
+              kind: "opencode",
+              path: input.paths.opencode,
+              ok: true,
+              version: "1.0.0",
+              error: null,
+            },
+          ],
+        } satisfies RuntimeExecutableCheck;
       }
       return createCheck(runtimes, true);
     });
@@ -303,6 +400,11 @@ describe("useOnboardingRuntimeSetup", () => {
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
         ).toBe(false),
       );
+      fireEvent.change(
+        within(opencodeSection()).getByRole("textbox", { name: "Executable path" }),
+        { target: { value: "/updated/opencode" } },
+      );
+      await waitFor(() => expect(opencodePaths).toContain("/updated/opencode"));
     } finally {
       claudeValidation.resolve(createCheck(runtimes, true));
       host.runtimeExecutablesCheck = originalCheck;

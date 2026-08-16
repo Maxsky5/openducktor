@@ -4,8 +4,9 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
-import { useQueries } from "@tanstack/react-query";
-import { runtimeExecutableQueryOptions } from "./runtime";
+import { useIsFetching, useQueries } from "@tanstack/react-query";
+import { errorMessage } from "@/lib/errors";
+import { runtimeExecutableQueryOptions, runtimeQueryKeys } from "./runtime";
 
 export type RuntimeExecutableValidationResult = RuntimeExecutableCheckResult & {
   requestedPath: string;
@@ -18,10 +19,30 @@ export type RuntimeExecutableValidationState = {
   refetch: () => Promise<void>;
 };
 
+const activeValidationCountForKind = (
+  kind: RuntimeKind,
+  opencode: number,
+  codex: number,
+  claude: number,
+): number => {
+  if (kind === "opencode") return opencode;
+  if (kind === "codex") return codex;
+  return claude;
+};
+
 export const useRuntimeExecutableValidation = (
   runtimes: AgentRuntimes | null,
   enabled: boolean,
 ): RuntimeExecutableValidationState => {
+  const activeOpenCodeValidationCount = useIsFetching({
+    queryKey: runtimeQueryKeys.executableKind("opencode"),
+  });
+  const activeCodexValidationCount = useIsFetching({
+    queryKey: runtimeQueryKeys.executableKind("codex"),
+  });
+  const activeClaudeValidationCount = useIsFetching({
+    queryKey: runtimeQueryKeys.executableKind("claude"),
+  });
   const inputs = knownRuntimeKindValues.map((kind) => ({
     kind,
     path: runtimes?.[kind].executablePath ?? "",
@@ -29,12 +50,31 @@ export const useRuntimeExecutableValidation = (
   const queries = useQueries({
     queries: inputs.map(({ kind, path }) => ({
       ...runtimeExecutableQueryOptions(kind, path),
-      enabled: enabled && runtimes !== null,
+      enabled:
+        enabled &&
+        runtimes !== null &&
+        activeValidationCountForKind(
+          kind,
+          activeOpenCodeValidationCount,
+          activeCodexValidationCount,
+          activeClaudeValidationCount,
+        ) === 0,
     })),
   });
-  const results = inputs.flatMap(({ path }, index) => {
-    const result = queries[index]?.data;
-    return result ? [{ ...result, requestedPath: path }] : [];
+  const results = inputs.flatMap(({ kind, path }, index) => {
+    const query = queries[index];
+    if (query?.data) return [{ ...query.data, requestedPath: path }];
+    if (!query?.error || runtimes?.[kind].enabled === false) return [];
+    return [
+      {
+        kind,
+        path,
+        ok: false,
+        version: null,
+        error: errorMessage(query.error),
+        requestedPath: path,
+      },
+    ];
   });
   const checkingRuntimeKinds = knownRuntimeKindValues.filter((kind, index) => {
     if (!runtimes?.[kind].enabled) return false;

@@ -204,6 +204,7 @@ const createSystemDiagnosticsServiceForTest = (
   });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
+    const runtimeHealthCalls: RuntimeHealth["kind"][] = [];
     const commandCalls: Array<{
       command: string;
       args: string[];
@@ -216,9 +217,12 @@ describe("createSystemDiagnosticsService", () => {
     }> = [];
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort({
-        codex: runtimeHealth("codex", "codex not found"),
-      }),
+      runtimeHealth: {
+        getRuntimeHealth: (kind) => {
+          runtimeHealthCalls.push(kind);
+          return Effect.succeed(runtimeHealth(kind));
+        },
+      },
       settingsConfig: createSettingsConfig({
         ...createDefaultGlobalConfig(),
         agentRuntimes: {
@@ -248,9 +252,10 @@ describe("createSystemDiagnosticsService", () => {
         kind: "codex",
         enabled: false,
         ok: false,
-        error: "codex not found",
+        error: null,
       }),
     ]);
+    expect(runtimeHealthCalls).toEqual(["opencode"]);
     expect(check.errors).toEqual([]);
     expect(commandCalls.find((call) => call.command === "gh")?.options?.env).toMatchObject({
       GH_PROMPT_DISABLED: "1",
@@ -318,7 +323,18 @@ describe("createSystemDiagnosticsService", () => {
     const service = createSystemDiagnosticsServiceForTest({
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode", "codex"]),
       runtimeHealth: runtimeHealthPort,
-      settingsConfig: createSettingsConfig(null),
+      settingsConfig: createSettingsConfig({
+        ...createDefaultGlobalConfig(),
+        agentRuntimes: {
+          ...DEFAULT_AGENT_RUNTIMES,
+          opencode: { enabled: true, executablePath: "/bin/opencode" },
+          codex: {
+            ...DEFAULT_AGENT_RUNTIMES.codex,
+            enabled: true,
+            executablePath: "/bin/codex",
+          },
+        },
+      }),
       systemCommands: createSystemCommandPort(),
       repoStoreDiagnostics: createTaskStore(),
     });

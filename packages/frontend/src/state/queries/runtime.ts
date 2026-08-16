@@ -24,8 +24,11 @@ export const runtimeQueryKeys = {
   all: ["runtime"] as const,
   definitions: () => [...runtimeQueryKeys.all, "definitions"] as const,
   discovery: () => [...runtimeQueryKeys.all, "executables", "discovery"] as const,
+  executableValidations: () => [...runtimeQueryKeys.all, "executables", "validate"] as const,
+  executableKind: (kind: RuntimeKind) =>
+    [...runtimeQueryKeys.executableValidations(), kind] as const,
   executable: (kind: RuntimeKind, path: string) =>
-    [...runtimeQueryKeys.all, "executables", "validate", kind, path] as const,
+    [...runtimeQueryKeys.executableKind(kind), path] as const,
 };
 
 export const runtimeDefinitionsQueryOptions = () =>

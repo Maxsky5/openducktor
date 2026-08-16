@@ -135,8 +135,7 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
   const runtimeLoading =
     settingsQuery.isPending || definitionsQuery.isPending || runtimeDraft === null;
   const validationPending = runtimeDraft !== null && checkingRuntimeKinds.length > 0;
-  const runtimeRequestError =
-    settingsQuery.error ?? definitionsQuery.error ?? runtimeValidation.error;
+  const runtimeRequestError = settingsQuery.error ?? definitionsQuery.error;
   const validEnabledRuntimeCount = runtimeDraft
     ? checkResults.filter((result) => result.ok && runtimeDraft[result.kind].enabled).length
     : 0;
@@ -201,9 +200,6 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
   const retryRuntimeRequests = (): void => {
     void settingsQuery.refetch();
     void definitionsQuery.refetch();
-    if (runtimeDraft !== null) {
-      void runtimeValidation.refetch();
-    }
   };
 
   return {
