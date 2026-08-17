@@ -12,7 +12,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src drizzle.task-store.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.226",
+    "@anthropic-ai/claude-agent-sdk": "0.3.232",
     "@openducktor/adapters-codex-app-server": "workspace:*",
     "@openducktor/adapters-opencode-sdk": "workspace:*",
     "@openducktor/contracts": "workspace:*",
