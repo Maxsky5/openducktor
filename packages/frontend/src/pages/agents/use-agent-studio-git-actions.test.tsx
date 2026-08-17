@@ -736,26 +736,6 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  test("suppresses the lock banner when git actions are locked only because Builder is working", async () => {
-    const harness = createHookHarness(
-      createBaseArgs({
-        isBuilderSessionWorking: true,
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      expect(harness.getLatest().isGitActionsLocked).toBe(true);
-      expect(harness.getLatest().gitActionsLockReason).toBe(
-        "Git actions are disabled while the Builder session is working.",
-      );
-      expect(harness.getLatest().showLockReasonBanner).toBe(false);
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("does not request a lock banner when git actions are unlocked", async () => {
     const harness = createHookHarness(createBaseArgs());
 

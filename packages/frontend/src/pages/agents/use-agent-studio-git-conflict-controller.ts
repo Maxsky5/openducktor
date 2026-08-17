@@ -4,7 +4,7 @@ import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 import { host } from "@/state/operations/shared/host";
 import {
-  getGitActionsLockReason,
+  CONFLICT_LOCK_REASON,
   type RefreshGitDiffData,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
@@ -57,7 +57,6 @@ type UseAgentStudioGitConflictControllerArgs = {
   detectedConflict?: GitConflict | null;
   detectedConflictedFiles: string[];
   worktreeStatusSnapshotKey: string | null;
-  isBuilderSessionWorking: boolean;
   refreshDiffData: RefreshGitDiffData;
   clearActionErrors: () => void;
   setRebaseError: (message: string | null) => void;
@@ -166,7 +165,6 @@ export function useAgentStudioGitConflictController({
   detectedConflict = null,
   detectedConflictedFiles,
   worktreeStatusSnapshotKey,
-  isBuilderSessionWorking,
   refreshDiffData,
   clearActionErrors,
   setRebaseError,
@@ -193,9 +191,9 @@ export function useAgentStudioGitConflictController({
   const effectiveDetectedConflict = detectedConflict ?? fallbackDetectedConflict;
 
   const activeGitConflict = state.localConflict ?? effectiveDetectedConflict;
-  const isGitActionsLocked = isBuilderSessionWorking || activeGitConflict != null;
-  const gitActionsLockReason = getGitActionsLockReason(isBuilderSessionWorking, activeGitConflict);
-  const showLockReasonBanner = isGitActionsLocked && !isBuilderSessionWorking;
+  const isGitActionsLocked = activeGitConflict != null;
+  const gitActionsLockReason = activeGitConflict != null ? CONFLICT_LOCK_REASON : null;
+  const showLockReasonBanner = isGitActionsLocked;
 
   useEffect(() => {
     if (

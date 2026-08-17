@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { hostClient } from "@/lib/host-client";
 import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
@@ -63,7 +62,6 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     taskId: string | null;
     selectedTaskId: string | null;
     viewRole: BuildToolsSelectedView["role"];
-    isSelectedBuilderWorking: boolean;
     sessionWorkingDirectory: string | null;
     hasSelectedTask: boolean;
   };
@@ -315,9 +313,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
         taskId,
         selectedTaskId,
         viewRole: selectedView.role,
-        isSelectedBuilderWorking:
-          selectedView.role === "build" &&
-          isAgentSessionActivityWorking(selectedView.selectedSession.activityState),
         sessionWorkingDirectory: buildToolsBootstrap.sessionWorkingDirectory,
         hasSelectedTask,
       },
@@ -342,7 +337,6 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
       resolvedGitPanelBranch,
       selectedTaskId,
       selectedView.role,
-      selectedView.selectedSession.activityState,
       taskTargetBranchState,
       taskId,
       worktree,
