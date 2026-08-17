@@ -24,6 +24,7 @@ import {
   createDevServerTaskScope,
   formatDevServerTaskScopeKey,
 } from "@/types/dev-server-task-scope";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
 
@@ -103,7 +104,8 @@ function CompactStartButton({
     className?: string;
     onClick?: (() => void) | undefined;
     disabled?: boolean | undefined;
-    [key: string]: unknown;
+    "aria-disabled"?: string | undefined;
+    "aria-describedby"?: string | undefined;
   }>;
   disabledReason: string | null;
   disabledReasonId: string;

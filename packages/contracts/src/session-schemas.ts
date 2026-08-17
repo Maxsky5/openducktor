@@ -17,9 +17,16 @@ const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
-const agentSessionMetadataValueSchema: z.ZodType<
-  string | number | boolean | null | undefined | Array<unknown> | Record<string, unknown>
-> = z.lazy(() =>
+type AgentSessionMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | AgentSessionMetadataValue[]
+  | { [key: string]: AgentSessionMetadataValue };
+
+const agentSessionMetadataValueSchema: z.ZodType<AgentSessionMetadataValue> = z.lazy(() =>
   z.union([
     z.string(),
     z.number(),

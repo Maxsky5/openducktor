@@ -1,4 +1,5 @@
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
+import type { JsonValue } from "@openducktor/contracts";
 import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
@@ -7,7 +8,7 @@ import { codexSubagentPartsFromItem } from "../codex-subagent-items";
 import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 
 const subagentEvents = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   ctx: CodexMappingContext,
   linkState: CodexSubagentLinkState,
   timestamp?: string,
@@ -35,7 +36,7 @@ const subagentEvents = (
   };
 };
 
-const shouldMapAsSubagentItem = (item: Record<string, unknown>): boolean => {
+const shouldMapAsSubagentItem = (item: Record<string, JsonValue>): boolean => {
   const isCollabToolCall =
     codexItemTypeMatches(item, "collabAgentToolCall") ||
     codexItemTypeMatches(item, "collabToolCall");

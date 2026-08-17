@@ -51,6 +51,7 @@ import {
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
@@ -71,7 +72,7 @@ export const toClaudeHistoryMessages = (
   const assistantMessagesByToolCallId = new Map<string, MutableAssistantHistoryMessage>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
-  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolInputsByCallId = new Map<string, Record<string, JsonValue>>();
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentAgentIdsByToolUseId = new Map(options.subagentAgentIdsByToolUseId);

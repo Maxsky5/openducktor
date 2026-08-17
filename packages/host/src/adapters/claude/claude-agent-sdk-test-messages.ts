@@ -1,5 +1,6 @@
 import type { SDKMessage, SessionMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeSdkMessageFixture<MessageType extends SDKMessage["type"]> = {
   readonly type: MessageType;
@@ -50,7 +51,7 @@ export const claudeSessionMessageFixture = <Fixture extends ClaudeSessionMessage
 });
 
 export const claudeSessionMessageFixtures = (
-  messages: readonly (ClaudeSessionMessageFixture & Record<string, unknown>)[],
+  messages: readonly (ClaudeSessionMessageFixture & Record<string, JsonValue>)[],
 ): SessionMessage[] => messages.map(claudeSessionMessageFixture);
 
 /**

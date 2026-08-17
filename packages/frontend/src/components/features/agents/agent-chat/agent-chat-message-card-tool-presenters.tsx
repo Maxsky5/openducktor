@@ -26,6 +26,7 @@ import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
   const value = meta.toolType;
@@ -93,7 +94,7 @@ const ToolJsonDetails = ({
 };
 
 const formatToolInput = (
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue>,
   workingDirectory?: string | null,
 ): string => {
   return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);

@@ -1,6 +1,7 @@
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 
-export type GithubPayloadObject = Record<string, unknown>;
+export type GithubPayloadObject = Record<string, JsonValue>;
 
 const isGithubPayloadObject = (value: unknown): value is GithubPayloadObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);

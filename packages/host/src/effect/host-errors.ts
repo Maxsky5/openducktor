@@ -1,6 +1,14 @@
 import { Cause, Chunk, Data, Option } from "effect";
+import type { JsonValue } from "@openducktor/contracts";
 
-export type HostErrorDetails = Readonly<Record<string, unknown>>;
+export type HostErrorDetailValue =
+  | JsonValue
+  | Error
+  | undefined
+  | ReadonlyArray<HostErrorDetailValue>
+  | { readonly [key: string]: HostErrorDetailValue };
+
+export type HostErrorDetails = Readonly<Record<string, HostErrorDetailValue>>;
 
 export class HostValidationError extends Data.TaggedError("HostValidationError")<{
   readonly message: string;

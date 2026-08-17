@@ -4,6 +4,7 @@ import {
   isCodexUnmaterializedThreadError,
   isPlainObject,
 } from "./codex-app-server-shared";
+import type { JsonValue } from "@openducktor/contracts";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
@@ -247,7 +248,7 @@ export class CodexThreadInventoryReader {
     unmaterializedWorkingDirectory?: string,
   ): Promise<unknown> {
     let response: unknown;
-    let pagedTurns: Record<string, unknown>[];
+    let pagedTurns: Record<string, JsonValue>[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
@@ -357,8 +358,8 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     itemsView: "full" | "summary",
-  ): Promise<Record<string, unknown>[]> {
-    const turns: Record<string, unknown>[] = [];
+  ): Promise<Record<string, JsonValue>[]> {
+    const turns: Record<string, JsonValue>[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
     do {

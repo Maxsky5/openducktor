@@ -30,6 +30,7 @@ import type {
 import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-normalization";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type OpenCodeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
@@ -46,7 +47,7 @@ export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
 const stateEffect = <Value>(
   operation: string,
   run: () => Value,
-  details: Record<string, unknown>,
+  details: Record<string, JsonValue>,
 ): Effect.Effect<Value, HostError> =>
   Effect.try({
     try: run,

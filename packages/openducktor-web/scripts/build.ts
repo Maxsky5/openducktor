@@ -57,7 +57,7 @@ const runBuildCommandEffect = (
         operation: label,
         message: errorMessage(cause),
         cause,
-        details: { command, cwd: packageRoot },
+        details: { command: [...command], cwd: packageRoot },
       }),
   });
 

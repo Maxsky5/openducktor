@@ -23,6 +23,7 @@ import {
 } from "./claude-agent-sdk-transcript-correlation";
 import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -34,7 +35,7 @@ type ClaudeSubagentSession = {
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
@@ -141,9 +142,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   toolUseId,
 }: {
   emit: (event: AgentEvent) => void;
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
   isError: boolean;
-  resultRaw: Record<string, unknown>;
+  resultRaw: Record<string, JsonValue>;
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -191,7 +192,7 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     typeof structuredResult.totalDurationMs === "number" ? structuredResult.totalDurationMs : null;
   const startedAtMs =
     totalDurationMs === null ? undefined : Math.max(0, endedAtMs - totalDurationMs);
-  const metadata: Record<string, unknown> = {
+  const metadata: Record<string, JsonValue> = {
     agentId,
     sourceToolUseId: toolUseId,
     ...(structuredResult.resolvedModel ? { resolvedModel: structuredResult.resolvedModel } : {}),
@@ -247,7 +248,7 @@ export const emitClaudeTaskStopSubagentPart = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  resultRaw: Record<string, unknown>;
+  resultRaw: Record<string, JsonValue>;
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -376,7 +377,7 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
-    const patch = message.patch as Record<string, unknown>;
+    const patch = message.patch as Record<string, JsonValue>;
     const error =
       readStringProp(patch, "error") ??
       readStringProp(message, "error") ??

@@ -5,8 +5,11 @@ import type {
 } from "../../application/attachments/local-attachment-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
-const parseStageInput = (args: Record<string, unknown> | undefined): LocalAttachmentStageInput => {
+const parseStageInput = (
+  args: Record<string, JsonValue> | undefined,
+): LocalAttachmentStageInput => {
   const record = requireRecord(args, "workspace_stage_local_attachment input");
   return {
     name: requireString(record.name, "Attachment name"),
@@ -15,7 +18,7 @@ const parseStageInput = (args: Record<string, unknown> | undefined): LocalAttach
 };
 
 const parseResolveInput = (
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
 ): LocalAttachmentResolveInput => {
   const record = requireRecord(args, "workspace_resolve_local_attachment_path input");
   return { path: requireString(record.path, "Attachment path") };

@@ -10,6 +10,7 @@ import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
+import type { JsonValue } from "@openducktor/contracts";
 
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -852,9 +853,9 @@ describe("use-repo-settings-operations", () => {
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(forwardedSnapshot).toBeDefined();
       const parsedForwarded = forwardedSnapshot as {
-        globalPromptOverrides: Record<string, unknown>;
+        globalPromptOverrides: Record<string, JsonValue>;
         agentRuntimes: unknown;
-        workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
+        workspaces: Record<string, { promptOverrides: Record<string, JsonValue> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
         agentPromptTemplateIdValues.toSorted(),

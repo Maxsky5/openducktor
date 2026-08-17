@@ -11,8 +11,9 @@ import {
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type { JsonValue } from "@openducktor/contracts";
 
-type SqliteTaskStoreErrorDetails = Readonly<Record<string, unknown>>;
+type SqliteTaskStoreErrorDetails = Readonly<Record<string, JsonValue>>;
 
 export type SqliteTaskStorePersistenceError = SqliteTaskStoreDataError | TaskStoreError;
 export type SqliteTaskStoreReadError = SqliteTaskStoreDataError | TaskStoreError;

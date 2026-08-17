@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeTextPart = Extract<AgentStreamPart, { kind: "text" }>;
 type ClaudeReasoningPart = Extract<AgentStreamPart, { kind: "reasoning" }>;
@@ -68,12 +69,12 @@ export const createClaudeCompletedToolPart = ({
 }: {
   callId: string;
   endedAtMs: number;
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
   isError: boolean;
   messageId: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
   preview?: string;
-  raw?: Record<string, unknown>;
+  raw?: Record<string, JsonValue>;
   startedAtMs?: number;
   text: string;
   tool: string;

@@ -5,18 +5,19 @@ import {
   readStringProp,
   toolPartPresentation,
 } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ClaudeDecodedToolUse = {
   blockType: string;
   callId: string;
-  input?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
+  metadata?: Record<string, JsonValue>;
   toolName: string;
 };
 
 export type ClaudeDecodedToolResult = {
   isError: boolean;
-  raw: Record<string, unknown>;
+  raw: Record<string, JsonValue>;
   text: string;
   toolName?: string;
   toolUseId: string;
@@ -34,7 +35,7 @@ export const decodeClaudeToolUseBlock = ({
   fallbackMessageId,
   index,
 }: {
-  block: Record<string, unknown>;
+  block: Record<string, JsonValue>;
   fallbackMessageId: string;
   index: number;
 }): ClaudeDecodedToolUse | null => {
@@ -153,7 +154,7 @@ const toolResultBlockText = (block: unknown): string => {
   );
 };
 
-const claudeToolResultContentText = (value: Record<string, unknown>): string => {
+const claudeToolResultContentText = (value: Record<string, JsonValue>): string => {
   const text =
     readStringProp(value, "content") ??
     readStringProp(value, "text") ??

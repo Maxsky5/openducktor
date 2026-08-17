@@ -2,6 +2,7 @@ import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeFileEditPayload = {
   fileDiffs?: FileDiff[];
@@ -13,19 +14,19 @@ export const isClaudeFileEditTool = (tool: string): boolean =>
   new Set(["edit", "multiedit", "notebookedit", "write"]).has(normalizeToolName(tool));
 
 const readRecordProp = (
-  record: Record<string, unknown>,
+  record: Record<string, JsonValue>,
   key: string,
-): Record<string, unknown> | null => {
+): Record<string, JsonValue> | null => {
   const value = record[key];
   return isRecord(value) ? value : null;
 };
 
-const readNumberProp = (record: Record<string, unknown>, key: string): number | undefined => {
+const readNumberProp = (record: Record<string, JsonValue>, key: string): number | undefined => {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
 
-const readStringValue = (record: Record<string, unknown>, key: string): string | undefined => {
+const readStringValue = (record: Record<string, JsonValue>, key: string): string | undefined => {
   const value = record[key];
   return typeof value === "string" ? value : undefined;
 };
@@ -80,7 +81,7 @@ const readStructuredPatch = (value: unknown, file: string | undefined): string |
   ].join("\n");
 };
 
-const readInputFilePath = (input: Record<string, unknown> | undefined): string | undefined => {
+const readInputFilePath = (input: Record<string, JsonValue> | undefined): string | undefined => {
   if (!input) {
     return undefined;
   }
@@ -94,8 +95,8 @@ const readInputFilePath = (input: Record<string, unknown> | undefined): string |
 };
 
 const readFilePath = (
-  record: Record<string, unknown>,
-  input: Record<string, unknown> | undefined,
+  record: Record<string, JsonValue>,
+  input: Record<string, JsonValue> | undefined,
 ): string | undefined =>
   readStringProp(record, "file") ??
   readStringProp(record, "file_path") ??
@@ -105,7 +106,7 @@ const readFilePath = (
   readInputFilePath(input);
 
 const readPatchFromRecord = (
-  record: Record<string, unknown>,
+  record: Record<string, JsonValue>,
   file: string | undefined,
   tool: string,
 ): string | null => {
@@ -151,7 +152,7 @@ const readPatchFromRecord = (
   return null;
 };
 
-const readResultRecords = (raw: Record<string, unknown>): Record<string, unknown>[] => {
+const readResultRecords = (raw: Record<string, JsonValue>): Record<string, JsonValue>[] => {
   const records = [raw];
   for (const key of ["structuredContent", "result", "output", "toolUseResult", "file"] as const) {
     const value = raw[key];
@@ -177,9 +178,9 @@ const readResultRecords = (raw: Record<string, unknown>): Record<string, unknown
   return records;
 };
 
-const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unknown>[] => {
+const fileRecordsFromResult = (raw: Record<string, JsonValue>): Record<string, JsonValue>[] => {
   const records = readResultRecords(raw);
-  const result: Record<string, unknown>[] = [];
+  const result: Record<string, JsonValue>[] = [];
   for (const record of records) {
     result.push(record);
     for (const key of ["files", "fileDiffs", "changes", "edits"] as const) {
@@ -207,8 +208,8 @@ const fileRecordsFromResult = (raw: Record<string, unknown>): Record<string, unk
 
 const changeTypeFromToolInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
-  record: Record<string, unknown>,
+  input: Record<string, JsonValue> | undefined,
+  record: Record<string, JsonValue>,
 ): FileDiff["type"] => {
   if (normalizeToolName(tool) === "write") {
     return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";
@@ -253,8 +254,8 @@ const readClaudeFileDiffs = ({
   raw,
   tool,
 }: {
-  input: Record<string, unknown> | undefined;
-  raw: Record<string, unknown>;
+  input: Record<string, JsonValue> | undefined;
+  raw: Record<string, JsonValue>;
   tool: string;
 }): FileDiff[] => {
   const diffs: FileDiff[] = [];
@@ -294,8 +295,8 @@ export const readClaudeFileEditPayload = ({
   raw,
   tool,
 }: {
-  input: Record<string, unknown> | undefined;
-  raw: Record<string, unknown>;
+  input: Record<string, JsonValue> | undefined;
+  raw: Record<string, JsonValue>;
   tool: string;
 }): ClaudeFileEditPayload => {
   if (!isClaudeFileEditTool(tool)) {

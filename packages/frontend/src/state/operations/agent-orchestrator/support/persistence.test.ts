@@ -7,6 +7,7 @@ import {
   toPersistedSessionIdentity,
   toPersistedSessionRecord,
 } from "./persistence";
+import type { JsonValue } from "@openducktor/contracts";
 
 const recordFixture: AgentSessionRecord = {
   runtimeKind: "opencode",
@@ -125,7 +126,7 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisted session records without a top-level runtime kind", () => {
-    const invalidRecord = { ...recordFixture } as Record<string, unknown>;
+    const invalidRecord = { ...recordFixture } as Record<string, JsonValue>;
     delete invalidRecord.runtimeKind;
 
     expect(() =>

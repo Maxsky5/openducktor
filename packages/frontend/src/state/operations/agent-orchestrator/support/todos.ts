@@ -1,5 +1,6 @@
 import { parseAgentSessionTodoPayloadList } from "@openducktor/contracts";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const parseTodosFromToolOutput = (
   output: string | undefined,
@@ -13,7 +14,7 @@ export const parseTodosFromToolOutput = (
       return normalizeAgentSessionTodoList(parseAgentSessionTodoPayloadList(parsed));
     }
     if (parsed && typeof parsed === "object") {
-      const record = parsed as Record<string, unknown>;
+      const record = parsed as Record<string, JsonValue>;
       if (Array.isArray(record.todos)) {
         return normalizeAgentSessionTodoList(parseAgentSessionTodoPayloadList(record.todos));
       }
@@ -25,7 +26,7 @@ export const parseTodosFromToolOutput = (
 };
 
 export const parseTodosFromToolInput = (
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): AgentSessionTodoItem[] | null => {
   if (!input) {
     return null;

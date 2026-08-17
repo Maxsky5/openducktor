@@ -8,11 +8,12 @@ import type {
   CodexAppServerThreadListResponse,
   CodexSessionStatus,
 } from "../../ports/codex-app-server-port";
+import type { JsonValue } from "@openducktor/contracts";
 
-export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
+export const isJsonRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const requireRecord = (value: unknown, context: string): Record<string, unknown> => {
+const requireRecord = (value: unknown, context: string): Record<string, JsonValue> => {
   if (!isJsonRecord(value)) {
     throw new HostValidationError({
       message: `${context} must be an object`,

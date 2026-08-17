@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import {
   type CreateHostCommandRouterInput,
@@ -439,7 +440,9 @@ describe("createCodexAppServerCommandHandlers", () => {
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "model/list",
-        params: { omitted: undefined },
+        // SAFETY: intentionally non-JSON payload to exercise the runtime
+        // JSON-serializability validation; the cast bypasses the static JsonValue gate.
+        params: { omitted: undefined } as unknown as JsonValue,
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
     for (const params of [null, true, 1, "params", []]) {

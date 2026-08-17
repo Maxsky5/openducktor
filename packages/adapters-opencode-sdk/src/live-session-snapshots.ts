@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -87,13 +88,15 @@ const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity
 const toOpencodeSessionStatusMap = (
   payload: unknown,
   directory: string,
-): Record<string, unknown> => {
+): Record<string, JsonValue> => {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     throw new Error(
       `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
     );
   }
-  return payload as Record<string, unknown>;
+  // SAFETY: session status payloads arrive over the SDK JSON-RPC transport, which serializes
+  // payloads to JSON-compatible values before they reach this layer.
+  return payload as Record<string, JsonValue>;
 };
 
 const normalizeSessionDirectory = (directory: unknown): string | undefined => {

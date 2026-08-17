@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
+import { toCommandArgs } from "./invoke-utils";
 type WorkspaceFileTreeInput = {
   rootPath: string;
   targetBranch?: string | null;
@@ -26,7 +27,10 @@ const filesystemListDirectory = async (
   input?: string | FilesystemListDirectoryInput,
 ): Promise<DirectoryListing> => {
   const args = typeof input === "string" ? { path: input } : input;
-  const payload = await invokeFn("filesystem_list_directory", args);
+  const payload = await invokeFn(
+    "filesystem_list_directory",
+    args === undefined ? undefined : toCommandArgs(args),
+  );
   return directoryListingSchema.parse(payload);
 };
 

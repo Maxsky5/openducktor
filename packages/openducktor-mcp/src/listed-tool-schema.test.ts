@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { getListedToolInputSchema } from "./listed-tool-schema";
+import type { JsonValue } from "@openducktor/contracts";
 
-const propertiesOf = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
-  return jsonSchema.properties as Record<string, unknown>;
+const propertiesOf = (jsonSchema: Record<string, JsonValue>): Record<string, JsonValue> => {
+  return jsonSchema.properties as Record<string, JsonValue>;
 };
 
-const requiredOf = (jsonSchema: Record<string, unknown>): string[] => {
+const requiredOf = (jsonSchema: Record<string, JsonValue>): string[] => {
   return Array.isArray(jsonSchema.required) ? (jsonSchema.required as string[]) : [];
 };
 

@@ -44,7 +44,9 @@ const lifecycleReportingFailure = ({
     operation,
     message,
     cause: failures[0],
-    details: { failures },
+    details: {
+      failures: failures.map((failure) => (failure instanceof Error ? failure : String(failure))),
+    },
   });
 };
 

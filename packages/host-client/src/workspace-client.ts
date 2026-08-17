@@ -18,6 +18,8 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
+import { toCommandArgs } from "./invoke-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type AgentDefaultConfig = {
   providerId: string;
@@ -69,7 +71,7 @@ const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => 
     throw new Error("Expected staged local attachment payload from host command");
   }
 
-  const candidate = payload as Record<string, unknown>;
+  const candidate = payload as Record<string, JsonValue>;
   const path = candidate.path;
   if (typeof path !== "string" || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
@@ -123,10 +125,13 @@ const workspaceUpdateRepoConfig = async (
   workspaceId: string,
   config: WorkspaceRepoConfigInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_update_repo_config", {
-    workspaceId,
-    config,
-  });
+  const payload = await invokeFn(
+    "workspace_update_repo_config",
+    toCommandArgs({
+      workspaceId,
+      config,
+    }),
+  );
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -135,10 +140,13 @@ const workspaceSaveRepoSettings = async (
   workspaceId: string,
   settings: WorkspaceRepoSettingsInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_save_repo_settings", {
-    workspaceId,
-    settings,
-  });
+  const payload = await invokeFn(
+    "workspace_save_repo_settings",
+    toCommandArgs({
+      workspaceId,
+      settings,
+    }),
+  );
   return workspaceRecordSchema.parse(payload);
 };
 
@@ -171,7 +179,7 @@ const workspaceSaveSettingsSnapshot = async (
   invokeFn: InvokeFn,
   snapshot: SettingsSnapshotSaveInput,
 ): Promise<WorkspaceRecord[]> => {
-  const payload = await invokeFn("workspace_save_settings_snapshot", { snapshot });
+  const payload = await invokeFn("workspace_save_settings_snapshot", toCommandArgs({ snapshot }));
   return parseArray(workspaceRecordSchema, payload, "workspace_save_settings_snapshot");
 };
 

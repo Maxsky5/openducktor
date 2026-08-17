@@ -49,6 +49,7 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -250,7 +251,7 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readUnknownProperty = (value: unknown, property: string): unknown =>
@@ -261,7 +262,7 @@ const readValidFailureKind = (value: unknown): string | undefined => {
   return parsed.success ? parsed.data : undefined;
 };
 
-const readStructuredDetails = (value: unknown): Record<string, unknown> | undefined => {
+const readStructuredDetails = (value: unknown): Record<string, JsonValue> | undefined => {
   const details = readUnknownProperty(value, "details");
   return isRecord(details) ? details : undefined;
 };
@@ -487,11 +488,11 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> => isRecord(value);
+const isJsonObject = (value: unknown): value is Record<string, JsonValue> => isRecord(value);
 
 const parseJsonObjectBody = (
   request: Request,
-): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
+): Effect.Effect<Record<string, JsonValue>, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed: unknown = yield* Effect.tryPromise({
       try: () => request.json(),

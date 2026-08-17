@@ -26,6 +26,7 @@ import {
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult, parseUpdatedAtResult } from "./invoke-utils";
+import { toCommandArgs } from "./invoke-utils";
 import type {
   ParsedTaskMetadata,
   TaskMetadataCache,
@@ -133,10 +134,13 @@ export class HostTaskClient {
   }
 
   async tasksList(repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> {
-    const payload = await this.invokeFn("tasks_list", {
-      repoPath,
-      doneVisibleDays,
-    });
+    const payload = await this.invokeFn(
+      "tasks_list",
+      toCommandArgs({
+        repoPath,
+        doneVisibleDays,
+      }),
+    );
     return parseArray(taskCardSchema, payload, "tasks_list");
   }
 
@@ -149,11 +153,14 @@ export class HostTaskClient {
     const assetIntent = descriptionAssets
       ? taskAssetDescriptionMutationSchema.parse(descriptionAssets)
       : undefined;
-    const payload = await this.invokeFn("task_create", {
-      repoPath,
-      input: createInput,
-      ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
-    });
+    const payload = await this.invokeFn(
+      "task_create",
+      toCommandArgs({
+        repoPath,
+        input: createInput,
+        ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
+      }),
+    );
     return taskCardSchema.parse(payload);
   }
 
@@ -170,12 +177,15 @@ export class HostTaskClient {
     if (assetIntent && !Object.hasOwn(updatePatch, "description")) {
       throw new Error("descriptionAssets requires a description patch.");
     }
-    const payload = await this.invokeFn("task_update", {
-      repoPath,
-      taskId,
-      patch: updatePatch,
-      ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
-    });
+    const payload = await this.invokeFn(
+      "task_update",
+      toCommandArgs({
+        repoPath,
+        taskId,
+        patch: updatePatch,
+        ...(assetIntent ? { descriptionAssets: assetIntent } : {}),
+      }),
+    );
     this.invalidateTaskMetadata(repoPath, taskId);
     return taskCardSchema.parse(payload);
   }
@@ -240,12 +250,15 @@ export class HostTaskClient {
     reason?: string,
   ): Promise<TaskCard> {
     taskStatusSchema.parse(status);
-    const payload = await this.invokeFn("task_transition", {
-      repoPath,
-      taskId,
-      status,
-      reason,
-    });
+    const payload = await this.invokeFn(
+      "task_transition",
+      toCommandArgs({
+        repoPath,
+        taskId,
+        status,
+        reason,
+      }),
+    );
     return taskCardSchema.parse(payload);
   }
 
@@ -279,14 +292,17 @@ export class HostTaskClient {
   async setPlan(input: SetPlanInput): Promise<SetPlanOutput> {
     const repoPath = this.requireRepoPath(input.repoPath, "plan");
 
-    const payload = await this.invokeFn("set_plan", {
-      repoPath,
-      taskId: input.taskId,
-      input: {
-        markdown: input.markdown,
-        subtasks: input.subtasks,
-      },
-    });
+    const payload = await this.invokeFn(
+      "set_plan",
+      toCommandArgs({
+        repoPath,
+        taskId: input.taskId,
+        input: {
+          markdown: input.markdown,
+          subtasks: input.subtasks,
+        },
+      }),
+    );
 
     this.invalidateTaskMetadata(repoPath, input.taskId);
     return parseUpdatedAtResult(payload, "set_plan");
@@ -372,11 +388,14 @@ export class HostTaskClient {
     taskId: string,
     session: AgentSessionRecord,
   ): Promise<void> {
-    await this.invokeFn("agent_session_upsert", {
-      repoPath,
-      taskId,
-      session,
-    });
+    await this.invokeFn(
+      "agent_session_upsert",
+      toCommandArgs({
+        repoPath,
+        taskId,
+        session,
+      }),
+    );
     this.invalidateTaskMetadata(repoPath, taskId);
   }
 

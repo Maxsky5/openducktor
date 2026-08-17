@@ -1,5 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { type FileContent, type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import {
+  type FileContent,
+  type FileDiff,
+  type JsonValue,
+  odtToolErrorPayloadSchema,
+} from "@openducktor/contracts";
 import {
   type AgentStreamPart,
   countRenderableFileDiffLines,
@@ -42,7 +47,7 @@ const toDisplayText = (value: unknown): string | undefined => {
   }
 };
 
-const parseStructuredTextObject = (value: unknown): Record<string, unknown> | undefined => {
+const parseStructuredTextObject = (value: unknown): Record<string, JsonValue> | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -179,7 +184,7 @@ const readStructuredToolError = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined => {
+const normalizeMetadata = (value: unknown): Record<string, JsonValue> | undefined => {
   const normalized = asUnknownRecord(value);
   if (!normalized) {
     return undefined;
@@ -201,7 +206,7 @@ const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
   return "modified";
 };
 
-const readFileDiffPatch = (value: Record<string, unknown>): string | null => {
+const readFileDiffPatch = (value: Record<string, JsonValue>): string | null => {
   const patch = readStringProp(value, ["patch"]);
   if (patch !== undefined) {
     return patch;
@@ -283,7 +288,7 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
 };
 
 const fileDiffFromWriteMetadata = (
-  metadata: Record<string, unknown>,
+  metadata: Record<string, JsonValue>,
   input: unknown,
 ): FileDiff | null => {
   const inputRecord = asUnknownRecord(input);
@@ -318,7 +323,7 @@ const fileDiffFromWriteMetadata = (
 };
 
 const fileContentFromWriteMetadata = (
-  metadata: Record<string, unknown>,
+  metadata: Record<string, JsonValue>,
   input: unknown,
 ): FileContent | null => {
   const inputRecord = asUnknownRecord(input);
@@ -348,8 +353,8 @@ type FileEditPayloadFields = {
 };
 
 const readToolMetadataFileEditPayload = (
-  metadata: Record<string, unknown> | undefined,
-  toolState: Record<string, unknown>,
+  metadata: Record<string, JsonValue> | undefined,
+  toolState: Record<string, JsonValue>,
   tool: string,
 ): FileEditPayloadFields => {
   if (!metadata) {
@@ -483,11 +488,11 @@ const resolveSubagentExecutionMode = (
 };
 
 const resolveBackgroundJobId = (
-  metadata: Record<string, unknown> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
 ): string | undefined => readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
 
 const isRunningBackgroundSubagentResult = (
-  metadata: Record<string, unknown> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
 ): boolean => {
   // OpenCode keeps the parent tool part carrying background job metadata; the synthetic task result is the terminal child update.
   return (
@@ -548,7 +553,7 @@ const buildSubagentStreamPart = (input: {
   error?: string;
   externalSessionId?: string;
   executionMode?: SubagentStreamPart["executionMode"];
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
   startedAtMs?: number;
   endedAtMs?: number;
 }): SubagentStreamPart => {
@@ -613,10 +618,10 @@ const resolveSubagentDescription = (...sources: unknown[]): string | undefined =
 
 const buildSubagentFromToolPart = (
   part: ToolPart,
-  toolState: Record<string, unknown>,
+  toolState: Record<string, JsonValue>,
   normalizedStatus: SubagentStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: Record<string, unknown> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
   structuredError: string | undefined,
 ): SubagentStreamPart => {
   const rawInput = readUnknownProp(toolState, "input");
@@ -713,10 +718,10 @@ const normalizeSubagentStatus = (
 
 const buildToolStreamPart = (
   part: ToolPart,
-  toolState: Record<string, unknown>,
+  toolState: Record<string, JsonValue>,
   normalizedStatus: ToolStatus,
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: Record<string, unknown> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
   const fileEditPayload =
@@ -735,7 +740,7 @@ const buildToolStreamPart = (
     tool: part.tool,
     toolType,
     status: normalizedStatus,
-    input: part.state.input,
+    input: asUnknownRecord(part.state.input) ?? {},
     ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
     ...fileEditPayload,

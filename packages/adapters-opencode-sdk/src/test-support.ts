@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
@@ -101,7 +102,7 @@ export type MockSession = {
       id: string;
       role: "user" | "assistant";
       time: { created: number };
-      [key: string]: unknown;
+      [key: string]: JsonValue;
     };
     parts: Part[];
   }>;
@@ -209,7 +210,7 @@ export type MakeMockClientInput = {
       id: string;
       role: "user" | "assistant";
       time: { created: number };
-      [key: string]: unknown;
+      [key: string]: JsonValue;
     };
     parts: Part[];
   }>;

@@ -4,6 +4,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { RegisteredToolName } from "./listed-tool-schema";
 import { createMcpServer } from "./mcp-server";
+import type { JsonValue } from "@openducktor/contracts";
 
 type RecordedRequest = {
   url: string;
@@ -12,7 +13,7 @@ type RecordedRequest = {
 
 type ContentToolResult = {
   content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: Record<string, JsonValue>;
   isError?: boolean;
 };
 
@@ -297,10 +298,10 @@ const expectToolError = (
 const readToolInputProperties = (
   toolsResult: unknown,
   toolName: string,
-): Record<string, unknown> => {
+): Record<string, JsonValue> => {
   const tools = (toolsResult as { tools?: Array<{ name?: string; inputSchema?: unknown }> }).tools;
   const tool = tools?.find((entry) => entry.name === toolName);
-  const properties = (tool?.inputSchema as { properties?: Record<string, unknown> } | undefined)
+  const properties = (tool?.inputSchema as { properties?: Record<string, JsonValue> } | undefined)
     ?.properties;
   if (!properties) {
     throw new Error(`Expected ${toolName} to expose input schema properties.`);

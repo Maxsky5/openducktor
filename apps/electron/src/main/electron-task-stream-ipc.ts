@@ -7,7 +7,11 @@ import {
 } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import type { WebContentsDidStartNavigationEventParams } from "electron";
-import { ElectronValidationError } from "../effect/electron-errors";
+import {
+  type ElectronErrorDetails,
+  ElectronValidationError,
+  jsonIssues,
+} from "../effect/electron-errors";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -19,6 +23,7 @@ import {
   electronTaskStreamTerminalFailureEnvelopeSchema,
   electronTaskStreamUnsubscribeSchema,
 } from "../shared/electron-bridge-contract";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ElectronTaskStreamSender = {
   readonly mainFrame: ElectronTaskStreamFrame;
@@ -82,7 +87,7 @@ const validationError = (
   operation: string,
   field: string,
   message: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: ElectronErrorDetails,
 ) => new ElectronValidationError({ operation, field, message, details });
 
 const readTrustedSender = (
@@ -113,7 +118,7 @@ const parseOrThrow = <Value>(
   schema: {
     safeParse(
       value: unknown,
-    ): { success: true; data: Value } | { success: false; error: { issues: unknown } };
+    ): { success: true; data: Value } | { success: false; error: Error & { issues: unknown } };
   },
   value: unknown,
   operation: string,
@@ -252,7 +257,7 @@ export const registerElectronTaskStreamIpc = ({
             "electron.task-stream.delivery.validate",
             "frame",
             "Task stream produced an invalid frame.",
-            { issues: parsedFrame.error.issues },
+            { issues: jsonIssues(parsedFrame.error.issues) },
           ),
           subscriptionId,
         });

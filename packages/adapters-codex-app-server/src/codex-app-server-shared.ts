@@ -1,11 +1,12 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
 export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
 };
 
-export const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+export const isPlainObject = (value: unknown): value is Record<string, JsonValue> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
@@ -133,7 +134,7 @@ export const stringifyJsonValue = (value: unknown): string | null => {
 export const extractOptionalObject = (
   value: unknown,
   key: string,
-): Record<string, unknown> | undefined => {
+): Record<string, JsonValue> | undefined => {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -174,10 +175,11 @@ const isCodexContextualUserTextFragment = (text: string): boolean =>
     textMatchesCodexMarkedContextFragment(text, start, end),
   );
 
-const codexMessageContentItems = (payload: Record<string, unknown>): Record<string, unknown>[] =>
-  arrayFromUnknown(payload.content).filter(isPlainObject);
+const codexMessageContentItems = (
+  payload: Record<string, JsonValue>,
+): Record<string, JsonValue>[] => arrayFromUnknown(payload.content).filter(isPlainObject);
 
-export const isCodexContextualUserMessage = (payload: Record<string, unknown>): boolean => {
+export const isCodexContextualUserMessage = (payload: Record<string, JsonValue>): boolean => {
   const role = extractStringField(payload, ["role"]);
   if (role !== "user") {
     return false;
@@ -199,8 +201,8 @@ export const readPathFromCommand = (command: string): string | null => {
   return rawPath ? stripShellQuotes(rawPath.trim()) : null;
 };
 
-export const searchInputFromCommand = (command: string): Record<string, unknown> => {
-  const input: Record<string, unknown> = { command };
+export const searchInputFromCommand = (command: string): Record<string, JsonValue> => {
+  const input: Record<string, JsonValue> = { command };
   const rgMatch = command.match(/\brg\s+(?:-[^\s]+\s+)*(?:['"]([^'"]+)['"]|(\S+))(?:\s+(.+))?$/);
   if (!rgMatch) {
     return input;

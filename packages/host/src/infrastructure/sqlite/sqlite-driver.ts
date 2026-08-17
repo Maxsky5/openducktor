@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type SqliteValue = bigint | number | string | null | Uint8Array;
 export type SqliteRow = Record<string, SqliteValue>;
@@ -67,7 +68,7 @@ const nodeSqliteModuleSpecifier = "node:sqlite";
 export const currentSqliteDriverRuntime = (): SqliteDriverRuntime =>
   "Bun" in globalThis ? "bun" : "node";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   Boolean(value) && typeof value === "object";
 
 const isBunSqliteModule = (value: unknown): value is BunSqliteModule =>
@@ -88,7 +89,7 @@ const isSqliteValue = (value: unknown): value is SqliteValue =>
 const unsupportedSqliteDriverShape = (
   operation: string,
   message: string,
-  details: Readonly<Record<string, unknown>>,
+  details: Readonly<Record<string, JsonValue>>,
 ): HostOperationError =>
   new HostOperationError({
     operation,

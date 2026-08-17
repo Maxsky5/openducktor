@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -107,17 +108,13 @@ export function logFatalError(
   rawValue: unknown,
   componentStack?: string,
 ): void {
-  const context: Record<string, unknown> = {
+  const context = {
     source: report.source,
     timestamp: report.timestamp,
     rawValue,
+    ...(report.location ? { location: report.location } : {}),
+    ...(componentStack ? { componentStack } : {}),
   };
-  if (report.location) {
-    context.location = report.location;
-  }
-  if (componentStack) {
-    context.componentStack = componentStack;
-  }
 
   console.error(
     `[AppCrashShell] Fatal error (${report.source}):`,

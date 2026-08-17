@@ -23,6 +23,7 @@ import type {
 } from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
+import type { JsonValue } from "@openducktor/contracts";
 
 type Parser<Output> = {
   parse(value: unknown): Output;
@@ -30,7 +31,7 @@ type Parser<Output> = {
 
 const parseCommandInput = <Output>(
   schema: Parser<Output>,
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
   command: string,
 ) =>
   Effect.try({

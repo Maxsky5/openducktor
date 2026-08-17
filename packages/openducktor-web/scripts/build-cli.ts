@@ -28,7 +28,7 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
           operation: "web-cli-build",
           message: errorMessage(cause),
           cause,
-          details: { command, cwd: packageRoot },
+          details: { command: [...command], cwd: packageRoot },
         }),
     });
     yield* Effect.tryPromise({

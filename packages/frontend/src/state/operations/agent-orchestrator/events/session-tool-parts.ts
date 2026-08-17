@@ -18,6 +18,7 @@ import type {
   SessionToolPartEventContext,
 } from "./session-event-types";
 import { eventTimestampMs, hasMeaningfulToolInput } from "./session-helpers";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ToolPart = Extract<SessionPart, { kind: "tool" }>;
 type ToolPartStatus = ToolPart["status"];
@@ -32,7 +33,7 @@ type ToolTimingMeta = {
 
 const resolveTodoUpdateFromTool = (
   part: ToolPart,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
   output: string | undefined,
 ) => {
   if (part.toolType !== "todo") {
@@ -45,7 +46,7 @@ const composeToolTimingMeta = (
   existingToolMeta: ToolMeta | null,
   observedEventTimestampMs: number,
   status: ToolPartStatus,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): ToolTimingMeta => {
   const observedStartedAtMs =
     typeof existingToolMeta?.observedStartedAtMs === "number"
@@ -70,7 +71,7 @@ const composeToolTimingMeta = (
 const composeToolMessageMeta = (
   part: ToolPart,
   status: ToolPartStatus,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
   output: string | undefined,
   error: string | undefined,
   timingMeta: ToolTimingMeta,
@@ -137,7 +138,7 @@ const composeToolPartSessionUpdate = ({
   part: ToolPart;
   status: ToolPartStatus;
   observedEventTimestampMs: number;
-  input: Record<string, unknown> | undefined;
+  input: Record<string, JsonValue> | undefined;
   output: string | undefined;
   error: string | undefined;
   timestamp: string;

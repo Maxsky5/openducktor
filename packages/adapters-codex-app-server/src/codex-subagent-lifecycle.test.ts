@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { codexSubagentLifecycleUpdateFromNotification } from "./codex-subagent-lifecycle";
 
-const notification = (method: string, turn: Record<string, unknown>) => ({
+const notification = (method: string, turn: Record<string, JsonValue>) => ({
   method,
   receivedAt: "2026-07-10T12:00:00.000Z",
   params: {

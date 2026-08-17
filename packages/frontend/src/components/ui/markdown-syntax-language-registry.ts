@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 type PrismLanguageLoader = () => Promise<{ default: unknown }>;
 type LanguageRegistrationResult =
   | { status: "registered" }
@@ -6,7 +7,7 @@ type LanguageRegistrationResult =
 
 type CreateMarkdownSyntaxLanguageRegistryArgs = {
   languageAliases: Record<string, string>;
-  defaultLanguages: Record<string, unknown>;
+  defaultLanguages: Record<string, JsonValue>;
   lazyLanguageLoaders: Record<string, PrismLanguageLoader>;
   registerLanguage: (language: string, grammar: unknown) => void;
 };

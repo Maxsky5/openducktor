@@ -7,6 +7,7 @@ import {
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type { JsonValue } from "@openducktor/contracts";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS = [
@@ -59,7 +60,7 @@ const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
     if (!option || typeof option !== "object") {
       return null;
     }
-    const record = option as Record<string, unknown>;
+    const record = option as Record<string, JsonValue>;
     const label = readString(record.label);
     const description = readString(record.description);
     if (!label || !description) {
@@ -76,7 +77,7 @@ const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
 };
 
 const parseClaudeAskUserQuestionInput = (
-  toolInput: Record<string, unknown>,
+  toolInput: Record<string, JsonValue>,
 ): ClaudeAskUserQuestionPayload | null => {
   const rawQuestions = toolInput.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -90,7 +91,7 @@ const parseClaudeAskUserQuestionInput = (
     if (!rawQuestion || typeof rawQuestion !== "object") {
       return null;
     }
-    const record = rawQuestion as Record<string, unknown>;
+    const record = rawQuestion as Record<string, JsonValue>;
     const question = readString(record.question);
     const header = readString(record.header);
     const options = readOptions(record.options);
@@ -162,7 +163,7 @@ export const requestClaudeAskUserQuestion = async ({
   randomId: () => string;
   session: ClaudeSessionContext;
   signal: AbortSignal;
-  toolInput: Record<string, unknown>;
+  toolInput: Record<string, JsonValue>;
   toolUseID?: string | undefined;
   agentID?: string | undefined;
 }): Promise<ReturnType<typeof buildClaudeAskUserQuestionResult> | null> => {
@@ -273,7 +274,8 @@ export const createClaudeUserDialogHandler = ({
       randomId,
       session,
       signal: options.signal,
-      toolInput: request.payload,
+      // SAFETY: the Claude Agent SDK delivers dialog payloads as JSON over its message transport.
+      toolInput: request.payload as Record<string, JsonValue>,
       toolUseID: request.toolUseID,
     });
     if (!result) {

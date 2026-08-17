@@ -29,6 +29,7 @@ import type { RuntimeInfo } from "../runtime/runtime";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
+import type { JsonValue } from "@openducktor/contracts";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 export type TestAgentSessionState = AgentSessionFixtureOverrides & {
@@ -67,7 +68,7 @@ export const persistedSessionRecord = (
     workingDirectory: string;
     runtimeKind: AgentSessionRecord["runtimeKind"];
     selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
+  } & Record<string, JsonValue>,
 ): AgentSessionRecord => ({
   runtimeKind: input.runtimeKind,
   externalSessionId: input.externalSessionId,

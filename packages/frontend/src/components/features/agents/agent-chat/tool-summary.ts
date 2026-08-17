@@ -4,6 +4,7 @@ import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
 import { compactText, stripToolPrefix } from "./tool-text-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",
@@ -52,7 +53,7 @@ const PATH_DISPLAY_TOOL_NAMES = new Set([
 
 const summarizeSearchToolInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): string | null => {
   if (!input) {
     return null;
@@ -98,7 +99,7 @@ const parseStructuredOutputSummary = (output: string): string | null => {
       return null;
     }
 
-    const record = parsed as Record<string, unknown>;
+    const record = parsed as Record<string, JsonValue>;
     if (typeof record.message === "string" && record.message.trim().length > 0) {
       return compactText(record.message, 160);
     }
@@ -120,7 +121,7 @@ const countTodosFromUnknown = (value: unknown): number | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, JsonValue>;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -130,7 +131,7 @@ const countTodosFromUnknown = (value: unknown): number | null => {
   return null;
 };
 
-const countTodosFromInput = (input: Record<string, unknown> | undefined): number | null => {
+const countTodosFromInput = (input: Record<string, JsonValue> | undefined): number | null => {
   if (!input) {
     return null;
   }
@@ -163,7 +164,7 @@ const normalizeDisplaySummary = (
   return relativizeDisplayPath(summary, workingDirectory);
 };
 
-const extractTaskId = (input: Record<string, unknown> | undefined): string | null => {
+const extractTaskId = (input: Record<string, JsonValue> | undefined): string | null => {
   const taskId = input?.taskId;
   return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
 };

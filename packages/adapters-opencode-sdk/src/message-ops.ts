@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentSessionHistoryMessage,
@@ -25,14 +26,16 @@ import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory } from "./types";
 
-const asRecord = (value: unknown): Record<string, unknown> | null => {
+const asRecord = (value: unknown): Record<string, JsonValue> | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
-  return value as Record<string, unknown>;
+  // SAFETY: message payloads arrive over the SDK JSON-RPC transport, which serializes
+  // payloads to JSON-compatible values before they reach this layer.
+  return value as Record<string, JsonValue>;
 };
 
-const readString = (record: Record<string, unknown>, keys: string[]): string | undefined => {
+const readString = (record: Record<string, JsonValue>, keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = record[key];
     if (typeof value === "string" && value.trim().length > 0) {

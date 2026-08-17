@@ -1,6 +1,7 @@
 import { toPersistedTaskTabs } from "./agent-studio-task-tabs-storage";
 import { toTabsStorageKey } from "./agents-page-selection";
 import { toContextStorageKey } from "./query-sync/agent-studio-navigation";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type TestStorageLike = Pick<
   Storage,
@@ -51,7 +52,7 @@ export const withMockedLocalStorage = async <T>(
 
 export const seedWorkspaceNavigationContexts = (
   storage: Pick<Storage, "setItem">,
-  contexts: Record<string, Record<string, unknown>>,
+  contexts: Record<string, Record<string, JsonValue>>,
 ): void => {
   for (const [workspaceId, context] of Object.entries(contexts)) {
     storage.setItem(toContextStorageKey(workspaceId), JSON.stringify(context));

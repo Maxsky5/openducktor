@@ -22,6 +22,7 @@ import {
   type ToolDiscoveryPathOptions,
   type ToolDiscoverySource,
 } from "./tool-discovery-descriptors";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type { ToolDiscoveryPathOptions } from "./tool-discovery-descriptors";
 
@@ -66,7 +67,7 @@ const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
   variable: string,
   message: string,
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue>,
 ) =>
   new HostValidationError({
     field: variable,
@@ -78,7 +79,7 @@ const invalidProvidedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue>,
 ) =>
   new HostValidationError({
     field: `providedToolPaths.${toolId}`,
@@ -90,7 +91,7 @@ const invalidSavedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue>,
 ) =>
   new HostValidationError({
     field: `agentRuntimes.${toolId}.executablePath`,
@@ -112,7 +113,7 @@ const resolveExplicitToolPathSource = ({
   detailKey: string;
   displayLabel: string;
   env: NodeJS.ProcessEnv;
-  invalidError: (message: string, details?: Record<string, unknown>) => HostValidationError;
+  invalidError: (message: string, details?: Record<string, JsonValue>) => HostValidationError;
   rawPath: string;
   sourceCategory: ToolDiscoverySourceCategory;
   systemCommands: SystemCommandPort;
@@ -139,7 +140,7 @@ const resolveExplicitToolPathSource = ({
 const missingToolError = (
   descriptor: ToolDiscoveryDescriptor,
   checked: readonly string[],
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue>,
 ) =>
   new HostDependencyError({
     dependency: descriptor.command,

@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type {
   Event,
@@ -553,7 +554,7 @@ const makeAssistantTextPart = (input: {
   partId?: string;
   start?: number;
   end?: number;
-}): Record<string, unknown> => ({
+}): Record<string, JsonValue> => ({
   id: input.partId ?? `${input.messageId}-text-1`,
   sessionID: "external-session-1",
   messageID: input.messageId,
@@ -572,7 +573,7 @@ const makeAssistantMessageUpdatedEvent = (input: {
   finish?: string;
   completedAt?: number;
   parts?: unknown[];
-  info?: Record<string, unknown>;
+  info?: Record<string, JsonValue>;
 }): Event => {
   const parts =
     input.parts ??

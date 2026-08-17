@@ -15,7 +15,10 @@ import {
   parseCodexAppServerRequestResult,
 } from "../../ports/codex-app-server-protocol";
 import { acquirePendingResponse } from "./codex-app-server-pending-response";
-import { writeCodexAppServerRequestLine } from "./codex-app-server-request-writer";
+import {
+  writeCodexAppServerRequestLine,
+  type CodexAppServerRequestLineMessage,
+} from "./codex-app-server-request-writer";
 import {
   appendCapturedStderr,
   extractErrorMessage,
@@ -29,6 +32,13 @@ import type {
   PendingCodexAppServerRequest,
 } from "./codex-app-server-transport-types";
 import { writeJsonLine } from "./codex-json-line-writer";
+import type {
+  CodexAppServerClientNotification,
+  CodexAppServerRequestId,
+  CodexAppServerRespondError,
+  CodexAppServerRespondResult,
+  JsonValue,
+} from "@openducktor/contracts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 export const createCodexAppServerTransport = (
@@ -95,7 +105,18 @@ export const createCodexAppServerTransport = (
         toHostOperationError(cause, "codexAppServerTransport.ensureOpen", { runtimeId }),
     });
 
-  const sendMessage = (message: Record<string, unknown>) =>
+  type CodexTransportResponseMessage = {
+    jsonrpc: "2.0";
+    id: CodexAppServerRequestId;
+    result?: CodexAppServerRespondResult;
+    error?: CodexAppServerRespondError;
+  };
+
+  type CodexTransportNotifyMessage = {
+    jsonrpc: "2.0";
+  } & CodexAppServerClientNotification;
+
+  const sendMessage = (message: CodexTransportResponseMessage | CodexTransportNotifyMessage) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
       yield* writeJsonLine(child.stdin, message).pipe(
@@ -111,7 +132,10 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const sendRequestMessage = (message: Record<string, unknown>, markWriteStarted: () => void) =>
+  const sendRequestMessage = (
+    message: CodexAppServerRequestLineMessage,
+    markWriteStarted: () => void,
+  ) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
       yield* writeCodexAppServerRequestLine({
@@ -139,7 +163,7 @@ export const createCodexAppServerTransport = (
     cancelledSentRequests.set(id, timeout);
   };
 
-  const resolveResponse = (id: number, message: Record<string, unknown>): void => {
+  const resolveResponse = (id: number, message: Record<string, JsonValue>): void => {
     const request = pending.get(id);
     if (!request) {
       if (forgetCancelledSentRequest(id)) {

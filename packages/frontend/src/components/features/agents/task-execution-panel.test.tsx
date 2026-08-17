@@ -23,6 +23,7 @@ import type {
   TaskExecutionPanelModel,
   TaskExecutionPanelToggleModel,
 } from "./task-execution-panel";
+import type { JsonValue } from "@openducktor/contracts";
 
 type TaskExecutionPanelComponent = (typeof import("./task-execution-panel"))["TaskExecutionPanel"];
 type TaskExecutionPanelToggleButtonComponent =
@@ -30,7 +31,7 @@ type TaskExecutionPanelToggleButtonComponent =
 
 let TaskExecutionPanel: TaskExecutionPanelComponent;
 let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
-let lastFileTreeOptions: Record<string, unknown> | null = null;
+let lastFileTreeOptions: Record<string, JsonValue> | null = null;
 let prepareFileTreeInputCalls: string[][] = [];
 let preparePresortedFileTreeInputCalls: string[][] = [];
 let fileTreeSelectedPaths: string[] = [];
@@ -65,7 +66,7 @@ beforeEach(async () => {
 
   mock.module("@pierre/trees/react", () => ({
     FileTree: () => createElement("div", { "data-testid": "mock-pierre-file-tree" }),
-    useFileTree: (options: Record<string, unknown>) => {
+    useFileTree: (options: Record<string, JsonValue>) => {
       lastFileTreeOptions = options;
       return {
         model: {

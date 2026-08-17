@@ -4,6 +4,7 @@ import {
   createContextMenuTemplate,
   createViewMenu,
 } from "./main-menu-template";
+import type { JsonValue } from "@openducktor/contracts";
 
 const rolesFromSubmenu = (submenu: unknown): string[] => {
   if (!Array.isArray(submenu)) {
@@ -18,11 +19,11 @@ const rolesFromSubmenu = (submenu: unknown): string[] => {
   return roles;
 };
 
-const submenuItems = (submenu: unknown): Array<Record<string, unknown>> => {
+const submenuItems = (submenu: unknown): Array<Record<string, JsonValue>> => {
   if (!Array.isArray(submenu)) {
     return [];
   }
-  return submenu.filter((item): item is Record<string, unknown> => Boolean(item));
+  return submenu.filter((item): item is Record<string, JsonValue> => Boolean(item));
 };
 
 describe("main menu template", () => {

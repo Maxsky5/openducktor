@@ -13,6 +13,7 @@ import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
 
@@ -290,7 +291,9 @@ export const toApprovalRequest = (request: CodexServerRequestRecord): PendingApp
   };
 };
 
-const mcpToolApprovalMeta = (request: CodexServerRequestRecord): Record<string, unknown> | null => {
+const mcpToolApprovalMeta = (
+  request: CodexServerRequestRecord,
+): Record<string, JsonValue> | null => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
@@ -306,7 +309,7 @@ const mcpToolApprovalMeta = (request: CodexServerRequestRecord): Record<string, 
 };
 
 const mcpToolApprovalSupportsPersistMode = (
-  meta: Record<string, unknown>,
+  meta: Record<string, JsonValue>,
   expectedMode: typeof MCP_APPROVAL_PERSIST_SESSION | typeof MCP_APPROVAL_PERSIST_ALWAYS,
 ): boolean => {
   const persist = meta[MCP_APPROVAL_PERSIST_KEY];
@@ -317,7 +320,7 @@ const mcpToolApprovalSupportsPersistMode = (
 };
 
 const mcpToolApprovalSupportedReplyOutcomes = (
-  meta: Record<string, unknown>,
+  meta: Record<string, JsonValue>,
 ): NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> => {
   const outcomes: NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> = [
     "approve_once",

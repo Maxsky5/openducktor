@@ -1,5 +1,6 @@
 import type { HostInvokeFailure } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
+import type { JsonValue } from "@openducktor/contracts";
 
 export class HostInvokeError extends Error {
   override readonly cause: unknown;
@@ -17,8 +18,13 @@ export class HostInvokeError extends Error {
 
 export type InvokeFn = (
   command: HostCommandName,
-  args?: Record<string, unknown>,
+  args?: Record<string, JsonValue>,
 ) => Promise<unknown>;
+
+export const toCommandArgs = (parsed: unknown): Record<string, JsonValue> =>
+  // SAFETY: command args cross the IPC transport boundary, which serializes payloads to
+  // JSON-compatible values before they reach the host.
+  parsed as Record<string, JsonValue>;
 
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };

@@ -8,8 +8,9 @@ import type {
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireString } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
-const parseRuntimeListInput = (args: Record<string, unknown> | undefined): RuntimeListInput => {
+const parseRuntimeListInput = (args: Record<string, JsonValue> | undefined): RuntimeListInput => {
   const record = requireRecord(args, "runtime_list input");
   const runtimeKind = requireString(record.runtimeKind, "runtimeKind");
   const repoPath = optionalString(record.repoPath, "repoPath");
@@ -17,7 +18,7 @@ const parseRuntimeListInput = (args: Record<string, unknown> | undefined): Runti
 };
 
 const parseRuntimeRepoInput = (
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
   label: string,
 ): RuntimeRepoInput => {
   const record = requireRecord(args, `${label} input`);
@@ -27,12 +28,12 @@ const parseRuntimeRepoInput = (
   };
 };
 
-const parseRuntimeStopInput = (args: Record<string, unknown> | undefined): RuntimeStopInput => {
+const parseRuntimeStopInput = (args: Record<string, JsonValue> | undefined): RuntimeStopInput => {
   const record = requireRecord(args, "runtime_stop input");
   return { runtimeId: requireString(record.runtimeId, "runtimeId") };
 };
 
-const parseAgentSessionStopInput = (args: Record<string, unknown> | undefined) => {
+const parseAgentSessionStopInput = (args: Record<string, JsonValue> | undefined) => {
   const record = requireRecord(args, "agent_session_stop input");
   const parsed = agentSessionStopTargetSchema.safeParse(record.request);
   if (parsed.success) {

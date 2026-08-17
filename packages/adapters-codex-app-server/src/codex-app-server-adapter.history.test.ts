@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   createHarness,
@@ -8,7 +9,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
-type PaginatedThreadFixture = Record<string, unknown> & { turns: unknown[] };
+type PaginatedThreadFixture = Record<string, JsonValue> & { turns: unknown[] };
 
 const paginatedThreadReadResponse = (thread: PaginatedThreadFixture): unknown => ({
   thread: { ...thread, turns: [] },

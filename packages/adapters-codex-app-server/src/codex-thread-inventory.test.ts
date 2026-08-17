@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import { codexThreadList, codexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
@@ -8,8 +9,8 @@ const threadListResponse = (
   id: string,
   preview: string,
   cwd = "/repo",
-  status: Record<string, unknown> = { type: "idle" },
-  extra: Record<string, unknown> = {},
+  status: Record<string, JsonValue> = { type: "idle" },
+  extra: Record<string, JsonValue> = {},
 ): unknown => ({
   data: [
     {
@@ -28,9 +29,9 @@ const threadListResponse = (
 const threadReadResponse = (
   id: string,
   cwd = "/repo",
-  status: Record<string, unknown> = { type: "idle" },
+  status: Record<string, JsonValue> = { type: "idle" },
   turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
-  extra: Record<string, unknown> = {},
+  extra: Record<string, JsonValue> = {},
 ): unknown => ({
   thread: {
     id,
@@ -79,11 +80,11 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("requests interactive and subagent thread sources from Codex", async () => {
-    const threadListCalls: Array<Record<string, unknown>> = [];
+    const threadListCalls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
     const client = {
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async (params: Record<string, unknown>) => {
+      threadList: async (params: Record<string, JsonValue>) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
@@ -101,11 +102,11 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("scopes startup inventory reads to the requested working directories and state database", async () => {
-    const threadListCalls: Array<Record<string, unknown>> = [];
+    const threadListCalls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
     const client = {
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async (params: Record<string, unknown>) => {
+      threadList: async (params: Record<string, JsonValue>) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
@@ -125,10 +126,10 @@ describe("CodexThreadInventoryReader", () => {
   });
 
   test("reads every parent turn id with summary-only pagination", async () => {
-    const calls: Array<Record<string, unknown>> = [];
+    const calls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
     const client = {
-      threadTurnsList: async (params: Record<string, unknown>) => {
+      threadTurnsList: async (params: Record<string, JsonValue>) => {
         calls.push(params);
         return params.cursor
           ? { data: [{ id: "turn-2" }], nextCursor: null }

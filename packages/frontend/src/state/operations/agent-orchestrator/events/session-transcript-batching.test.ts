@@ -14,14 +14,15 @@ import {
   type SessionEventAdapter,
   type SessionUpdateFn,
 } from "./session-events-test-harness";
+import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator session transcript events", () => {
   test("flushes queued non-immediate events in a single session commit", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },
@@ -96,11 +97,11 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("flushes queued work before applying an immediate event", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },
@@ -159,11 +160,11 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("collapses assistant stream chunks across a queued flush", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },
@@ -269,11 +270,11 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("prefers final assistant message over earlier streamed text in the same batch", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },

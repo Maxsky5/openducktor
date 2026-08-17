@@ -1,4 +1,5 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 
 const CODEX_FORK_BOUNDARY_TITLE = "Session forked here";
@@ -11,7 +12,7 @@ export type CodexForkBoundary = {
   timestamp: string;
 };
 
-const threadFromReadResponse = (response: unknown): Record<string, unknown> => {
+const threadFromReadResponse = (response: unknown): Record<string, JsonValue> => {
   if (!isPlainObject(response) || !isPlainObject(response.thread)) {
     throw new Error("Codex thread/read response is missing thread data for fork projection.");
   }

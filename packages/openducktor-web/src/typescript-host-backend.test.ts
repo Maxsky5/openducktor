@@ -16,6 +16,7 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 } from "./typescript-host-backend-support";
+import type { JsonValue } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
@@ -47,7 +48,7 @@ class StructuredHostCommandFailure extends Error {
 
 type TestHostCommandInvoke = (
   command: string,
-  args?: Record<string, unknown>,
+  args?: Record<string, JsonValue>,
 ) => Effect.Effect<unknown, unknown>;
 
 const createDeferred = <Value = void>() => {

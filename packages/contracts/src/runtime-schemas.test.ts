@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import opencodeRuntimeDescriptorFixture from "../../../docs/contracts/opencode-runtime-descriptor.fixture.json";
 import runtimeDescriptorInvalidCasesFixture from "../../../docs/contracts/runtime-descriptor-invalid-cases.fixture.json";
+import type { JsonObject } from "./json-types";
 import {
   agentSessionApprovalRequestSchema,
   agentSessionRecordSchema,
@@ -76,13 +77,11 @@ const expectRuntimeDescriptorIssue = (
   );
 };
 
-type JsonObject = Record<string, unknown>;
-
 type RuntimeDescriptorInvalidCase = {
   name: string;
   patch: Array<{
     path: string[];
-    value: unknown;
+    value: JsonValue;
   }>;
 };
 

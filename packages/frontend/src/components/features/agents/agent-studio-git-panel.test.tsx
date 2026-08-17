@@ -7,6 +7,7 @@ import {
 import { act, createElement, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { JsonValue } from "@openducktor/contracts";
 
 (
   globalThis as typeof globalThis & {
@@ -160,7 +161,7 @@ const wrapElement = (element: Element): DomTestNode => ({
     const htmlElement = element as HTMLElement;
     const reactPropsKey = Object.keys(htmlElement).find((key) => key.startsWith("__reactProps$"));
     const reactProps = reactPropsKey
-      ? ((htmlElement as unknown as Record<string, unknown>)[reactPropsKey] as {
+      ? ((htmlElement as unknown as Record<string, JsonValue>)[reactPropsKey] as {
           onClick?: (event?: unknown) => void;
           onChange?: (event?: unknown) => void;
         })

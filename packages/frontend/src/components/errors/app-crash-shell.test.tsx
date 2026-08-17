@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { lazy, Suspense } from "react";
 import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
 import { AppCrashShell } from "./app-crash-shell";
+import type { JsonValue } from "@openducktor/contracts";
 
 ensurePromiseRejectionEventPolyfill();
 
@@ -549,7 +550,7 @@ describe("AppCrashShell", () => {
       });
 
       const structuredCall = findStructuredLogCall(consoleErrorMock, "[AppCrashShell]");
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
+      const context = structuredCall[structuredCall.length - 1] as Record<string, JsonValue>;
       expect(context.source).toBe("boundary");
       expect(context.rawValue).toBeInstanceOf(Error);
       expect(context.timestamp).toBeDefined();
@@ -578,7 +579,7 @@ describe("AppCrashShell", () => {
         consoleErrorMock,
         "[AppCrashShell] Fatal error (error)",
       );
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
+      const context = structuredCall[structuredCall.length - 1] as Record<string, JsonValue>;
       expect(context.source).toBe("error");
       expect(context.rawValue).toBeInstanceOf(ErrorEvent);
     });

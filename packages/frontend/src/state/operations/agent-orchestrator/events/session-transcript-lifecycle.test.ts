@@ -11,14 +11,15 @@ import {
   type SessionEventAdapter,
   type SessionUpdateFn,
 } from "./session-events-test-harness";
+import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator session transcript events", () => {
   test("preserves explicit history load state when live transcript changes", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },
@@ -196,11 +197,11 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("ignores observed session events after the mounted identity changes", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_sessionRef, handler) => {
         handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
         );
         return () => {};
       },

@@ -13,6 +13,7 @@ import {
   type AgentChatComposerSegment,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type AgentChatDraftSessionIdentity = AgentSessionIdentityLike & {
   workspaceId: string;
@@ -69,7 +70,7 @@ const ATTACHMENT_KINDS = new Set<AgentAttachmentKind>(["image", "audio", "video"
 const FILE_REFERENCE_KINDS = new Set(["directory", "css", "code", "image", "video", "default"]);
 const SLASH_COMMAND_SOURCES = new Set(["command", "mcp", "skill", "custom"]);
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isNonEmptyString = (value: unknown): value is string =>

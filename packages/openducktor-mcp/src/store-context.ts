@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 const FORBID_WORKSPACE_ID_INPUT_ENV = "ODT_FORBID_WORKSPACE_ID_INPUT";
 const HOST_TOKEN_ENV = "ODT_HOST_TOKEN";
@@ -102,7 +103,7 @@ const validateHostConnection = async (
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {

@@ -18,6 +18,7 @@ import {
   createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
+import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator/handlers/session-actions stop", () => {
   test("stops a workspace-scoped planner session and clears pending state", async () => {
@@ -186,10 +187,13 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSubscribeEvents = adapter.subscribeEvents;
     const originalStopSession = adapter.stopSession;
-    let sessionEventListener: ((event: { type: string; [key: string]: unknown }) => void) | null =
+    let sessionEventListener: ((event: { type: string; [key: string]: JsonValue }) => void) | null =
       null;
     adapter.subscribeEvents = async (_externalSessionId, listener) => {
-      sessionEventListener = listener as (event: { type: string; [key: string]: unknown }) => void;
+      sessionEventListener = listener as (event: {
+        type: string;
+        [key: string]: JsonValue;
+      }) => void;
       return () => {
         sessionEventListener = null;
       };

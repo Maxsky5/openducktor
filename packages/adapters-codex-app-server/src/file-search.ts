@@ -2,6 +2,7 @@ import type { CodexAppServerFuzzyFileSearchResult } from "@openducktor/contracts
 import { type AgentFileSearchResult, detectAgentFileReferenceKind } from "@openducktor/core";
 import { basenameForPath, toProjectRelativePath } from "@openducktor/path-support";
 import type { CodexAppServerClient } from "./types";
+import type { JsonValue } from "@openducktor/contracts";
 
 type CodexFileSearchInput = {
   query: string;
@@ -16,12 +17,12 @@ const normalizeReferencePath = (rawPath: string, root: string, index: number): s
   return toProjectRelativePath(trimmedPath, root);
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
+const isRecord = (value: unknown): value is Record<string, JsonValue> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
 const requireStringField = (
-  record: Record<string, unknown>,
+  record: Record<string, JsonValue>,
   field: keyof CodexAppServerFuzzyFileSearchResult,
   index: number,
 ): string => {
@@ -33,7 +34,7 @@ const requireStringField = (
 };
 
 const requireNonEmptyStringField = (
-  record: Record<string, unknown>,
+  record: Record<string, JsonValue>,
   field: keyof CodexAppServerFuzzyFileSearchResult,
   index: number,
 ): string => {
@@ -45,7 +46,7 @@ const requireNonEmptyStringField = (
 };
 
 const requireFiniteNumberField = (
-  record: Record<string, unknown>,
+  record: Record<string, JsonValue>,
   field: keyof CodexAppServerFuzzyFileSearchResult,
   index: number,
 ): number => {

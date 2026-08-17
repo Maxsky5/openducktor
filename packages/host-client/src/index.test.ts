@@ -2,10 +2,11 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
+import type { JsonValue } from "@openducktor/contracts";
 
 type InvokeCall = {
   command: string;
-  args?: Record<string, unknown>;
+  args?: Record<string, JsonValue>;
 };
 
 const makeTaskCardPayload = () => ({
@@ -55,7 +56,7 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   ],
 });
 
-const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => ({
+const makeRepoStoreHealthPayload = (overrides: Record<string, JsonValue> = {}) => ({
   category: "healthy",
   status: "ready",
   isReady: true,
@@ -64,9 +65,9 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
-const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
+const createClient = (resolver: (command: string, args?: Record<string, JsonValue>) => unknown) => {
   const calls: InvokeCall[] = [];
-  const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
+  const invoke = async (command: string, args?: Record<string, JsonValue>): Promise<unknown> => {
     calls.push({ command, args });
     return resolver(command, args);
   };

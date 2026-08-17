@@ -1,4 +1,5 @@
 import type { AgentUserMessagePart } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
 import { utf8ByteLength } from "./codex-user-input-display";
 import type { CodexTextElement, CodexUserInput } from "./types";
@@ -60,7 +61,7 @@ const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null => {
   return null;
 };
 
-export const codexUserInputsFromItem = (item: Record<string, unknown>): CodexUserInput[] => {
+export const codexUserInputsFromItem = (item: Record<string, JsonValue>): CodexUserInput[] => {
   return arrayFromUnknown(item.content)
     .map(codexUserInputFromUnknown)
     .filter((entry): entry is CodexUserInput => Boolean(entry));

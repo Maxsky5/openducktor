@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { jsonValueSchema } from "./json-types";
 
 export const TERMINAL_ID_MAX_LENGTH = 128;
 export const terminalIdSchema = z.string().trim().min(1).max(TERMINAL_ID_MAX_LENGTH);
@@ -93,7 +94,7 @@ export const terminalFailureSchema = z
     message: z.string().min(1),
     terminalId: terminalIdSchema.optional(),
     workingDir: z.string().min(1).optional(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: z.record(z.string(), jsonValueSchema).optional(),
   })
   .strict();
 export type TerminalFailure = z.infer<typeof terminalFailureSchema>;

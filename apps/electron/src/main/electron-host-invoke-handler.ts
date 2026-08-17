@@ -3,6 +3,7 @@ import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ElectronIpcMainLike = {
   handle(
@@ -13,15 +14,15 @@ type ElectronIpcMainLike = {
 
 type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
-  invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
+  invoke(command: string, args?: Record<string, JsonValue>): Promise<unknown>;
 };
 
 type ValidatedElectronHostInvokeRequest = {
   command: string;
-  args?: Record<string, unknown>;
+  args?: Record<string, JsonValue>;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostInvokeRequest => {

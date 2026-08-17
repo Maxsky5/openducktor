@@ -15,6 +15,7 @@ import type {
   ClaudeSessionContext,
   ClaudeSessionInput,
 } from "./claude-agent-sdk-types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const INIT_TIMEOUT_MS = 60_000;
 export const FILE_SEARCH_LIMIT = 30;
@@ -74,7 +75,7 @@ export const withTimeout = async <A>(
 export const readText = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const readStringProp = (value: unknown, key: string): string | undefined =>
@@ -120,7 +121,7 @@ export const permissionRequestTypeForTool = (
 
 export const mutationForTool = (
   toolName: string,
-  _input?: Record<string, unknown>,
+  _input?: Record<string, JsonValue>,
 ): NonNullable<AgentPendingApprovalRequest["mutation"]> => {
   if (/bash|shell/iu.test(toolName)) {
     return "unknown";
@@ -138,7 +139,7 @@ export const mutationForTool = (
   return "unknown";
 };
 
-export const previewInput = (input: Record<string, unknown>): string | undefined => {
+export const previewInput = (input: Record<string, JsonValue>): string | undefined => {
   const command = readStringProp(input, "command");
   if (command) {
     return command;

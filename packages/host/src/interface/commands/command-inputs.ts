@@ -1,4 +1,5 @@
 import { HostValidationError } from "../../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -6,12 +7,12 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
+export const requireRecord = (value: unknown, label: string): Record<string, JsonValue> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
-  return value as Record<string, unknown>;
+  return value as Record<string, JsonValue>;
 };
 
 export const requireString = (value: unknown, label: string): string => {

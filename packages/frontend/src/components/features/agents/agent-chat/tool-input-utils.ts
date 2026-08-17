@@ -1,5 +1,6 @@
+import type { JsonValue } from "@openducktor/contracts";
 export const readInputString = (
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
   keys: string[],
 ): string | null => {
   if (!input) {
@@ -14,7 +15,9 @@ export const readInputString = (
   return null;
 };
 
-export const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
+export const extractPathFromInput = (
+  input: Record<string, JsonValue> | undefined,
+): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
   if (typeof candidate === "string") {

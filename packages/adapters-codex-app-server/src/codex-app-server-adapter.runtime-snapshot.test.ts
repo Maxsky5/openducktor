@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
@@ -59,7 +60,7 @@ class DeferredInventoryTransport extends RecordingTransport {
 }
 
 class MutableThreadListTransport extends RecordingTransport {
-  threadSavedStatus: Record<string, unknown> = { type: "active", activeFlags: [] };
+  threadSavedStatus: Record<string, JsonValue> = { type: "active", activeFlags: [] };
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
@@ -184,7 +185,7 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
 class StoredIdleHistoryTransport extends RecordingTransport {
   includeThread = true;
   loaded = false;
-  threadStatus: Record<string, unknown> = { type: "idle" };
+  threadStatus: Record<string, JsonValue> = { type: "idle" };
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/loaded/list") {

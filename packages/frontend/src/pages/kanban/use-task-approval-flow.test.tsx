@@ -182,7 +182,7 @@ const HOST_METHOD_NAMES = [
 ] as const;
 
 type HostMethodName = (typeof HOST_METHOD_NAMES)[number];
-type HostLike = Record<HostMethodName, unknown>;
+type HostLike = Record<HostMethodName, Function>;
 
 let originalHostMethods: Partial<HostLike> | null = null;
 

@@ -16,6 +16,7 @@ import type {
   AgentUserMessageDisplayPart,
   AgentUserMessageState,
 } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type AgentChatMessageMeta =
   | {
@@ -33,14 +34,14 @@ export type AgentChatMessageMeta =
       preview?: string;
       title?: string;
       displayLabel?: string;
-      input?: Record<string, unknown>;
+      input?: Record<string, JsonValue>;
       output?: string;
       error?: string;
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
       /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
-      metadata?: Record<string, unknown>;
+      metadata?: Record<string, JsonValue>;
       startedAtMs?: number;
       endedAtMs?: number;
       observedStartedAtMs?: number;
@@ -90,7 +91,7 @@ export type AgentChatMessageMeta =
       error?: string;
       externalSessionId?: string;
       executionMode?: AgentSubagentExecutionMode;
-      metadata?: Record<string, unknown>;
+      metadata?: Record<string, JsonValue>;
       startedAtMs?: number;
       endedAtMs?: number;
     }

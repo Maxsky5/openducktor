@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
 import type { TaskRow } from "./sqlite-task-store-schema";
+import type { JsonValue } from "@openducktor/contracts";
 
 type SafeParseResult<A> =
   | { readonly success: true; readonly data: A }
@@ -21,7 +22,7 @@ export const decodeWithSchema = <A>(
   parser: SafeParser<A>,
   value: unknown,
   field: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: Readonly<Record<string, JsonValue>>,
 ): Effect.Effect<A, SqliteTaskStoreDataError> => {
   const parsed = parser.safeParse(value);
   if (parsed.success) {

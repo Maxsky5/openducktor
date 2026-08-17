@@ -1,4 +1,5 @@
 import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type {
   CodexThreadForkResult,
@@ -62,7 +63,7 @@ export type CodexThreadSnapshot = {
 export type CodexSubAgentSourceMetadata = {
   parentThreadId: string;
   depth: number;
-  agentPath: unknown;
+  agentPath: JsonValue;
   agentNickname: string | null;
   agentRole: string | null;
 };

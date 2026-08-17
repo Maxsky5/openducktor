@@ -28,14 +28,6 @@ let realBuildToolsSnapshot: BuildToolsSnapshotModule | null = null;
 let realGitActions: GitActionsModule | null = null;
 let realPullRequestReviewQueries: PullRequestReviewQueriesModule | null = null;
 
-const buildToolsSnapshotState: { current: Record<string, unknown> } = {
-  current: {},
-};
-
-const gitActionsState: { current: Record<string, unknown> } = {
-  current: {},
-};
-
 const buildToolsSnapshotMock = mock(() => buildToolsSnapshotState.current);
 const gitActionsMock = mock(() => gitActionsState.current);
 const prefetchPullRequestReviewContextMock = mock(async () => {});
@@ -149,6 +141,9 @@ const createGitActions = (gitConflictId: string | null) => ({
   abortGitConflict: async () => {},
   pullFromUpstream: async () => {},
 });
+
+const buildToolsSnapshotState = { current: createSnapshot(null) };
+const gitActionsState = { current: createGitActions(null) };
 
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
   loadedSession?: AgentSessionState | null;

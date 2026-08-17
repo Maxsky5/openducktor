@@ -5,6 +5,7 @@ import { Effect, Fiber } from "effect";
 import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
+import type { JsonValue } from "@openducktor/contracts";
 
 const createChild = (
   stdin: Writable = new PassThrough(),
@@ -546,7 +547,7 @@ describe("createCodexAppServerTransport", () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
-    const circularParams: Record<string, unknown> = {};
+    const circularParams: Record<string, JsonValue> = {};
     circularParams.self = circularParams;
 
     try {

@@ -12,6 +12,7 @@ import {
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
+import type { JsonValue } from "@openducktor/contracts";
 
 type UseAgentStudioDocumentsArgs = {
   workspaceRepoPath: string | null;
@@ -235,7 +236,7 @@ export function useAgentStudioDocuments({
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
       const toolInput =
         typeof meta.input === "object" && meta.input !== null
-          ? (meta.input as Record<string, unknown>)
+          ? (meta.input as Record<string, JsonValue>)
           : null;
       const inputMarkdown = toolInput?.[target.inputKey];
       const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;

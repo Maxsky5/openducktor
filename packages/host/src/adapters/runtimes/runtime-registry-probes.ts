@@ -12,6 +12,7 @@ import type {
   RuntimeMcpStatusProbeResult,
   RuntimeRegistryError,
 } from "../../ports/runtime-registry-port";
+import type { JsonValue } from "@openducktor/contracts";
 
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
@@ -84,7 +85,7 @@ const isLiveSessionStatus = (value: unknown): boolean => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
-  const status = (value as Record<string, unknown>).type;
+  const status = (value as Record<string, JsonValue>).type;
   return status === "busy" || status === "retry";
 };
 
@@ -97,10 +98,10 @@ const requireObjectPayload = (value: unknown, context: string) => {
       }),
     );
   }
-  return Effect.succeed(value as Record<string, unknown>);
+  return Effect.succeed(value as Record<string, JsonValue>);
 };
 
-const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {
+const readStringProperty = (value: Record<string, JsonValue>, property: string): string | null => {
   const raw = value[property];
   return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
 };
@@ -109,7 +110,7 @@ const readStringField = (value: unknown, field: "code" | "name"): string | null 
   if (!value || typeof value !== "object" || !(field in value)) {
     return null;
   }
-  const raw = (value as Record<string, unknown>)[field];
+  const raw = (value as Record<string, JsonValue>)[field];
   return typeof raw === "string" ? raw : null;
 };
 
@@ -276,7 +277,7 @@ export const probeOpenCodeSessionStatus = ({
       );
     }
     const statuses = yield* Effect.try({
-      try: () => JSON.parse(body) as Record<string, unknown>,
+      try: () => JSON.parse(body) as Record<string, JsonValue>,
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),

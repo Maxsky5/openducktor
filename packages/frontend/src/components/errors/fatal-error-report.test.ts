@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
 import { buildFatalErrorReport, logFatalError } from "./fatal-error-report";
+import type { JsonValue } from "@openducktor/contracts";
 
 ensurePromiseRejectionEventPolyfill();
 
@@ -142,7 +143,7 @@ describe("buildFatalErrorReport", () => {
     });
 
     test("handles circular references gracefully", () => {
-      const circular: Record<string, unknown> = {};
+      const circular: Record<string, JsonValue> = {};
       circular.self = circular;
 
       const report = buildFatalErrorReport(circular, "error");
@@ -177,7 +178,12 @@ describe("logFatalError", () => {
     expect(args[0]).toContain("[AppCrashShell]");
     expect(args[0]).toContain("boundary");
 
-    const context = args[args.length - 1] as Record<string, unknown>;
+    const context = args[args.length - 1] as {
+      source?: string;
+      timestamp?: string;
+      rawValue?: unknown;
+      componentStack?: string;
+    };
     expect(context.source).toBe("boundary");
     expect(context.rawValue).toBe(rawError);
     expect(context.timestamp).toBeDefined();
@@ -192,7 +198,12 @@ describe("logFatalError", () => {
     logFatalError(report, rawError, componentStack);
 
     const args = consoleErrorMock.mock.calls[0] as unknown[];
-    const context = args[args.length - 1] as Record<string, unknown>;
+    const context = args[args.length - 1] as {
+      source?: string;
+      timestamp?: string;
+      rawValue?: unknown;
+      componentStack?: string;
+    };
     expect(context.componentStack).toBe(componentStack);
   });
 });

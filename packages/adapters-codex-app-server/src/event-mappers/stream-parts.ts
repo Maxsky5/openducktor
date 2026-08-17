@@ -1,4 +1,5 @@
 import { arrayFromUnknown, extractStringField, isPlainObject } from "../codex-app-server-shared";
+import type { JsonValue } from "@openducktor/contracts";
 import { codexItemTypeMatches, toStreamPart } from "../codex-app-server-transcript";
 import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
@@ -11,7 +12,7 @@ const streamPartEvents = (
   name: string,
   ctx: CodexMappingContext,
   raw: unknown,
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   messageId: string,
   partId: string,
   timestamp?: string,
@@ -72,7 +73,8 @@ export const fileChangeMapper: CodexEventMapper = {
 
     const params = isPlainObject(input.notification.params) ? input.notification.params : null;
     const itemId = extractStringField(params, ["itemId", "item_id"]);
-    const changes = arrayFromUnknown(params?.changes);
+    // SAFETY: Codex app-server messages arrive as parsed JSON-RPC payloads, so changes is JSON-valid.
+    const changes = arrayFromUnknown(params?.changes) as JsonValue[];
     if (!itemId || changes.length === 0) {
       return emptyCodexMappingResult();
     }

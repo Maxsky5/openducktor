@@ -3,11 +3,12 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const workspaceFileValidationError = (
   cause: unknown,
   message: string,
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue | undefined>,
 ): HostValidationError =>
   new HostValidationError({
     message,

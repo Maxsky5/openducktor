@@ -24,6 +24,7 @@ import {
   copySqliteTaskStoreMigrationsEffect,
   resolveSqliteTaskStoreMigrationCopyPlan,
 } from "./build";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ManagedElectronProcess = {
   readonly exited: Promise<number>;
@@ -235,7 +236,7 @@ const runDevFileOperationEffect = (
   operation: string,
   filePath: string,
   action: () => Promise<unknown>,
-  details?: Record<string, unknown>,
+  details?: Record<string, JsonValue>,
 ): Effect.Effect<void, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {

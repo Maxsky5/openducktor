@@ -7,19 +7,21 @@ import {
   detectMacUpdateArtifactArchFromUrl,
   getCanonicalMacUpdateManifestName,
 } from "./electron-release-artifacts";
+import type { JsonValue } from "@openducktor/contracts";
 
 type MacUpdateManifestFile = {
-  url?: unknown;
-  [key: string]: unknown;
+  url?: string;
+  sha512?: string;
+  [key: string]: JsonValue;
 };
 
 type MacUpdateManifest = {
-  files?: unknown;
-  path?: unknown;
-  releaseDate?: unknown;
-  sha512?: unknown;
-  version?: unknown;
-  [key: string]: unknown;
+  files?: MacUpdateManifestFile[];
+  path?: string;
+  releaseDate?: string;
+  sha512?: string;
+  version?: string;
+  [key: string]: JsonValue;
 };
 
 const assertManifest = (value: unknown, fileName: string): MacUpdateManifest => {

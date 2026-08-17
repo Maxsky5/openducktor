@@ -1,6 +1,7 @@
 import { agentRoleValues } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -261,7 +262,7 @@ export const toTabsStorageKey = (workspaceId: string): string =>
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 
 const parsePersistedContextString = (
-  parsed: Record<string, unknown>,
+  parsed: Record<string, JsonValue>,
   key: (typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS)[keyof typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS],
 ): string | undefined => {
   const value = parsed[key];

@@ -5,6 +5,7 @@ import {
   type ElectronHostInvokeResult,
   type OpenDucktorElectronApi,
 } from "../shared/electron-bridge-contract";
+import type { JsonValue } from "@openducktor/contracts";
 
 const ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE =
   "Received an invalid host invoke response from the Electron main process.";
@@ -13,7 +14,7 @@ type ElectronIpcRendererLike = {
   invoke(channel: string, request: ElectronHostInvokeRequest): Promise<unknown>;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null;
 
 const isElectronHostInvokeResult = (value: unknown): value is ElectronHostInvokeResult => {

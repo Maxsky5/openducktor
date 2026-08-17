@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import {
   type FileDiff,
   type FileStatus,
@@ -103,7 +104,9 @@ function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
     throw new Error(`unexpected OpenCode diff entry at index ${index}: expected an object`);
   }
 
-  const record = entry as Record<string, unknown>;
+  // SAFETY: snapshot diff entries come from parsed snapshot JSON files, so their values
+  // are JSON-compatible at runtime.
+  const record = entry as Record<string, JsonValue>;
   const file = record.file;
   const patch = record.patch;
   const additions = record.additions;

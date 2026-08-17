@@ -1,5 +1,6 @@
 import type { AgentStreamPart } from "@openducktor/core";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ClaudeTaskStatus =
@@ -30,8 +31,8 @@ export const isTerminalClaudeTaskStatus = (status: ClaudeTaskStatus): boolean =>
   status === "completed" || status === "failed" || status === "killed";
 
 export const readStructuredClaudeAgentResult = (
-  raw: Record<string, unknown>,
-): Record<string, unknown> => {
+  raw: Record<string, JsonValue>,
+): Record<string, JsonValue> => {
   if (isRecord(raw.toolUseResult)) {
     return raw.toolUseResult;
   }
@@ -42,7 +43,7 @@ export const readStructuredClaudeAgentResult = (
 };
 
 export const claudeAgentResultStatus = (
-  result: Record<string, unknown>,
+  result: Record<string, JsonValue>,
   isError: boolean,
 ): SubagentStreamPart["status"] => {
   if (isError) {
@@ -70,8 +71,8 @@ export const claudeAgentResultStatus = (
 };
 
 export const claudeAgentResultExecutionMode = (
-  result: Record<string, unknown>,
-  input: Record<string, unknown> | undefined,
+  result: Record<string, JsonValue>,
+  input: Record<string, JsonValue> | undefined,
 ): NonNullable<SubagentStreamPart["executionMode"]> => {
   const status = readStringProp(result, "status");
   if (status === "async_launched" || status === "remote_launched") {
@@ -92,7 +93,7 @@ export const firstClaudeTaskText = (
   return undefined;
 };
 
-export const readClaudeFailedTaskMessage = (value: Record<string, unknown>): string | undefined =>
+export const readClaudeFailedTaskMessage = (value: Record<string, JsonValue>): string | undefined =>
   firstClaudeTaskText(
     readStringProp(value, "error"),
     readStringProp(value, "message"),
@@ -101,7 +102,7 @@ export const readClaudeFailedTaskMessage = (value: Record<string, unknown>): str
     readStringProp(value, "summary"),
   );
 
-export const readClaudeFailedTaskReason = (value: Record<string, unknown>): string | undefined =>
+export const readClaudeFailedTaskReason = (value: Record<string, JsonValue>): string | undefined =>
   firstClaudeTaskText(
     readStringProp(value, "error"),
     readStringProp(value, "message"),
@@ -109,7 +110,7 @@ export const readClaudeFailedTaskReason = (value: Record<string, unknown>): stri
   );
 
 export const readClaudeTaskStopTaskId = (
-  resultRaw: Record<string, unknown>,
+  resultRaw: Record<string, JsonValue>,
   resultText: string,
 ): string | undefined => {
   const structuredTaskId = readStringProp(readStructuredClaudeAgentResult(resultRaw), "task_id");

@@ -1,3 +1,4 @@
+import type { JsonObject, JsonValue } from "./json-types";
 import { describe, expect, test } from "bun:test";
 import {
   pullRequestReviewActivitySchema,
@@ -210,12 +211,12 @@ describe("pullRequestReviewContextSchema", () => {
       ],
       reviewThreads: { openCount: 0 },
       refreshedAt: "2026-07-10T08:02:00Z",
-    } as Record<string, unknown>;
+    } as JsonObject;
     let current: unknown = context;
     for (const segment of path.slice(0, -1)) {
-      current = (current as Record<string | number, unknown>)[segment];
+      current = (current as Record<string | number, JsonValue>)[segment];
     }
-    (current as Record<string | number, unknown>)[path.at(-1) as string | number] = value;
+    (current as Record<string | number, JsonValue>)[path.at(-1) as string | number] = value;
 
     expect(() => pullRequestReviewContextSchema.parse(context)).toThrow();
   });

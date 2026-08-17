@@ -32,6 +32,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import type { CodexPolicyLogEntry } from "./codex-session-policy";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type CodexJsonRpcRequest = {
   method: string;
@@ -201,7 +202,7 @@ export type CodexThreadStartParams = {
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
-  config?: Record<string, unknown>;
+  config?: Record<string, JsonValue>;
 };
 
 export type CodexThreadResumeParams = {
@@ -214,7 +215,7 @@ export type CodexThreadResumeParams = {
   model?: string;
   effort?: string;
   excludeTurns?: boolean;
-  config?: Record<string, unknown>;
+  config?: Record<string, JsonValue>;
 };
 
 export type CodexThreadForkParams = {
@@ -227,7 +228,7 @@ export type CodexThreadForkParams = {
   sandbox: CodexAppServerSandboxMode;
   model: string;
   effort: string;
-  config?: Record<string, unknown>;
+  config?: Record<string, JsonValue>;
 };
 
 export type CodexThreadSetNameParams = {

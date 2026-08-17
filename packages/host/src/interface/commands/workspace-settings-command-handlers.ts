@@ -10,8 +10,9 @@ import type { WorkspaceSettingsService } from "../../application/workspaces/work
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
-const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
+const requireNoArgs = (command: string, args: Record<string, JsonValue> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,
@@ -23,7 +24,7 @@ const requireNoArgs = (command: string, args: Record<string, unknown> | undefine
 
 const requireObjectArg = (
   command: string,
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
   key: string,
 ): unknown => {
   if (!args || !(key in args)) {
@@ -42,14 +43,16 @@ const requireStringArray = (value: unknown, label: string): string[] => {
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
       field: label,
-      details: { value },
+      // SAFETY: host command inputs arrive over the IPC transport boundary, which serializes
+      // payloads to JSON-compatible values before they reach command handlers.
+      details: { value: value as JsonValue },
     });
   }
 
   return value;
 };
 
-const optionalRuntimeKind = (record: Record<string, unknown>) => {
+const optionalRuntimeKind = (record: Record<string, JsonValue>) => {
   if (record.defaultRuntimeKind === undefined) return undefined;
   const parsed = runtimeKindSchema.safeParse(record.defaultRuntimeKind);
   if (!parsed.success) {

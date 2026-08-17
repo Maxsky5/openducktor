@@ -31,6 +31,7 @@ import {
   ElectronValidationError,
   errorMessage,
   isElectronError,
+  jsonIssues,
 } from "../effect/electron-errors";
 import {
   ELECTRON_APP_UPDATE_CHECK_CHANNEL,
@@ -620,7 +621,7 @@ const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheck
     operation: "electron.ipc.app-update-check.validate",
     message: "Expected update check initiator to be settings or menu.",
     field: "initiator",
-    details: { issues: parsed.error.issues },
+    details: { issues: jsonIssues(parsed.error.issues) },
   });
 };
 
@@ -634,7 +635,7 @@ const readAppUpdateStateForIpc = (state: AppUpdateState): AppUpdateState => {
     operation: "electron.ipc.app-update-state.validate",
     message: "Electron app update state failed contract validation.",
     field: "state",
-    details: { issues: parsed.error.issues },
+    details: { issues: jsonIssues(parsed.error.issues) },
   });
 };
 
@@ -651,7 +652,7 @@ const readAppUpdateCommandResultForIpc = (
     operation: `electron.ipc.app-update-${operation}.validate-result`,
     message: "Electron app update command result failed contract validation.",
     field: "result",
-    details: { issues: parsed.error.issues },
+    details: { issues: jsonIssues(parsed.error.issues) },
   });
 };
 

@@ -1,4 +1,5 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type { CodexMappingContext } from "./codex-canonical-events";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
@@ -53,9 +54,9 @@ const COLLAB_AGENT_STATUSES = new Set<CodexCollabAgentStatus>([
 const ACTIVITY_KINDS = new Set<CodexSubagentActivityKind>(["started", "interacted", "interrupted"]);
 
 const itemError = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   message: string,
-  context: Record<string, unknown> = {},
+  context: Record<string, JsonValue | undefined> = {},
 ): CodexSubagentItemError => {
   const id = extractStringField(item, ["id"]) ?? "<missing>";
   const type = extractStringField(item, ["type"]) ?? "<missing>";
@@ -67,7 +68,7 @@ const itemError = (
 };
 
 const requireStringField = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   keys: string[],
   label: string,
 ): string => {
@@ -78,7 +79,7 @@ const requireStringField = (
   return value;
 };
 
-const collabTool = (item: Record<string, unknown>): CodexCollabTool => {
+const collabTool = (item: Record<string, JsonValue>): CodexCollabTool => {
   const tool = requireStringField(item, ["tool"], "tool");
   if (!COLLAB_TOOLS.has(tool as CodexCollabTool)) {
     throw itemError(item, "unknown collab tool", { tool });
@@ -86,7 +87,7 @@ const collabTool = (item: Record<string, unknown>): CodexCollabTool => {
   return tool as CodexCollabTool;
 };
 
-const collabCallStatus = (item: Record<string, unknown>): CodexCollabCallStatus => {
+const collabCallStatus = (item: Record<string, JsonValue>): CodexCollabCallStatus => {
   const status = requireStringField(item, ["status"], "status");
   if (!COLLAB_CALL_STATUSES.has(status as CodexCollabCallStatus)) {
     throw itemError(item, "unknown collab tool-call status", { status });
@@ -99,7 +100,7 @@ const stringArrayField = (value: unknown): string[] =>
     (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );
 
-const receiverThreadIds = (item: Record<string, unknown>): string[] => {
+const receiverThreadIds = (item: Record<string, JsonValue>): string[] => {
   const receivers = [
     ...stringArrayField(item.receiverThreadIds ?? item.receiver_thread_ids),
     extractStringField(item, ["receiverThreadId", "receiver_thread_id"]),
@@ -108,15 +109,15 @@ const receiverThreadIds = (item: Record<string, unknown>): string[] => {
   return [...new Set(receivers)];
 };
 
-const agentsStates = (item: Record<string, unknown>): Record<string, unknown> => {
+const agentsStates = (item: Record<string, JsonValue>): Record<string, JsonValue> => {
   const states = item.agentsStates ?? item.agents_states;
   return isPlainObject(states) ? states : {};
 };
 
 const agentStateForChild = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   childThreadId: string,
-): Record<string, unknown> | null => {
+): Record<string, JsonValue> | null => {
   const state = agentsStates(item)[childThreadId];
   if (isPlainObject(state)) {
     return state;
@@ -134,9 +135,9 @@ const agentStateForChild = (
 const assertNever = (value: never): never => value;
 
 const mapAgentStatus = (
-  item: Record<string, unknown>,
-  status: unknown,
-  message: unknown,
+  item: Record<string, JsonValue>,
+  status: JsonValue | undefined,
+  message: JsonValue | undefined,
   childThreadId: string,
 ): StatusMapping => {
   if (typeof status !== "string" || !COLLAB_AGENT_STATUSES.has(status as CodexCollabAgentStatus)) {
@@ -183,7 +184,7 @@ const mapAggregateStatus = (
 };
 
 const statusForChild = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   tool: CodexCollabTool,
   aggregateStatus: CodexCollabCallStatus,
   childThreadId: string,
@@ -208,7 +209,7 @@ const statusForChild = (
   return mapAgentStatus(item, state.status, state.message, childThreadId);
 };
 
-const activityKind = (item: Record<string, unknown>): CodexSubagentActivityKind => {
+const activityKind = (item: Record<string, JsonValue>): CodexSubagentActivityKind => {
   const kind = requireStringField(item, ["kind"], "kind");
   if (!ACTIVITY_KINDS.has(kind as CodexSubagentActivityKind)) {
     throw itemError(item, "unknown subagent activity kind", { kind });
@@ -236,11 +237,11 @@ const creationDescriptionForPrompt = (
 };
 
 const collabMetadata = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   source: CodexCollabItemType,
   parentThreadId: string,
   childThreadId?: string,
-): Record<string, unknown> => ({
+): Record<string, JsonValue> => ({
   codexSubagent: {
     source,
     itemId: extractStringField(item, ["id"]),
@@ -251,10 +252,10 @@ const collabMetadata = (
 });
 
 const activityMetadata = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   parentThreadId: string,
   childThreadId: string,
-): Record<string, unknown> => {
+): Record<string, JsonValue> => {
   const agentPath = extractStringField(item, ["agentPath", "agent_path"]);
   return {
     codexSubagent: {
@@ -269,7 +270,7 @@ const activityMetadata = (
 };
 
 export const codexSubagentPartsFromItem = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   ctx: CodexMappingContext,
   linkState: CodexSubagentLinkState,
 ): AgentStreamPart[] => {

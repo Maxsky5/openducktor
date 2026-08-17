@@ -44,6 +44,7 @@ import {
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
+import { toCommandArgs } from "./invoke-utils";
 
 const gitGetBranches = async (invokeFn: InvokeFn, repoPath: string): Promise<GitBranch[]> => {
   const payload = await invokeFn("git_get_branches", { repoPath });
@@ -117,14 +118,17 @@ const gitPushBranch = async (
     workingDir?: string;
   },
 ): Promise<GitPushBranchResult> => {
-  const payload = await invokeFn("git_push_branch", {
-    repoPath,
-    branch,
-    remote: options?.remote,
-    setUpstream: options?.setUpstream ?? false,
-    forceWithLease: options?.forceWithLease ?? false,
-    workingDir: options?.workingDir ?? null,
-  });
+  const payload = await invokeFn(
+    "git_push_branch",
+    toCommandArgs({
+      repoPath,
+      branch,
+      remote: options?.remote,
+      setUpstream: options?.setUpstream ?? false,
+      forceWithLease: options?.forceWithLease ?? false,
+      workingDir: options?.workingDir ?? null,
+    }),
+  );
   return gitPushBranchResultSchema.parse(payload);
 };
 

@@ -1,9 +1,10 @@
 import type { PullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireStringPreservingWhitespace } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
 const parsePullRequestReviewContextInput = (
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
 ): {
   repoPath: string;
   taskId?: string;

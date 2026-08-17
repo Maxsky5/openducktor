@@ -3,6 +3,7 @@ import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@
 import { codexServerRequestKey } from "./codex-app-server-approvals";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type CodexNativeServerRequest = {
   id: CodexAppServerRequestId;
@@ -34,7 +35,7 @@ export type PendingQuestionEntry = {
   request: AgentPendingQuestionRequest;
   nativeRequest: CodexNativeServerRequest;
   questionIds: string[];
-  input: Record<string, unknown>;
+  input: Record<string, JsonValue>;
   route?: CodexSubagentRoute;
 };
 

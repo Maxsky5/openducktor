@@ -8,6 +8,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioRebaseConflictResolution } from "./use-agent-studio-rebase-conflict-resolution";
+import type { JsonValue } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 
@@ -59,7 +60,7 @@ const createSelectedSession = (
   ...overrides,
 });
 
-const createConflict = (overrides: Record<string, unknown> = {}) => ({
+const createConflict = (overrides: Record<string, JsonValue | undefined> = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
   targetBranch: "origin/main",

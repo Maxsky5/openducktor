@@ -1,5 +1,6 @@
 import type { TerminalFailure, TerminalFailureCode } from "@openducktor/contracts";
 import { Data } from "effect";
+import type { JsonValue } from "@openducktor/contracts";
 
 export class TerminalServiceError extends Data.TaggedError("TerminalServiceError")<{
   readonly code: TerminalFailureCode;
@@ -19,7 +20,7 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
   readonly terminalId?: string;
   readonly workingDir?: string;
   readonly cause?: unknown;
-  readonly details?: Readonly<Record<string, unknown>>;
+  readonly details?: Readonly<Record<string, JsonValue>>;
 }> {}
 
 export const terminalServiceErrorToFailure = (error: TerminalServiceError): TerminalFailure => ({

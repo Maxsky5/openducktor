@@ -17,13 +17,15 @@ import {
   agentSessionLiveRefSchema,
 } from "./agent-session-schemas";
 import { type FileContent, type FileDiff, fileContentSchema, fileDiffSchema } from "./git-schemas";
+import type { JsonValue } from "./json-types";
+import { jsonValueSchema } from "./json-types";
 import { type SkillDescriptor, skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { type SubagentDescriptor, subagentDescriptorSchema } from "./subagent-schemas";
 
 const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
-const metadataSchema = z.record(z.string(), z.unknown());
+const metadataSchema = z.record(z.string(), jsonValueSchema);
 
 type ExactOptional<T> = T extends SkillDescriptor | SubagentDescriptor
   ? T
@@ -199,13 +201,13 @@ export type AgentTranscriptStreamPart =
       preview?: string;
       title?: string;
       displayLabel?: string;
-      input?: Record<string, unknown>;
+      input?: Record<string, JsonValue>;
       output?: string;
       error?: string;
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
       fileChanges?: FileDiff[];
-      metadata?: Record<string, unknown>;
+      metadata?: Record<string, JsonValue>;
       startedAtMs?: number;
       endedAtMs?: number;
     }
@@ -231,7 +233,7 @@ export type AgentTranscriptStreamPart =
       error?: string;
       externalSessionId?: string;
       executionMode?: RuntimeSubagentExecutionMode;
-      metadata?: Record<string, unknown>;
+      metadata?: Record<string, JsonValue>;
       startedAtMs?: number;
       endedAtMs?: number;
     };
@@ -342,10 +344,10 @@ export type AgentTranscriptPendingApprovalRequest = {
   affectedPaths?: string[];
   command?: { command: string; workingDirectory?: string };
   action?: { name: string; description?: string };
-  tool?: { name: string; title?: string; input?: Record<string, unknown> };
+  tool?: { name: string; title?: string; input?: Record<string, JsonValue> };
   mutation?: "mutating" | "read_only" | "unknown";
   supportedReplyOutcomes?: RuntimeApprovalReplyOutcome[];
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
 };
 
 const inferredTranscriptPendingApprovalRequestSchema = z
@@ -375,7 +377,7 @@ const inferredTranscriptPendingApprovalRequestSchema = z
       .object({
         name: z.string(),
         title: z.string().optional(),
-        input: z.record(z.string(), z.unknown()).optional(),
+        input: z.record(z.string(), jsonValueSchema).optional(),
       })
       .strict()
       .optional(),

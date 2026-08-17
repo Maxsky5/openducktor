@@ -1,4 +1,5 @@
 import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
+import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import {
   type AsyncRemoteCallback,
   drizzle,
@@ -15,24 +16,23 @@ import {
   type SqliteDriverRuntime,
   type SqliteValue,
 } from "./sqlite-driver";
+import type { JsonValue } from "@openducktor/contracts";
 
 type SqliteRemoteMethod = Parameters<AsyncRemoteCallback>[2];
 type SqliteRemoteRows = { rows: unknown[] };
-type SqliteDrizzleTransaction<TSchema extends Record<string, unknown>> = SQLiteProxyTransaction<
-  TSchema,
-  ExtractTablesWithRelations<TSchema>
->;
+type SqliteDrizzleTransaction<TSchema extends Record<string, AnySQLiteTable>> =
+  SQLiteProxyTransaction<TSchema, ExtractTablesWithRelations<TSchema>>;
 
-export type SqliteDrizzleExecutor<TSchema extends Record<string, unknown>> =
+export type SqliteDrizzleExecutor<TSchema extends Record<string, AnySQLiteTable>> =
   | SqliteRemoteDatabase<TSchema>
   | SqliteDrizzleTransaction<TSchema>;
 
-export type SqliteDrizzleSession<TSchema extends Record<string, unknown>> = {
+export type SqliteDrizzleSession<TSchema extends Record<string, AnySQLiteTable>> = {
   readonly database: SqliteDrizzleExecutor<TSchema>;
   readonly execute: <A>(
     run: (database: SqliteDrizzleExecutor<TSchema>) => PromiseLike<A>,
     operation: string,
-    details?: Readonly<Record<string, unknown>>,
+    details?: Readonly<Record<string, JsonValue>>,
   ) => Effect.Effect<A, HostOperationError>;
   readonly transaction: <A, E>(
     operation: string,
@@ -40,13 +40,13 @@ export type SqliteDrizzleSession<TSchema extends Record<string, unknown>> = {
   ) => Effect.Effect<A, E | HostOperationError>;
 };
 
-export type SqliteDrizzleConnection<TSchema extends Record<string, unknown>> = {
+export type SqliteDrizzleConnection<TSchema extends Record<string, AnySQLiteTable>> = {
   readonly close: Effect.Effect<void, HostOperationError>;
   readonly database: SqliteRemoteDatabase<TSchema>;
   readonly session: SqliteDrizzleSession<TSchema>;
 };
 
-export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, unknown>> = {
+export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, AnySQLiteTable>> = {
   readonly config: DrizzleConfig<TSchema>;
   readonly configureWal: boolean;
   readonly databasePath: string;
@@ -127,14 +127,14 @@ const configureDatabase = (
 const executeSqliteQuery = <A>(
   run: () => PromiseLike<A>,
   operation: string,
-  details?: Readonly<Record<string, unknown>>,
+  details?: Readonly<Record<string, JsonValue>>,
 ): Effect.Effect<A, HostOperationError> =>
   Effect.tryPromise({
     try: () => Promise.resolve(run()),
     catch: (cause) => toHostOperationError(cause, operation, details),
   });
 
-const runSqliteTransaction = <TSchema extends Record<string, unknown>, A, E>(
+const runSqliteTransaction = <TSchema extends Record<string, AnySQLiteTable>, A, E>(
   database: SqliteDrizzleExecutor<TSchema>,
   operation: string,
   use: (session: SqliteDrizzleSession<TSchema>) => Effect.Effect<A, E>,
@@ -166,7 +166,7 @@ const runSqliteTransaction = <TSchema extends Record<string, unknown>, A, E>(
     );
   });
 
-const makeSqliteDrizzleSession = <TSchema extends Record<string, unknown>>(
+const makeSqliteDrizzleSession = <TSchema extends Record<string, AnySQLiteTable>>(
   database: SqliteDrizzleExecutor<TSchema>,
 ): SqliteDrizzleSession<TSchema> => ({
   database,
@@ -174,7 +174,7 @@ const makeSqliteDrizzleSession = <TSchema extends Record<string, unknown>>(
   transaction: (operation, use) => runSqliteTransaction(database, operation, use),
 });
 
-export const openSqliteDrizzleConnection = <TSchema extends Record<string, unknown>>({
+export const openSqliteDrizzleConnection = <TSchema extends Record<string, AnySQLiteTable>>({
   config,
   configureWal,
   databasePath,

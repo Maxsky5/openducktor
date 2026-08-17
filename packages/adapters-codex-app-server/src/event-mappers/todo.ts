@@ -1,4 +1,5 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -19,7 +20,7 @@ import { codexDynamicToolErrorFromItem } from "../codex-tool-error-extractor";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
 import { type CodexToolTimingFields, codexToolTimingFields } from "../codex-tool-timing";
 
-const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
+const parseJsonObject = (value: unknown): Record<string, JsonValue> | null => {
   if (isPlainObject(value)) return value;
   if (typeof value !== "string") return null;
   try {
@@ -57,8 +58,8 @@ const normalizePlanTextStatus = (value: string): AgentSessionTodoItem["status"] 
   return null;
 };
 
-const codexTodoItemsFromPlanText = (text: string): Record<string, unknown>[] => {
-  const todos: Record<string, unknown>[] = [];
+const codexTodoItemsFromPlanText = (text: string): Record<string, JsonValue>[] => {
+  const todos: Record<string, JsonValue>[] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const checkboxMatch = line.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)\[([ xX~-])\]\s+(.+?)\s*$/);
     if (checkboxMatch) {
@@ -85,7 +86,7 @@ const codexTodoItemsFromPlanText = (text: string): Record<string, unknown>[] => 
   return todos;
 };
 
-const codexTodoItemsFromPayload = (payload: Record<string, unknown>): unknown[] => {
+const codexTodoItemsFromPayload = (payload: Record<string, JsonValue>): unknown[] => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
     return todo;
@@ -99,8 +100,8 @@ const codexTodoItemsFromPayload = (payload: Record<string, unknown>): unknown[] 
 };
 
 const codexTodoToolInputFromPayload = (
-  payload: Record<string, unknown>,
-): Record<string, unknown> | null => {
+  payload: Record<string, JsonValue>,
+): Record<string, JsonValue> | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
   if (rawTodos.length === 0) {
     return null;
@@ -119,7 +120,7 @@ const codexTodoToolInputFromPayload = (
   };
 };
 
-const codexTodoUpdateFromPayload = (payload: Record<string, unknown>): CodexTodoUpdate | null => {
+const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTodoUpdate | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
   if (rawTodos.length === 0) {
     return null;
@@ -144,7 +145,7 @@ const codexTodoUpdateFromPayload = (payload: Record<string, unknown>): CodexTodo
 
 const codexTodoUpdateFromToolCall = (
   toolName: string,
-  input: Record<string, unknown> | null | undefined,
+  input: Record<string, JsonValue> | null | undefined,
 ): CodexTodoUpdate | null => {
   const tool = toolName.split(/[./]/).filter(Boolean).at(-1) ?? toolName;
   if (tool !== "update_plan" && tool !== "todo_write") {
@@ -155,7 +156,7 @@ const codexTodoUpdateFromToolCall = (
 
 const todoToolCanonicalEvents = (
   update: CodexTodoUpdate,
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue>,
   ctx: CodexMappingContext,
   ids: {
     messageId: string;
@@ -195,7 +196,7 @@ const todoToolCanonicalEvents = (
 ];
 
 const completedDynamicToolCallEvents = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   ctx: CodexMappingContext,
   fallbackId: string,
 ): CodexMappingResult => {
@@ -240,7 +241,7 @@ const completedDynamicToolCallEvents = (
 };
 
 const planItemEvents = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   ctx: CodexMappingContext,
 ): CodexMappingResult => {
   if (!codexItemTypeMatches(item, "plan")) {
@@ -267,12 +268,15 @@ const planItemEvents = (
 
 export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   fromLivePlanUpdated(
-    payload: Record<string, unknown>,
+    payload: Record<string, JsonValue>,
     ctx: CodexMappingContext,
     state?: CodexTodoMapperState,
   ): CodexMappingResult;
-  fromCompletedItem(item: Record<string, unknown>, ctx: CodexMappingContext): CodexMappingResult;
-  fromThreadItemObject(item: Record<string, unknown>, ctx: CodexMappingContext): CodexMappingResult;
+  fromCompletedItem(item: Record<string, JsonValue>, ctx: CodexMappingContext): CodexMappingResult;
+  fromThreadItemObject(
+    item: Record<string, JsonValue>,
+    ctx: CodexMappingContext,
+  ): CodexMappingResult;
 } = {
   name: TODO_MAPPER_NAME,
 
@@ -305,7 +309,7 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   },
 
   fromLivePlanUpdated(
-    payload: Record<string, unknown>,
+    payload: Record<string, JsonValue>,
     ctx: CodexMappingContext,
     state?: CodexTodoMapperState,
   ): CodexMappingResult {
@@ -338,12 +342,12 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
     };
   },
 
-  fromCompletedItem(item: Record<string, unknown>, ctx: CodexMappingContext): CodexMappingResult {
+  fromCompletedItem(item: Record<string, JsonValue>, ctx: CodexMappingContext): CodexMappingResult {
     return completedDynamicToolCallEvents(item, ctx, `codex-item-${Date.now()}`);
   },
 
   fromThreadItemObject(
-    item: Record<string, unknown>,
+    item: Record<string, JsonValue>,
     ctx: CodexMappingContext,
   ): CodexMappingResult {
     const planResult = planItemEvents(item, ctx);

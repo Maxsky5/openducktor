@@ -6,6 +6,7 @@ import {
   persistedGlobalConfigV2Schema,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type LoadedGlobalConfig = GlobalConfig & {
   agentRuntimes: AgentRuntimes;
@@ -19,21 +20,21 @@ const migratePersistedConfigShape = (payload: unknown): unknown => {
     return payload;
   }
 
-  const candidate = payload as Record<string, unknown>;
+  const candidate = payload as Record<string, JsonValue>;
   const chat = candidate.chat;
   if (
     candidate.reusablePrompts !== undefined ||
     !chat ||
     typeof chat !== "object" ||
     Array.isArray(chat) ||
-    !Array.isArray((chat as Record<string, unknown>).customPrompts)
+    !Array.isArray((chat as Record<string, JsonValue>).customPrompts)
   ) {
     return payload;
   }
 
   return {
     ...candidate,
-    reusablePrompts: (chat as Record<string, unknown>).customPrompts,
+    reusablePrompts: (chat as Record<string, JsonValue>).customPrompts,
   };
 };
 
@@ -42,7 +43,7 @@ const assertSupportedConfigVersion = (payload: unknown, expectedVersion: 2 | 3):
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
 
-  const version = (payload as Record<string, unknown>).version;
+  const version = (payload as Record<string, JsonValue>).version;
   if (version !== expectedVersion) {
     throw new HostValidationError({
       message: `Unsupported config version ${String(version)}. Expected ${expectedVersion}.`,
@@ -78,7 +79,7 @@ export const readPersistedGlobalConfigVersion = (payload: unknown): 2 | 3 => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
-  const version = (payload as Record<string, unknown>).version;
+  const version = (payload as Record<string, JsonValue>).version;
   if (version === 2 || version === 3) {
     return version;
   }

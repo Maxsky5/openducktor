@@ -14,6 +14,7 @@ import {
   createClaudeFinishStepPart,
 } from "./claude-agent-sdk-transcript-parts";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type MutableAssistantHistoryMessage = Extract<
   AgentSessionHistoryMessage,
@@ -60,7 +61,7 @@ export const moveNestedResultToEnd = (
 type ProjectClaudeHistoryAssistantMessageInput = {
   entry: ClaudeHistoryMessage;
   timestamp: string;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };

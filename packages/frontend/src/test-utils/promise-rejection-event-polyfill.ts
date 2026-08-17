@@ -3,8 +3,8 @@ export function ensurePromiseRejectionEventPolyfill(): void {
     return;
   }
 
-  (globalThis as Record<string, unknown>).PromiseRejectionEvent =
-    class PromiseRejectionEvent extends Event {
+  Object.assign(globalThis, {
+    PromiseRejectionEvent: class PromiseRejectionEvent extends Event {
       readonly reason: unknown;
       readonly promise: Promise<unknown>;
 
@@ -13,5 +13,6 @@ export function ensurePromiseRejectionEventPolyfill(): void {
         this.reason = init.reason;
         this.promise = init.promise;
       }
-    };
+    },
+  });
 }

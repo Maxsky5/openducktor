@@ -1,3 +1,4 @@
+import type { JsonObject } from "./json-types";
 import { describe, expect, test } from "bun:test";
 import {
   APP_PLATFORM_VALUES,
@@ -378,7 +379,7 @@ describe("config-schemas", () => {
       enabled: false,
       executablePath: "/bin/opencode",
     });
-    expect((parsed.agentRuntimes as Record<string, unknown>).custom).toEqual({
+    expect((parsed.agentRuntimes as JsonObject).custom).toEqual({
       enabled: true,
       executablePath: "/bin/custom",
     });
@@ -704,7 +705,7 @@ describe("config-schemas", () => {
   });
 
   test("rejects invalid explicit chat diff display values", () => {
-    const invalidCases: Array<[string, Record<string, unknown>]> = [
+    const invalidCases: Array<[string, JsonObject]> = [
       ["diffStyle", { diffStyle: "side-by-side" }],
       ["diffIndicators", { diffIndicators: "glyphs" }],
       ["diffHeight", { diffHeight: "auto" }],

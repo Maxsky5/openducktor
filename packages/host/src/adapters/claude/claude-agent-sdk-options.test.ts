@@ -16,6 +16,7 @@ import type {
   ClaudeSessionContext,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
+import type { JsonValue } from "@openducktor/contracts";
 
 const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   acceptedUserMessages: [],
@@ -162,7 +163,7 @@ const preToolUseHook = async (
   options: Awaited<ReturnType<typeof buildClaudeAgentSdkOptions>>,
   input: {
     permissionMode: string;
-    toolInput: Record<string, unknown>;
+    toolInput: Record<string, JsonValue>;
     toolName: string;
   },
 ) => {
@@ -507,7 +508,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         hookOutput as {
           hookSpecificOutput?: {
             permissionDecision?: unknown;
-            updatedInput?: Record<string, unknown>;
+            updatedInput?: Record<string, JsonValue>;
           };
         }
       ).hookSpecificOutput;

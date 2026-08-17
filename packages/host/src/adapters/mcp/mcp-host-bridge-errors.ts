@@ -1,6 +1,7 @@
 import { type OdtToolErrorPayload, odtToolErrorCodeSchema } from "@openducktor/contracts";
+import type { JsonValue } from "@openducktor/contracts";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+const isRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const bridgeErrorPayload = (error: unknown, message: string): OdtToolErrorPayload => {

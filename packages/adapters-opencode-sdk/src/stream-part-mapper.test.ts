@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
@@ -16,36 +17,23 @@ const createToolPart = ({
 }: {
   id: string;
   status?: string;
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
   output?: unknown;
   error?: unknown;
   title?: unknown;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
   time?: { start?: number; end?: number };
   tool?: string;
 }): Part => {
-  const state: Record<string, unknown> = {
+  const state = {
     input,
+    ...(status !== undefined ? { status } : {}),
+    ...(output !== undefined ? { output } : {}),
+    ...(error !== undefined ? { error } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+    ...(time !== undefined ? { time } : {}),
   };
-
-  if (status !== undefined) {
-    state.status = status;
-  }
-  if (output !== undefined) {
-    state.output = output;
-  }
-  if (error !== undefined) {
-    state.error = error;
-  }
-  if (title !== undefined) {
-    state.title = title;
-  }
-  if (metadata !== undefined) {
-    state.metadata = metadata;
-  }
-  if (time !== undefined) {
-    state.time = time;
-  }
 
   return {
     id,

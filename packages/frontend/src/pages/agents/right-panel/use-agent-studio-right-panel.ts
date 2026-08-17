@@ -12,6 +12,7 @@ import type { AgentStudioGitPanelModel } from "@/components/features/agents/agen
 import type { TaskExecutionCiChecksPanelModel } from "@/components/features/agents/task-execution-ci-checks-panel";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import { toRightPanelStorageKey } from "../agents-page-selection";
+import type { JsonValue } from "@openducktor/contracts";
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
@@ -48,7 +49,7 @@ const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> => ({
   ...DEFAULT_OPEN_BY_ROLE,
 });
 
-const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
+const readPersistedRightPanelPayload = (): Record<string, JsonValue> | null => {
   if (typeof globalThis.localStorage === "undefined") {
     return null;
   }
@@ -63,7 +64,7 @@ const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
     return null;
   }
 
-  return parsed as Record<string, unknown>;
+  return parsed as Record<string, JsonValue>;
 };
 
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {

@@ -1,4 +1,5 @@
 import type { AgentSubagentStatus } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { extractStringField, extractText, isPlainObject } from "./codex-app-server-shared";
 import type { CodexNotificationRecord } from "./types";
 
@@ -11,7 +12,7 @@ export type CodexSubagentLifecycleUpdate = {
 
 const lifecycleTimestampMs = (
   notification: CodexNotificationRecord,
-  turn: Record<string, unknown>,
+  turn: Record<string, JsonValue>,
   field: "startedAt" | "completedAt",
 ): number => {
   const snakeCaseField = field === "startedAt" ? "started_at" : "completed_at";
@@ -29,7 +30,7 @@ const lifecycleTimestampMs = (
   return receivedAtMs;
 };
 
-const notificationTurn = (notification: CodexNotificationRecord): Record<string, unknown> => {
+const notificationTurn = (notification: CodexNotificationRecord): Record<string, JsonValue> => {
   const params = isPlainObject(notification.params) ? notification.params : null;
   const turn = params?.turn;
   if (!isPlainObject(turn)) {

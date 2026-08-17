@@ -13,6 +13,7 @@ import {
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeToolResultSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -22,7 +23,7 @@ type ClaudeToolResultSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
@@ -37,7 +38,7 @@ const mergeTopLevelToolUseResult = (
   result: ClaudeDecodedToolResult,
   message: Extract<SDKMessage, { type: "user" }>,
 ): ClaudeDecodedToolResult => {
-  const rawMessage = message as unknown as Record<string, unknown>;
+  const rawMessage = message as unknown as Record<string, JsonValue>;
   const toolUseResult = rawMessage.tool_use_result;
   if (!isRecord(toolUseResult)) {
     return result;

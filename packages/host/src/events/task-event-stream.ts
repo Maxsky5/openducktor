@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import {
   type ExternalTaskSyncEvent,
   externalTaskSyncEventSchema,
@@ -9,6 +10,7 @@ import {
   taskEventStreamAcknowledgeSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
+import type { HostErrorDetails } from "../effect/host-errors";
 import { HostValidationError } from "../effect/host-errors";
 
 const TASK_EVENT_STREAM_CAPACITY = 256;
@@ -81,8 +83,17 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame =>
       })
     : Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
 
-const validationError = (message: string, field: string, details: Record<string, unknown>) =>
+const validationError = (message: string, field: string, details: HostErrorDetails) =>
   new HostValidationError({ message, field, details });
+
+const jsonIssues = (
+  issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
+): JsonValue[] =>
+  issues.map((issue) => ({
+    code: issue.code,
+    message: issue.message,
+    path: issue.path.map(String),
+  }));
 
 export const createTaskEventStream = ({
   epochFactory = () => crypto.randomUUID(),
@@ -164,7 +175,7 @@ export const createTaskEventStream = ({
       const parsed = externalTaskSyncEventSchema.safeParse(event);
       if (!parsed.success) {
         throw validationError("Task event stream requires a valid task event.", "event", {
-          issues: parsed.error.issues,
+          issues: jsonIssues(parsed.error.issues),
         });
       }
       const frame = freezeFrame({
@@ -188,7 +199,7 @@ export const createTaskEventStream = ({
       const parsed = taskEventStreamSubscribeSchema.safeParse(input);
       if (!parsed.success) {
         throw validationError("Task event stream subscription cursor is invalid.", "cursor", {
-          issues: parsed.error.issues,
+          issues: jsonIssues(parsed.error.issues),
         });
       }
       const cursor = parsed.data.cursor;
@@ -225,7 +236,7 @@ export const createTaskEventStream = ({
       const parsed = taskEventStreamAcknowledgeSchema.safeParse(input);
       if (!parsed.success) {
         throw validationError("Task event stream acknowledgement is invalid.", "acknowledgement", {
-          issues: parsed.error.issues,
+          issues: jsonIssues(parsed.error.issues),
         });
       }
       const { cursor, subscriptionId } = parsed.data;

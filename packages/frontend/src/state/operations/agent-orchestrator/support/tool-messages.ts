@@ -4,10 +4,11 @@ import {
   findSessionMessageById,
   type SessionMessageOwner,
 } from "./messages";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const normalizeToolInput = (
-  input: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined => {
+  input: Record<string, JsonValue> | undefined,
+): Record<string, JsonValue> | undefined => {
   if (!input) {
     return undefined;
   }
@@ -28,7 +29,7 @@ export const normalizeToolText = (value: unknown): string | undefined => {
   if (Array.isArray(value) && value.length === 0) {
     return undefined;
   }
-  if (typeof value === "object" && Object.keys(value as Record<string, unknown>).length === 0) {
+  if (typeof value === "object" && Object.keys(value as Record<string, JsonValue>).length === 0) {
     return undefined;
   }
   try {
@@ -108,7 +109,7 @@ export const normalizeSessionErrorMessage = (value: string): string => {
     if (!parsed || typeof parsed !== "object") {
       return withoutQuotes;
     }
-    const record = parsed as Record<string, unknown>;
+    const record = parsed as Record<string, JsonValue>;
     if (typeof record.message === "string" && record.message.trim().length > 0) {
       return record.message.trim();
     }
@@ -116,9 +117,9 @@ export const normalizeSessionErrorMessage = (value: string): string => {
     if (
       nestedError &&
       typeof nestedError === "object" &&
-      typeof (nestedError as Record<string, unknown>).message === "string"
+      typeof (nestedError as Record<string, JsonValue>).message === "string"
     ) {
-      return String((nestedError as Record<string, unknown>).message).trim();
+      return String((nestedError as Record<string, JsonValue>).message).trim();
     }
     return withoutQuotes;
   } catch {

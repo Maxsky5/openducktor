@@ -4,6 +4,7 @@ import type { GithubCommandDependencies } from "../../../application/tasks/suppo
 import { HostOperationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
+import type { JsonValue } from "@openducktor/contracts";
 
 const createDependencies = ({
   commandActivity,
@@ -78,11 +79,7 @@ const createDependencies = ({
       }
       if (command.includes("api graphql")) {
         if (command.includes("PullRequestReviewOverview")) {
-          const view = pullRequestViewResponse as {
-            comments?: unknown[];
-            reviews?: unknown[];
-            [key: string]: unknown;
-          };
+          const view = pullRequestViewResponse as Record<string, JsonValue>;
           return succeed({
             data: {
               repository: {
@@ -1168,7 +1165,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewReader();
     const malformedView = {
-      ...(defaultPullRequestViewResponse() as Record<string, unknown>),
+      ...(defaultPullRequestViewResponse() as Record<string, JsonValue>),
       url: "not-a-url",
     };
 

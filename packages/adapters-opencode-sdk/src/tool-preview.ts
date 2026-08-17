@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { asUnknownRecord } from "./guards";
@@ -16,7 +17,7 @@ const compactText = (value: string, maxLength = 160): string => {
 };
 
 const readTrimmedString = (
-  source: Record<string, unknown> | undefined,
+  source: Record<string, JsonValue> | undefined,
   keys: string[],
 ): string | null => {
   if (!source) {
@@ -31,7 +32,7 @@ const readTrimmedString = (
   return null;
 };
 
-const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
+const extractPathFromInput = (input: Record<string, JsonValue> | undefined): string | null => {
   return readTrimmedString(input, ["filePath", "file_path", "path", "file", "filename"]);
 };
 
@@ -42,7 +43,7 @@ const extractBaseName = (value: string): string => {
 
 const summarizeSearchInput = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): string | null => {
   if (!input) {
     return null;
@@ -98,7 +99,7 @@ const countCollectionItems = (value: unknown): number | null => {
 };
 
 const summarizeTodoTool = (
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
   output: unknown,
 ): string | null => {
   const count = countCollectionItems(output) ?? countCollectionItems(input?.todos ?? input?.items);
@@ -109,8 +110,8 @@ const summarizeTodoTool = (
 };
 
 const summarizeQuestionTool = (
-  input: Record<string, unknown> | undefined,
-  metadata: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
   output: unknown,
 ): string | null => {
   const sources = [input, metadata, asUnknownRecord(output)];
@@ -130,8 +131,8 @@ const summarizeQuestionTool = (
 };
 
 const summarizeTaskTool = (
-  input: Record<string, unknown> | undefined,
-  metadata: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
+  metadata: Record<string, JsonValue> | undefined,
   output: unknown,
 ): string | null => {
   const summaryCount = countCollectionItems(metadata?.summary);
@@ -151,7 +152,7 @@ const summarizeTaskTool = (
 };
 
 const summarizeOdtReadTask = (
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
   output: unknown,
 ): string | null => {
   const taskId = readTrimmedString(input, ["taskId"]);
@@ -172,7 +173,7 @@ const summarizeOdtReadTask = (
 
 const summarizeOdtMutation = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): string | null => {
   if (tool === "odt_build_blocked") {
     return readTrimmedString(input, ["reason", "taskId"]);
@@ -201,7 +202,7 @@ const summarizeOdtMutation = (
   return readTrimmedString(input, ["taskId"]);
 };
 
-const summarizeSkillTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeSkillTool = (input: Record<string, JsonValue> | undefined): string | null => {
   const direct =
     readTrimmedString(input, ["name", "skillName", "skill", "id"]) ??
     readTrimmedString(asUnknownRecord(input?.skill), ["name", "id"]);
@@ -215,7 +216,7 @@ const summarizeSkillTool = (input: Record<string, unknown> | undefined): string 
 
 const summarizeWebTool = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): string | null => {
   if (tool === "webfetch") {
     return readTrimmedString(input, ["url", "href"]);
@@ -225,7 +226,7 @@ const summarizeWebTool = (
 
 const summarizeContextTool = (
   tool: string,
-  input: Record<string, unknown> | undefined,
+  input: Record<string, JsonValue> | undefined,
 ): string | null => {
   if (tool === "context7_resolve-library-id") {
     return readTrimmedString(input, ["libraryName", "query"]);
@@ -236,7 +237,7 @@ const summarizeContextTool = (
   return null;
 };
 
-const summarizeGithubSearchTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeGithubSearchTool = (input: Record<string, JsonValue> | undefined): string | null => {
   const query = readTrimmedString(input, ["query"]);
   const repo = readTrimmedString(input, ["repo"]);
   if (query && repo) {
@@ -245,7 +246,7 @@ const summarizeGithubSearchTool = (input: Record<string, unknown> | undefined): 
   return query ?? repo;
 };
 
-const summarizeLspTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeLspTool = (input: Record<string, JsonValue> | undefined): string | null => {
   return (
     readTrimmedString(input, ["symbol", "name", "query"]) ??
     extractPathFromInput(input) ??
@@ -253,13 +254,13 @@ const summarizeLspTool = (input: Record<string, unknown> | undefined): string | 
   );
 };
 
-const summarizeSessionTool = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeSessionTool = (input: Record<string, JsonValue> | undefined): string | null => {
   return (
     readTrimmedString(input, ["sessionId", "query"]) ?? readTrimmedString(input, ["id", "name"])
   );
 };
 
-const summarizeGenericInput = (input: Record<string, unknown> | undefined): string | null => {
+const summarizeGenericInput = (input: Record<string, JsonValue> | undefined): string | null => {
   return (
     readTrimmedString(input, ["url", "query", "pattern", "symbol", "libraryId", "libraryName"]) ??
     extractPathFromInput(input) ??
@@ -271,7 +272,7 @@ export const deriveToolPreview = (input: {
   tool: string;
   rawInput: unknown;
   rawOutput: unknown;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, JsonValue>;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);
   const tool = strategy.canonicalName;

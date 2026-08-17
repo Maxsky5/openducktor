@@ -18,6 +18,7 @@ export * from "./filesystem-schemas";
 export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./host-invoke-failure-schemas";
+export * from "./json-types";
 export * from "./mcp-bridge-discovery";
 export * from "./metadata-schemas";
 export * from "./odt-mcp-schemas";

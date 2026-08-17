@@ -18,6 +18,7 @@ import {
   type WebError,
   type WebHostRequestError,
 } from "./effect/web-errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const TASK_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
@@ -37,7 +38,7 @@ const parseTaskEventSubscription = (
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Task event stream subscription response must be an object.");
   }
-  const { streamToken, subscriptionId } = value as Record<string, unknown>;
+  const { streamToken, subscriptionId } = value as Record<string, JsonValue>;
   if (
     typeof streamToken !== "string" ||
     streamToken.length === 0 ||

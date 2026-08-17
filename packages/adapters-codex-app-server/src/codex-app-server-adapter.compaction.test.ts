@@ -225,7 +225,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
       { subscribeEvents: runtimeStream.subscribeEvents },
     );
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    const events: Array<{ type: string; [key: string]: JsonValue }> = [];
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -286,7 +286,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
   test("does not synthesize a user message before synchronous compaction lifecycle events", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const events: Array<{ type: string; [key: string]: unknown }> = [];
+    const events: Array<{ type: string; [key: string]: JsonValue }> = [];
     const adapter = createAdapterWithTransport(
       {
         async request(request) {

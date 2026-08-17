@@ -17,6 +17,7 @@ import {
 } from "../../ports/codex-app-server-protocol";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
 type CodexAppServerCommandHandlerOptions = {
   logger?: HostLifecycleLogger;
@@ -34,13 +35,13 @@ const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
   "turn/start",
 ]);
 
-const isRecordValue = (value: unknown): value is Record<string, unknown> =>
+const isRecordValue = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const recordFromValue = (value: unknown): Record<string, unknown> =>
+const recordFromValue = (value: unknown): Record<string, JsonValue> =>
   isRecordValue(value) ? value : {};
 
-const stringField = (record: Record<string, unknown>, field: string): string | undefined => {
+const stringField = (record: Record<string, JsonValue>, field: string): string | undefined => {
   const value = record[field];
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
@@ -182,7 +183,7 @@ const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod 
 };
 
 const parseRequestInput = (
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
 ): CodexAppServerRequestInput => {
   const record = requireRecord(args, "codex_app_server_request input");
   const params =

@@ -1,4 +1,5 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { JsonValue } from "@openducktor/contracts";
 
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
@@ -15,12 +16,12 @@ const hasMeaningfulInputValue = (value: unknown): boolean => {
   if (!value || typeof value !== "object") {
     return false;
   }
-  return Object.values(value as Record<string, unknown>).some((entry) =>
+  return Object.values(value as Record<string, JsonValue>).some((entry) =>
     hasMeaningfulInputValue(entry),
   );
 };
 
-export const hasNonEmptyInput = (input: Record<string, unknown> | undefined): boolean => {
+export const hasNonEmptyInput = (input: Record<string, JsonValue> | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulInputValue(value)) : false;
 };
 

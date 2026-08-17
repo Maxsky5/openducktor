@@ -47,6 +47,7 @@ import {
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -58,7 +59,7 @@ export type CodexTurnTiming = {
 };
 
 export type CodexThreadReadItem = {
-  item: Record<string, unknown>;
+  item: Record<string, JsonValue>;
   turnIndex: number;
   turnId: string | null;
   timestamp: string | null;
@@ -100,7 +101,7 @@ const codexTimestampFromSeconds = (seconds: number | null): string | undefined =
 };
 
 const codexTurnTimestampSeconds = (
-  turn: Record<string, unknown>,
+  turn: Record<string, JsonValue>,
   keys: [string, string],
 ): number | null => {
   const [camelKey, snakeKey] = keys;
@@ -118,20 +119,23 @@ export const timestampFromCodexTurn = (turn: unknown, keys: [string, string]): s
     ? (codexTimestampFromSeconds(codexTurnTimestampSeconds(turn, keys)) ?? null)
     : null;
 
-export const codexItemId = (item: Record<string, unknown>, fallbackId: string): string => {
+export const codexItemId = (item: Record<string, JsonValue>, fallbackId: string): string => {
   return extractStringField(item, ["id", "itemId", "item_id"]) ?? fallbackId;
 };
 
-const codexItemType = (item: Record<string, unknown>): string => {
+const codexItemType = (item: Record<string, JsonValue>): string => {
   return extractStringField(item, ["type", "kind", "itemType"]) ?? "";
 };
 
-export const codexItemTypeMatches = (item: Record<string, unknown>, expected: string): boolean => {
+export const codexItemTypeMatches = (
+  item: Record<string, JsonValue>,
+  expected: string,
+): boolean => {
   const normalize = (value: string) => value.replace(/[_-]/g, "").toLowerCase();
   return normalize(codexItemType(item)) === normalize(expected);
 };
 
-const codexAgentMessagePhase = (item: Record<string, unknown>): string | null => {
+const codexAgentMessagePhase = (item: Record<string, JsonValue>): string | null => {
   return extractStringField(item, ["phase"]);
 };
 
@@ -143,11 +147,11 @@ const isCodexCommentaryPhase = (phase: string | null): boolean => {
   return phase === "commentary";
 };
 
-const hasVisibleCodexAgentMessageText = (item: Record<string, unknown>): boolean => {
+const hasVisibleCodexAgentMessageText = (item: Record<string, JsonValue>): boolean => {
   return codexAgentMessageText(item).trim().length > 0;
 };
 
-const codexAgentMessageText = (item: Record<string, unknown>): string => {
+const codexAgentMessageText = (item: Record<string, JsonValue>): string => {
   const directText = extractStringField(item, ["text", "message", "summary", "delta"]);
   if (directText) {
     return directText;
@@ -167,8 +171,8 @@ const codexAgentMessageText = (item: Record<string, unknown>): string => {
 };
 
 const selectCodexFinalAgentMessage = (
-  items: Record<string, unknown>[],
-): Record<string, unknown> | null => {
+  items: Record<string, JsonValue>[],
+): Record<string, JsonValue> | null => {
   const visibleAgentMessages = items.filter(
     (item) => codexItemTypeMatches(item, "agentMessage") && hasVisibleCodexAgentMessageText(item),
   );
@@ -185,8 +189,8 @@ const selectCodexFinalAgentMessage = (
 };
 
 export const shouldReplaceCodexBufferedFinalAgentMessage = (
-  current: Record<string, unknown>,
-  next: Record<string, unknown>,
+  current: Record<string, JsonValue>,
+  next: Record<string, JsonValue>,
 ): boolean => {
   return selectCodexFinalAgentMessage([current, next]) === next;
 };
@@ -342,7 +346,7 @@ export const codexTokenUsageHistoryFields = (
 });
 
 const toHistoryParts = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   messageId: string,
   fallbackText: string,
   options: {
@@ -394,11 +398,11 @@ export const terminalHistoryPart = (
   ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
 });
 
-const firstPlainObject = (value: unknown): Record<string, unknown> | null => {
+const firstPlainObject = (value: unknown): Record<string, JsonValue> | null => {
   return arrayFromUnknown(value).find(isPlainObject) ?? null;
 };
 
-const parseObjectString = (value: unknown): Record<string, unknown> | null => {
+const parseObjectString = (value: unknown): Record<string, JsonValue> | null => {
   if (typeof value !== "string") {
     return null;
   }
@@ -410,7 +414,7 @@ const parseObjectString = (value: unknown): Record<string, unknown> | null => {
   }
 };
 
-const commandActionToolName = (action: Record<string, unknown> | null): string => {
+const commandActionToolName = (action: Record<string, JsonValue> | null): string => {
   if (!action) {
     return "bash";
   }
@@ -433,10 +437,10 @@ const commandActionToolName = (action: Record<string, unknown> | null): string =
 };
 
 const commandActionInput = (
-  action: Record<string, unknown> | null,
+  action: Record<string, JsonValue> | null,
   command: string,
   cwd: string | null,
-): Record<string, unknown> => {
+): Record<string, JsonValue> => {
   if (!action) {
     return { command, ...(cwd ? { cwd } : {}) };
   }
@@ -481,7 +485,7 @@ const codexCommandText = (value: unknown): string | null => {
   return parts.length > 0 ? parts.join(" ") : null;
 };
 
-const codexObjectInput = (value: unknown): Record<string, unknown> | undefined => {
+const codexObjectInput = (value: unknown): Record<string, JsonValue> | undefined => {
   if (isPlainObject(value)) {
     return value;
   }
@@ -527,7 +531,7 @@ const codexToolResultText = (value: unknown): string | null => {
   return text.length > 0 ? text : stringifyJsonValue(value);
 };
 
-const webSearchActionInput = (action: unknown): Record<string, unknown> | undefined => {
+const webSearchActionInput = (action: unknown): Record<string, JsonValue> | undefined => {
   if (!isPlainObject(action)) {
     return undefined;
   }
@@ -562,7 +566,9 @@ const webSearchActionInput = (action: unknown): Record<string, unknown> | undefi
   return undefined;
 };
 
-const webSearchInput = (value: Record<string, unknown>): Record<string, unknown> | undefined => {
+const webSearchInput = (
+  value: Record<string, JsonValue>,
+): Record<string, JsonValue> | undefined => {
   const query = extractStringField(value, ["query"]);
   if (query) {
     return { query };
@@ -599,8 +605,8 @@ export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTo
 };
 
 const codexTokenUsagePayload = (
-  params: Record<string, unknown>,
-): Record<string, unknown> | null => {
+  params: Record<string, JsonValue>,
+): Record<string, JsonValue> | null => {
   const directUsage = params.tokenUsage ?? params.token_usage;
   if (isPlainObject(directUsage)) {
     return directUsage;
@@ -623,7 +629,7 @@ const normalizedCodexToolPart = (input: NormalizedCodexToolInvocation): AgentStr
 };
 
 const codexReasoningStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
@@ -634,7 +640,7 @@ const codexReasoningStreamParts = (
 };
 
 const codexPlanStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
@@ -660,7 +666,7 @@ const codexPlanStreamParts = (
 };
 
 const codexCommandExecutionStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -692,7 +698,7 @@ const codexCommandExecutionStreamParts = (
 };
 
 const codexFileChangeStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
@@ -725,7 +731,7 @@ const codexFileChangeStreamParts = (
 };
 
 const codexMcpToolCallStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -750,7 +756,7 @@ const codexMcpToolCallStreamParts = (
 };
 
 const codexCollabAgentToolCallStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
@@ -781,7 +787,7 @@ const codexCollabAgentToolCallStreamParts = (
 };
 
 const codexDynamicToolCallStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -834,7 +840,7 @@ const codexDynamicToolCallStreamParts = (
 };
 
 const codexWebSearchStreamParts = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -858,7 +864,7 @@ const codexWebSearchStreamParts = (
 };
 
 export const toStreamPart = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   messageId: string,
   fallbackPartId: string,
   timingOptions?: CodexToolTimingOptions,

@@ -2,6 +2,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { JsonValue } from "../packages/contracts/src/index";
 
 const workspaceRoot = process.cwd();
 
@@ -122,7 +123,7 @@ function readJsonVersion(relativePath: string): string {
 
 function writeJsonVersion(relativePath: string, version: string): void {
   const absolutePath = resolve(workspaceRoot, relativePath);
-  const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, unknown>;
+  const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, JsonValue>;
 
   if (parsed.version === version) {
     return;

@@ -6,6 +6,7 @@ import type {
   AgentStreamPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import {
   codexTurnKey,
@@ -53,7 +54,7 @@ const CODEX_UNLINKED_SPAWN_ERROR = "Codex ended this subagent spawn without crea
 
 export type CompletedAgentMessage = {
   session: CodexSessionState;
-  item: Record<string, unknown>;
+  item: Record<string, JsonValue>;
   timestamp: string;
   model?: AgentModelSelection;
 };
@@ -180,10 +181,10 @@ const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
 const withLifecycleTimestamp = (
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   key: "startedAtMs" | "completedAtMs",
   timestamp: string,
-): Record<string, unknown> => {
+): Record<string, JsonValue> => {
   const timestampMs = Date.parse(timestamp);
   return Number.isFinite(timestampMs) ? { ...item, [key]: timestampMs } : item;
 };
@@ -191,7 +192,7 @@ const withLifecycleTimestamp = (
 const recordStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   timestamp: string,
 ): void => {
   const itemId = extractStringField(item, ["id"]);
@@ -207,8 +208,8 @@ const recordStartedItemTimestamp = (
 const withRecordedStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, unknown>,
-): Record<string, unknown> => {
+  item: Record<string, JsonValue>,
+): Record<string, JsonValue> => {
   const itemId = extractStringField(item, ["id"]);
   if (!itemId) {
     return item;
@@ -240,7 +241,7 @@ const createCodexAcceptedUserMessageId = (timestamp = Date.now()): string => {
 const emitFinalAgentMessage = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   timestamp: string,
   tokenUsage?: CodexTokenUsageTotals,
   model?: AgentModelSelection,
@@ -304,7 +305,7 @@ export const emitCodexUserMessage = (
 const emitStartedItem = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   timestamp: string,
 ): void => {
   if (
@@ -345,7 +346,7 @@ const emitStartedItem = (
 const emitCompletedItem = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, unknown>,
+  item: Record<string, JsonValue>,
   timestamp: string,
   turnId: string | null,
 ): void => {
@@ -535,7 +536,7 @@ const emitCodexCompletedTurnTiming = (
   context: CodexStreamingContext,
   session: CodexSessionState,
   completedAgentMessage: CompletedAgentMessage,
-  turn: Record<string, unknown>,
+  turn: Record<string, JsonValue>,
 ): void => {
   const durationMs = extractNumberField(turn, ["durationMs", "duration_ms"]);
   if (durationMs === null) {

@@ -1,6 +1,14 @@
 import { Cause, Data, Effect, Exit } from "effect";
+import type { JsonValue } from "@openducktor/contracts";
 
-export type WebErrorDetails = Readonly<Record<string, unknown>>;
+export type WebErrorDetailValue =
+  | JsonValue
+  | Error
+  | undefined
+  | ReadonlyArray<WebErrorDetailValue>
+  | { readonly [key: string]: WebErrorDetailValue };
+
+export type WebErrorDetails = Readonly<Record<string, WebErrorDetailValue>>;
 
 export class WebValidationError extends Data.TaggedError("WebValidationError")<{
   readonly message: string;

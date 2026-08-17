@@ -8,8 +8,9 @@ import {
   listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "./session-events-test-harness";
+import type { JsonValue } from "@openducktor/contracts";
 
-type RoutedEvent = { type: string; [key: string]: unknown };
+type RoutedEvent = { type: string; [key: string]: JsonValue };
 
 const observeSession = async (session = buildSession()) => {
   let handleEvent: ((event: RoutedEvent) => void) | undefined;

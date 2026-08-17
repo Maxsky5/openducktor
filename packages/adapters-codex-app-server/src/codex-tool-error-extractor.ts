@@ -5,8 +5,9 @@ import {
   isPlainObject,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
+import type { JsonValue } from "@openducktor/contracts";
 
-const parseJsonObjectString = (value: unknown): Record<string, unknown> | null => {
+const parseJsonObjectString = (value: unknown): Record<string, JsonValue> | null => {
   if (typeof value !== "string") {
     return null;
   }
@@ -23,7 +24,7 @@ const parseJsonObjectString = (value: unknown): Record<string, unknown> | null =
   }
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null =>
+const asRecord = (value: unknown): Record<string, JsonValue> | null =>
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
 const nonEmptyString = (value: unknown): string | null => {
@@ -105,9 +106,9 @@ const dynamicContentErrorMessage = (value: unknown): string | null => {
 };
 
 const objectField = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   keys: string[],
-): Record<string, unknown> | null => {
+): Record<string, JsonValue> | null => {
   for (const key of keys) {
     const candidate = value[key];
     if (isPlainObject(candidate)) {
@@ -118,8 +119,8 @@ const objectField = (
 };
 
 const failureMarkerMessage = (
-  record: Record<string, unknown>,
-  structuredContent: Record<string, unknown> | null,
+  record: Record<string, JsonValue>,
+  structuredContent: Record<string, JsonValue> | null,
 ): string | null => {
   if (record.isError !== true && record.ok !== false && record.success !== false) {
     return null;
@@ -186,15 +187,15 @@ const dynamicToolErrorFromValue = (value: unknown): string | null => {
 
 export const codexMcpToolErrorFromResult = (
   result: unknown,
-  item?: Record<string, unknown>,
+  item?: Record<string, JsonValue>,
 ): string | null => {
   return mcpToolErrorFromValue(result) ?? (item ? mcpToolErrorFromValue(item) : null);
 };
 
-export const codexDynamicToolDisplayPayload = (item: Record<string, unknown>): unknown =>
+export const codexDynamicToolDisplayPayload = (item: Record<string, JsonValue>): unknown =>
   item.contentItems ?? item.content_items ?? item.result;
 
-export const codexDynamicToolErrorFromItem = (item: Record<string, unknown>): string | null => {
+export const codexDynamicToolErrorFromItem = (item: Record<string, JsonValue>): string | null => {
   return (
     dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??
     dynamicToolErrorFromValue(item.result) ??
@@ -202,7 +203,7 @@ export const codexDynamicToolErrorFromItem = (item: Record<string, unknown>): st
   );
 };
 
-export const codexFileChangeErrorFromItem = (item: Record<string, unknown>): string | null => {
+export const codexFileChangeErrorFromItem = (item: Record<string, JsonValue>): string | null => {
   const explicitError = errorMessageFromValue(item.error) ?? extractStringField(item, ["stderr"]);
   if (explicitError) {
     return explicitError;

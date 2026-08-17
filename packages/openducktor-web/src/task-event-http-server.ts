@@ -3,6 +3,7 @@ import { taskEventCursorSchema, taskEventStreamSubscribeSchema } from "@openduck
 import { Effect } from "effect";
 import { errorMessage, WebHostRequestError } from "./effect/web-errors";
 import type { TaskEventLeaseManager } from "./task-event-leases";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const TASK_EVENT_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "/task-events/subscriptions";
@@ -17,7 +18,7 @@ type TaskEventHttpServerContext = {
   corsHeaders: HeadersInit;
   parseJsonObjectBody: (
     request: Request,
-  ) => Effect.Effect<Record<string, unknown>, WebHostRequestError>;
+  ) => Effect.Effect<Record<string, JsonValue>, WebHostRequestError>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -109,7 +110,7 @@ const createTaskEventSseResponse = (
 };
 
 const parseTaskEventAckCursor = (
-  body: Record<string, unknown>,
+  body: Record<string, JsonValue>,
 ): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
   Effect.gen(function* () {
     if (Object.keys(body).length !== 1 || !("cursor" in body)) {

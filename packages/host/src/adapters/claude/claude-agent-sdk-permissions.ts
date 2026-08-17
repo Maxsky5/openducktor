@@ -27,6 +27,7 @@ import {
   permissionRequestTypeForTool,
   readStringProp,
 } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type CreateClaudeCanUseToolInput = {
   session: ClaudeSessionContext;
@@ -40,7 +41,7 @@ export type ClaudeToolUseAuthorization =
   | {
       behavior: "allow";
       approval: "automatic" | "interactive" | "workflow_role";
-      toolInput: Record<string, unknown>;
+      toolInput: Record<string, JsonValue>;
     }
   | {
       behavior: "deny";
@@ -49,7 +50,7 @@ export type ClaudeToolUseAuthorization =
 
 type AuthorizeClaudeToolUseInput = {
   session: ClaudeSessionContext;
-  toolInput: Record<string, unknown>;
+  toolInput: Record<string, JsonValue>;
   toolName: string;
   blockedPath?: string;
   canonicalizePath?: (path: string) => Promise<string>;
@@ -57,7 +58,7 @@ type AuthorizeClaudeToolUseInput = {
 
 const withAllowedToolInput = (
   result: PermissionResult,
-  toolInput: Record<string, unknown>,
+  toolInput: Record<string, JsonValue>,
 ): PermissionResult =>
   result.behavior === "allow"
     ? {
@@ -100,8 +101,8 @@ const rewriteSessionPath = (session: ClaudeSessionContext, value: string): strin
 const normalizeToolInputForSession = (
   session: ClaudeSessionContext,
   _toolName: string,
-  toolInput: Record<string, unknown>,
-): Record<string, unknown> => {
+  toolInput: Record<string, JsonValue>,
+): Record<string, JsonValue> => {
   const nextInput = { ...toolInput };
   let changed = false;
 
@@ -122,7 +123,7 @@ const normalizeToolInputForSession = (
 
 const readOnlyToolPathValues = (
   session: ClaudeSessionContext,
-  toolInput: Record<string, unknown>,
+  toolInput: Record<string, JsonValue>,
   blockedPath: string | undefined,
 ): string[] => {
   const paths: string[] = [];
@@ -173,7 +174,7 @@ const canonicalReadPathViolation = async (
 
 const findReadOnlyPathPolicyViolation = async (
   session: ClaudeSessionContext,
-  toolInput: Record<string, unknown>,
+  toolInput: Record<string, JsonValue>,
   blockedPath: string | undefined,
   canonicalizePath: (path: string) => Promise<string>,
 ): Promise<string | null> => {
@@ -419,7 +420,8 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
     const authorization = authorizeClaudeToolUse({
       session,
       toolName,
-      toolInput,
+      // SAFETY: the Claude Agent SDK delivers tool inputs as JSON over its message transport.
+      toolInput: toolInput as Record<string, JsonValue>,
       ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
       canonicalizePath,
     });

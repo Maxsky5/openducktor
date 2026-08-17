@@ -24,6 +24,7 @@ import {
   taskPrioritySchema,
   taskStatusSchema,
 } from "./task-schemas";
+import { jsonValueSchema } from "./json-types";
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -52,7 +53,7 @@ export const odtToolErrorSchema = z
   .object({
     code: odtToolErrorCodeSchema,
     message: z.string(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: z.record(z.string(), jsonValueSchema).optional(),
     issues: z.array(odtToolErrorIssueSchema).optional(),
   })
   .strict();
@@ -330,7 +331,7 @@ export const GetWorkspacesInputSchema = z.object({}).strict();
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesInputSchema>;
 
 const pickToolSchemas = <
-  TSchemas extends Record<string, unknown>,
+  TSchemas extends Record<string, z.ZodTypeAny>,
   const TNames extends readonly (keyof TSchemas)[],
 >(
   schemas: TSchemas,
@@ -359,7 +360,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_set_pull_request: SetPullRequestInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
-} as const satisfies Record<OdtToolName, unknown>;
+} as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
 export const ODT_WORKFLOW_TOOL_SCHEMAS = pickToolSchemas(
   ODT_TOOL_SCHEMAS,

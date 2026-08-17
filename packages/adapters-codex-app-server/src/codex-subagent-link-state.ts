@@ -1,5 +1,6 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
-import type { CodexThreadSnapshot } from "./codex-app-server-threads";
+import type { JsonValue } from "@openducktor/contracts";
+import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -29,12 +30,22 @@ export type CodexSubagentLinkInput = {
   description?: string;
   error?: string;
   agent?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: CodexSubagentLinkMetadata;
   executionMode?: "background";
   preferItemCorrelationKey?: boolean;
   allowStatusRestart?: boolean;
   startedAtMs?: number;
   endedAtMs?: number;
+};
+
+type CodexSubagentLinkMetadata = {
+  codexThread?: {
+    parentThreadId: string;
+    childThreadId: string;
+    agentNickname?: string;
+    agentRole?: string;
+    subAgentSource?: CodexSubAgentSourceMetadata;
+  };
 };
 
 type CodexStoredSubagentLink = {
@@ -47,7 +58,7 @@ type CodexStoredSubagentLink = {
   description?: string;
   error?: string;
   agent?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: CodexSubagentLinkMetadata;
   executionMode?: "background";
   startedAtMs?: number;
   endedAtMs?: number;
@@ -150,7 +161,7 @@ class CodexSubagentLinkError extends Error {
   }
 }
 
-const mergeDefined = <T extends Record<string, unknown>>(
+const mergeDefined = <T extends object>(
   existing: T | undefined,
   incoming: T | undefined,
 ): T | undefined => {

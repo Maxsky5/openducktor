@@ -18,6 +18,7 @@ import {
   createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
   type useAgentStudioBuildToolsWorktreeSnapshot,
 } from "./use-agent-studio-build-tools-worktree-snapshot";
+import type { JsonValue } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 if (typeof document === "undefined") {
@@ -26,7 +27,7 @@ if (typeof document === "undefined") {
 
 const refreshDiffMock = mock(async (_mode?: string) => {});
 const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-const useAgentStudioDiffDataMock = mock((args: Record<string, unknown>): DiffDataState => ({
+const useAgentStudioDiffDataMock = mock((args: Record<string, JsonValue>): DiffDataState => ({
   branch: "feature/task-24",
   worktreePath: (args.worktreePath as string | null) ?? null,
   targetBranch: "origin/main",
@@ -52,7 +53,7 @@ const useAgentStudioDiffDataMock = mock((args: Record<string, unknown>): DiffDat
   refresh: refreshDiffMock,
   setDiffScope: setDiffScopeMock,
 }));
-const useAgentStudioDevServerPanelMock = mock((args: Record<string, unknown>) => ({
+const useAgentStudioDevServerPanelMock = mock((args: Record<string, JsonValue>) => ({
   mode: "unconfigured" as const,
   repoPath: args.repoPath,
   taskId: args.taskId,

@@ -1,3 +1,5 @@
+import type { JsonValue } from "@openducktor/contracts";
+
 export const createEventTestSession = (activity: "idle" | "running" = "running") => ({
   acceptedUserMessages: [] as unknown[],
   activeBackgroundSubagentTaskIds: new Set<string>(),
@@ -14,7 +16,7 @@ export const createEventTestSession = (activity: "idle" | "running" = "running")
   todosById: new Map(),
   subagentMessageIdsByTaskId: new Map<string, string>(),
   subagentTaskIdsByToolUseId: new Map<string, string>(),
-  toolInputsByCallId: new Map<string, Record<string, unknown>>(),
+  toolInputsByCallId: new Map<string, Record<string, JsonValue>>(),
   toolMessageIdsByCallId: new Map<string, string>(),
   toolNamesByCallId: new Map<string, string>(),
   toolStartedAtMsByCallId: new Map<string, number>(),

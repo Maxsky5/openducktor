@@ -9,6 +9,7 @@ import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-tr
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ForwardedClaudeSubagentMessage = {
   message: SDKMessage;
@@ -28,7 +29,7 @@ const hasToolResultForParent = (
       }
     }
   }
-  const rawMessage = message as unknown as Record<string, unknown>;
+  const rawMessage = message as unknown as Record<string, JsonValue>;
   const directResult =
     decodeClaudeToolResultValue(rawMessage.tool_use_result, parentToolUseId, {
       allowNonToolResultType: true,
@@ -52,7 +53,7 @@ const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "use
   ) {
     return true;
   }
-  const rawMessage = message as unknown as Record<string, unknown>;
+  const rawMessage = message as unknown as Record<string, JsonValue>;
   return isRecord(rawMessage.tool_use_result) || isRecord(rawMessage.toolUseResult);
 };
 

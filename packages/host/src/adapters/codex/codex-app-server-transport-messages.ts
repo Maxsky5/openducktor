@@ -15,10 +15,11 @@ import {
   isCodexAppServerMcpServerElicitationRequestParams,
   isCodexAppServerRequestPermissionProfile,
 } from "../../ports/codex-app-server-protocol";
+import type { JsonValue } from "@openducktor/contracts";
 
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
-export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
+export const isJsonRecord = (value: unknown): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isCodexServerRequestMethod = (method: string): method is CodexAppServerServerRequestMethod =>
@@ -117,7 +118,7 @@ export const extractErrorMessage = (value: unknown): string => {
 
 export const parseStreamMessage = (
   runtimeId: string,
-  message: Record<string, unknown>,
+  message: Record<string, JsonValue>,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage => {
   if (typeof message.method !== "string" || message.method.trim().length === 0) {

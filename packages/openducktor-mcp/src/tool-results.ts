@@ -6,10 +6,11 @@ import type {
 } from "@openducktor/contracts";
 import { readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z } from "zod";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ToolResult = CallToolResult;
 
-export type OdtToolErrorDetails = Record<string, unknown>;
+export type OdtToolErrorDetails = Record<string, JsonValue>;
 
 export type OdtToolErrorInput = {
   readonly code: OdtToolErrorCode;
@@ -47,7 +48,7 @@ export const toErrorMessage = (error: unknown): string => {
   return "Unknown error";
 };
 
-const isStructuredToolPayload = (payload: unknown): payload is Record<string, unknown> => {
+const isStructuredToolPayload = (payload: unknown): payload is Record<string, JsonValue> => {
   return payload !== null && typeof payload === "object" && !Array.isArray(payload);
 };
 

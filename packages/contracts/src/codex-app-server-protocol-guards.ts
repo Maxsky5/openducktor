@@ -1,3 +1,4 @@
+import type { JsonObject } from "./json-types";
 import type {
   CodexAppServerAdditionalFileSystemPermissions,
   CodexAppServerAdditionalNetworkPermissions,
@@ -10,7 +11,7 @@ import type {
   CodexAppServerRequestPermissionProfile,
 } from "./codex-app-server-protocol";
 
-const isCodexAppServerRecord = (value: unknown): value is Record<string, unknown> =>
+const isCodexAppServerRecord = (value: unknown): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isNullableString = (value: unknown): value is string | null =>

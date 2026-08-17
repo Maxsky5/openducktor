@@ -13,6 +13,7 @@ import {
   searchInputFromCommand,
 } from "./codex-app-server-shared";
 import { codexToolTimingFields } from "./codex-tool-timing";
+import type { JsonValue } from "@openducktor/contracts";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -30,6 +31,16 @@ export type AgentToolStatus = Extract<
   { kind: "tool" }
 >["status"];
 
+export type CodexToolInvocationMetadata = {
+  codexServerRequest?: boolean;
+  codexTodoUpdate?: boolean;
+  requestId?: string;
+  questions?: JsonValue[];
+  answers?: Record<string, { answers: string[] }>;
+  codexItem?: Record<string, JsonValue>;
+  server?: string;
+};
+
 export type NormalizedCodexToolInvocation = {
   messageId: string;
   partId: string;
@@ -40,11 +51,11 @@ export type NormalizedCodexToolInvocation = {
   title?: string;
   displayLabel?: string;
   preview?: string;
-  input?: Record<string, unknown>;
+  input?: Record<string, JsonValue>;
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
-  metadata?: Record<string, unknown>;
+  metadata?: CodexToolInvocationMetadata;
   startedAtMs?: number;
   endedAtMs?: number;
 };
@@ -127,7 +138,7 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 };
 const codexToolType = (
   rawToolName: string,
-  input?: Record<string, unknown>,
+  input?: Record<string, JsonValue>,
 ): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
@@ -195,7 +206,7 @@ const canonicalCodexToolName = (rawToolName: string): string | null => {
     : rawToolName;
 };
 
-const questionPromptFromInput = (input: Record<string, unknown>): string | undefined => {
+const questionPromptFromInput = (input: Record<string, JsonValue>): string | undefined => {
   const questions = arrayFromUnknown(input.questions).filter(isPlainObject);
   for (const question of questions) {
     const prompt = extractStringField(question, ["question", "prompt", "header", "title"]);
@@ -208,7 +219,7 @@ const questionPromptFromInput = (input: Record<string, unknown>): string | undef
 
 const toolPreviewFromInput = (
   toolType: AgentToolType,
-  input?: Record<string, unknown>,
+  input?: Record<string, JsonValue>,
 ): string | undefined => {
   if (!input) {
     return undefined;
@@ -238,9 +249,9 @@ const toolPreviewFromInput = (
 };
 
 const codexExecCommandInput = (
-  input: Record<string, unknown>,
+  input: Record<string, JsonValue>,
   tool: string,
-): Record<string, unknown> | undefined => {
+): Record<string, JsonValue> | undefined => {
   const command = extractStringField(input, ["cmd", "command"]);
   const cwd = extractStringField(input, ["workdir", "cwd"]);
   if (!command) {
@@ -268,8 +279,8 @@ const codexExecCommandInput = (
 const normalizerInput = (
   toolType: AgentToolType,
   rawToolName: string,
-  input?: Record<string, unknown>,
-): Record<string, unknown> | undefined => {
+  input?: Record<string, JsonValue>,
+): Record<string, JsonValue> | undefined => {
   if (isCodexExecCommandTool(rawToolName)) {
     return codexExecCommandInput(input ?? {}, toolType);
   }

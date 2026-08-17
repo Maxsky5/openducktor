@@ -1,3 +1,5 @@
+import type { JsonValue } from "@openducktor/contracts";
+
 export type ClaudeTranscriptCorrelationState = {
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
@@ -6,7 +8,7 @@ export type ClaudeTranscriptCorrelationState = {
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId?: Map<string, Record<string, unknown>>;
+  toolInputsByCallId?: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId?: Map<string, number>;

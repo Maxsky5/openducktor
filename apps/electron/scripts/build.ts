@@ -59,7 +59,7 @@ const runBuildCommandEffect = (
         operation: "electron.build.run-command",
         message: errorMessage(cause),
         cause,
-        details: { command, label },
+        details: { command: [...command], label },
       }),
   });
 

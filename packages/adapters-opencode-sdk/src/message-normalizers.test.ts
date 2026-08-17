@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import {
@@ -661,7 +662,7 @@ describe("message-normalizers", () => {
   });
 
   test("extractMessageTotalTokens falls back to max part token total", () => {
-    const parts: Array<Part | Record<string, unknown>> = [
+    const parts: Array<Part | Record<string, JsonValue>> = [
       {
         id: "part-1",
         tokens: 42,

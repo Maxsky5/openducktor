@@ -3,6 +3,7 @@ import {
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
 import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export function browserLiveControlEvent(
   kind: typeof BROWSER_LIVE_RECONNECTED_EVENT_KIND,
@@ -39,7 +40,7 @@ export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserL
     return false;
   }
 
-  const record = payload as Record<string, unknown>;
+  const record = payload as Record<string, JsonValue>;
   if (record.__openducktorBrowserLive !== true) {
     return false;
   }

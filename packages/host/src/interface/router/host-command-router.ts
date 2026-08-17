@@ -14,7 +14,8 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
-export type HostCommandArgs = Record<string, unknown> | undefined;
+import type { JsonValue } from "@openducktor/contracts";
+export type HostCommandArgs = Record<string, JsonValue> | undefined;
 export type HostCommandContext = {
   command: HostCommandName;
   args: HostCommandArgs;
@@ -39,13 +40,13 @@ export type EffectHostCommandRouter = {
   initialize(): Effect.Effect<void, HostCommandHandlerError>;
   invoke(
     command: string,
-    args?: Record<string, unknown>,
+    args?: Record<string, JsonValue>,
   ): Effect.Effect<unknown, HostCommandHandlerError>;
 };
 export type HostCommandRouter = {
   dispose(): Promise<void>;
   initialize(): Promise<void>;
-  invoke(command: string, args?: Record<string, unknown>): Promise<unknown>;
+  invoke(command: string, args?: Record<string, JsonValue>): Promise<unknown>;
 };
 export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;

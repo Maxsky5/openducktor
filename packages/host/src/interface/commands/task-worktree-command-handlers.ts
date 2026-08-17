@@ -4,8 +4,9 @@ import type {
 } from "../../application/tasks/worktrees/task-worktree-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
+import type { JsonValue } from "@openducktor/contracts";
 
-const parseTaskWorktreeInput = (args: Record<string, unknown> | undefined): TaskWorktreeInput => {
+const parseTaskWorktreeInput = (args: Record<string, JsonValue> | undefined): TaskWorktreeInput => {
   const record = requireRecord(args, "task_worktree_get input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),

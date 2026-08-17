@@ -20,6 +20,7 @@ import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   acceptedUserMessages?: readonly unknown[];
@@ -35,7 +36,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
@@ -53,9 +54,9 @@ type PermissionDeniedToolPartInput = {
   permission: {
     toolName: string;
     toolUseId: string;
-    input?: Record<string, unknown>;
+    input?: Record<string, JsonValue>;
     message: string;
-    metadata?: Record<string, unknown>;
+    metadata?: Record<string, JsonValue>;
   };
   session: ClaudeResultEventSession;
   timestamp: string;

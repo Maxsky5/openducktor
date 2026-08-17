@@ -8,6 +8,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
+import type { JsonValue } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 
@@ -39,7 +40,7 @@ const toolTypeForFixture = (tool: string): import("@openducktor/core").AgentTool
   return "generic";
 };
 
-const createCompletedToolSession = (tool: string, id = tool, input?: Record<string, unknown>) =>
+const createCompletedToolSession = (tool: string, id = tool, input?: Record<string, JsonValue>) =>
   createAgentSessionFixture({
     externalSessionId: "build-session-1",
     sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },

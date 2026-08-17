@@ -11,6 +11,7 @@ import {
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
 import { OdtToolError } from "./tool-results";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 type ToolOutput<Name extends OdtToolName> = z.infer<
@@ -188,7 +189,10 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     ) as ToolOutput<Name>;
   }
 
-  private async invokeJson(command: string, input: Record<string, unknown>): Promise<unknown> {
+  private async invokeJson(
+    command: string,
+    input: Record<string, JsonValue | undefined>,
+  ): Promise<unknown> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
     const response = await this.fetchBridge(

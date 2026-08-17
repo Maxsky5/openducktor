@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import { ComponentProps, createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { JsonValue } from "@openducktor/contracts";
 
 const actualHostOperationsModule = await import("@/state/operations/host");
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
@@ -53,7 +54,7 @@ describe("FolderPickerDialog", () => {
     }));
 
     mock.module("@/components/ui/scroll-area", () => ({
-      ScrollArea: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
+      ScrollArea: ({ children, ...props }: ComponentProps<"div"> & { children: ReactNode }) =>
         createElement("div", props, children),
     }));
 

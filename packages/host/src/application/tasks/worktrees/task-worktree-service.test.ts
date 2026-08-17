@@ -30,7 +30,7 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
           new HostOperationError({
             operation: "test.getRepoConfigByRepoPath",
             message: `Workspace is not configured for repository: ${String(repoPath)}`,
-            details: { repoPath },
+            details: { repoPath: String(repoPath) },
           }),
         );
       }

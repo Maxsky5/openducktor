@@ -13,7 +13,7 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
-import { act, isValidElement, type ReactElement } from "react";
+import { act, type ComponentProps, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { hostClient } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
@@ -62,6 +62,8 @@ import {
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 import type { KanbanPageModels } from "./kanban-page-model-types";
+import { KanbanColumn } from "@/components/features/kanban/kanban-column";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 
 enableReactActEnvironment();
 
@@ -130,16 +132,18 @@ type PendingMergedPullRequestFixture = {
   };
 };
 
+type KanbanColumnTestProps = ComponentProps<typeof KanbanColumn>;
+
 type LatestKanbanPageModels = {
-  columnProps: Record<string, unknown> | null;
+  columnProps: KanbanColumnTestProps | null;
   isLoadingTasks: boolean | null;
   showHorizontalScrollbars: boolean | null;
-  humanReviewFeedbackModalModel: Record<string, unknown> | null;
+  humanReviewFeedbackModalModel: HumanReviewFeedbackModalModel | null;
   taskApprovalModalModel: KanbanPageModels["taskApprovalModal"];
   taskGitConflictDialogModel: KanbanPageModels["taskGitConflictDialog"];
   sessionStartModalModel: KanbanPageModels["sessionStartModal"];
-  resetImplementationModalModel: Record<string, unknown> | null;
-  mergedPullRequestModalProps: Record<string, unknown> | null;
+  resetImplementationModalModel: KanbanPageModels["resetImplementationModal"];
+  mergedPullRequestModalProps: KanbanPageModels["mergedPullRequestModal"];
   location: string;
 };
 
@@ -153,15 +157,15 @@ type KanbanPageRenderState = {
 };
 
 type KanbanPageHarness = RenderResult & {
-  getKanbanColumnProps: () => Record<string, unknown>;
+  getKanbanColumnProps: () => KanbanColumnTestProps;
   getIsLoadingTasks: () => boolean | null;
   getShowHorizontalScrollbars: () => boolean | null;
-  getHumanReviewFeedbackModalModel: () => Record<string, unknown> | null;
+  getHumanReviewFeedbackModalModel: () => HumanReviewFeedbackModalModel | null;
   getTaskApprovalModalModel: () => KanbanPageModels["taskApprovalModal"];
   getTaskGitConflictDialogModel: () => KanbanPageModels["taskGitConflictDialog"];
   getSessionStartModalModel: () => KanbanPageModels["sessionStartModal"];
-  getResetImplementationModalModel: () => Record<string, unknown> | null;
-  getMergedPullRequestModalProps: () => Record<string, unknown> | null;
+  getResetImplementationModalModel: () => KanbanPageModels["resetImplementationModal"];
+  getMergedPullRequestModalProps: () => KanbanPageModels["mergedPullRequestModal"];
   getLocation: () => string;
 };
 
@@ -436,7 +440,7 @@ const publishKanbanPageModels = (
   latest.mergedPullRequestModalProps = models.mergedPullRequestModal;
 };
 
-const getKanbanColumnProps = (latest: LatestKanbanPageModels): Record<string, unknown> => {
+const getKanbanColumnProps = (latest: LatestKanbanPageModels): KanbanColumnTestProps => {
   if (!latest.columnProps) {
     throw new Error("Expected the Kanban page model to publish column actions.");
   }
@@ -825,7 +829,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getKanbanColumnProps()).toBeTruthy();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
@@ -954,7 +958,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -1047,7 +1051,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       await confirmSessionStartModal(renderer, {
@@ -1058,7 +1062,7 @@ describe("KanbanPage session start modal flow", () => {
       });
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()?.isStarting).toBe(false);
@@ -1247,7 +1251,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(initialOnHumanRequestChanges).toBeDefined();
 
       await act(async () => {
-        (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onDelegate("TASK-123");
       });
 
       const nextOnHumanRequestChanges = renderer.getKanbanColumnProps().onHumanRequestChanges;

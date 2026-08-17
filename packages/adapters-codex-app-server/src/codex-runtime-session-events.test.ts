@@ -9,6 +9,7 @@ import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
 import type { CodexRuntimeEventQueueFailureHandler, CodexSessionState } from "./types";
+import type { JsonValue } from "@openducktor/contracts";
 
 const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 const flushRuntimeEvents = async (): Promise<void> => {
@@ -114,7 +115,7 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
       method: ItemLifecycleMethod,
       timestampMs: number,
       itemId: string,
-      itemOverrides: Record<string, unknown> = {},
+      itemOverrides: Record<string, JsonValue> = {},
     ): void {
       const listener = listenersByRuntimeId.get(session.runtimeId);
       if (!listener) {

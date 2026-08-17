@@ -870,7 +870,8 @@ export class CodexAppServerAdapter
       const answers = Object.fromEntries(
         pending.questionIds.map((questionId, index) => [
           questionId,
-          { answers: input.answers[index] },
+          // SAFETY: the length equality check above guarantees an answer set for every question id.
+          { answers: input.answers[index] as string[] },
         ]),
       );
       const output = JSON.stringify({ answers });

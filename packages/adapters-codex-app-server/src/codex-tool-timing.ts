@@ -1,4 +1,5 @@
 import type { AgentStreamPart } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { extractNumberField, extractStringField } from "./codex-app-server-shared";
 
 const CODEX_DURATION_MS_KEYS = ["durationMs", "duration_ms"];
@@ -30,11 +31,11 @@ export type CodexToolTimingOptions = {
   allowStartedAtOnly?: boolean;
 };
 
-const hasOwnField = (value: Record<string, unknown>, keys: string[]): boolean =>
+const hasOwnField = (value: Record<string, JsonValue>, keys: string[]): boolean =>
   keys.some((key) => Object.hasOwn(value, key));
 
 const extractOptionalFiniteNumberField = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   keys: string[],
   label: string,
 ): number | null => {
@@ -70,7 +71,7 @@ const parseCodexTimestampString = (timestamp: string | null | undefined): number
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const codexItemCompletedAtMs = (item: Record<string, unknown>): number | null => {
+const codexItemCompletedAtMs = (item: Record<string, JsonValue>): number | null => {
   const millis = extractNumberField(item, CODEX_COMPLETION_MS_KEYS);
   if (millis !== null) {
     return millis;
@@ -80,7 +81,7 @@ const codexItemCompletedAtMs = (item: Record<string, unknown>): number | null =>
   return parseCodexTimestampString(timestamp);
 };
 
-const codexItemTimestampMs = (item: Record<string, unknown>): number | null => {
+const codexItemTimestampMs = (item: Record<string, JsonValue>): number | null => {
   const completionTimestamp = codexItemCompletedAtMs(item);
   if (completionTimestamp !== null) {
     return completionTimestamp;
@@ -100,12 +101,12 @@ const codexItemTimestampMs = (item: Record<string, unknown>): number | null => {
   return parseCodexTimestampString(timestamp);
 };
 
-export const codexItemTimestamp = (item: Record<string, unknown>): string | null =>
+export const codexItemTimestamp = (item: Record<string, JsonValue>): string | null =>
   safeCodexTimestampFromMilliseconds(codexItemTimestampMs(item));
 
 export const withCodexItemCompletedAtMs = (
-  item: Record<string, unknown>,
-): Record<string, unknown> => {
+  item: Record<string, JsonValue>,
+): Record<string, JsonValue> => {
   if (hasOwnField(item, CODEX_COMPLETION_MS_KEYS)) {
     return item;
   }
@@ -114,7 +115,7 @@ export const withCodexItemCompletedAtMs = (
 };
 
 export const codexToolTimingFields = (
-  value: Record<string, unknown>,
+  value: Record<string, JsonValue>,
   options: CodexToolTimingOptions = {},
 ): CodexToolTimingFields => {
   const durationMs = extractOptionalFiniteNumberField(value, CODEX_DURATION_MS_KEYS, "durationMs");

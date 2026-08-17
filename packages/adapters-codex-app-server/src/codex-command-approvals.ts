@@ -9,6 +9,7 @@ import {
 import type { AgentApprovalMutation } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ReadOnlyCommandActionType =
   | Extract<CodexAppServerCommandAction["type"], "read" | "listFiles" | "search">
@@ -27,7 +28,7 @@ const isReadOnlyCommandActionType = (value: string): value is ReadOnlyCommandAct
 const hasEntries = <T>(value: readonly T[] | null | undefined): boolean =>
   Array.isArray(value) && value.length > 0;
 
-const hasNetworkApprovalContext = (value: Record<string, unknown>): boolean =>
+const hasNetworkApprovalContext = (value: Record<string, JsonValue>): boolean =>
   value.networkApprovalContext !== undefined && value.networkApprovalContext !== null;
 
 const hasAdditionalNetworkPermissions = (value: unknown): boolean =>

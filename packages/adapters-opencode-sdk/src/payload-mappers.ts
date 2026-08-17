@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
@@ -70,7 +71,7 @@ export const toToolIdList = (payload: unknown): string[] => {
 };
 
 const normalizeModelAttachmentSupport = (
-  modelRecord: Record<string, unknown>,
+  modelRecord: Record<string, JsonValue>,
 ):
   | {
       image: boolean;

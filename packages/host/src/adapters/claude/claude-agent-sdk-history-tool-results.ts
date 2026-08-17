@@ -17,6 +17,7 @@ import {
 } from "./claude-agent-sdk-todos";
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
+import type { JsonValue } from "@openducktor/contracts";
 
 type SubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -32,7 +33,7 @@ export type ClaudeHistoryToolResultState = {
   subagentTaskIdsByToolUseId: Map<string, string>;
   todoProjectionState: ClaudeTodoProjectionState;
   todosById: ClaudeTodoState;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   transcriptExternalSessionId: string | undefined;
@@ -139,7 +140,7 @@ const projectAgentResult = ({
 }: {
   completedMessageId: string;
   entry: SessionMessage;
-  input: Record<string, unknown> | undefined;
+  input: Record<string, JsonValue> | undefined;
   result: ReturnType<typeof readHistoryToolResults>[number];
   state: ClaudeHistoryToolResultState;
   timestamp: string;

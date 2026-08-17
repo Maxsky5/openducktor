@@ -1,4 +1,5 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type QuestionToolDetail = {
   prompt: string;
@@ -24,7 +25,7 @@ const readQuestionPrompt = (value: unknown): string | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, JsonValue>;
   const candidates = [
     record.question,
     record.prompt,
@@ -52,7 +53,7 @@ const normalizeAnswerValues = (value: unknown): string[] => {
   if (!value || typeof value !== "object") {
     return [];
   }
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, JsonValue>;
   return normalizeAnswerValues(
     record.answers ??
       record.answer ??
@@ -72,7 +73,7 @@ const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
     if (!prompt) {
       return details;
     }
-    const record = entry as Record<string, unknown>;
+    const record = entry as Record<string, JsonValue>;
     const answers = normalizeAnswerValues(
       record.answers ?? record.answer ?? record.response ?? record.responses,
     );
@@ -91,7 +92,7 @@ const normalizeAnswerGroups = (value: unknown): string[][] => {
   if (!value || typeof value !== "object") {
     return [];
   }
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, JsonValue>;
   const nested =
     record.answers ??
     record.answer ??
@@ -137,7 +138,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   const parsedOutput = parseJsonIfPossible(meta.output);
   const outputQuestions = collectQuestionDetails(
     parsedOutput && typeof parsedOutput === "object"
-      ? (parsedOutput as Record<string, unknown>).questions
+      ? (parsedOutput as Record<string, JsonValue>).questions
       : undefined,
   );
   const questions =
@@ -153,7 +154,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
 
   const outputRecord =
     parsedOutput && typeof parsedOutput === "object"
-      ? (parsedOutput as Record<string, unknown>)
+      ? (parsedOutput as Record<string, JsonValue>)
       : undefined;
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,

@@ -16,6 +16,7 @@ import {
   createNodeEffectHostCommandRouter,
 } from "./create-node-host-command-router";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
+import type { JsonValue } from "@openducktor/contracts";
 
 const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
@@ -109,7 +110,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           ),
           "utf8",
         ),
-      ) as Record<string, unknown>;
+      ) as Record<string, JsonValue>;
       expect(payload).toEqual({
         hostToken: expect.any(String),
         hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),

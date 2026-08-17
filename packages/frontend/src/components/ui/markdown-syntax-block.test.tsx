@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { JsonValue } from "@openducktor/contracts";
 
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -18,7 +19,7 @@ const actualThemeProviderModule = { ...(await import("@/components/layout/theme-
 let currentTheme: Theme = "light";
 let yamlLanguageShouldFail = false;
 const registerLanguageMock = mock((_language: string, _grammar: unknown) => {});
-const syntaxHighlighterRenderMock = mock((_props: Record<string, unknown>) => {});
+const syntaxHighlighterRenderMock = mock((_props: Record<string, JsonValue>) => {});
 const darkThemeModuleLoadMock = mock(() => DARK_THEME);
 
 mock.module("@/components/layout/theme-provider", () => ({
@@ -32,7 +33,7 @@ mock.module("react-syntax-highlighter", () => {
   const PrismLight = ({
     children,
     ...props
-  }: Record<string, unknown> & { children?: ReactElement | string }): ReactElement => {
+  }: Record<string, JsonValue> & { children?: ReactElement | string }): ReactElement => {
     syntaxHighlighterRenderMock(props);
     return createElement("mock-syntax-highlighter", props, children);
   };

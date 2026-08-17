@@ -1,6 +1,7 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export const eventTimestampMs = (timestamp: string): number => {
   const parsed = Date.parse(timestamp);
@@ -20,12 +21,12 @@ const hasMeaningfulToolInputValue = (value: unknown): boolean => {
   if (!value || typeof value !== "object") {
     return false;
   }
-  return Object.values(value as Record<string, unknown>).some((entry) =>
+  return Object.values(value as Record<string, JsonValue>).some((entry) =>
     hasMeaningfulToolInputValue(entry),
   );
 };
 
-export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
+export const hasMeaningfulToolInput = (input: Record<string, JsonValue> | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 

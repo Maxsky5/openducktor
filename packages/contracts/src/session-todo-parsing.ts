@@ -1,3 +1,4 @@
+import type { JsonObject } from "./json-types";
 export type AgentSessionTodoPayloadRecord = {
   id: string;
   content: string;
@@ -10,7 +11,7 @@ export type ParseAgentSessionTodoPayloadOptions = {
   allowStringEntries?: boolean;
 };
 
-const parseTodoId = (record: Record<string, unknown>, fallbackId: string): string => {
+const parseTodoId = (record: JsonObject, fallbackId: string): string => {
   return (
     (typeof record.id === "string" ? record.id.trim() : "") ||
     (typeof record.todoId === "string" ? record.todoId.trim() : "") ||
@@ -18,7 +19,7 @@ const parseTodoId = (record: Record<string, unknown>, fallbackId: string): strin
   );
 };
 
-const parseTodoContent = (record: Record<string, unknown>): string => {
+const parseTodoContent = (record: JsonObject): string => {
   const contentCandidate =
     typeof record.content === "string"
       ? record.content
@@ -50,7 +51,7 @@ export const parseAgentSessionTodoPayloadEntry = (
     return null;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value as JsonObject;
   const id = parseTodoId(record, fallbackId);
   const content = parseTodoContent(record);
   if (!id || !content) {

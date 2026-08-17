@@ -1,5 +1,6 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
+import type { JsonValue } from "@openducktor/contracts";
 
 type ProbeBranchChangeParams = {
   activeWorkspaceRepoPath: string | null;
@@ -76,8 +77,8 @@ export const shouldSkipBranchSwitch = (
 const toOptionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
 
-const toRecord = (value: unknown): Record<string, unknown> | null =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+const toRecord = (value: unknown): Record<string, JsonValue> | null =>
+  typeof value === "object" && value !== null ? (value as Record<string, JsonValue>) : null;
 
 const extractStructuredErrorHint = (error: unknown): string | null => {
   const record = toRecord(error);

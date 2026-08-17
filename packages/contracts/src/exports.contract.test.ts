@@ -119,6 +119,8 @@ import type {
   GlobalConfig,
   HorizontalScrollbarVisibility,
   IssueType,
+  JsonObject,
+  JsonValue,
   KanbanEmptyColumnDisplay,
   KanbanSettings,
   PersistedGlobalConfigV2,
@@ -399,6 +401,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "isCodexAppServerJsonValue",
   "isCodexAppServerCommandAction",
   "isCodexAppServerCommandRequestMethod",
+  "jsonValueSchema",
   "isCodexAppServerFileMutationRequestMethod",
   "isCodexAppServerLegacyParsedCommand",
   "isCodexAppServerMcpServerElicitationRequestParams",
@@ -936,6 +939,8 @@ type ExportedTypeContract = {
   KanbanEmptyColumnDisplay: KanbanEmptyColumnDisplay;
   KanbanSettings: KanbanSettings;
   IssueType: IssueType;
+  JsonObject: JsonObject;
+  JsonValue: JsonValue;
   PlanSubtaskInput: PlanSubtaskInput;
   PlanSubtaskIssueType: PlanSubtaskIssueType;
   PlanSubtaskPriority: PlanSubtaskPriority;

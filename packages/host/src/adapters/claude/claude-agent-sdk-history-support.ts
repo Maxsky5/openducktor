@@ -8,6 +8,7 @@ import type {
 } from "@openducktor/core";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -257,9 +258,9 @@ export const createLiveUserMessageResolver = (
 };
 
 export const readHistoryToolResults = (message: SessionMessage) => {
-  const messageRecord = message as unknown as Record<string, unknown>;
+  const messageRecord = message as unknown as Record<string, JsonValue>;
   type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
-  const readTopLevelToolUseResult = (): Record<string, unknown> | null => {
+  const readTopLevelToolUseResult = (): Record<string, JsonValue> | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
     if (isRecord(camelCaseToolUseResult)) {
       return camelCaseToolUseResult;

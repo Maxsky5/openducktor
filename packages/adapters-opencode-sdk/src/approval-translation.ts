@@ -4,7 +4,9 @@ import {
 } from "@openducktor/contracts";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
 
-type UnknownRecord = Record<string, unknown>;
+import type { JsonValue } from "@openducktor/contracts";
+
+type UnknownRecord = Record<string, JsonValue>;
 type OpenCodePermissionReply = "once" | "always" | "reject";
 
 const OPENCODE_APPROVAL_OUTCOMES = ["approve_once", "approve_session", "reject"] as const;
@@ -15,6 +17,8 @@ const asRecord = (value: unknown): UnknownRecord | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
+  // SAFETY: approval request payloads arrive over the SDK JSON-RPC transport, which
+  // serializes payloads to JSON-compatible values before they reach this translation layer.
   return value as UnknownRecord;
 };
 

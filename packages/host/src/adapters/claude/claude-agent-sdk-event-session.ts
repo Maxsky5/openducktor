@@ -2,6 +2,7 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
 import type { ClaudeManualCompactionState, ClaudeSessionActivity } from "./claude-agent-sdk-types";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ClaudeEventSession = {
   acceptedUserMessages?: readonly unknown[];
@@ -35,7 +36,7 @@ export type ClaudeEventSession = {
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
   toolEndedAtMsByCallId?: Map<string, number>;
-  toolInputsByCallId: Map<string, Record<string, unknown>>;
+  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;

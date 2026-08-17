@@ -1,6 +1,7 @@
 import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
+import type { JsonValue } from "@openducktor/contracts";
 
 export class CodexFileDiffParseError extends Error {
   constructor(message: string) {
@@ -9,7 +10,7 @@ export class CodexFileDiffParseError extends Error {
   }
 }
 
-export const codexFileChangeEntries = (value: Record<string, unknown>): unknown[] => {
+export const codexFileChangeEntries = (value: Record<string, JsonValue>): unknown[] => {
   const changes = arrayFromUnknown(value.changes);
   const diffs = arrayFromUnknown(value.diffs);
   return changes.length > 0 ? changes : diffs;
@@ -37,7 +38,7 @@ const normalizeExplicitDiffType = (value: unknown): string | null => {
   return null;
 };
 
-const inferDiffType = (entry: Record<string, unknown>, diff: string): string => {
+const inferDiffType = (entry: Record<string, JsonValue>, diff: string): string => {
   const explicitType =
     normalizeExplicitDiffType(entry.type) ??
     normalizeExplicitDiffType(entry.status) ??
@@ -248,7 +249,9 @@ export const codexApplyPatchFileDiffs = (patch: string): FileDiff[] => {
   return diffs;
 };
 
-const patchInputFromObject = (value: Record<string, unknown> | null | undefined): string | null =>
+const patchInputFromObject = (
+  value: Record<string, JsonValue> | null | undefined,
+): string | null =>
   value
     ? (extractStringField(value, ["patch"]) ??
       extractStringField(value, ["patchText", "patch_text"]) ??
@@ -256,8 +259,8 @@ const patchInputFromObject = (value: Record<string, unknown> | null | undefined)
     : null;
 
 export const codexPatchInputFromToolPayload = (
-  value: Record<string, unknown>,
-  input: Record<string, unknown> | null | undefined,
+  value: Record<string, JsonValue>,
+  input: Record<string, JsonValue> | null | undefined,
 ): string | null => {
   if (typeof value.input === "string") {
     return value.input;

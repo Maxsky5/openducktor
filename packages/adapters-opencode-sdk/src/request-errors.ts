@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
 
 type ResponseMetadata = {
@@ -57,7 +58,9 @@ const readUnknownProp = (value: unknown, key: string): unknown => {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  return (value as Record<string, unknown>)[key];
+  // SAFETY: request error payloads arrive over the SDK JSON-RPC transport, which serializes
+  // payloads to JSON-compatible values before they reach this layer.
+  return (value as Record<string, JsonValue>)[key];
 };
 
 const readStringProp = (value: unknown, key: string): string | undefined => {

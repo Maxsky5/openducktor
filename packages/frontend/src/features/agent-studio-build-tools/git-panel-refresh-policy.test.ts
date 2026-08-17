@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolMessageMeta } from "./git-panel-refresh-policy";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
+import type { JsonValue } from "@openducktor/contracts";
 
 const buildToolMeta = (
   tool: string,
   toolType: ToolMessageMeta["toolType"],
-  input?: Record<string, unknown>,
+  input?: Record<string, JsonValue>,
 ): ToolMessageMeta => ({
   kind: "tool",
   partId: `part-${tool}`,

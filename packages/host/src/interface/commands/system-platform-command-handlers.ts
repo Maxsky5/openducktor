@@ -2,6 +2,7 @@ import { APP_PLATFORM_VALUES, appPlatformSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
+import type { JsonValue } from "@openducktor/contracts";
 
 type PlatformSource = () => string;
 
@@ -12,7 +13,7 @@ const supportedPlatformsText =
 
 const noArgsValidationError = (
   command: string,
-  args: Record<string, unknown> | undefined,
+  args: Record<string, JsonValue> | undefined,
 ): HostValidationError | null => {
   if (args && Object.keys(args).length > 0) {
     return new HostValidationError({

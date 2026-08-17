@@ -30,7 +30,7 @@ export const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependency
           operation: "web-mcp-entrypoint-build",
           message: errorMessage(cause),
           cause,
-          details: { command, cwd: packageRoot },
+          details: { command: [...command], cwd: packageRoot },
         }),
     });
     yield* Effect.tryPromise({

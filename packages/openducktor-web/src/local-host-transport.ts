@@ -38,6 +38,7 @@ import {
 } from "./effect/web-errors";
 import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
+import type { JsonValue } from "@openducktor/contracts";
 
 type BrowserSseListener = (payload: unknown) => void;
 type BrowserSseListenerRegistration = {
@@ -181,7 +182,7 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
 
 const invokeLocalHostEffect = <T>(
   command: string,
-  args?: Record<string, unknown>,
+  args?: Record<string, JsonValue>,
 ): Effect.Effect<T, WebError | HostInvokeError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
@@ -227,7 +228,7 @@ const invokeLocalHostEffect = <T>(
 
 const createHttpInvoke =
   () =>
-  async <T>(command: string, args?: Record<string, unknown>): Promise<T> =>
+  async <T>(command: string, args?: Record<string, JsonValue>): Promise<T> =>
     runWebBoundary(invokeLocalHostEffect<T>(command, args));
 
 export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
@@ -237,7 +238,7 @@ const parseHostEvent = (raw: string): { channel: string; payload: unknown } => {
   if (!value || typeof value !== "object") {
     throw new Error("Host event payload must be an object.");
   }
-  const record = value as Record<string, unknown>;
+  const record = value as Record<string, JsonValue>;
   if (typeof record.channel !== "string" || !("payload" in record)) {
     throw new Error("Host event payload must contain channel and payload fields.");
   }

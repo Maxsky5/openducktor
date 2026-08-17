@@ -15,6 +15,7 @@ import {
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
 
@@ -32,7 +33,7 @@ export type ClaudeTodoProjectionState = {
 
 export const claudeTodoToolPresentation = (
   todos: readonly AgentSessionTodoItem[],
-): { input: Record<string, unknown>; text: "Plan updated" } => ({
+): { input: Record<string, JsonValue>; text: "Plan updated" } => ({
   input: {
     todos: todos.map((todo) => ({
       step: todo.content,
@@ -43,14 +44,14 @@ export const claudeTodoToolPresentation = (
 });
 
 type ClaudeTaskToolResultInput = {
-  input: Record<string, unknown> | undefined;
+  input: Record<string, JsonValue> | undefined;
   isError: boolean;
-  raw: Record<string, unknown>;
+  raw: Record<string, JsonValue>;
   state: ClaudeTodoState;
   tool: string;
 };
 
-const readTaskOutput = (raw: Record<string, unknown>): Record<string, unknown> => {
+const readTaskOutput = (raw: Record<string, JsonValue>): Record<string, JsonValue> => {
   if (isRecord(raw.toolUseResult)) {
     return raw.toolUseResult;
   }
@@ -77,7 +78,7 @@ const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
   return { id, content, status, priority: "medium" };
 };
 
-const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
+const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
   if (!isRecord(output.task)) {
     return false;
   }
@@ -92,8 +93,8 @@ const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, unknown>
 
 const applyTaskUpdate = (
   state: ClaudeTodoState,
-  input: Record<string, unknown> | undefined,
-  output: Record<string, unknown>,
+  input: Record<string, JsonValue> | undefined,
+  output: Record<string, JsonValue>,
 ): boolean => {
   if (output.success !== true) {
     return false;
@@ -118,7 +119,7 @@ const applyTaskUpdate = (
   return true;
 };
 
-const applyTaskGet = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
+const applyTaskGet = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
   if (output.task === null) {
     return false;
   }
@@ -130,7 +131,7 @@ const applyTaskGet = (state: ClaudeTodoState, output: Record<string, unknown>): 
   return true;
 };
 
-const applyTaskList = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
+const applyTaskList = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
   if (!Array.isArray(output.tasks)) {
     return false;
   }
@@ -234,7 +235,7 @@ export const toClaudeTodos = (
   options: { includeNestedEntries?: boolean } = {},
 ): AgentSessionTodoItem[] => {
   const projectionState: ClaudeTodoProjectionState = { todosById: new Map() };
-  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
+  const toolInputsByCallId = new Map<string, Record<string, JsonValue>>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
   const correlationState = {
