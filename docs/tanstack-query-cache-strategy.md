@@ -50,8 +50,6 @@ Files:
 - [packages/frontend/src/state/queries/runtime.ts](../packages/frontend/src/state/queries/runtime.ts)
 - [packages/frontend/src/state/queries/runtime-catalog.ts](../packages/frontend/src/state/queries/runtime-catalog.ts)
 
-Runtime model catalogs use one canonical repo-and-runtime key on every picker surface. `useRuntimeModelCatalogs` composes independent query results for the requested runtime kinds, so one runtime can load, fail, or retry without replacing another runtime's state. Session start and Settings request all eligible catalogs while open. The new-session chat composer keeps the selected runtime enabled and enables the other available runtimes only when the model picker opens. An existing-session composer uses its selected-session catalog and does not load foreign runtime catalogs.
-
 ### Medium-lived operational reads
 
 Used for workflow data that can change during a session, but where we still want deduplication across repeated reads.
@@ -146,11 +144,8 @@ Instead, mutations must do one of:
 Examples:
 
 - saving settings snapshot updates the settings snapshot cache directly
-- saving agent model favorites writes through the narrow favorites command and replaces the settings snapshot cache only after the host returns the canonical snapshot
 - saving repo settings invalidates repo config
 - task mutations invalidate repo task data and runs
-
-The Settings full-snapshot save and the narrow favorites mutation are serialized. A full save blocks while the favorites mutation is pending, then merges the latest cached favorites into its draft payload. The full-save input echoes that canonical field as a concurrency token; the host rejects a stale value instead of changing or ignoring favorites. Only the narrow favorites command can change the field. Failed favorite writes leave the last canonical cache value unchanged and expose an explicit retry.
 
 ## Non-goals
 
