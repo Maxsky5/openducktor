@@ -124,7 +124,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 2,
+      version: 3,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
