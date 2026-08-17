@@ -193,10 +193,12 @@ export const assertRuntimeSupportsSelectedStartMode = ({
 
 export function useSessionStartModalRunner({
   branches = [],
+  favoriteState,
   repoSettings,
   workspaceRepoPath,
 }: {
   branches?: GitBranch[];
+  favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
 }): {
@@ -217,14 +219,19 @@ export function useSessionStartModalRunner({
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
-    runtimeOptions,
+    modelPickerRuntimes,
     supportsProfiles,
     supportsVariants,
     catalogError,
     isCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading,
+    retryRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading,
+    hasRuntimeSettingsSnapshot,
+    retryRuntimeSettings,
     runtimeProfileOptions,
-    modelOptions,
-    modelGroups,
     variantOptions,
     availableStartModes,
     selectedStartMode,
@@ -238,9 +245,8 @@ export function useSessionStartModalRunner({
     handleSelectStartMode,
     handleSelectSourceSessionValue,
     handleSelectTargetBranch,
-    handleSelectRuntime,
     handleSelectRuntimeProfile,
-    handleSelectModel,
+    handleSelectModelPair,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
     branches,
@@ -249,6 +255,22 @@ export function useSessionStartModalRunner({
   });
 
   selectionRef.current = selection;
+
+  const handleRetryRuntimeDefinitions = useCallback((): void => {
+    void retryRuntimeDefinitions().catch((error) => {
+      toast.error("Failed to refresh runtime definitions.", {
+        description: errorMessage(error),
+      });
+    });
+  }, [retryRuntimeDefinitions]);
+
+  const handleRetryRuntimeSettings = useCallback((): void => {
+    void retryRuntimeSettings().catch((error) => {
+      toast.error("Failed to refresh runtime settings.", {
+        description: errorMessage(error),
+      });
+    });
+  }, [retryRuntimeSettings]);
 
   const resolvePendingRun = useCallback(
     (value: unknown): void => {
@@ -383,14 +405,20 @@ export function useSessionStartModalRunner({
       confirmLabel: "Start session",
       selectedModelSelection: selection,
       selectedRuntimeKind,
-      runtimeOptions,
+      modelPickerRuntimes,
+      favoriteState,
       supportsProfiles,
       supportsVariants,
       selectionCatalogError: catalogError,
       isSelectionCatalogLoading: isCatalogLoading,
+      runtimeDefinitionsError,
+      isRuntimeDefinitionsLoading,
+      onRetryRuntimeDefinitions: handleRetryRuntimeDefinitions,
+      runtimeSettingsError,
+      isRuntimeSettingsLoading,
+      hasRuntimeSettingsSnapshot,
+      onRetryRuntimeSettings: handleRetryRuntimeSettings,
       runtimeProfileOptions,
-      modelOptions,
-      modelGroups,
       variantOptions,
       availableStartModes,
       selectedStartMode,
@@ -402,9 +430,8 @@ export function useSessionStartModalRunner({
       onSelectStartMode: handleSelectStartMode,
       onSelectSourceSessionValue: handleSelectSourceSessionValue,
       onSelectTargetBranch: handleSelectTargetBranch,
-      onSelectRuntime: handleSelectRuntime,
       onSelectRuntimeProfile: handleSelectRuntimeProfile,
-      onSelectModel: handleSelectModel,
+      onSelectModelPair: handleSelectModelPair,
       onSelectVariant: handleSelectVariant,
       allowRunInBackground: intent.source === "kanban",
       backgroundConfirmLabel: "Run in background",
@@ -426,19 +453,24 @@ export function useSessionStartModalRunner({
     confirmModal,
     existingSessionOptions,
     handleSelectRuntimeProfile,
-    handleSelectModel,
+    handleSelectModelPair,
     handleSelectTargetBranch,
-    handleSelectRuntime,
+    handleRetryRuntimeDefinitions,
+    handleRetryRuntimeSettings,
     handleSelectSourceSessionValue,
     handleSelectStartMode,
     handleSelectVariant,
     intent,
     isCatalogLoading,
+    isRuntimeDefinitionsLoading,
+    isRuntimeSettingsLoading,
     isOpen,
-    modelGroups,
-    modelOptions,
+    modelPickerRuntimes,
+    favoriteState,
     resolvePendingRun,
-    runtimeOptions,
+    runtimeDefinitionsError,
+    runtimeSettingsError,
+    hasRuntimeSettingsSnapshot,
     selectedTargetBranch,
     selectedRuntimeKind,
     selectedSourceSessionValue,

@@ -1,6 +1,9 @@
 import {
+  type AgentModelFavorite,
+  agentModelFavoritesSchema,
   globalConfigSchema,
   globalGitConfigSchema,
+  isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
@@ -26,6 +29,13 @@ import {
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
+const areAgentModelFavoritesEqual = (
+  left: readonly AgentModelFavorite[],
+  right: readonly AgentModelFavorite[],
+): boolean =>
+  left.length === right.length &&
+  left.every((favorite, index) => isSameAgentModelFavorite(favorite, right[index] ?? null));
+
 const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
 ): WorkspaceSettingsService => {
@@ -43,6 +53,8 @@ const withSerializedConfigWrites = (
       serialize(service.saveRepoSettings(workspaceId, settings)),
     updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
     saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
+    updateAgentModelFavorites: (favorites) =>
+      serialize(service.updateAgentModelFavorites(favorites)),
     setTheme: (theme) => serialize(service.setTheme(theme)),
     updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };
@@ -311,6 +323,15 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message:
+              "Model favorites changed since settings were loaded. Reload settings and retry.",
+            field: "agentModelFavorites",
+          }),
+        );
+      }
       const workspaces = yield* normalizeSnapshotWorkspaces(
         settingsConfig,
         config,
@@ -328,6 +349,7 @@ const createUnserializedWorkspaceSettingsService = (
             kanban: snapshot.kanban,
             autopilot: snapshot.autopilot,
             agentRuntimes: snapshot.agentRuntimes,
+            agentModelFavorites: config.agentModelFavorites,
             workspaces,
             globalPromptOverrides: snapshot.globalPromptOverrides,
           }) as LoadedGlobalConfig,
@@ -341,6 +363,41 @@ const createUnserializedWorkspaceSettingsService = (
       yield* settingsConfig.writeConfig(nextConfig);
       return yield* Effect.try({
         try: () => workspaceRecordsInEffectiveOrder(settingsConfig, nextConfig),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+    });
+  },
+  updateAgentModelFavorites(rawFavorites) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const favorites = yield* Effect.try({
+        try: () => agentModelFavoritesSchema.parse(rawFavorites),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      const nextConfig = yield* Effect.try({
+        try: () =>
+          globalConfigSchema.parse({
+            ...config,
+            agentModelFavorites: favorites,
+          }) as LoadedGlobalConfig,
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      yield* settingsConfig.writeConfig(nextConfig);
+      return yield* Effect.try({
+        try: () => toSettingsSnapshot(nextConfig),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

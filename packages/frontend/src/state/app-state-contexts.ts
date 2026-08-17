@@ -67,6 +67,10 @@ export type RuntimeDefinitionsContextValue = {
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   refreshRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  isLoadingRuntimeSettings: boolean;
+  runtimeSettingsError: string | null;
+  hasRuntimeSettingsSnapshot: boolean;
+  refreshRuntimeSettings: () => Promise<void>;
   loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   loadRepoRuntimeSlashCommands: (
     runtimeRef: RuntimeWorkingDirectoryRef,
@@ -162,6 +166,10 @@ export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue
       isLoadingRuntimeDefinitions: runtimeContext.isLoadingRuntimeDefinitions,
       runtimeDefinitionsError: runtimeContext.runtimeDefinitionsError,
       refreshRuntimeDefinitions: runtimeContext.refreshRuntimeDefinitions,
+      isLoadingRuntimeSettings: runtimeContext.isLoadingRuntimeSettings,
+      runtimeSettingsError: runtimeContext.runtimeSettingsError,
+      hasRuntimeSettingsSnapshot: runtimeContext.hasRuntimeSettingsSnapshot,
+      refreshRuntimeSettings: runtimeContext.refreshRuntimeSettings,
       loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
       loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills,

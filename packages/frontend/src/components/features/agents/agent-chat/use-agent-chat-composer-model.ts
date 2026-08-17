@@ -4,7 +4,7 @@ import type {
   AgentModelSelection,
 } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useMemo } from "react";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
@@ -71,11 +71,9 @@ export type AgentChatComposerConfig = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
+  modelPicker: AgentChatComposerModel["modelPicker"];
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
 };
 
@@ -164,11 +162,9 @@ export function useAgentChatComposerModel({
       isSubagentsLoading: composer.isSubagentsLoading,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
-      modelOptions: composer.modelOptions,
-      modelGroups: composer.modelGroups,
+      modelPicker: composer.modelPicker,
       variantOptions: composer.variantOptions,
       onSelectAgent: composer.onSelectAgent,
-      onSelectModel: composer.onSelectModel,
       onSelectVariant: composer.onSelectVariant,
       accentColor: composerState?.accentColor,
       contextUsage: composer.contextUsage,

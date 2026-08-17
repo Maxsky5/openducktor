@@ -156,6 +156,10 @@ const createHookHarness = (initialProps: HookArgs) => {
                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                   isLoadingRuntimeDefinitions: false,
                   runtimeDefinitionsError: null,
+                  isLoadingRuntimeSettings: false,
+                  runtimeSettingsError: null,
+                  hasRuntimeSettingsSnapshot: true,
+                  refreshRuntimeSettings: async () => {},
                   refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
                   loadRepoRuntimeCatalog: async () => createModalCatalog(),
                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
@@ -220,6 +224,17 @@ const createRepoConfigFixture = (): RepoConfig => ({
 const createBaseArgs = (): HookArgs => ({
   activeWorkspaceId: "workspace-1",
   workspaceRepoPath: "/repo",
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: false,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },
@@ -508,7 +523,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.run((state) => {
       state.sessionStartModal?.onSelectRuntimeProfile("builder");
-      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
     });
 
     await harness.run(async (state) => {

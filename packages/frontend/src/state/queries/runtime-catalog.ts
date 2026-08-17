@@ -17,13 +17,6 @@ export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
   repo: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
-  repoSessionStart: (repoPath: string, runtimeKind: RuntimeKind) =>
-    [
-      ...runtimeCatalogQueryKeys.all,
-      "session-start",
-      normalizeWorkingDirectory(repoPath),
-      runtimeKind,
-    ] as const,
   repoSlashCommandsScope: ({
     repoPath,
     runtimeKind,
@@ -86,21 +79,7 @@ export const repoRuntimeCatalogQueryOptions = (
         runtimeKind: runtimeRef.runtimeKind,
       }),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
-
-export const sessionStartRuntimeCatalogQueryOptions = (
-  runtimeRef: RepoRuntimeRef,
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
-) =>
-  queryOptions<AgentModelCatalog, Error, AgentModelCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repoSessionStart(runtimeRef.repoPath, runtimeRef.runtimeKind),
-    queryFn: (): Promise<AgentModelCatalog> =>
-      loadRepoRuntimeCatalog({
-        repoPath: runtimeRef.repoPath,
-        runtimeKind: runtimeRef.runtimeKind,
-      }),
-    gcTime: 0,
-    staleTime: 0,
+    retry: false,
   });
 
 export const repoRuntimeSlashCommandsQueryOptions = (

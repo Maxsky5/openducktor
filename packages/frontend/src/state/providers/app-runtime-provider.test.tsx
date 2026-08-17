@@ -42,7 +42,7 @@ const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
   );
 
 describe("AppRuntimeProvider", () => {
-  test("surfaces settings snapshot failures as runtime availability errors", async () => {
+  test("keeps settings snapshot failures separate from runtime definition errors", async () => {
     const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
@@ -56,12 +56,10 @@ describe("AppRuntimeProvider", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(
-        (state) =>
-          state.runtimeDefinitionsError === "Failed to load runtime settings: settings unavailable",
-      );
+      await harness.waitFor((state) => state.runtimeSettingsError === "settings unavailable");
 
       const state = harness.getLatest();
+      expect(state.runtimeDefinitionsError).toBeNull();
       expect(state.runtimeDefinitions).toEqual([OPENCODE_RUNTIME_DESCRIPTOR]);
       expect(state.availableRuntimeDefinitions).toEqual([]);
     } finally {

@@ -1,14 +1,14 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { type Dispatch, type SetStateAction, useCallback, useMemo } from "react";
+import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import {
   coerceVisibleSelectionToCatalog,
   resolveInitialModelSelection,
-  resolveModelSelectionForModelChange,
+  resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
-  resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
-} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+} from "@/features/model-selection/model-selection-state";
 
 type UseSessionStartModalSelectionStateArgs = {
   catalog: AgentModelCatalog | null;
@@ -30,8 +30,7 @@ type UseSessionStartModalSelectionStateResult = {
     selectedModel: AgentModelSelection | null,
   ) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
-  handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
+  handleSelectPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
@@ -116,21 +115,6 @@ export function useSessionStartModalSelectionState({
     [catalog, setSelection],
   );
 
-  const handleSelectRuntime = useCallback(
-    (runtimeKind: RuntimeKind): void => {
-      setSelection(
-        resolveModelSelectionForRuntimeChange({
-          catalog,
-          currentSelection: resolvedSelection,
-          defaultSelection,
-          selectedModel: intentSelectedModel,
-          runtimeKind,
-        }),
-      );
-    },
-    [catalog, defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
-  );
-
   const handleSelectRuntimeProfile = useCallback(
     (profileId: string): void => {
       if (!selectedRuntimeKind) {
@@ -148,21 +132,18 @@ export function useSessionStartModalSelectionState({
     [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
   );
 
-  const handleSelectModel = useCallback(
-    (modelKey: string): void => {
-      if (!selectedRuntimeKind) {
-        return;
-      }
-      setSelection(
-        resolveModelSelectionForModelChange({
-          catalog,
-          currentSelection: resolvedSelection,
-          modelKey,
-          runtimeKind: selectedRuntimeKind,
-        }),
-      );
+  const handleSelectPair = useCallback(
+    (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
+      const resolvedPair = resolveModelSelectionForPair({
+        catalog: targetCatalog,
+        currentSelection: resolvedSelection,
+        defaultSelection,
+        selectedModel: intentSelectedModel,
+        value,
+      });
+      setSelection(resolvedPair?.selection ?? null);
     },
-    [catalog, resolvedSelection, selectedRuntimeKind, setSelection],
+    [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
 
   const handleSelectVariant = useCallback(
@@ -186,8 +167,7 @@ export function useSessionStartModalSelectionState({
     resetSelection,
     initializeSelection,
     handleSelectRuntimeProfile,
-    handleSelectModel,
-    handleSelectRuntime,
+    handleSelectPair,
     handleSelectVariant,
   };
 }

@@ -262,6 +262,7 @@ describe("HostClient", () => {
       "workspaceUpdateRepoHooks",
       "workspaceGetRepoConfig",
       "workspaceGetSettingsSnapshot",
+      "workspaceUpdateAgentModelFavorites",
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
       "workspaceSaveSettingsSnapshot",
@@ -1124,6 +1125,36 @@ describe("HostClient", () => {
             globalPromptOverrides: {},
           },
         },
+      },
+    ]);
+  });
+
+  test("workspaceUpdateAgentModelFavorites returns the canonical settings snapshot", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_update_agent_model_favorites") {
+        return {
+          theme: "light",
+          git: { defaultMergeMethod: "merge_commit" },
+          workspaces: {},
+          globalPromptOverrides: {},
+          agentModelFavorites: [
+            { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+          ],
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const favorites = [
+      { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
+    ];
+
+    const snapshot = await client.workspaceUpdateAgentModelFavorites(favorites);
+
+    expect(snapshot.agentModelFavorites).toEqual(favorites);
+    expect(calls).toEqual([
+      {
+        command: "workspace_update_agent_model_favorites",
+        args: { favorites },
       },
     ]);
   });

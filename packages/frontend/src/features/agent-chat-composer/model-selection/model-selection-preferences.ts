@@ -1,14 +1,14 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
   resolvePreferredModelSelection,
-} from "./model-selection-state";
+} from "@/features/model-selection/model-selection-state";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const availableRuntimeKindFor = (
   runtimeDefinitions: RuntimeDescriptor[],

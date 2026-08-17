@@ -232,6 +232,35 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
+      updateAgentModelFavorites() {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push("updateAgentModelFavorites");
+            return {
+              theme: "light",
+              git: { defaultMergeMethod: "merge_commit" },
+              general: { openAgentStudioTabOnBackgroundSessionStart: true },
+              appearance: { horizontalScrollbarVisibility: "system" },
+              chat: { showThinkingMessages: false },
+              reusablePrompts: [],
+              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+              autopilot: { rules: [] },
+              agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+              agentModelFavorites: [
+                { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+              ],
+              workspaces: {},
+              globalPromptOverrides: {},
+            };
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
       setTheme() {
         return Effect.tryPromise({
           try: async () => {
@@ -321,11 +350,19 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             opencode: { enabled: true, executablePath: "/bin/opencode" },
             codex: { enabled: false, executablePath: "/bin/codex" },
           },
+          agentModelFavorites: [],
           workspaces: {},
           globalPromptOverrides: {},
         },
       }),
     ).resolves.toEqual([]);
+    await expect(
+      router.invoke("workspace_update_agent_model_favorites", {
+        favorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
+      }),
+    ).resolves.toMatchObject({
+      agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
+    });
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
     await expect(
       router.invoke("workspace_update_global_git_config", {
@@ -343,6 +380,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "updateRepoHooks",
       "getSettingsSnapshot",
       "saveSettingsSnapshot",
+      "updateAgentModelFavorites",
       "setTheme",
       "updateGlobalGitConfig",
     ]);

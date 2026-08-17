@@ -7,7 +7,7 @@ export {
   coerceVisibleSelectionToCatalog,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
-} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+} from "@/features/model-selection/model-selection-state";
 
 export const roleDefaultSelectionFor = (
   repoSettings: RepoSettingsInput | null,

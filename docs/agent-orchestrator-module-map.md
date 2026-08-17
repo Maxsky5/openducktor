@@ -620,15 +620,20 @@ Files:
 
 - `pages/agents/agent-studio-chat-surface-state.ts`
 - `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`
+- `components/features/agents/model-picker/model-picker.tsx`
+- `components/features/agents/model-picker/model-picker-model.ts`
 - `features/agent-chat-composer/context-usage/use-selected-session-context-usage.ts`
 - `features/agent-chat-composer/model-selection/model-selection-preferences.ts`
 - `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime.ts`
 - `features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands.ts`
 - `features/agent-chat-composer/prompt-input/use-chat-composer-skills.ts`
+- `state/queries/use-runtime-model-catalogs.ts`
+- `state/mutations/use-agent-model-favorites.ts`
 
 Owns:
 
 - composing model-selection choices for a new message or new session
+- presenting runtime and model as one exact `runtimeKind`/`providerId`/`modelId` choice with favorites, search, per-runtime loading, and per-runtime retry
 - resolving composer model selections from one explicit model-selection source:
   selected session or new session
 - resolving selected composer runtime kind from selected-session model, draft
@@ -644,6 +649,8 @@ Owns:
   source, repo-runtime readiness, and unavailable runtime context
 - passing runtime-backed composer tools a `RuntimeWorkingDirectoryRef` for both
   loaded-session and pre-session repo targets
+- loading other available runtime catalogs only while the new-session picker is open
+- keeping foreign runtime rails visible but disabled for an existing session
 
 Must not own:
 
@@ -713,6 +720,7 @@ user explicitly changes the selected session model; otherwise they update the
 new-session draft selection. Do not add automatic loaded-session model sync
 effects, and do not store a mirrored loaded-session identity. The composer can
 derive that action target from the loaded session it already receives.
+Model-picker actions must validate the exact runtime, provider, and model against the target catalog before updating a draft or session. Existing sessions reject foreign runtime choices before any durable session update.
 Selected-session model fallback is exposed separately as `selectedSessionModel`
 and remains display-only until the user changes the model.
 An explicit session model action requires that selected session to be loaded.

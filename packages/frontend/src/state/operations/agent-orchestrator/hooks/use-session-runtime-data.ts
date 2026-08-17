@@ -146,11 +146,12 @@ export const useSessionRuntimeData = ({
   const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
 
-  const catalogQuery = useQuery(
-    catalogRef && isRuntimeReady
+  const catalogQuery = useQuery({
+    ...(catalogRef && isRuntimeReady
       ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions(catalogRef),
-  );
+      : skippedRuntimeCatalogQueryOptions(catalogRef)),
+    notifyOnChangeProps: ["data", "error", "isFetching"],
+  });
 
   const todosQuery = useQuery(
     todosRef && isRuntimeReady
@@ -164,30 +165,29 @@ export const useSessionRuntimeData = ({
     }
 
     const catalogQueryError =
-      catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
+      !catalogQuery.isFetching && catalogQuery.error instanceof Error
+        ? catalogQuery.error.message
+        : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
-    const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const error =
-      runtimeDataRefs.kind === "unavailable"
-        ? runtimeDataRefs.error
-        : (runtimePolicyError ?? runtimeDataQueryError);
+    const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
-    const canShowModelCatalogLoading =
-      isRuntimeReady && runtimeDataRefs.kind === "available" && !catalogQueryError;
     const isLoadingModelCatalog =
-      canShowModelCatalogLoading && resolvedCatalog === null && catalogQuery.isPending;
+      isRuntimeReady && runtimeDataRefs.kind === "available" && catalogQuery.isFetching;
 
     return {
       modelCatalog: resolvedCatalog,
       todos: resolvedTodos,
       isLoadingModelCatalog,
-      error,
+      catalogError: catalogQueryError,
+      todosError: todosQueryError,
+      runtimePolicyError,
+      contextError,
     };
   }, [
     catalogQuery.data,
     catalogQuery.error,
-    catalogQuery.isPending,
+    catalogQuery.isFetching,
     isRuntimeReady,
     runtimeDataRefs,
     runtimePolicyError,

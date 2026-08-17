@@ -13,6 +13,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state";
+import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -59,7 +60,9 @@ export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeWorkspace, branches, isSwitchingWorkspace } = useWorkspaceState();
+  const { activeWorkspace, branches, isSwitchingWorkspace, saveAgentModelFavorites } =
+    useWorkspaceState();
+  const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
@@ -190,6 +193,7 @@ export function useKanbanPageModels({
   const sessionStartFlow = useKanbanSessionStartFlow({
     activeWorkspaceId,
     branches,
+    favoriteState,
     repoSettings,
     openAgentStudioTabOnBackgroundSessionStart,
     tasks: kanbanTasks,

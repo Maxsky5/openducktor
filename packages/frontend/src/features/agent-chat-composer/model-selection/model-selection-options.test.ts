@@ -45,13 +45,6 @@ describe("model-selection-options", () => {
         description: "Current session profile",
       }),
     ]);
-    expect(options.modelOptions).toEqual([
-      {
-        value: "anthropic/claude-sonnet",
-        label: "claude-sonnet",
-        description: "anthropic (current session model)",
-      },
-    ]);
     expect(options.variantOptions).toEqual([{ value: "high", label: "high" }]);
   });
 

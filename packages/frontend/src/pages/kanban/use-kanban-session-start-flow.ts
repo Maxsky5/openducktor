@@ -39,6 +39,7 @@ const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 type UseKanbanSessionStartFlowArgs = {
   activeWorkspaceId: string | null;
   branches?: GitBranch[];
+  favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
@@ -126,6 +127,7 @@ const resolveKanbanPlanningStartPreference = (
 export function useKanbanSessionStartFlow({
   activeWorkspaceId,
   branches = [],
+  favoriteState,
   repoSettings,
   openAgentStudioTabOnBackgroundSessionStart,
   tasks,
@@ -140,6 +142,7 @@ export function useKanbanSessionStartFlow({
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
     branches,
+    favoriteState,
     repoSettings,
     workspaceRepoPath,
   });

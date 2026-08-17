@@ -44,6 +44,7 @@ const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuest
 type UseAgentStudioSessionActionsArgs = {
   activeWorkspaceId: string | null;
   branches?: GitBranch[];
+  favoriteState: SessionStartModalModel["favoriteState"];
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
@@ -101,6 +102,7 @@ export type UseAgentStudioSessionActionsResult = {
 export function useAgentStudioSessionActions({
   activeWorkspaceId,
   branches = [],
+  favoriteState,
   taskId,
   role,
   launchActionId,
@@ -156,6 +158,7 @@ export function useAgentStudioSessionActions({
     handleQuickAction,
   } = useAgentStudioSessionStartFlow({
     branches,
+    favoriteState,
     taskId,
     role,
     launchActionId,

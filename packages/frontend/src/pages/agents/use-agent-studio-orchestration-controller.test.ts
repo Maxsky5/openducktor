@@ -21,7 +21,6 @@ const onCreateTab = () => {};
 const onCloseTab = () => {};
 const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
-const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
 const createBaseArgs = (): BuildArgs => {
   const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
@@ -84,7 +83,10 @@ const createBaseArgs = (): BuildArgs => {
           modelCatalog: null,
           todos: [],
           isLoadingModelCatalog: false,
-          error: null,
+          catalogError: null,
+          todosError: null,
+          runtimePolicyError: null,
+          contextError: null,
         },
         runtimeReadiness: {
           state: "ready",
@@ -138,11 +140,26 @@ const createBaseArgs = (): BuildArgs => {
       isSubagentsLoading: false,
       searchFiles: async () => [],
       agentProfileOptions: [],
-      modelOptions: [],
-      modelGroups: [],
+      modelPicker: {
+        runtimes: [],
+        value: null,
+        selectionPolicy: { kind: "editable" as const },
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: true,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        onValueChange: () => {},
+        onOpenChange: () => {},
+      },
       variantOptions: [],
       handleSelectAgentProfile,
-      handleSelectModel,
       handleSelectVariant,
       agentAccentColorsByProfileId: {},
       selectedSessionContextUsage: null,
@@ -189,7 +206,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.documents.activeDocument?.document.markdown).toBe("# doc");
     expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
-    expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings).toEqual(baseArgs.chatSettings);
     expect(mapped.composer.draftScope).toEqual({

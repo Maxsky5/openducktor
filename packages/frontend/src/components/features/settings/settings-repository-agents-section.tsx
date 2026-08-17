@@ -1,22 +1,22 @@
 import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
+import { AgentRuntimeCombobox, toPrimaryAgentOptions } from "@/components/features/agents";
 import {
-  AgentRuntimeCombobox,
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents";
+  ModelPicker,
+  type ModelPickerFavoriteState,
+  type ModelPickerRuntime,
+  type ModelPickerValue,
+  toModelPickerCatalogResource,
+  unavailableModelPickerCatalogResource,
+} from "@/components/features/agents/model-picker";
 import {
   ensureDraftAgentDefault,
-  findCatalogModel,
   ROLE_DEFAULTS,
   resolveRepoAgentDefaultRuntimeKind,
-  selectedModelKeyForRole,
   toRoleVariantOptions,
 } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
-import type { ComboboxGroup } from "@/components/ui/combobox";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,10 +24,14 @@ import {
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
+import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
   availableRuntimeDefinitions: RuntimeDescriptor[];
+  catalogResources: RuntimeModelCatalogQueryResource[];
+  favoriteState: ModelPickerFavoriteState;
   loadingState: {
     isLoadingRuntimeDefinitions: boolean;
     isLoadingCatalog: boolean;
@@ -37,7 +41,6 @@ type RepositoryAgentsSectionProps = {
   runtimeDefinitionsError: string | null;
   runtimeAvailabilityErrors: string[];
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
-  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
   onUpdateSelectedRepoAgentDefault: (
@@ -53,13 +56,9 @@ type RepositoryAgentRoleViewModel = {
   value: ReturnType<typeof ensureDraftAgentDefault>;
   runtimeDescriptor: RuntimeDescriptor | null;
   catalog: AgentModelCatalog | null;
-  catalogError: string | null;
   isCatalogLoading: boolean;
   agentOptions: ReturnType<typeof toPrimaryAgentOptions>;
-  modelOptions: ReturnType<typeof toModelOptions>;
-  modelGroups: ComboboxGroup[];
   roleVariantOptions: ReturnType<typeof toRoleVariantOptions>;
-  modelKey: string;
 };
 
 const agentPlaceholderFor = ({
@@ -83,14 +82,12 @@ const buildRepositoryAgentRoleViewModel = ({
   runtimeDefinitions,
   role,
   getCatalogForRuntime,
-  getCatalogErrorForRuntime,
   isCatalogLoadingForRuntime,
 }: {
   selectedRepoConfig: RepoConfig;
   runtimeDefinitions: RuntimeDescriptor[];
   role: "spec" | "planner" | "build" | "qa";
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
-  getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
 }): RepositoryAgentRoleViewModel => {
   const value = ensureDraftAgentDefault(selectedRepoConfig.agentDefaults[role] ?? null);
@@ -109,13 +106,9 @@ const buildRepositoryAgentRoleViewModel = ({
     value,
     runtimeDescriptor,
     catalog,
-    catalogError: runtimeKind ? getCatalogErrorForRuntime(runtimeKind) : null,
     isCatalogLoading: runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false,
     agentOptions: toPrimaryAgentOptions(catalog),
-    modelOptions: toModelOptions(catalog),
-    modelGroups: toModelGroupsByProvider(catalog) as ComboboxGroup[],
     roleVariantOptions: toRoleVariantOptions(catalog, selectedRepoConfig.agentDefaults, role),
-    modelKey: selectedModelKeyForRole(selectedRepoConfig.agentDefaults, role),
   };
 };
 
@@ -155,11 +148,12 @@ const findMissingRoleLabels = ({
 export function RepositoryAgentsSection({
   selectedRepoConfig,
   availableRuntimeDefinitions,
+  catalogResources,
+  favoriteState,
   loadingState,
   runtimeDefinitionsError,
   runtimeAvailabilityErrors,
   getCatalogForRuntime,
-  getCatalogErrorForRuntime,
   isCatalogLoadingForRuntime,
   onUpdateSelectedRepoConfig,
   onUpdateSelectedRepoAgentDefault,
@@ -176,9 +170,28 @@ export function RepositoryAgentsSection({
   }
 
   const runtimeOptions = toAgentRuntimeOptions(availableRuntimeDefinitions);
+  const modelPickerRuntimes: ModelPickerRuntime[] = availableRuntimeDefinitions.map(
+    (descriptor) => {
+      const resource = catalogResources.find(
+        (candidate) => candidate.runtimeKind === descriptor.kind,
+      );
+      return {
+        descriptor,
+        resource: resource
+          ? toModelPickerCatalogResource({
+              catalog: resource.catalog,
+              isFetching: resource.isFetching,
+              error: resource.error,
+              isAvailable: resource.isEnabled,
+              unavailableReason: "This runtime catalog is not available yet.",
+              retry: resource.retry,
+            })
+          : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
+      };
+    },
+  );
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
-  const modelDropdownClassName = "sm:min-w-[26rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
   const selectedDefaultRuntimeKind =
     resolveRuntimeKindSelection({
@@ -246,27 +259,20 @@ export function RepositoryAgentsSection({
 
       <div className="grid gap-3">
         {ROLE_DEFAULTS.map(({ role, label }) => {
-          const roleRuntimeOptions = runtimeOptions;
           const roleViewModel = buildRepositoryAgentRoleViewModel({
             selectedRepoConfig,
             runtimeDefinitions: availableRuntimeDefinitions,
             role,
             getCatalogForRuntime,
-            getCatalogErrorForRuntime,
             isCatalogLoadingForRuntime,
           });
           const {
             value,
             runtimeKind,
             runtimeDescriptor,
-            catalog,
-            catalogError,
             isCatalogLoading: isRoleCatalogLoading,
             agentOptions,
-            modelOptions,
-            modelGroups,
             roleVariantOptions,
-            modelKey,
           } = roleViewModel;
           const supportsProfiles =
             runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles === true;
@@ -276,6 +282,14 @@ export function RepositoryAgentsSection({
           });
           const isAgentSelectDisabled =
             isRoleCatalogLoading || isSaving || !supportsProfiles || agentOptions.length === 0;
+          const selectedPickerValue: ModelPickerValue | null =
+            runtimeKind && value.providerId && value.modelId
+              ? {
+                  runtimeKind,
+                  providerId: value.providerId,
+                  modelId: value.modelId,
+                }
+              : null;
 
           return (
             <div key={role} className="grid gap-2 rounded-md border border-border bg-card p-3">
@@ -294,31 +308,53 @@ export function RepositoryAgentsSection({
                 </Button>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-4">
+              <div className="grid gap-2 md:grid-cols-3">
                 <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Agent Runtime</Label>
-                  <AgentRuntimeCombobox
-                    value={runtimeKind ?? ""}
-                    runtimeOptions={roleRuntimeOptions}
-                    disabled={
-                      isSaving || isLoadingRuntimeDefinitions || roleRuntimeOptions.length === 0
+                  <Label className="text-xs">Runtime and Model</Label>
+                  <ModelPicker
+                    runtimes={modelPickerRuntimes}
+                    value={selectedPickerValue}
+                    favoriteState={favoriteState}
+                    selectionPolicy={
+                      isSaving || isLoadingSettings
+                        ? { kind: "read_only", reason: "Settings are being saved or loaded." }
+                        : { kind: "editable" }
                     }
-                    className={runtimeDropdownClassName}
-                    onValueChange={(runtimeKind) =>
-                      onUpdateSelectedRepoConfig((repoConfig) => ({
-                        ...repoConfig,
-                        agentDefaults: {
-                          ...repoConfig.agentDefaults,
-                          [role]: {
-                            runtimeKind,
-                            providerId: "",
-                            modelId: "",
-                            variant: "",
-                            profileId: "",
+                    placeholder={isRoleCatalogLoading ? "Loading models…" : "Select a model"}
+                    onValueChange={(selectedValue) => {
+                      const targetRuntime = modelPickerRuntimes.find(
+                        (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
+                      );
+                      if (targetRuntime?.resource.status !== "ready") {
+                        return;
+                      }
+                      const targetCatalog = targetRuntime.resource.catalog;
+
+                      onUpdateSelectedRepoConfig((repoConfig) => {
+                        const currentValue = repoConfig.agentDefaults[role] ?? null;
+                        const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
+                          selectedRepoConfig: repoConfig,
+                          runtimeDefinitions: availableRuntimeDefinitions,
+                          role,
+                        });
+                        const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
+                          currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
+                          currentRuntimeKind,
+                          targetCatalog,
+                          value: selectedValue,
+                        });
+                        if (!nextDefault) {
+                          return repoConfig;
+                        }
+                        return {
+                          ...repoConfig,
+                          agentDefaults: {
+                            ...repoConfig.agentDefaults,
+                            [role]: nextDefault,
                           },
-                        },
-                      }))
-                    }
+                        };
+                      });
+                    }}
                   />
                 </div>
 
@@ -336,42 +372,6 @@ export function RepositoryAgentsSection({
                   />
                 </div>
 
-                <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Model</Label>
-                  <Combobox
-                    value={modelKey}
-                    options={modelOptions}
-                    groups={modelGroups}
-                    matchAllSearchTerms
-                    placeholder={isRoleCatalogLoading ? "Loading models…" : "Select model"}
-                    disabled={isRoleCatalogLoading || isSaving || modelOptions.length === 0}
-                    className={modelDropdownClassName}
-                    onValueChange={(selectedModelKey) => {
-                      if (!runtimeKind) {
-                        return;
-                      }
-                      const model = findCatalogModel(catalog, selectedModelKey);
-                      if (!model) {
-                        return;
-                      }
-
-                      onUpdateSelectedRepoConfig((repoConfig) => ({
-                        ...repoConfig,
-                        agentDefaults: {
-                          ...repoConfig.agentDefaults,
-                          [role]: {
-                            ...ensureDraftAgentDefault(repoConfig.agentDefaults[role] ?? null),
-                            runtimeKind,
-                            providerId: model.providerId,
-                            modelId: model.modelId,
-                            variant: model.variants[0] ?? "",
-                          },
-                        },
-                      }));
-                    }}
-                  />
-                </div>
-
                 {runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ? (
                   <div className="grid min-w-0 gap-1">
                     <Label className="text-xs">Variant</Label>
@@ -384,7 +384,7 @@ export function RepositoryAgentsSection({
                       disabled={
                         isRoleCatalogLoading ||
                         isSaving ||
-                        !modelKey ||
+                        !selectedPickerValue ||
                         roleVariantOptions.length === 0
                       }
                       className={variantDropdownClassName}
@@ -395,12 +395,6 @@ export function RepositoryAgentsSection({
                   </div>
                 ) : null}
               </div>
-
-              {catalogError ? (
-                <p className="text-xs text-warning-muted">
-                  Failed to load runtime catalog: {catalogError}
-                </p>
-              ) : null}
             </div>
           );
         })}

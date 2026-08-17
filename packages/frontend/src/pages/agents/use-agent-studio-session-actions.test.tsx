@@ -51,7 +51,10 @@ const createSessionRuntimeData = (
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
-  error: null,
+  catalogError: null,
+  todosError: null,
+  runtimePolicyError: null,
+  contextError: null,
   ...overrides,
 });
 
@@ -309,7 +312,11 @@ const confirmSessionStartModal = async (
       state.sessionStartModal.isSelectionCatalogLoading === false,
   );
   await harness.run((state) => {
-    state.sessionStartModal?.onSelectModel("openai/gpt-5");
+    state.sessionStartModal?.onSelectModelPair({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
     state.sessionStartModal?.onSelectRuntimeProfile("spec");
     state.sessionStartModal?.onSelectVariant("default");
   });
@@ -334,6 +341,17 @@ const createBaseArgs = (): HookArgs => {
   return {
     activeWorkspaceId: "workspace-1",
     workspaceRepoPath: "/repo",
+    favoriteState: {
+      favorites: [],
+      isLoading: false,
+      readError: null,
+      isMutationPending: false,
+      mutationError: null,
+      canMutate: false,
+      toggleFavorite: () => {},
+      retryRead: () => {},
+      retryMutation: () => {},
+    },
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",
@@ -579,7 +597,11 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.waitFor((state) => state.sessionStartModal !== null);
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
       state.sessionStartModal?.onSelectRuntimeProfile("build");
       state.sessionStartModal?.onSelectVariant("default");
     });

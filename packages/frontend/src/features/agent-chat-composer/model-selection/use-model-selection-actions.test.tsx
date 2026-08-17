@@ -128,7 +128,14 @@ describe("useModelSelectionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectModel("claude/claude-opus-4-6");
+      state.handleSelectModelPair(
+        {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-opus-4-6",
+        },
+        claudeCatalog,
+      );
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
@@ -169,7 +176,14 @@ describe("useModelSelectionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectModel("claude/claude-sonnet-4-6");
+      state.handleSelectModelPair(
+        {
+          runtimeKind: "claude",
+          providerId: "claude",
+          modelId: "claude-sonnet-4-6",
+        },
+        selectionCatalog,
+      );
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
@@ -178,6 +192,72 @@ describe("useModelSelectionActions", () => {
       modelId: "claude-sonnet-4-6",
       variant: "high",
       profileId: "orchestrator",
+    });
+    await harness.unmount();
+  });
+
+  test("blocks foreign runtime pairs for a loaded session", async () => {
+    const updateAgentSessionModel = mock(async () => {});
+    const harness = createHarness(createBaseProps({ updateAgentSessionModel }));
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+        {
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["medium"],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5" },
+        },
+      );
+    });
+
+    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
+  test("applies an exact cross-runtime pair to a new-session draft", async () => {
+    const applyDraftSelection = mock(() => {});
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: null,
+        applyDraftSelection,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+        {
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["medium"],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5" },
+        },
+      );
+    });
+
+    expect(applyDraftSelection).toHaveBeenCalledWith({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
     });
     await harness.unmount();
   });

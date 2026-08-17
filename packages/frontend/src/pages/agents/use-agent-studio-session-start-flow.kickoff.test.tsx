@@ -93,6 +93,10 @@ const createHookHarness = (initialProps: HookArgs) => {
                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                   isLoadingRuntimeDefinitions: false,
                   runtimeDefinitionsError: null,
+                  isLoadingRuntimeSettings: false,
+                  runtimeSettingsError: null,
+                  hasRuntimeSettingsSnapshot: true,
+                  refreshRuntimeSettings: async () => {},
                   refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
                   loadRepoRuntimeCatalog: async () => ({
                     runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -138,6 +142,17 @@ const createHookHarness = (initialProps: HookArgs) => {
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workspaceId: null,
   workspaceRepoPath: null,
+  favoriteState: {
+    favorites: [],
+    isLoading: false,
+    readError: null,
+    isMutationPending: false,
+    mutationError: null,
+    canMutate: false,
+    toggleFavorite: () => {},
+    retryRead: () => {},
+    retryMutation: () => {},
+  },
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",
@@ -207,7 +222,11 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
         state.sessionStartModal.isSelectionCatalogLoading === false,
     );
     await harness.run(async (state) => {
-      state.sessionStartModal?.onSelectModel("openai/gpt-5");
+      state.sessionStartModal?.onSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
       state.sessionStartModal?.onSelectRuntimeProfile("spec");
       state.sessionStartModal?.onSelectVariant("default");
       await state.sessionStartModal?.onConfirm({

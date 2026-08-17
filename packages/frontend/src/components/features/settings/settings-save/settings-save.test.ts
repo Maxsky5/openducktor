@@ -316,6 +316,7 @@ describe("settings save transforms", () => {
   test("normalizes snapshot workspace map and global prompt overrides", () => {
     const snapshot = prepareSettingsSnapshotForSave(
       createSettingsSnapshotFixture({
+        agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
         chat: {
           showThinkingMessages: true,
         },
@@ -365,6 +366,9 @@ describe("settings save transforms", () => {
       horizontalScrollbarVisibility: "hide",
     });
     expect(snapshot.kanban.doneVisibleDays).toBe(1);
+    expect(snapshot.agentModelFavorites).toEqual([
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+    ]);
     expect(snapshot.globalPromptOverrides).toEqual({
       "kickoff.spec_initial": {
         template: "global",

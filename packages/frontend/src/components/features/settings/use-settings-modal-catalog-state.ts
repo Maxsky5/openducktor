@@ -1,14 +1,11 @@
-import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
-  repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
-} from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
+  type RuntimeModelCatalogQueryResource,
+  useRuntimeModelCatalogs,
+} from "@/state/queries/use-runtime-model-catalogs";
 
 type UseSettingsModalCatalogStateArgs = {
   enabled: boolean;
@@ -17,6 +14,7 @@ type UseSettingsModalCatalogStateArgs = {
 };
 
 type SettingsModalCatalogState = {
+  resources: RuntimeModelCatalogQueryResource[];
   catalogsByRuntime: Record<string, AgentModelCatalog | null>;
   catalogErrorsByRuntime: Record<string, string | null>;
   isLoadingCatalog: boolean;
@@ -26,13 +24,7 @@ type SettingsModalCatalogState = {
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
 };
 
-const skippedSettingsCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
-  skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
+const EMPTY_RUNTIME_KINDS: RuntimeKind[] = [];
 
 export const useSettingsModalCatalogState = ({
   enabled,
@@ -40,45 +32,32 @@ export const useSettingsModalCatalogState = ({
   runtimeKinds,
 }: UseSettingsModalCatalogStateArgs): SettingsModalCatalogState => {
   const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
-  const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
-
-  const catalogQueries = useQueries({
-    queries: uniqueRuntimeKinds.map((runtimeKind) => {
-      const runtimeRef: RepoRuntimeRef | null = selectedRepoPath
-        ? {
-            repoPath: selectedRepoPath,
-            runtimeKind,
-          }
-        : null;
-      return enabled && runtimeRef
-        ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
-        : skippedSettingsCatalogQueryOptions(runtimeRef);
-    }),
+  const { resources } = useRuntimeModelCatalogs({
+    repoPath: selectedRepoPath,
+    runtimeKinds,
+    enabledRuntimeKinds: enabled ? runtimeKinds : EMPTY_RUNTIME_KINDS,
+    loadCatalog: loadRepoRuntimeCatalog,
   });
-
-  const catalogsByRuntime = useMemo<Record<string, AgentModelCatalog | null>>(() => {
-    return Object.fromEntries(
-      uniqueRuntimeKinds.map((runtimeKind, index) => [
-        runtimeKind,
-        catalogQueries[index]?.data ?? null,
-      ]),
-    );
-  }, [catalogQueries, uniqueRuntimeKinds]);
-
-  const catalogErrorsByRuntime = useMemo<Record<string, string | null>>(() => {
-    return Object.fromEntries(
-      uniqueRuntimeKinds.map((runtimeKind, index) => {
-        const queryError = catalogQueries[index]?.error;
-        return [runtimeKind, queryError instanceof Error ? queryError.message : null];
-      }),
-    );
-  }, [catalogQueries, uniqueRuntimeKinds]);
-
-  const loadingRuntimeKinds = useMemo<RuntimeKind[]>(() => {
-    return uniqueRuntimeKinds.filter((_runtimeKind, index) => catalogQueries[index]?.isLoading);
-  }, [catalogQueries, uniqueRuntimeKinds]);
+  const { catalogsByRuntime, catalogErrorsByRuntime, loadingRuntimeKinds } = useMemo(() => {
+    const catalogs: Record<string, AgentModelCatalog | null> = {};
+    const errors: Record<string, string | null> = {};
+    const loading: RuntimeKind[] = [];
+    for (const resource of resources) {
+      catalogs[resource.runtimeKind] = resource.catalog;
+      errors[resource.runtimeKind] = resource.error;
+      if (resource.isFetching) {
+        loading.push(resource.runtimeKind);
+      }
+    }
+    return {
+      catalogsByRuntime: catalogs,
+      catalogErrorsByRuntime: errors,
+      loadingRuntimeKinds: loading,
+    };
+  }, [resources]);
 
   return {
+    resources,
     catalogsByRuntime,
     catalogErrorsByRuntime,
     isLoadingCatalog: loadingRuntimeKinds.length > 0,

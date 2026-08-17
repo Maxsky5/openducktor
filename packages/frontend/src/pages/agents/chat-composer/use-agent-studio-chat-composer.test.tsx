@@ -58,7 +58,10 @@ const createSessionRuntimeData = (
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
-  error: null,
+  catalogError: null,
+  todosError: null,
+  runtimePolicyError: null,
+  contextError: null,
   ...overrides,
 });
 
@@ -253,6 +256,10 @@ const createHookHarness = (
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
     refreshRuntimeDefinitions: async () => runtimeDefinitions,
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Test runtime catalog loader was not configured.");
@@ -346,6 +353,17 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
     role,
     reusablePrompts: [],
     repoSettings: createRepoSettings(null),
+    favoriteState: {
+      favorites: [],
+      isLoading: false,
+      readError: null,
+      isMutationPending: false,
+      mutationError: null,
+      canMutate: true,
+      toggleFavorite: () => {},
+      retryRead: () => {},
+      retryMutation: () => {},
+    },
     updateAgentSessionModel: async () => {},
     loadCatalog: async () => CATALOG,
     ...hookOverrides,
@@ -510,6 +528,175 @@ describe("useAgentStudioChatComposer", () => {
       expect(state.agentAccentColorsByProfileId).toMatchObject({
         "spec-agent": "#f59e0b",
       });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads other runtime catalogs when the new-session picker opens and selects an exact pair", async () => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) =>
+      runtimeKind === "codex" ? CODEX_CATALOG : CATALOG,
+    );
+    const harness = createHookHarness(createBaseProps({ loadCatalog }), {
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.modelPicker.runtimes[0]?.resource.catalog !== null);
+      expect(loadCatalog).not.toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+
+      await harness.run(() => {
+        harness.getLatest().modelPicker.onOpenChange(true);
+      });
+      await harness.waitFor((state) =>
+        state.modelPicker.runtimes.some(
+          (runtime) => runtime.descriptor.kind === "codex" && runtime.resource.catalog !== null,
+        ),
+      );
+      await harness.run(() => {
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
+      });
+
+      expect(harness.getLatest().selectionForNewSession?.runtimeKind).toBe("codex");
+      expect(loadCatalog).toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows foreign runtimes as locked without loading their repo catalogs for an existing session", async () => {
+    const loadCatalog = mock(async () => CODEX_CATALOG);
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        loadCatalog,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().modelPicker.selectionPolicy).toEqual({
+        kind: "runtime_locked",
+        runtimeKind: "opencode",
+        reason: "An existing session cannot change runtime.",
+      });
+      expect(
+        harness.getLatest().modelPicker.runtimes.map((runtime) => runtime.descriptor.kind),
+      ).toEqual(["opencode", "codex"]);
+      expect(loadCatalog).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps existing-session catalog rows when an unrelated runtime-data read fails", async () => {
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({
+          modelCatalog: CATALOG,
+          todosError: "Session todos unavailable",
+        }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      const selectedRuntime = harness
+        .getLatest()
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
+
+      expect(selectedRuntime?.resource.catalog).toBe(CATALOG);
+      expect(selectedRuntime?.resource.status).toBe("ready");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("maps existing-session catalog refresh, success, and failure into picker resources", async () => {
+    const loadedSession = createLoadedSession();
+    const harness = createHookHarness(
+      createBaseProps({
+        loadedSession,
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({
+            modelCatalog: CATALOG,
+            isLoadingModelCatalog: true,
+          }),
+        }),
+      );
+      let selectedRuntime = harness
+        .getLatest()
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({ status: "refreshing", catalog: CATALOG }),
+      );
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({ modelCatalog: ALTERNATE_CATALOG }),
+        }),
+      );
+      selectedRuntime = harness
+        .getLatest()
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(false);
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({ status: "ready", catalog: ALTERNATE_CATALOG }),
+      );
+
+      await harness.update(
+        createBaseProps({
+          loadedSession,
+          sessionRuntimeData: createSessionRuntimeData({
+            modelCatalog: ALTERNATE_CATALOG,
+            catalogError: "Catalog refresh failed",
+          }),
+        }),
+      );
+      selectedRuntime = harness
+        .getLatest()
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
+      expect(selectedRuntime?.resource).toEqual(
+        expect.objectContaining({
+          status: "failed",
+          catalog: ALTERNATE_CATALOG,
+          error: "Catalog refresh failed",
+        }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -1232,12 +1419,20 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("openai/gpt-5");
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
@@ -1287,7 +1482,11 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
 
       expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
@@ -1569,7 +1768,11 @@ describe("useAgentStudioChatComposer", () => {
       );
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
       });
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 

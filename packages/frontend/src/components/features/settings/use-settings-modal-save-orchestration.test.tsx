@@ -65,6 +65,8 @@ const createArgs = (
   onRuntimeAvailabilityError: () => {},
   saveGlobalGitConfig: mock(async () => {}),
   saveSettingsSnapshot: mock(async () => {}),
+  loadSettingsSnapshot: mock(async () => createSnapshot()),
+  isAgentModelFavoritesMutationPending: false,
   ...overrides,
 });
 
@@ -120,6 +122,66 @@ describe("useSettingsModalSaveOrchestration", () => {
     expect(harness.getLatest().saveError).toBe("Fix 2 prompt placeholder errors before saving.");
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
 
+    await harness.unmount();
+  });
+
+  test("blocks a full snapshot save while favorites are being written", async () => {
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          isAgentModelFavoritesMutationPending: true,
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, chat: true },
+      ),
+    );
+
+    await harness.mount();
+    let didSave = true;
+    await harness.run(async (state) => {
+      didSave = await state.submit();
+    });
+
+    expect(didSave).toBe(false);
+    expect(harness.getLatest().saveError).toBe(
+      "Wait for the model favorites update to finish before saving settings.",
+    );
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(0);
+    await harness.unmount();
+  });
+
+  test("merges the latest persisted favorites into a full snapshot save", async () => {
+    const snapshotDraft = createSnapshot();
+    snapshotDraft.agentModelFavorites = [
+      { runtimeKind: "claude", providerId: "anthropic", modelId: "stale" },
+    ];
+    const latestSnapshot = createSnapshot();
+    latestSnapshot.agentModelFavorites = [
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+    ];
+    const saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(
+      createArgs(
+        {
+          snapshotDraft,
+          loadSettingsSnapshot: mock(async () => latestSnapshot),
+          saveSettingsSnapshot,
+        },
+        { ...EMPTY_DIRTY_SECTIONS, chat: true },
+      ),
+    );
+
+    await harness.mount();
+    await harness.run(async (state) => {
+      await state.submit();
+    });
+
+    expect(saveSettingsSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentModelFavorites: latestSnapshot.agentModelFavorites,
+      }),
+    );
     await harness.unmount();
   });
 

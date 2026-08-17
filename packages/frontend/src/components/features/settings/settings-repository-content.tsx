@@ -88,6 +88,8 @@ export function SettingsRepositoryContent({
     isSaving,
     runtimeDefinitionsError,
     availableRuntimeDefinitions,
+    catalogResources,
+    favoriteState,
     workspaceIds,
     selectedWorkspace,
     selectedWorkspaceId,
@@ -192,6 +194,8 @@ export function SettingsRepositoryContent({
           <RepositoryAgentsSection
             selectedRepoConfig={selectedRepoConfig}
             availableRuntimeDefinitions={availableRuntimeDefinitions}
+            catalogResources={catalogResources}
+            favoriteState={favoriteState}
             loadingState={{
               isLoadingRuntimeDefinitions,
               isLoadingCatalog,
@@ -201,7 +205,6 @@ export function SettingsRepositoryContent({
             runtimeDefinitionsError={runtimeDefinitionsError}
             runtimeAvailabilityErrors={selectedRepoRuntimeAvailabilityErrors}
             getCatalogForRuntime={controller.getCatalogForRuntime}
-            getCatalogErrorForRuntime={controller.getCatalogErrorForRuntime}
             isCatalogLoadingForRuntime={controller.isCatalogLoadingForRuntime}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
             onUpdateSelectedRepoAgentDefault={updateSelectedRepoAgentDefault}

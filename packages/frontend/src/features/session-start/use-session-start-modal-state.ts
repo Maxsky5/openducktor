@@ -11,13 +11,14 @@ import type {
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
-import {
-  toModelGroupsByProvider,
-  toModelOptions,
-  toPrimaryAgentOptions,
-} from "@/components/features/agents/catalog-select-options";
+import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
+import type {
+  ModelPickerRuntime,
+  ModelPickerValue,
+} from "@/components/features/agents/model-picker";
+import { toModelPickerCatalogResource } from "@/components/features/agents/model-picker";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
@@ -56,14 +57,19 @@ type UseSessionStartModalStateResult = {
   eligibleRuntimeDefinitions: RuntimeDescriptor[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
-  runtimeOptions: ComboboxOption[];
+  modelPickerRuntimes: ModelPickerRuntime[];
   supportsProfiles: boolean;
   supportsVariants: boolean;
   catalogError: string | null;
   isCatalogLoading: boolean;
+  runtimeDefinitionsError: string | null;
+  isRuntimeDefinitionsLoading: boolean;
+  retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
+  runtimeSettingsError: string | null;
+  isRuntimeSettingsLoading: boolean;
+  hasRuntimeSettingsSnapshot: boolean;
+  retryRuntimeSettings: () => Promise<void>;
   runtimeProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
@@ -77,9 +83,8 @@ type UseSessionStartModalStateResult = {
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
   handleSelectSourceSessionValue: (sourceSessionValue: string) => void;
   handleSelectTargetBranch: (branch: string) => void;
-  handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
-  handleSelectModel: (modelKey: string) => void;
+  handleSelectModelPair: (value: ModelPickerValue) => void;
   handleSelectVariant: (variant: string) => void;
 };
 
@@ -90,7 +95,17 @@ export function useSessionStartModalState({
   loadCatalog,
   workspaceRepoPath,
 }: UseSessionStartModalStateArgs): UseSessionStartModalStateResult {
-  const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
+  const {
+    availableRuntimeDefinitions,
+    hasRuntimeSettingsSnapshot,
+    isLoadingRuntimeDefinitions,
+    isLoadingRuntimeSettings,
+    loadRepoRuntimeCatalog,
+    refreshRuntimeDefinitions,
+    refreshRuntimeSettings,
+    runtimeDefinitionsError,
+    runtimeSettingsError,
+  } = useRuntimeAvailabilityContext();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const [intent, setIntent] = useState<SessionStartModalIntent | null>(null);
   const [selection, setSelection] = useState<AgentModelSelection | null>(null);
@@ -104,12 +119,12 @@ export function useSessionStartModalState({
   );
   const {
     catalog,
+    catalogResources,
     catalogError,
     eligibleRuntimeDefinitions,
     isCatalogLoading,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
-    runtimeOptions,
     setRequestedRuntimeKind,
   } = useSessionStartModalRuntimeState({
     initialCatalog,
@@ -142,8 +157,7 @@ export function useSessionStartModalState({
     resetSelection,
     initializeSelection,
     handleSelectRuntimeProfile,
-    handleSelectModel,
-    handleSelectRuntime: handleSelectionRuntimeChange,
+    handleSelectPair,
     handleSelectVariant,
   } = useSessionStartModalSelectionState({
     catalog,
@@ -213,25 +227,47 @@ export function useSessionStartModalState({
     ],
   );
 
-  const handleSelectRuntime = useCallback(
-    (runtimeKindValue: RuntimeKind): void => {
-      const runtimeKind = resolveRuntimeKindSelection({
-        runtimeDefinitions: eligibleRuntimeDefinitions,
-        requestedRuntimeKind: runtimeKindValue,
-      });
-      setRequestedRuntimeKind(runtimeKindValue);
-      if (runtimeKind) {
-        handleSelectionRuntimeChange(runtimeKind);
-      } else {
-        resetSelection();
+  const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(
+    () =>
+      eligibleRuntimeDefinitions.flatMap((descriptor) => {
+        const resource = catalogResources.find(
+          (candidate) => candidate.runtimeKind === descriptor.kind,
+        );
+        if (!resource) {
+          return [];
+        }
+        return [
+          {
+            descriptor,
+            resource: toModelPickerCatalogResource({
+              catalog: resource.catalog,
+              isFetching: resource.isFetching,
+              error: resource.error,
+              isAvailable: resource.isEnabled,
+              unavailableReason: "This runtime catalog is not available yet.",
+              retry: resource.retry,
+            }),
+          },
+        ];
+      }),
+    [catalogResources, eligibleRuntimeDefinitions],
+  );
+
+  const handleSelectModelPair = useCallback(
+    (value: ModelPickerValue): void => {
+      if (selectedStartMode === "reuse") {
+        return;
       }
+      const runtime = modelPickerRuntimes.find(
+        (candidate) => candidate.descriptor.kind === value.runtimeKind,
+      );
+      if (runtime?.resource.status !== "ready") {
+        return;
+      }
+      setRequestedRuntimeKind(value.runtimeKind);
+      handleSelectPair(value, runtime.resource.catalog);
     },
-    [
-      eligibleRuntimeDefinitions,
-      handleSelectionRuntimeChange,
-      resetSelection,
-      setRequestedRuntimeKind,
-    ],
+    [handleSelectPair, modelPickerRuntimes, selectedStartMode, setRequestedRuntimeKind],
   );
 
   const handleSelectedStartModeChange = useCallback(
@@ -275,29 +311,6 @@ export function useSessionStartModalState({
       },
     ];
   }, [catalog, visibleSelection?.profileId]);
-
-  const modelOptions = useMemo<ComboboxOption[]>(() => {
-    const options = toModelOptions(catalog);
-    if (options.length > 0) {
-      return options;
-    }
-
-    if (!visibleSelection?.providerId || !visibleSelection.modelId) {
-      return [];
-    }
-
-    return [
-      {
-        value: `${visibleSelection.providerId}/${visibleSelection.modelId}`,
-        label: visibleSelection.modelId,
-        description: `${visibleSelection.providerId} (saved default model)`,
-      },
-    ];
-  }, [catalog, visibleSelection]);
-
-  const modelGroups = useMemo<ComboboxGroup[]>(() => {
-    return toModelGroupsByProvider(catalog);
-  }, [catalog]);
 
   const variantOptions = useMemo<ComboboxOption[]>(() => {
     if (selectedModelEntry) {
@@ -356,16 +369,21 @@ export function useSessionStartModalState({
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
-    runtimeOptions,
+    modelPickerRuntimes,
     supportsProfiles:
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false,
     supportsVariants:
       selectedRuntimeDescriptor?.capabilities.optionalSurfaces.supportsVariants ?? false,
     catalogError,
     isCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading: isLoadingRuntimeDefinitions,
+    retryRuntimeDefinitions: refreshRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading: isLoadingRuntimeSettings,
+    hasRuntimeSettingsSnapshot,
+    retryRuntimeSettings: refreshRuntimeSettings,
     runtimeProfileOptions,
-    modelOptions,
-    modelGroups,
     variantOptions,
     availableStartModes: orderedStartModes,
     selectedStartMode,
@@ -379,9 +397,8 @@ export function useSessionStartModalState({
     handleSelectStartMode: handleSelectedStartModeChange,
     handleSelectSourceSessionValue,
     handleSelectTargetBranch,
-    handleSelectRuntime,
     handleSelectRuntimeProfile,
-    handleSelectModel,
+    handleSelectModelPair,
     handleSelectVariant,
   };
 }

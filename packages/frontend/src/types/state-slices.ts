@@ -1,4 +1,5 @@
 import type {
+  AgentModelFavorite,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
@@ -95,6 +96,7 @@ export type WorkspaceStateContextValue = {
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 };
 
 export type WorkspaceBranchStateContextValue = Pick<

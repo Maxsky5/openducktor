@@ -1,4 +1,5 @@
 import {
+  agentModelFavoritesSchema,
   globalGitConfigSchema,
   repoHooksSchema,
   runtimeKindSchema,
@@ -134,6 +135,12 @@ export const createWorkspaceSettingsCommandHandlers = (
     workspaceSettingsService.saveSettingsSnapshot(
       settingsSnapshotSaveInputSchema.parse(
         requireObjectArg("workspace_save_settings_snapshot", args, "snapshot"),
+      ),
+    ),
+  workspace_update_agent_model_favorites: (args) =>
+    workspaceSettingsService.updateAgentModelFavorites(
+      agentModelFavoritesSchema.parse(
+        requireObjectArg("workspace_update_agent_model_favorites", args, "favorites"),
       ),
     ),
   set_theme: (args) =>

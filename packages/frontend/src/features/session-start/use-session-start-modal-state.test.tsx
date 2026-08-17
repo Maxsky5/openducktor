@@ -322,6 +322,34 @@ const createExistingSessionWithModel = ({
 });
 
 describe("useSessionStartModalState", () => {
+  test("keeps runtime-definition failures distinct and exposes retry", async () => {
+    const refreshRuntimeDefinitions = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    const runtimeDefinitionsContextRef = {
+      current: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [],
+        availableRuntimeDefinitions: [],
+        runtimeDefinitionsError: "Runtime definitions failed",
+        refreshRuntimeDefinitions,
+      }),
+    };
+    const harness = createHookHarness(createBaseProps({ runtimeDefinitions: [] }), {
+      runtimeDefinitionsContextRef,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest()).toEqual(
+      expect.objectContaining({
+        runtimeDefinitionsError: "Runtime definitions failed",
+        isRuntimeDefinitionsLoading: false,
+      }),
+    );
+    await harness.run(async (state) => {
+      await state.retryRuntimeDefinitions();
+    });
+    expect(refreshRuntimeDefinitions).toHaveBeenCalledTimes(1);
+    await harness.unmount();
+  });
+
   test("waits for runtime readiness before loading the modal catalog", async () => {
     const loadCatalog = mock(async () => CATALOG);
     const repoRuntimeHealthContextRef = {
@@ -517,7 +545,11 @@ describe("useSessionStartModalState", () => {
     expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
     await harness.run(() => {
-      harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      });
     });
 
     expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
@@ -578,19 +610,27 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectRuntime("claude");
-    });
-
-    expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
-    expect(harness.getLatest().selection).toBeNull();
-    expect(harness.getLatest().modelOptions).toEqual([]);
-    expect(harness.getLatest().variantOptions).toEqual([]);
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource
+          .status === "loading",
+    );
 
     await harness.run(() => {
       catalogDeferred.resolve(CLAUDE_CATALOG);
     });
-    await harness.waitFor((state) => state.selection?.runtimeKind === "claude");
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource
+          .status === "ready",
+    );
+    await harness.run(() => {
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "default",
+      });
+    });
 
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "claude",
@@ -638,16 +678,19 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
-    await harness.run(() => {
-      harness.getLatest().handleSelectRuntime("claude");
-    });
-    await harness.waitFor((state) => state.catalogError === "Claude auth failed");
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource
+          .status === "failed",
+    );
 
-    expect(harness.getLatest().selectedRuntimeKind).toBe("claude");
-    expect(harness.getLatest().selection).toBeNull();
-    expect(harness.getLatest().modelOptions).toEqual([]);
-    expect(harness.getLatest().variantOptions).toEqual([]);
-    expect(harness.getLatest().isCatalogLoading).toBe(false);
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource,
+    ).toEqual(expect.objectContaining({ status: "failed", error: "Claude auth failed" }));
+    expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
+    expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
 
     await harness.unmount();
   });
@@ -700,9 +743,9 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
-    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
-      FRESH_RUNTIME_KIND,
-    ]);
+    expect(
+      harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+    ).toEqual([FRESH_RUNTIME_KIND]);
 
     await harness.unmount();
   });
@@ -733,9 +776,9 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
-    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
-      FRESH_RUNTIME_KIND,
-    ]);
+    expect(
+      harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+    ).toEqual([FRESH_RUNTIME_KIND]);
 
     await harness.unmount();
   });
@@ -1028,16 +1071,26 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().modelOptions.map((option) => option.label)).toContain("GPT-5");
-
-    await harness.run(() => {
-      harness.getLatest().handleSelectRuntime("codex");
-    });
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode")
+        ?.resource.catalog?.models.map((model) => model.modelName),
+    ).toContain("GPT-5");
 
     await harness.waitFor((state) =>
-      state.modelOptions.some((option) => option.label === "GPT-5.4 Mini"),
+      Boolean(
+        state.modelPickerRuntimes
+          .find((runtime) => runtime.descriptor.kind === "codex")
+          ?.resource.catalog?.models.some((model) => model.modelName === "GPT-5.4 Mini"),
+      ),
     );
-    expect(harness.getLatest().modelOptions.map((option) => option.label)).not.toContain("GPT-5");
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "codex")
+        ?.resource.catalog?.models.map((model) => model.modelName),
+    ).not.toContain("GPT-5");
     expect(loadCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -1046,7 +1099,54 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("fetches fresh modal catalog data instead of reusing stale shared runtime cache", async () => {
+  test("selects an exact runtime, provider, and model pair in one action", async () => {
+    const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => {
+      return runtimeKind === "codex" ? CODEX_CATALOG : CATALOG;
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        loadCatalog,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      }),
+    );
+
+    await harness.mount();
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-EXACT-PAIR",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "none",
+        title: "Start Spec Session",
+      });
+    });
+    await harness.waitFor((state) =>
+      state.modelPickerRuntimes.some(
+        (runtime) => runtime.descriptor.kind === "codex" && runtime.resource.catalog !== null,
+      ),
+    );
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "codex",
+        providerId: "codex",
+        modelId: "gpt-5.4-mini",
+      });
+    });
+
+    expect(harness.getLatest().selectedRuntimeKind).toBe("codex");
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: "gpt-5.4-mini",
+      variant: "low",
+    });
+
+    await harness.unmount();
+  });
+
+  test("reuses the canonical runtime catalog cache across picker surfaces", async () => {
     const queryClient = new QueryClient();
     const claudeModel = CLAUDE_CATALOG.models[0];
     if (!claudeModel) {
@@ -1086,23 +1186,25 @@ describe("useSessionStartModalState", () => {
       });
     });
 
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource
+          .status === "ready",
+    );
     await harness.run(() => {
-      harness.getLatest().handleSelectRuntime("claude");
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "default",
+      });
     });
-
     await harness.waitFor((state) => state.selection?.runtimeKind === "claude");
 
-    expect(loadCatalog).toHaveBeenCalledWith({
+    expect(loadCatalog).not.toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "claude",
     });
-    expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]);
+    expect(harness.getLatest().variantOptions).toEqual([]);
 
     await harness.unmount();
     queryClient.clear();
@@ -1497,7 +1599,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("filters runtime options by the selected start mode without selecting fallbacks", async () => {
+  test("filters picker runtimes by the selected start mode without selecting fallbacks", async () => {
     const loadCatalog = mock(async ({ runtimeKind }: RepoRuntimeRef) => ({
       ...CATALOG,
       runtime:
@@ -1531,25 +1633,33 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
-      REUSE_RUNTIME_KIND,
-    ]);
+    expect(
+      harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+    ).toEqual([REUSE_RUNTIME_KIND]);
     expect(harness.getLatest().selectedRuntimeKind).toBe(REUSE_RUNTIME_KIND);
 
     await harness.run(() => {
       harness.getLatest().handleSelectStartMode("fork");
     });
 
-    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
-      FORK_RUNTIME_KIND,
-    ]);
+    expect(
+      harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+    ).toEqual([FORK_RUNTIME_KIND]);
     await harness.waitFor((state) => state.selectedRuntimeKind === null);
     await harness.waitFor((state) => state.selection === null);
 
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === FORK_RUNTIME_KIND)
+          ?.resource.status === "ready",
+    );
     await harness.run(() => {
-      harness.getLatest().handleSelectRuntime(FORK_RUNTIME_KIND);
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: FORK_RUNTIME_KIND,
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
     });
-
     await harness.waitFor((state) => state.selectedRuntimeKind === FORK_RUNTIME_KIND);
     await harness.waitFor((state) => state.selection?.runtimeKind === FORK_RUNTIME_KIND);
 
@@ -1557,9 +1667,9 @@ describe("useSessionStartModalState", () => {
       harness.getLatest().handleSelectStartMode("reuse");
     });
 
-    expect(harness.getLatest().runtimeOptions.map((option) => option.value)).toEqual([
-      REUSE_RUNTIME_KIND,
-    ]);
+    expect(
+      harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+    ).toEqual([REUSE_RUNTIME_KIND]);
     await harness.waitFor((state) => state.selectedRuntimeKind === REUSE_RUNTIME_KIND);
     await harness.waitFor((state) => state.selection?.runtimeKind === REUSE_RUNTIME_KIND);
 
@@ -1599,7 +1709,7 @@ describe("useSessionStartModalState", () => {
       harness.getLatest().handleSelectStartMode("fork");
     });
 
-    expect(harness.getLatest().runtimeOptions).toEqual([]);
+    expect(harness.getLatest().modelPickerRuntimes).toEqual([]);
     await harness.waitFor((state) => state.selectedRuntimeKind === null);
     await harness.waitFor((state) => state.selection === null);
 
@@ -1638,7 +1748,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().runtimeOptions).toEqual([]);
+    expect(harness.getLatest().modelPickerRuntimes).toEqual([]);
     await harness.waitFor((state) => state.selectedRuntimeKind === null);
     await harness.waitFor((state) => state.selection === null);
 

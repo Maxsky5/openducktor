@@ -40,6 +40,7 @@ type CanStartRole = (role: AgentRole) => boolean;
 
 type UseAgentStudioSessionStartFlowArgs = {
   branches?: GitBranch[];
+  favoriteState: SessionStartModalModel["favoriteState"];
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
@@ -82,6 +83,7 @@ const showPostStartActionError = (action: SessionStartPostAction, error: Error):
 
 export function useAgentStudioSessionStartFlow({
   branches = [],
+  favoriteState,
   taskId,
   role,
   launchActionId,
@@ -140,6 +142,7 @@ export function useAgentStudioSessionStartFlow({
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
       branches,
+      favoriteState,
       repoSettings,
       workspaceRepoPath,
     });

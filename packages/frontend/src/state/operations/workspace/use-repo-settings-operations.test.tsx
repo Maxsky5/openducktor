@@ -178,6 +178,86 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("saves agent model favorites and replaces the cached snapshot with the host result", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const initialSnapshot = createSettingsSnapshot();
+    const favorites = [
+      { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
+    ];
+    const canonicalSnapshot = { ...initialSnapshot, agentModelFavorites: favorites };
+    const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    const workspaceUpdateAgentModelFavorites = mock(async () => canonicalSnapshot);
+    const original = {
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      workspaceUpdateAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,
+    };
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    host.workspaceUpdateAgentModelFavorites = workspaceUpdateAgentModelFavorites;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().loadSettingsSnapshot();
+      await expect(harness.getLatest().saveAgentModelFavorites(favorites)).resolves.toEqual(
+        canonicalSnapshot,
+      );
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(canonicalSnapshot);
+      expect(workspaceUpdateAgentModelFavorites).toHaveBeenCalledWith(favorites);
+      expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      host.workspaceUpdateAgentModelFavorites = original.workspaceUpdateAgentModelFavorites;
+    }
+  });
+
+  test("keeps the last cached favorites when the host write fails", async () => {
+    const applyWorkspaceRecords = mock(() => {});
+    const applyWorkspaceRecord = mock(() => {});
+    const initialSnapshot = createSettingsSnapshotFixture({
+      agentModelFavorites: [
+        { runtimeKind: "claude", providerId: "anthropic", modelId: "claude-opus" },
+      ],
+    });
+    const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    const workspaceUpdateAgentModelFavorites = mock(async () => {
+      throw new Error("Could not save favorites");
+    });
+    const original = {
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      workspaceUpdateAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,
+    };
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    host.workspaceUpdateAgentModelFavorites = workspaceUpdateAgentModelFavorites;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords,
+      applyWorkspaceRecord,
+    });
+
+    try {
+      await harness.mount();
+      await harness.getLatest().loadSettingsSnapshot();
+      await expect(
+        harness
+          .getLatest()
+          .saveAgentModelFavorites([
+            { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+          ]),
+      ).rejects.toThrow("Could not save favorites");
+      await expect(harness.getLatest().loadSettingsSnapshot()).resolves.toEqual(initialSnapshot);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      host.workspaceUpdateAgentModelFavorites = original.workspaceUpdateAgentModelFavorites;
+    }
+  });
+
   test("throws when loading without an active workspace", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

@@ -104,6 +104,7 @@ export const createOnboardingTestHarness = () => {
       detectGithubRepository: mock(async () => null),
       saveGlobalGitConfig: mock(async () => {}),
       saveSettingsSnapshot,
+      saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()),
     } satisfies WorkspaceStateContextValue;
 
     const view = render(

@@ -569,6 +569,41 @@ const persistedAgentRuntimesV2Schema = z
     claude: { enabled: false },
   }));
 
+export const agentModelFavoriteSchema = z
+  .object({
+    runtimeKind: runtimeKindSchema,
+    providerId: trimmedRequiredString("Favorite provider id"),
+    modelId: trimmedRequiredString("Favorite model id"),
+  })
+  .strict();
+export type AgentModelFavorite = z.infer<typeof agentModelFavoriteSchema>;
+
+export const agentModelFavoriteKey = (favorite: AgentModelFavorite): string =>
+  `${favorite.runtimeKind}\u0000${favorite.providerId}\u0000${favorite.modelId}`;
+
+export const isSameAgentModelFavorite = (
+  left: AgentModelFavorite | null,
+  right: AgentModelFavorite | null,
+): boolean =>
+  left?.runtimeKind === right?.runtimeKind &&
+  left?.providerId === right?.providerId &&
+  left?.modelId === right?.modelId;
+
+export const agentModelFavoritesSchema = z
+  .array(agentModelFavoriteSchema)
+  .transform((favorites) => {
+    const seen = new Set<string>();
+    return favorites.filter((favorite) => {
+      const key = agentModelFavoriteKey(favorite);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  })
+  .default([]);
+
 const globalConfigSharedShape = {
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
@@ -579,6 +614,8 @@ const globalConfigSharedShape = {
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  agentRuntimes: agentRuntimesSchema,
+  agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
@@ -610,6 +647,7 @@ export const settingsSnapshotSchema = z.object({
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   agentRuntimes: agentRuntimesSchema,
+  agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });
@@ -625,6 +663,11 @@ export const settingsSnapshotSaveInputSchema = z.object({
   kanban: kanbanSettingsSchema,
   autopilot: autopilotSettingsSchema,
   agentRuntimes: agentRuntimesSchema.removeDefault(),
+  agentModelFavorites: agentModelFavoritesSchema
+    .removeDefault()
+    .describe(
+      "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
+    ),
   workspaces: z.record(workspaceIdSchema, repoConfigSchema),
   globalPromptOverrides: repoPromptOverridesSchema,
 });

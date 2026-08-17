@@ -137,7 +137,7 @@ type LatestKanbanPageModels = {
   humanReviewFeedbackModalModel: Record<string, unknown> | null;
   taskApprovalModalModel: KanbanPageModels["taskApprovalModal"];
   taskGitConflictDialogModel: KanbanPageModels["taskGitConflictDialog"];
-  sessionStartModalModel: Record<string, unknown> | null;
+  sessionStartModalModel: KanbanPageModels["sessionStartModal"];
   resetImplementationModalModel: Record<string, unknown> | null;
   mergedPullRequestModalProps: Record<string, unknown> | null;
   location: string;
@@ -159,7 +159,7 @@ type KanbanPageHarness = RenderResult & {
   getHumanReviewFeedbackModalModel: () => Record<string, unknown> | null;
   getTaskApprovalModalModel: () => KanbanPageModels["taskApprovalModal"];
   getTaskGitConflictDialogModel: () => KanbanPageModels["taskGitConflictDialog"];
-  getSessionStartModalModel: () => Record<string, unknown> | null;
+  getSessionStartModalModel: () => KanbanPageModels["sessionStartModal"];
   getResetImplementationModalModel: () => Record<string, unknown> | null;
   getMergedPullRequestModalProps: () => Record<string, unknown> | null;
   getLocation: () => string;
@@ -264,6 +264,9 @@ const createWorkspaceStateValue = (
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
   saveSettingsSnapshot: async () => {},
+  saveAgentModelFavorites: async () => {
+    throw new Error("saveAgentModelFavorites is not used in this test");
+  },
 });
 
 const createWorkspaceBranchStateValue = (): WorkspaceBranchStateContextValue => ({
@@ -555,6 +558,10 @@ const renderPage = async (
                                   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
                                   isLoadingRuntimeDefinitions: false,
                                   runtimeDefinitionsError: null,
+                                  isLoadingRuntimeSettings: false,
+                                  runtimeSettingsError: null,
+                                  hasRuntimeSettingsSnapshot: true,
+                                  refreshRuntimeSettings: async () => {},
                                   refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
                                   loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
                                   loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
@@ -655,17 +662,24 @@ const confirmSessionStartModal = async (
   }
 
   if (modelId) {
+    const [providerId, selectedModelId] = modelId.split("/");
     await waitFor(() => {
       expect(page.getSessionStartModalModel()?.isSelectionCatalogLoading).not.toBe(true);
-      const modelOptions = page.getSessionStartModalModel()?.modelOptions as
-        | Array<{ value?: string }>
-        | undefined;
-      expect(modelOptions?.some((option) => option.value === modelId)).toBe(true);
+      const hasModel = page
+        .getSessionStartModalModel()
+        ?.modelPickerRuntimes.some((runtime) =>
+          runtime.resource.catalog?.models.some(
+            (model) => model.providerId === providerId && model.modelId === selectedModelId,
+          ),
+        );
+      expect(hasModel).toBe(true);
     });
     await act(async () => {
-      (page.getSessionStartModalModel()?.onSelectModel as ((value: string) => void) | undefined)?.(
-        modelId,
-      );
+      page.getSessionStartModalModel()?.onSelectModelPair({
+        runtimeKind: page.getSessionStartModalModel()?.selectedRuntimeKind ?? "opencode",
+        providerId: providerId ?? "",
+        modelId: selectedModelId ?? "",
+      });
       await Promise.resolve();
     });
     await waitFor(() => {
@@ -1166,7 +1180,11 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      (sessionStartModal.onSelectModel as (value: string) => void)("openai/gpt-5");
+      sessionStartModal.onSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
       (sessionStartModal.onSelectRuntimeProfile as (value: string) => void)("build-agent");
       (sessionStartModal.onSelectVariant as (value: string) => void)("default");
     });

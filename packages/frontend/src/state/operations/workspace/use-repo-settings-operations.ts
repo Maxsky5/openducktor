@@ -1,4 +1,5 @@
 import type {
+  AgentModelFavorite,
   GitProviderRepository,
   GlobalGitConfig,
   SettingsSnapshot,
@@ -34,6 +35,7 @@ type UseRepoSettingsOperationsResult = {
   detectGithubRepository: (repoPath: string) => Promise<GitProviderRepository | null>;
   saveGlobalGitConfig: (git: GlobalGitConfig) => Promise<void>;
   saveSettingsSnapshot: (snapshot: SettingsSnapshotSaveInput) => Promise<void>;
+  saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 };
 
 const REPO_CONFIG_QUERY_KEY_PREFIX = [...workspaceQueryKeys.all, "repo-config"] as const;
@@ -183,6 +185,15 @@ export function useRepoSettingsOperations({
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );
 
+  const saveAgentModelFavorites = useCallback(
+    async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
+      const normalizedSnapshot = await host.workspaceUpdateAgentModelFavorites(favorites);
+      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
+      return normalizedSnapshot;
+    },
+    [queryClient, settingsSnapshotQueryKey],
+  );
+
   return {
     loadRepoSettings,
     saveRepoSettings,
@@ -190,5 +201,6 @@ export function useRepoSettingsOperations({
     detectGithubRepository,
     saveGlobalGitConfig,
     saveSettingsSnapshot,
+    saveAgentModelFavorites,
   };
 }

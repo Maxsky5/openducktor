@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
@@ -6,6 +9,7 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
@@ -58,6 +62,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
     },
     claude: { enabled: false, executablePath: "/bin/claude" },
   },
+  agentModelFavorites: [],
   workspaces: {},
   workspaceOrder: [],
   recentWorkspaces: [],
@@ -151,7 +156,65 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
+    expect(snapshot.agentModelFavorites).toEqual([]);
     expect(snapshot.workspaces).toEqual({});
+  });
+
+  test("updates only canonical agent model favorites", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        theme: "dark",
+        recentWorkspaces: ["repo"],
+        agentModelFavorites: [
+          { runtimeKind: "claude", providerId: "anthropic", modelId: "claude-opus" },
+        ],
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const snapshot = await Effect.runPromise(
+      service.updateAgentModelFavorites([
+        { runtimeKind: "opencode", providerId: " openai ", modelId: " gpt-5 " },
+        { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+      ]),
+    );
+
+    expect(snapshot.agentModelFavorites).toEqual([
+      { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+    ]);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+    expect(settingsConfig.writtenConfigs[0]).toMatchObject({
+      theme: "dark",
+      recentWorkspaces: ["repo"],
+      agentModelFavorites: snapshot.agentModelFavorites,
+    });
+  });
+  test("reloads exact agent model favorites through a fresh disk adapter and service", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-settings-restart-"));
+    const configPath = path.join(tempDir, "config.json");
+    const favorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+
+    try {
+      const firstService = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath }),
+      );
+      await Effect.runPromise(firstService.updateAgentModelFavorites([favorite]));
+
+      const restartedService = createWorkspaceSettingsService(
+        createSettingsConfigAdapter({ configPath }),
+      );
+      const restartedSnapshot = await Effect.runPromise(restartedService.getSettingsSnapshot());
+
+      expect(restartedSnapshot.agentModelFavorites).toEqual([favorite]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
   test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
     const service = createWorkspaceSettingsService(
@@ -501,6 +564,101 @@ describe("createWorkspaceSettingsService", () => {
     const persisted = await Effect.runPromise(service.getSettingsSnapshot());
     expect(persisted.theme).toBe("light");
     expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+  });
+  test("preserves a queued favorite update when a full settings save starts first", async () => {
+    let markSettingsWriteStarted: (() => void) | undefined;
+    let releaseSettingsWrite: (() => void) | undefined;
+    const settingsWriteStarted = new Promise<void>((resolve) => {
+      markSettingsWriteStarted = resolve;
+    });
+    const settingsWriteGate = new Promise<void>((resolve) => {
+      releaseSettingsWrite = resolve;
+    });
+    const oldFavorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-4",
+    };
+    const newFavorite = {
+      runtimeKind: "codex" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ agentModelFavorites: [oldFavorite] }),
+      beforeWrite: async (nextConfig) => {
+        if (!nextConfig.general.openAgentStudioTabOnBackgroundSessionStart) {
+          markSettingsWriteStarted?.();
+          await settingsWriteGate;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    const settingsWrite = Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...staleSnapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    await settingsWriteStarted;
+    const favoriteWrite = Effect.runPromise(service.updateAgentModelFavorites([newFavorite]));
+    releaseSettingsWrite?.();
+
+    await Promise.all([settingsWrite, favoriteWrite]);
+    const persisted = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
+    expect(persisted.agentModelFavorites).toEqual([newFavorite]);
+  });
+  test("rejects a stale full settings save after a favorite update completes", async () => {
+    let markFavoriteWriteStarted: (() => void) | undefined;
+    let releaseFavoriteWrite: (() => void) | undefined;
+    const favoriteWriteStarted = new Promise<void>((resolve) => {
+      markFavoriteWriteStarted = resolve;
+    });
+    const favoriteWriteGate = new Promise<void>((resolve) => {
+      releaseFavoriteWrite = resolve;
+    });
+    const oldFavorite = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-4",
+    };
+    const newFavorite = {
+      runtimeKind: "codex" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ agentModelFavorites: [oldFavorite] }),
+      beforeWrite: async (nextConfig) => {
+        if (nextConfig.agentModelFavorites[0]?.modelId === newFavorite.modelId) {
+          markFavoriteWriteStarted?.();
+          await favoriteWriteGate;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const staleSnapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    const favoriteWrite = Effect.runPromise(service.updateAgentModelFavorites([newFavorite]));
+    await favoriteWriteStarted;
+    const settingsWrite = Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...staleSnapshot,
+        general: { openAgentStudioTabOnBackgroundSessionStart: false },
+      }),
+    );
+    releaseFavoriteWrite?.();
+
+    await favoriteWrite;
+    await expect(settingsWrite).rejects.toThrow(
+      "Model favorites changed since settings were loaded. Reload settings and retry.",
+    );
+    const persisted = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(persisted.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
+    expect(persisted.agentModelFavorites).toEqual([newFavorite]);
   });
   test("rejects invalid appearance snapshot settings without writing config", async () => {
     const settingsConfig = createFakeSettingsConfig({

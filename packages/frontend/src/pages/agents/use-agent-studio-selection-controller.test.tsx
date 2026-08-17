@@ -352,10 +352,12 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.view.selectedSession.runtimeData.error !== null);
+      await harness.waitFor(
+        (state) => state.view.selectedSession.runtimeData.contextError !== null,
+      );
 
       const latest = harness.getLatest().view.selectedSession;
-      expect(latest.runtimeData.error).toBe(
+      expect(latest.runtimeData.contextError).toBe(
         'Failed to load context usage for session "session-with-approval": context recovery unavailable',
       );
       expect(latest.loadedSession?.pendingApprovals).toEqual([

@@ -4,12 +4,18 @@ export type SelectedSessionRuntimeData = {
   modelCatalog: AgentModelCatalog | null;
   todos: AgentSessionTodoItem[];
   isLoadingModelCatalog: boolean;
-  error: string | null;
+  catalogError: string | null;
+  todosError: string | null;
+  runtimePolicyError: string | null;
+  contextError: string | null;
 };
 
 export const EMPTY_SELECTED_SESSION_RUNTIME_DATA: SelectedSessionRuntimeData = Object.freeze({
   modelCatalog: null,
   todos: [],
   isLoadingModelCatalog: false,
-  error: null,
+  catalogError: null,
+  todosError: null,
+  runtimePolicyError: null,
+  contextError: null,
 });

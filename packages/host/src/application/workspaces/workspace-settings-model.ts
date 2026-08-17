@@ -1,4 +1,5 @@
 import {
+  type AgentModelFavorite,
   DEFAULT_BRANCH_PREFIX,
   type GlobalGitConfig,
   globalConfigSchema,
@@ -47,6 +48,9 @@ export type WorkspaceSettingsService = {
   saveSettingsSnapshot(
     snapshot: SettingsSnapshotSaveInput,
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
+  updateAgentModelFavorites(
+    favorites: AgentModelFavorite[],
+  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   setTheme(theme: Theme): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;
 };
@@ -222,6 +226,7 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     kanban: config.kanban,
     autopilot: config.autopilot,
     agentRuntimes: config.agentRuntimes,
+    agentModelFavorites: config.agentModelFavorites,
     workspaces: config.workspaces,
     globalPromptOverrides: config.globalPromptOverrides,
   });

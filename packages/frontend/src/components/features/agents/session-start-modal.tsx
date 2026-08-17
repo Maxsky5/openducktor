@@ -2,10 +2,15 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
 import type { FormEvent, ReactElement } from "react";
-import { AgentRuntimeCombobox } from "@/components/features/agents/agent-runtime-combobox";
+import {
+  ModelPicker,
+  type ModelPickerFavoriteState,
+  type ModelPickerRuntime,
+  type ModelPickerValue,
+} from "@/components/features/agents/model-picker";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
-import { Combobox, type ComboboxGroup, type ComboboxOption } from "@/components/ui/combobox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogBody,
@@ -43,14 +48,20 @@ export type SessionStartModalModel = {
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
   selectedRuntimeKind: RuntimeKind | null;
-  runtimeOptions: ComboboxOption[];
+  modelPickerRuntimes: ModelPickerRuntime[];
+  favoriteState: ModelPickerFavoriteState;
   supportsProfiles: boolean;
   supportsVariants: boolean;
   selectionCatalogError: string | null;
   isSelectionCatalogLoading: boolean;
+  runtimeDefinitionsError: string | null;
+  isRuntimeDefinitionsLoading: boolean;
+  onRetryRuntimeDefinitions: () => void;
+  runtimeSettingsError: string | null;
+  isRuntimeSettingsLoading: boolean;
+  hasRuntimeSettingsSnapshot: boolean;
+  onRetryRuntimeSettings: () => void;
   runtimeProfileOptions: ComboboxOption[];
-  modelOptions: ComboboxOption[];
-  modelGroups: ComboboxGroup[];
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
@@ -62,9 +73,8 @@ export type SessionStartModalModel = {
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
   onSelectSourceSessionValue: (sourceSessionValue: string) => void;
   onSelectTargetBranch?: (branch: string) => void;
-  onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectRuntimeProfile: (profileId: string) => void;
-  onSelectModel: (model: string) => void;
+  onSelectModelPair: (value: ModelPickerValue) => void;
   onSelectVariant: (variant: string) => void;
   allowRunInBackground?: boolean;
   isStarting: boolean;
@@ -177,43 +187,6 @@ function TargetBranchField({
   );
 }
 
-type RuntimeFieldProps = {
-  disabled: boolean;
-  runtimeOptions: ComboboxOption[];
-  selectedRuntimeKind: RuntimeKind | null;
-  selectedStartMode: AgentSessionStartMode;
-  onSelectRuntime: (runtimeKind: RuntimeKind) => void;
-};
-
-function RuntimeField({
-  disabled,
-  runtimeOptions,
-  selectedRuntimeKind,
-  selectedStartMode,
-  onSelectRuntime,
-}: RuntimeFieldProps): ReactElement {
-  const runtimePlaceholder =
-    runtimeOptions.length > 0
-      ? "Select runtime"
-      : `No runtime supports ${sessionStartModeButtonLabel(selectedStartMode).toLowerCase()}`;
-
-  return (
-    <div className="grid gap-1.5" data-testid="session-start-runtime-field">
-      <label className="text-sm font-medium text-foreground" htmlFor="session-start-runtime">
-        Agent Runtime
-      </label>
-      <AgentRuntimeCombobox
-        value={selectedRuntimeKind ?? ""}
-        runtimeOptions={runtimeOptions}
-        placeholder={runtimePlaceholder}
-        disabled={disabled}
-        className="sm:min-w-[20rem]"
-        onValueChange={onSelectRuntime}
-      />
-    </div>
-  );
-}
-
 type RuntimeProfileFieldProps = {
   runtimeProfileOptions: ComboboxOption[];
   disabled: boolean;
@@ -251,84 +224,66 @@ function RuntimeProfileField({
 }
 
 type ModelVariantFieldsProps = {
-  catalogError: string | null;
   isSelectionCatalogLoading: boolean;
-  modelDisabled: boolean;
-  modelGroups: ComboboxGroup[];
-  modelOptions: ComboboxOption[];
-  selectedModel: string;
   selectedModelSelection: AgentModelSelection | null;
   selectedVariant: string;
   supportsVariants: boolean;
   variantDisabled: boolean;
   variantOptions: ComboboxOption[];
-  onSelectModel: (model: string) => void;
   onSelectVariant: (variant: string) => void;
 };
 
-function ModelVariantFields({
-  catalogError,
+const modelVariantPlaceholder = ({
   isSelectionCatalogLoading,
-  modelDisabled,
-  modelGroups,
-  modelOptions,
-  selectedModel,
+  selectedModelSelection,
+  supportsVariants,
+  variantOptions,
+}: Pick<
+  ModelVariantFieldsProps,
+  "isSelectionCatalogLoading" | "selectedModelSelection" | "supportsVariants" | "variantOptions"
+>): string => {
+  if (isSelectionCatalogLoading) {
+    return "Checking compatibility...";
+  }
+  if (!selectedModelSelection) {
+    return "Select model first";
+  }
+  if (!supportsVariants) {
+    return "Variants handled by runtime";
+  }
+  if (variantOptions.length === 0) {
+    return "This model has no variants";
+  }
+  return "Select variant";
+};
+
+function ModelVariantFields({
+  isSelectionCatalogLoading,
   selectedModelSelection,
   selectedVariant,
   supportsVariants,
   variantDisabled,
   variantOptions,
-  onSelectModel,
   onSelectVariant,
 }: ModelVariantFieldsProps): ReactElement {
   return (
-    <div className="grid gap-2">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5" data-testid="session-start-model-field">
-          <label className="text-sm font-medium text-foreground" htmlFor="session-start-model">
-            Model
-          </label>
-          <Combobox
-            value={selectedModel}
-            options={modelOptions}
-            groups={modelGroups}
-            matchAllSearchTerms
-            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select model"}
-            disabled={modelDisabled}
-            className="w-full"
-            onValueChange={onSelectModel}
-          />
-        </div>
-
-        <div className="grid gap-1.5" data-testid="session-start-variant-field">
-          <label className="text-sm font-medium text-foreground" htmlFor="session-start-variant">
-            Variant
-          </label>
-          <Combobox
-            value={selectedVariant}
-            options={variantOptions}
-            placeholder={
-              isSelectionCatalogLoading
-                ? "Checking compatibility..."
-                : !selectedModelSelection
-                  ? "Select model first"
-                  : !supportsVariants
-                    ? "Variants handled by runtime"
-                    : variantOptions.length === 0
-                      ? "This model has no variants"
-                      : "Select variant"
-            }
-            disabled={variantDisabled}
-            className="w-full"
-            onValueChange={onSelectVariant}
-          />
-        </div>
-      </div>
-      {catalogError ? (
-        <p className="text-xs text-destructive" role="alert">
-          Failed to load runtime catalog: {catalogError}
-        </p>
-      ) : null}
+    <div className="grid gap-1.5" data-testid="session-start-variant-field">
+      <label className="text-sm font-medium text-foreground" htmlFor="session-start-variant">
+        Variant
+      </label>
+      <Combobox
+        value={selectedVariant}
+        options={variantOptions}
+        placeholder={modelVariantPlaceholder({
+          isSelectionCatalogLoading,
+          selectedModelSelection,
+          supportsVariants,
+          variantOptions,
+        })}
+        disabled={variantDisabled}
+        className="w-full"
+        onValueChange={onSelectVariant}
+      />
     </div>
   );
 }
@@ -419,14 +374,20 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     cancelLabel = "Cancel",
     selectedModelSelection,
     selectedRuntimeKind,
-    runtimeOptions,
+    modelPickerRuntimes,
+    favoriteState,
     supportsProfiles,
     supportsVariants,
     selectionCatalogError,
     isSelectionCatalogLoading,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading,
+    onRetryRuntimeDefinitions,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading,
+    hasRuntimeSettingsSnapshot,
+    onRetryRuntimeSettings,
     runtimeProfileOptions,
-    modelOptions,
-    modelGroups,
     variantOptions,
     availableStartModes,
     selectedStartMode,
@@ -438,9 +399,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onSelectStartMode,
     onSelectSourceSessionValue,
     onSelectTargetBranch,
-    onSelectRuntime,
     onSelectRuntimeProfile,
-    onSelectModel,
+    onSelectModelPair,
     onSelectVariant,
     allowRunInBackground = false,
     isStarting,
@@ -449,9 +409,14 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   } = model;
 
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
-  const selectedModel = selectedModelSelection
-    ? `${selectedModelSelection.providerId}/${selectedModelSelection.modelId}`
-    : "";
+  const selectedPickerValue =
+    selectedModelSelection?.runtimeKind && selectedModelSelection.providerId
+      ? {
+          runtimeKind: selectedModelSelection.runtimeKind,
+          providerId: selectedModelSelection.providerId,
+          modelId: selectedModelSelection.modelId,
+        }
+      : null;
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const hasExistingSessionOptions = existingSessionOptions.length > 0;
   const isReuseMode = selectedStartMode === "reuse";
@@ -462,6 +427,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
   const confirmDisabled =
     isStarting ||
+    isRuntimeDefinitionsLoading ||
+    runtimeDefinitionsError !== null ||
+    (!hasRuntimeSettingsSnapshot && (isRuntimeSettingsLoading || runtimeSettingsError !== null)) ||
     (!isReuseMode && selectionCatalogError !== null) ||
     (!isReuseMode &&
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
@@ -483,10 +451,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     handleConfirm();
   };
 
-  const runtimeDisabled = isSelectionCatalogLoading || isReuseMode;
   const runtimeProfileDisabled =
     isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
-  const modelDisabled = isReuseMode || isSelectionCatalogLoading;
   const variantDisabled =
     isReuseMode ||
     isSelectionCatalogLoading ||
@@ -498,6 +464,71 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     isReuseMode,
     isSelectionCatalogLoading,
   });
+  const runtimeModelControl = (() => {
+    if (runtimeDefinitionsError) {
+      return (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+          role="alert"
+        >
+          <span className="min-w-0 text-destructive">
+            Runtime definitions unavailable: {runtimeDefinitionsError}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeDefinitions}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    if (isRuntimeDefinitionsLoading) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading agent runtimes...
+        </div>
+      );
+    }
+    if (!hasRuntimeSettingsSnapshot && runtimeSettingsError) {
+      return (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+          role="alert"
+        >
+          <span className="min-w-0 text-destructive">
+            Runtime settings unavailable: {runtimeSettingsError}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeSettings}>
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    if (!hasRuntimeSettingsSnapshot && isRuntimeSettingsLoading) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading runtime settings...
+        </div>
+      );
+    }
+    return (
+      <ModelPicker
+        runtimes={modelPickerRuntimes}
+        value={selectedPickerValue}
+        favoriteState={favoriteState}
+        selectionPolicy={
+          isReuseMode
+            ? {
+                kind: "read_only",
+                reason: "Reuse mode keeps the source session runtime and model.",
+              }
+            : { kind: "editable" }
+        }
+        placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
+        onValueChange={onSelectModelPair}
+      />
+    );
+  })();
 
   return (
     <Dialog
@@ -509,7 +540,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         onOpenChange(nextOpen);
       }}
     >
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -543,13 +574,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 />
               ) : null}
 
-              <RuntimeField
-                disabled={runtimeDisabled}
-                runtimeOptions={runtimeOptions}
-                selectedRuntimeKind={selectedRuntimeKind}
-                selectedStartMode={selectedStartMode}
-                onSelectRuntime={onSelectRuntime}
-              />
+              <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
+                <p className="text-sm font-medium text-foreground">Runtime and model</p>
+                {runtimeModelControl}
+              </div>
 
               {supportsProfiles ? (
                 <RuntimeProfileField
@@ -562,18 +590,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
               ) : null}
 
               <ModelVariantFields
-                catalogError={selectionCatalogError}
                 isSelectionCatalogLoading={isSelectionCatalogLoading}
-                modelDisabled={modelDisabled}
-                modelGroups={modelGroups}
-                modelOptions={modelOptions}
-                selectedModel={selectedModel}
                 selectedModelSelection={selectedModelSelection}
                 selectedVariant={selectedVariant}
                 supportsVariants={supportsVariants}
                 variantDisabled={variantDisabled}
                 variantOptions={variantOptions}
-                onSelectModel={onSelectModel}
                 onSelectVariant={onSelectVariant}
               />
             </fieldset>

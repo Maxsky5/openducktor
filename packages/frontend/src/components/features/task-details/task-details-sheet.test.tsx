@@ -45,6 +45,9 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   detectGithubRepository: async () => null,
   saveGlobalGitConfig: async () => {},
   saveSettingsSnapshot: async () => {},
+  saveAgentModelFavorites: async () => {
+    throw new Error("saveAgentModelFavorites is not used in this test");
+  },
 });
 
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
