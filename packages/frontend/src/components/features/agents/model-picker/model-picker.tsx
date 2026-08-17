@@ -278,7 +278,7 @@ const ModelRow = ({
           >
             <Star
               aria-hidden="true"
-              className={cn(item.isFavorite && "fill-current text-warning-muted")}
+              className={cn(item.isFavorite && "fill-current text-amber-400")}
             />
           </Button>
         </TooltipTrigger>
