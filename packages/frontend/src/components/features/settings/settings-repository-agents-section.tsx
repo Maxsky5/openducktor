@@ -7,6 +7,8 @@ import {
   type ModelPickerFavoriteState,
   type ModelPickerRuntime,
   type ModelPickerValue,
+  toModelPickerCatalogResource,
+  unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
 import {
   ensureDraftAgentDefault,
@@ -22,13 +24,13 @@ import {
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
-import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: RepoConfig | null;
   availableRuntimeDefinitions: RuntimeDescriptor[];
-  catalogResources: RuntimeModelCatalogResource[];
+  catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
   loadingState: {
     isLoadingRuntimeDefinitions: boolean;
@@ -168,12 +170,24 @@ export function RepositoryAgentsSection({
   }
 
   const runtimeOptions = toAgentRuntimeOptions(availableRuntimeDefinitions);
-  const modelPickerRuntimes: ModelPickerRuntime[] = availableRuntimeDefinitions.flatMap(
+  const modelPickerRuntimes: ModelPickerRuntime[] = availableRuntimeDefinitions.map(
     (descriptor) => {
       const resource = catalogResources.find(
         (candidate) => candidate.runtimeKind === descriptor.kind,
       );
-      return resource ? [{ descriptor, resource }] : [];
+      return {
+        descriptor,
+        resource: resource
+          ? toModelPickerCatalogResource({
+              catalog: resource.catalog,
+              isFetching: resource.isFetching,
+              error: resource.error,
+              isAvailable: resource.isEnabled,
+              unavailableReason: "This runtime catalog is not available yet.",
+              retry: resource.retry,
+            })
+          : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
+      };
     },
   );
   const runtimeDropdownClassName = "sm:min-w-[18rem]";
@@ -311,10 +325,10 @@ export function RepositoryAgentsSection({
                       const targetRuntime = modelPickerRuntimes.find(
                         (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
                       );
-                      const targetCatalog = targetRuntime?.resource.catalog ?? null;
-                      if (!targetCatalog) {
+                      if (targetRuntime?.resource.status !== "ready") {
                         return;
                       }
+                      const targetCatalog = targetRuntime.resource.catalog;
 
                       onUpdateSelectedRepoConfig((repoConfig) => {
                         const currentValue = repoConfig.agentDefaults[role] ?? null;

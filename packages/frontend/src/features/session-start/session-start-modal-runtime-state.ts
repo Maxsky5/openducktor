@@ -1,17 +1,15 @@
 import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
-import type { ComboboxOption } from "@/components/ui/combobox";
 import {
   filterRuntimeDefinitionsForStartMode,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
-  toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import {
-  type RuntimeModelCatalogResource,
+  type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
 } from "@/state/queries/use-runtime-model-catalogs";
 
@@ -26,11 +24,10 @@ type UseSessionStartModalRuntimeStateArgs = {
 
 type UseSessionStartModalRuntimeStateResult = {
   catalog: AgentModelCatalog | null;
-  catalogResources: RuntimeModelCatalogResource[];
+  catalogResources: RuntimeModelCatalogQueryResource[];
   catalogError: string | null;
   isCatalogLoading: boolean;
   eligibleRuntimeDefinitions: RuntimeDescriptor[];
-  runtimeOptions: ComboboxOption[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
   setRequestedRuntimeKind: (runtimeKind: RuntimeKind | null) => void;
@@ -50,10 +47,6 @@ export function useSessionStartModalRuntimeState({
   const eligibleRuntimeDefinitions = useMemo(
     () => filterRuntimeDefinitionsForStartMode(runtimeDefinitions, selectedStartMode),
     [runtimeDefinitions, selectedStartMode],
-  );
-  const runtimeOptions = useMemo(
-    () => toAgentRuntimeOptions(eligibleRuntimeDefinitions),
-    [eligibleRuntimeDefinitions],
   );
   const selectedRuntimeKind = useMemo(
     () =>
@@ -114,8 +107,9 @@ export function useSessionStartModalRuntimeState({
           ? {
               ...resource,
               catalog: initialCatalog ?? null,
-              isLoading: false,
+              isFetching: false,
               error: null,
+              isEnabled: true,
             }
           : resource,
       ),
@@ -131,10 +125,9 @@ export function useSessionStartModalRuntimeState({
     catalogError: selectedResource?.error ?? null,
     isCatalogLoading:
       isOpen && selectedStartMode !== "reuse" && selectedRuntimeKind !== null
-        ? isWaitingForRuntime || (selectedResource?.isLoading ?? false)
+        ? isWaitingForRuntime || (selectedResource?.isFetching ?? false)
         : false,
     eligibleRuntimeDefinitions,
-    runtimeOptions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,
     setRequestedRuntimeKind,

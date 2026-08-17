@@ -38,12 +38,11 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
     variant: "default",
   },
   selectedRuntimeKind: "opencode",
-  runtimeOptions: [{ value: "opencode", label: "OpenCode" }],
   modelPickerRuntimes: [
     {
       descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       resource: {
-        runtimeKind: "opencode",
+        status: "ready",
         catalog: {
           runtime: OPENCODE_RUNTIME_DESCRIPTOR,
           models: [
@@ -58,9 +57,6 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
           ],
           defaultModelsByProvider: {},
         },
-        isLoading: false,
-        error: null,
-        retry: async () => {},
       },
     },
   ],
@@ -94,7 +90,6 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   selectedSourceSessionValue: "",
   onSelectStartMode: noop,
   onSelectSourceSessionValue: noop,
-  onSelectRuntime: noop,
   onSelectRuntimeProfile: noop,
   onSelectModelPair: noop,
   onSelectVariant: noop,

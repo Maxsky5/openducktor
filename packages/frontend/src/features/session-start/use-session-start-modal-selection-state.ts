@@ -5,11 +5,10 @@ import type { ModelPickerValue } from "@/components/features/agents/model-picker
 import {
   coerceVisibleSelectionToCatalog,
   resolveInitialModelSelection,
-  resolveModelSelectionForModelChange,
+  resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
-  resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
-} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+} from "@/features/model-selection/model-selection-state";
 
 type UseSessionStartModalSelectionStateArgs = {
   catalog: AgentModelCatalog | null;
@@ -31,7 +30,6 @@ type UseSessionStartModalSelectionStateResult = {
     selectedModel: AgentModelSelection | null,
   ) => void;
   handleSelectRuntimeProfile: (profileId: string) => void;
-  handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
   handleSelectVariant: (variant: string) => void;
 };
@@ -117,21 +115,6 @@ export function useSessionStartModalSelectionState({
     [catalog, setSelection],
   );
 
-  const handleSelectRuntime = useCallback(
-    (runtimeKind: RuntimeKind): void => {
-      setSelection(
-        resolveModelSelectionForRuntimeChange({
-          catalog,
-          currentSelection: resolvedSelection,
-          defaultSelection,
-          selectedModel: intentSelectedModel,
-          runtimeKind,
-        }),
-      );
-    },
-    [catalog, defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
-  );
-
   const handleSelectRuntimeProfile = useCallback(
     (profileId: string): void => {
       if (!selectedRuntimeKind) {
@@ -151,22 +134,14 @@ export function useSessionStartModalSelectionState({
 
   const handleSelectPair = useCallback(
     (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
-      const modelKey = `${value.providerId}/${value.modelId}`;
-      const runtimeSelection = resolveModelSelectionForRuntimeChange({
+      const resolvedPair = resolveModelSelectionForPair({
         catalog: targetCatalog,
         currentSelection: resolvedSelection,
         defaultSelection,
         selectedModel: intentSelectedModel,
-        runtimeKind: value.runtimeKind,
+        value,
       });
-      setSelection(
-        resolveModelSelectionForModelChange({
-          catalog: targetCatalog,
-          currentSelection: runtimeSelection,
-          modelKey,
-          runtimeKind: value.runtimeKind,
-        }),
-      );
+      setSelection(resolvedPair?.selection ?? null);
     },
     [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
@@ -192,7 +167,6 @@ export function useSessionStartModalSelectionState({
     resetSelection,
     initializeSelection,
     handleSelectRuntimeProfile,
-    handleSelectRuntime,
     handleSelectPair,
     handleSelectVariant,
   };

@@ -82,7 +82,8 @@ describe("RepositoryAgentsSection", () => {
           {
             runtimeKind: "codex",
             catalog: codexCatalog,
-            isLoading: false,
+            isFetching: false,
+            isEnabled: true,
             error: null,
             retry: async () => {},
           },

@@ -99,17 +99,13 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   attachmentIntakeDisabled,
   selectedModelSelection,
   agentOptions,
-  modelPickerRuntimes,
-  modelPickerSelectionPolicy,
-  favoriteState,
+  modelPicker,
   variantOptions,
   isSelectionCatalogLoading,
   supportsProfiles,
   selectorDisabled,
   modelPickerDisabled,
   onSelectAgent,
-  onSelectModelPair,
-  onModelPickerOpenChange,
   onSelectVariant,
   contextUsage,
   canStopSession,
@@ -122,17 +118,13 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   attachmentIntakeDisabled: boolean;
   selectedModelSelection: AgentChatComposerModel["selectedModelSelection"];
   agentOptions: AgentChatComposerModel["agentOptions"];
-  modelPickerRuntimes: AgentChatComposerModel["modelPickerRuntimes"];
-  modelPickerSelectionPolicy: AgentChatComposerModel["modelPickerSelectionPolicy"];
-  favoriteState: AgentChatComposerModel["favoriteState"];
+  modelPicker: AgentChatComposerModel["modelPicker"];
   variantOptions: AgentChatComposerModel["variantOptions"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles: boolean;
   selectorDisabled: boolean;
   modelPickerDisabled: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
-  onSelectModelPair: AgentChatComposerModel["onSelectModelPair"];
-  onModelPickerOpenChange: AgentChatComposerModel["onModelPickerOpenChange"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
@@ -174,26 +166,18 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         ) : null}
 
         <ModelPicker
-          runtimes={modelPickerRuntimes}
-          value={
-            selectedModelSelection?.runtimeKind
-              ? {
-                  runtimeKind: selectedModelSelection.runtimeKind,
-                  providerId: selectedModelSelection.providerId,
-                  modelId: selectedModelSelection.modelId,
-                }
-              : null
-          }
-          favoriteState={favoriteState}
+          runtimes={modelPicker.runtimes}
+          value={modelPicker.value}
+          favoriteState={modelPicker.favoriteState}
           selectionPolicy={
             modelPickerDisabled
               ? { kind: "read_only", reason: "Model selection is unavailable right now." }
-              : modelPickerSelectionPolicy
+              : modelPicker.selectionPolicy
           }
           placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
           triggerClassName="!h-7 !w-auto max-w-[19rem] !rounded-full !border-input !bg-card !px-2 text-xs text-foreground shadow-none hover:!bg-muted"
-          onValueChange={onSelectModelPair}
-          onOpenChange={onModelPickerOpenChange}
+          onValueChange={modelPicker.onValueChange}
+          onOpenChange={modelPicker.onOpenChange}
         />
 
         {hasVariantOptions ? (
@@ -309,13 +293,9 @@ function AgentChatComposerFormView({
     isSubagentsLoading,
     searchFiles,
     agentOptions,
-    modelPickerRuntimes,
-    modelPickerSelectionPolicy,
-    favoriteState,
+    modelPicker,
     variantOptions,
     onSelectAgent,
-    onSelectModelPair,
-    onModelPickerOpenChange,
     onSelectVariant,
     contextUsage,
     canStopSession,
@@ -422,17 +402,13 @@ function AgentChatComposerFormView({
             attachmentIntakeDisabled={attachmentIntakeDisabled}
             selectedModelSelection={selectedModelSelection}
             agentOptions={agentOptions}
-            modelPickerRuntimes={modelPickerRuntimes}
-            modelPickerSelectionPolicy={modelPickerSelectionPolicy}
-            favoriteState={favoriteState}
+            modelPicker={modelPicker}
             variantOptions={variantOptions}
             isSelectionCatalogLoading={isSelectionCatalogLoading}
             supportsProfiles={supportsProfiles ?? true}
             selectorDisabled={selectorDisabled}
             modelPickerDisabled={modelPickerDisabled}
             onSelectAgent={onSelectAgent}
-            onSelectModelPair={onSelectModelPair}
-            onModelPickerOpenChange={onModelPickerOpenChange}
             onSelectVariant={onSelectVariant}
             contextUsage={contextUsage}
             canStopSession={canStopSession}

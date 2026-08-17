@@ -27,7 +27,7 @@ import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/ru
 import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
-import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -68,7 +68,7 @@ export type SettingsModalController = {
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   getCatalogErrorForRuntime: (runtimeKind: RuntimeKind) => string | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
-  catalogResources: RuntimeModelCatalogResource[];
+  catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
   workspaces: WorkspaceRecord[];
   workspaceIds: string[];

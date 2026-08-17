@@ -1,4 +1,4 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import {
   findCatalogModel,
@@ -7,6 +7,11 @@ import {
   pickCatalogDefaultModel,
   pickVisibleCatalogDefaultProfileId,
 } from "@/lib/model-catalog-selection";
+
+export type ResolvedModelPair = {
+  selection: AgentModelSelection;
+  model: AgentModelCatalog["models"][number];
+};
 
 export const pickDefaultVisibleSelectionForCatalog = (
   catalog: AgentModelCatalog | null,
@@ -168,6 +173,55 @@ export const resolveModelSelectionForRuntimeChange = ({
     runtimeKind,
     selectedModel,
   });
+};
+
+export const resolveModelSelectionForPair = ({
+  catalog,
+  currentSelection,
+  defaultSelection,
+  selectedModel,
+  value,
+}: {
+  catalog: AgentModelCatalog | null;
+  currentSelection: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
+  selectedModel: AgentModelSelection | null;
+  value: AgentModelFavorite;
+}): ResolvedModelPair | null => {
+  if (!catalog || (catalog.runtime?.kind && catalog.runtime.kind !== value.runtimeKind)) {
+    return null;
+  }
+
+  const model = catalog.models.find(
+    (entry) => entry.providerId === value.providerId && entry.modelId === value.modelId,
+  );
+  if (!model) {
+    return null;
+  }
+
+  const runtimeSelection = resolveModelSelectionForRuntimeChange({
+    catalog,
+    currentSelection,
+    defaultSelection,
+    selectedModel,
+    runtimeKind: value.runtimeKind,
+  });
+  const selection = resolveModelSelectionForModelChange({
+    catalog,
+    currentSelection: runtimeSelection,
+    modelKey: `${model.providerId}/${model.modelId}`,
+    runtimeKind: value.runtimeKind,
+  });
+  if (
+    !selection ||
+    selection.runtimeKind !== value.runtimeKind ||
+    selection.providerId !== value.providerId ||
+    selection.modelId !== value.modelId
+  ) {
+    return null;
+  }
+
+  return { selection, model };
 };
 
 export const resolveModelSelectionForProfileChange = ({

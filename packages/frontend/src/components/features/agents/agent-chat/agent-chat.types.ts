@@ -136,6 +136,15 @@ export type AgentChatPendingSendItems = {
   accessibleLabel: string;
 };
 
+export type AgentChatModelPicker = {
+  runtimes: ModelPickerRuntime[];
+  value: ModelPickerValue | null;
+  selectionPolicy: ModelPickerSelectionPolicy;
+  favoriteState: ModelPickerFavoriteState;
+  onValueChange: (value: ModelPickerValue) => void;
+  onOpenChange: (open: boolean) => void;
+};
+
 export type AgentChatComposerModel = {
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
@@ -174,13 +183,9 @@ export type AgentChatComposerModel = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
-  modelPickerRuntimes: ModelPickerRuntime[];
-  modelPickerSelectionPolicy: ModelPickerSelectionPolicy;
-  favoriteState: ModelPickerFavoriteState;
+  modelPicker: AgentChatModelPicker;
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModelPair: (value: ModelPickerValue) => void;
-  onModelPickerOpenChange: (open: boolean) => void;
   onSelectVariant: (variant: string) => void;
   accentColor?: string | undefined;
   contextUsage: {

@@ -10,10 +10,11 @@ import {
 } from "./runtime-catalog";
 import { skippedQueryOptions } from "./skipped-query";
 
-export type RuntimeModelCatalogResource = {
+export type RuntimeModelCatalogQueryResource = {
   runtimeKind: RuntimeKind;
   catalog: AgentModelCatalog | null;
-  isLoading: boolean;
+  isFetching: boolean;
+  isEnabled: boolean;
   error: string | null;
   retry: () => Promise<void>;
 };
@@ -38,7 +39,7 @@ export function useRuntimeModelCatalogs({
   runtimeKinds,
   enabledRuntimeKinds,
   loadCatalog,
-}: UseRuntimeModelCatalogsArgs): { resources: RuntimeModelCatalogResource[] } {
+}: UseRuntimeModelCatalogsArgs): { resources: RuntimeModelCatalogQueryResource[] } {
   const uniqueRuntimeKinds = useMemo(() => Array.from(new Set(runtimeKinds)), [runtimeKinds]);
   const enabledRuntimeKindSet = useMemo(() => new Set(enabledRuntimeKinds), [enabledRuntimeKinds]);
   const catalogQueries = useQueries({
@@ -50,25 +51,27 @@ export function useRuntimeModelCatalogs({
     }),
   });
 
-  const resources = useMemo<RuntimeModelCatalogResource[]>(
+  const resources = useMemo<RuntimeModelCatalogQueryResource[]>(
     () =>
       uniqueRuntimeKinds.map((runtimeKind, index) => {
         const query = catalogQueries[index];
         if (!query) {
           throw new Error(`Missing model catalog query for runtime '${runtimeKind}'.`);
         }
+        const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
         const error = !query.isFetching && query.error ? errorMessage(query.error) : null;
         return {
           runtimeKind,
           catalog: error ? null : (query.data ?? null),
-          isLoading: query.isFetching,
+          isFetching: query.isFetching,
+          isEnabled,
           error,
           retry: async (): Promise<void> => {
             await query.refetch();
           },
         };
       }),
-    [catalogQueries, uniqueRuntimeKinds],
+    [catalogQueries, enabledRuntimeKindSet, repoPath, uniqueRuntimeKinds],
   );
 
   return { resources };

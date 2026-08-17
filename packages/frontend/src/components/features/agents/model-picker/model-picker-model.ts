@@ -6,14 +6,90 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 
 export type ModelPickerValue = AgentModelFavorite;
 export type ModelPickerView = "favorites" | RuntimeKind;
 
+export type ModelPickerCatalogResource =
+  | {
+      status: "loading";
+      catalog: null;
+      retry: () => Promise<void>;
+    }
+  | {
+      status: "refreshing";
+      catalog: AgentModelCatalog;
+      retry: () => Promise<void>;
+    }
+  | {
+      status: "ready";
+      catalog: AgentModelCatalog;
+    }
+  | {
+      status: "failed";
+      catalog: AgentModelCatalog | null;
+      error: string;
+      retry: () => Promise<void>;
+    }
+  | {
+      status: "unavailable";
+      catalog: null;
+      reason: string;
+    };
+
+type ModelPickerCatalogResourceInput = {
+  catalog: AgentModelCatalog | null;
+  isFetching: boolean;
+  error: string | null;
+  isAvailable: boolean;
+  unavailableReason: string;
+  retry?: () => Promise<void>;
+};
+
+const requiredRetry = (retry: (() => Promise<void>) | undefined): (() => Promise<void>) => {
+  if (!retry) {
+    throw new Error("A loading or failed model catalog must provide a retry action.");
+  }
+  return retry;
+};
+
+export const unavailableModelPickerCatalogResource = (
+  reason: string,
+): ModelPickerCatalogResource => ({
+  status: "unavailable",
+  catalog: null,
+  reason,
+});
+
+export const toModelPickerCatalogResource = ({
+  catalog,
+  isFetching,
+  error,
+  isAvailable,
+  unavailableReason,
+  retry,
+}: ModelPickerCatalogResourceInput): ModelPickerCatalogResource => {
+  if (!isAvailable) {
+    return unavailableModelPickerCatalogResource(unavailableReason);
+  }
+  if (isFetching) {
+    const retryAction = requiredRetry(retry);
+    return catalog
+      ? { status: "refreshing", catalog, retry: retryAction }
+      : { status: "loading", catalog: null, retry: retryAction };
+  }
+  if (error) {
+    return { status: "failed", catalog, error, retry: requiredRetry(retry) };
+  }
+  if (!catalog) {
+    return unavailableModelPickerCatalogResource(unavailableReason);
+  }
+  return { status: "ready", catalog };
+};
+
 export type ModelPickerRuntime = {
   descriptor: RuntimeDescriptor;
-  resource: RuntimeModelCatalogResource;
+  resource: ModelPickerCatalogResource;
   disabledReason?: string | null;
 };
 
@@ -93,8 +169,7 @@ export const buildModelPickerItems = ({
   const favoriteKeys = new Set((favorites ?? []).map(modelPickerValueKey));
   const items = runtimes.flatMap((runtime, runtimeIndex) => {
     if (
-      runtime.resource.isLoading ||
-      runtime.resource.error ||
+      runtime.resource.status !== "ready" ||
       (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)
     ) {
       return [];

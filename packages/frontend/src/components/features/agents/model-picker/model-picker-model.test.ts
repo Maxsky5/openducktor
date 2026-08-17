@@ -5,7 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { ModelPickerCatalogResource, ModelPickerRuntime } from "./model-picker-model";
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
@@ -35,12 +35,9 @@ const catalog = (runtimeKind: "opencode" | "codex"): AgentModelCatalog => ({
   defaultModelsByProvider: {},
 });
 
-const resource = (runtimeKind: "opencode" | "codex"): RuntimeModelCatalogResource => ({
-  runtimeKind,
+const resource = (runtimeKind: "opencode" | "codex"): ModelPickerCatalogResource => ({
+  status: "ready",
   catalog: catalog(runtimeKind),
-  isLoading: false,
-  error: null,
-  retry: async () => {},
 });
 
 const favorite: AgentModelFavorite = {
@@ -126,10 +123,15 @@ describe("model-picker-model", () => {
   });
 
   test("does not expose retained catalog rows from a failed resource", () => {
-    const failedRuntimes = [
+    const failedRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        resource: { ...resource("opencode"), error: "Catalog refetch failed" },
+        resource: {
+          status: "failed",
+          catalog: catalog("opencode"),
+          error: "Catalog refetch failed",
+          retry: async () => {},
+        },
       },
     ];
 

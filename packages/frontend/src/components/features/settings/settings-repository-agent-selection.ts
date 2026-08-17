@@ -1,10 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
-import {
-  resolveModelSelectionForModelChange,
-  resolveModelSelectionForRuntimeChange,
-} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+import { resolveModelSelectionForPair } from "@/features/model-selection/model-selection-state";
 import type { ensureDraftAgentDefault } from "./settings-modal-model";
 
 export const resolveRepoAgentDefaultModelPickerSelection = ({
@@ -18,12 +15,6 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
   targetCatalog: AgentModelCatalog;
   value: ModelPickerValue;
 }): ReturnType<typeof ensureDraftAgentDefault> | null => {
-  const hasExactModel = targetCatalog.models.some(
-    (model) => model.providerId === value.providerId && model.modelId === value.modelId,
-  );
-  if (!hasExactModel) {
-    return null;
-  }
   const currentSelection =
     currentValue && currentRuntimeKind
       ? {
@@ -34,27 +25,21 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
           ...(currentValue.profileId ? { profileId: currentValue.profileId } : {}),
         }
       : null;
-  const runtimeSelection = resolveModelSelectionForRuntimeChange({
+  const resolvedPair = resolveModelSelectionForPair({
     catalog: targetCatalog,
     currentSelection,
     defaultSelection: null,
     selectedModel: null,
-    runtimeKind: value.runtimeKind,
+    value,
   });
-  const nextSelection = resolveModelSelectionForModelChange({
-    catalog: targetCatalog,
-    currentSelection: runtimeSelection,
-    modelKey: `${value.providerId}/${value.modelId}`,
-    runtimeKind: value.runtimeKind,
-  });
-  if (!nextSelection) {
+  if (!resolvedPair) {
     return null;
   }
   return {
     runtimeKind: value.runtimeKind,
-    providerId: nextSelection.providerId,
-    modelId: nextSelection.modelId,
-    variant: nextSelection.variant ?? "",
-    profileId: nextSelection.profileId ?? "",
+    providerId: resolvedPair.selection.providerId,
+    modelId: resolvedPair.selection.modelId,
+    variant: resolvedPair.selection.variant ?? "",
+    profileId: resolvedPair.selection.profileId ?? "",
   };
 };

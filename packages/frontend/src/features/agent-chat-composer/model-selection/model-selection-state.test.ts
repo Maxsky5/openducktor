@@ -8,7 +8,7 @@ import {
   resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
   resolvePreferredModelSelection,
-} from "./model-selection-state";
+} from "@/features/model-selection/model-selection-state";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,

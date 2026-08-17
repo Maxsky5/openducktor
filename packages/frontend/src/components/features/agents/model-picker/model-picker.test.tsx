@@ -8,8 +8,8 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 import { ModelPicker, type ModelPickerFavoriteState } from "./model-picker";
+import type { ModelPickerCatalogResource, ModelPickerRuntime } from "./model-picker-model";
 
 enableReactActEnvironment();
 
@@ -28,12 +28,9 @@ const catalog = (runtimeKind: "opencode" | "codex"): AgentModelCatalog => ({
   defaultModelsByProvider: {},
 });
 
-const resource = (runtimeKind: "opencode" | "codex"): RuntimeModelCatalogResource => ({
-  runtimeKind,
+const resource = (runtimeKind: "opencode" | "codex"): ModelPickerCatalogResource => ({
+  status: "ready",
   catalog: catalog(runtimeKind),
-  isLoading: false,
-  error: null,
-  retry: async () => {},
 });
 
 const opencodeRuntime = {
@@ -166,10 +163,14 @@ describe("ModelPicker", () => {
 
   test("keeps a retained catalog display-only while a refresh is in flight", async () => {
     const onValueChange = mock(() => {});
-    const refreshingRuntimes = [
+    const refreshingRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        resource: { ...resource("opencode"), isLoading: true },
+        resource: {
+          status: "refreshing",
+          catalog: catalog("opencode"),
+          retry: async () => {},
+        },
       },
     ];
     render(
@@ -186,7 +187,7 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
 
-    expect(screen.getByRole("status").textContent).toContain("Loading OpenCode models");
+    expect(screen.getByRole("status").textContent).toContain("Refreshing OpenCode models");
     expect(screen.getAllByText("GPT Five")).toHaveLength(1);
     expect(onValueChange).not.toHaveBeenCalled();
   });
@@ -458,10 +459,15 @@ describe("ModelPicker", () => {
       } as const,
     },
   ])("keeps failed retained rows display-only when $name", async ({ policy }) => {
-    const failedRuntimes = [
+    const failedRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        resource: { ...resource("opencode"), error: "Catalog refetch failed" },
+        resource: {
+          status: "failed",
+          catalog: catalog("opencode"),
+          error: "Catalog refetch failed",
+          retry: async () => {},
+        },
       },
       codexRuntime,
     ];

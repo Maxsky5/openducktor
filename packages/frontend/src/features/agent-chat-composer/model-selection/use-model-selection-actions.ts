@@ -1,15 +1,13 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
-import { catalogModelOptionValue } from "@/components/features/agents";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
-  resolveModelSelectionForModelChange,
+  resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
-  resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
-} from "./model-selection-state";
+} from "@/features/model-selection/model-selection-state";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 
 const findSelectedCatalogModel = (
@@ -96,28 +94,17 @@ export const useModelSelectionActions = ({
       if (loadedSessionIdentity && loadedSessionIdentity.runtimeKind !== value.runtimeKind) {
         return;
       }
-      const model = targetCatalog.models.find(
-        (entry) => entry.providerId === value.providerId && entry.modelId === value.modelId,
-      );
-      if (!model) {
-        return;
-      }
-      const runtimeSelection = resolveModelSelectionForRuntimeChange({
+      const resolvedPair = resolveModelSelectionForPair({
         catalog: targetCatalog,
         currentSelection: selectedModelSelection,
         defaultSelection: null,
         selectedModel: null,
-        runtimeKind: value.runtimeKind,
+        value,
       });
-      const modelSelection = resolveModelSelectionForModelChange({
-        catalog: targetCatalog,
-        currentSelection: runtimeSelection,
-        modelKey: catalogModelOptionValue(model),
-        runtimeKind: value.runtimeKind,
-      });
-      if (!modelSelection) {
+      if (!resolvedPair) {
         return;
       }
+      const { model, selection: modelSelection } = resolvedPair;
       const liveVariants = loadedSessionIdentity ? model.liveSessionUpdates?.variants : undefined;
       const liveVariantSet = liveVariants ? new Set(liveVariants) : null;
       const variants = liveVariantSet

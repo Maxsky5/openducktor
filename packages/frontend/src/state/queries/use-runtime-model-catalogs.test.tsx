@@ -57,18 +57,18 @@ describe("useRuntimeModelCatalogs", () => {
     await harness.run((state) => {
       void state.resources[0]?.retry();
     });
-    await harness.waitFor((state) => state.resources[0]?.isLoading === true, 2000);
+    await harness.waitFor((state) => state.resources[0]?.isFetching === true, 2000);
 
     expect(harness.getLatest().resources[0]).toEqual(
       expect.objectContaining({
         catalog: catalogFor("opencode"),
-        isLoading: true,
+        isFetching: true,
         error: null,
       }),
     );
 
     refetch.resolve(catalogFor("opencode"));
-    await harness.waitFor((state) => state.resources[0]?.isLoading === false, 2000);
+    await harness.waitFor((state) => state.resources[0]?.isFetching === false, 2000);
     expect(harness.getLatest().resources[0]?.catalog).toEqual(catalogFor("opencode"));
     await harness.unmount();
   });
@@ -93,7 +93,7 @@ describe("useRuntimeModelCatalogs", () => {
 
     await harness.mount();
     await harness.waitFor(
-      (state) => state.resources.every((resource) => !resource.isLoading),
+      (state) => state.resources.every((resource) => !resource.isFetching),
       2000,
     );
 
@@ -138,7 +138,7 @@ describe("useRuntimeModelCatalogs", () => {
     await harness.mount();
     await harness.waitFor((state) => state.resources[1]?.error !== null, 2000);
     expect(harness.getLatest().resources[0]).toEqual(
-      expect.objectContaining({ runtimeKind: "opencode", catalog: null, isLoading: false }),
+      expect.objectContaining({ runtimeKind: "opencode", catalog: null, isFetching: false }),
     );
 
     await harness.run(async (state) => {

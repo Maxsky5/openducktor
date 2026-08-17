@@ -71,13 +71,9 @@ export type AgentChatComposerConfig = {
   isSubagentsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
-  modelPickerRuntimes: AgentChatComposerModel["modelPickerRuntimes"];
-  modelPickerSelectionPolicy: AgentChatComposerModel["modelPickerSelectionPolicy"];
-  favoriteState: AgentChatComposerModel["favoriteState"];
+  modelPicker: AgentChatComposerModel["modelPicker"];
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModelPair: AgentChatComposerModel["onSelectModelPair"];
-  onModelPickerOpenChange: AgentChatComposerModel["onModelPickerOpenChange"];
   onSelectVariant: (variant: string) => void;
 };
 
@@ -166,13 +162,9 @@ export function useAgentChatComposerModel({
       isSubagentsLoading: composer.isSubagentsLoading,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
-      modelPickerRuntimes: composer.modelPickerRuntimes,
-      modelPickerSelectionPolicy: composer.modelPickerSelectionPolicy,
-      favoriteState: composer.favoriteState,
+      modelPicker: composer.modelPicker,
       variantOptions: composer.variantOptions,
       onSelectAgent: composer.onSelectAgent,
-      onSelectModelPair: composer.onSelectModelPair,
-      onModelPickerOpenChange: composer.onModelPickerOpenChange,
       onSelectVariant: composer.onSelectVariant,
       accentColor: composerState?.accentColor,
       contextUsage: composer.contextUsage,

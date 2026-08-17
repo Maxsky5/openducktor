@@ -130,15 +130,11 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "isSubagentsLoading"
   | "searchFiles"
   | "agentProfileOptions"
-  | "modelPickerRuntimes"
-  | "modelPickerSelectionPolicy"
-  | "favoriteState"
+  | "modelPicker"
   | "variantOptions"
   | "selectedSessionContextUsage"
   | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
-  | "handleSelectModelPair"
-  | "handleModelPickerOpenChange"
   | "handleSelectVariant"
 >;
 
@@ -173,8 +169,6 @@ export const buildAgentStudioPageModelsArgs = ({
   } = tabs;
   const {
     handleSelectAgentProfile,
-    handleSelectModelPair,
-    handleModelPickerOpenChange,
     handleSelectVariant,
     agentProfileOptions,
     agentAccentColorsByProfileId,
@@ -199,8 +193,6 @@ export const buildAgentStudioPageModelsArgs = ({
       agentOptions: agentProfileOptions,
       agentAccentColorsByProfileId,
       onSelectAgent: handleSelectAgentProfile,
-      onSelectModelPair: handleSelectModelPair,
-      onModelPickerOpenChange: handleModelPickerOpenChange,
       onSelectVariant: handleSelectVariant,
     },
     composer,
@@ -284,15 +276,11 @@ export function useAgentStudioOrchestrationController({
     isSubagentsLoading,
     searchFiles,
     agentProfileOptions,
-    modelPickerRuntimes,
-    modelPickerSelectionPolicy,
-    favoriteState,
+    modelPicker,
     variantOptions,
     agentAccentColorsByProfileId,
     selectedSessionContextUsage,
     handleSelectAgentProfile,
-    handleSelectModelPair,
-    handleModelPickerOpenChange,
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
@@ -459,15 +447,11 @@ export function useAgentStudioOrchestrationController({
       isSubagentsLoading,
       searchFiles,
       agentProfileOptions,
-      modelPickerRuntimes,
-      modelPickerSelectionPolicy,
-      favoriteState,
+      modelPicker,
       variantOptions,
       selectedSessionContextUsage,
       agentAccentColorsByProfileId,
       handleSelectAgentProfile,
-      handleSelectModelPair,
-      handleModelPickerOpenChange,
       handleSelectVariant,
     },
     chatSettings,

@@ -71,13 +71,9 @@ export type AgentStudioChatModelSelectionContext = {
   isSubagentsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
-  modelPickerRuntimes: AgentChatModel["composer"]["modelPickerRuntimes"];
-  modelPickerSelectionPolicy: AgentChatModel["composer"]["modelPickerSelectionPolicy"];
-  favoriteState: AgentChatModel["composer"]["favoriteState"];
+  modelPicker: AgentChatModel["composer"]["modelPicker"];
   variantOptions: ComboboxOption[];
   onSelectAgent: (agent: string) => void;
-  onSelectModelPair: AgentChatModel["composer"]["onSelectModelPair"];
-  onModelPickerOpenChange: AgentChatModel["composer"]["onModelPickerOpenChange"];
   onSelectVariant: (variant: string) => void;
   agentAccentColorsByProfileId: Record<string, string>;
   selectedSessionContextUsage: AgentStudioContextUsage;
@@ -386,13 +382,9 @@ export function useAgentStudioChatModel({
       isSubagentsLoading: modelSelection.isSubagentsLoading,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
-      modelPickerRuntimes: modelSelection.modelPickerRuntimes,
-      modelPickerSelectionPolicy: modelSelection.modelPickerSelectionPolicy,
-      favoriteState: modelSelection.favoriteState,
+      modelPicker: modelSelection.modelPicker,
       variantOptions: modelSelection.variantOptions,
       onSelectAgent: modelSelection.onSelectAgent,
-      onSelectModelPair: modelSelection.onSelectModelPair,
-      onModelPickerOpenChange: modelSelection.onModelPickerOpenChange,
       onSelectVariant: modelSelection.onSelectVariant,
     }),
     [
@@ -403,12 +395,8 @@ export function useAgentStudioChatModel({
       modelSelection.isSlashCommandsLoading,
       modelSelection.isSkillsLoading,
       modelSelection.isSubagentsLoading,
-      modelSelection.modelPickerRuntimes,
-      modelSelection.modelPickerSelectionPolicy,
-      modelSelection.favoriteState,
+      modelSelection.modelPicker,
       modelSelection.onSelectAgent,
-      modelSelection.onSelectModelPair,
-      modelSelection.onModelPickerOpenChange,
       modelSelection.onSelectVariant,
       modelSelection.searchFiles,
       modelSelection.selectedModelDescriptor,

@@ -43,47 +43,51 @@ const buildModel = () => ({
   isSubagentsLoading: false,
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
-  modelPickerRuntimes: [
-    {
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      resource: {
-        runtimeKind: "opencode" as const,
-        catalog: {
-          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-          models: [
-            {
-              id: "openai/gpt-5.3-codex",
-              providerId: "openai",
-              providerName: "OpenAI",
-              modelId: "gpt-5.3-codex",
-              modelName: "GPT-5.3 Codex",
-              variants: ["high"],
-            },
-          ],
-          defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+  modelPicker: {
+    runtimes: [
+      {
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        resource: {
+          status: "ready" as const,
+          catalog: {
+            runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+            models: [
+              {
+                id: "openai/gpt-5.3-codex",
+                providerId: "openai",
+                providerName: "OpenAI",
+                modelId: "gpt-5.3-codex",
+                modelName: "GPT-5.3 Codex",
+                variants: ["high"],
+              },
+            ],
+            defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+          },
         },
-        isLoading: false,
-        error: null,
-        retry: async () => {},
       },
+    ],
+    value: {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5.3-codex",
     },
-  ],
-  modelPickerSelectionPolicy: { kind: "editable" as const },
-  favoriteState: {
-    favorites: [],
-    isLoading: false,
-    readError: null,
-    isMutationPending: false,
-    mutationError: null,
-    canMutate: true,
-    toggleFavorite: () => {},
-    retryRead: () => {},
-    retryMutation: () => {},
+    selectionPolicy: { kind: "editable" as const },
+    favoriteState: {
+      favorites: [],
+      isLoading: false,
+      readError: null,
+      isMutationPending: false,
+      mutationError: null,
+      canMutate: true,
+      toggleFavorite: () => {},
+      retryRead: () => {},
+      retryMutation: () => {},
+    },
+    onValueChange: () => {},
+    onOpenChange: () => {},
   },
   variantOptions: [{ value: "high", label: "high" }],
   onSelectAgent: () => {},
-  onSelectModelPair: () => {},
-  onModelPickerOpenChange: () => {},
   onSelectVariant: () => {},
   accentColor: "#d97706",
   contextUsage: {

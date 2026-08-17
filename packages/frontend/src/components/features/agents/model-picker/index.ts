@@ -3,4 +3,12 @@ export type {
   ModelPickerSelectionPolicy,
 } from "./model-picker";
 export { ModelPicker } from "./model-picker";
-export type { ModelPickerRuntime, ModelPickerValue } from "./model-picker-model";
+export type {
+  ModelPickerCatalogResource,
+  ModelPickerRuntime,
+  ModelPickerValue,
+} from "./model-picker-model";
+export {
+  toModelPickerCatalogResource,
+  unavailableModelPickerCatalogResource,
+} from "./model-picker-model";

@@ -291,7 +291,6 @@ const baseSessionStartModal: SessionStartModalModel = {
   confirmLabel: "Start session",
   selectedModelSelection: null,
   selectedRuntimeKind: "opencode",
-  runtimeOptions: [],
   modelPickerRuntimes: [],
   favoriteState: {
     favorites: [],
@@ -323,7 +322,6 @@ const baseSessionStartModal: SessionStartModalModel = {
   selectedSourceSessionValue: "",
   onSelectStartMode: mock(() => {}),
   onSelectSourceSessionValue: mock(() => {}),
-  onSelectRuntime: mock(() => {}),
   onSelectRuntimeProfile: mock(() => {}),
   onSelectModelPair: mock(() => {}),
   onSelectVariant: mock(() => {}),

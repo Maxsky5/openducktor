@@ -544,19 +544,19 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.modelPickerRuntimes[0]?.resource.catalog !== null);
+      await harness.waitFor((state) => state.modelPicker.runtimes[0]?.resource.catalog !== null);
       expect(loadCatalog).not.toHaveBeenCalledWith({ repoPath: "/repo", runtimeKind: "codex" });
 
       await harness.run(() => {
-        harness.getLatest().handleModelPickerOpenChange(true);
+        harness.getLatest().modelPicker.onOpenChange(true);
       });
       await harness.waitFor((state) =>
-        state.modelPickerRuntimes.some(
+        state.modelPicker.runtimes.some(
           (runtime) => runtime.descriptor.kind === "codex" && runtime.resource.catalog !== null,
         ),
       );
       await harness.run(() => {
-        harness.getLatest().handleSelectModelPair({
+        harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "codex",
           providerId: "openai",
           modelId: "gpt-5",
@@ -588,13 +588,13 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().modelPickerSelectionPolicy).toEqual({
+      expect(harness.getLatest().modelPicker.selectionPolicy).toEqual({
         kind: "runtime_locked",
         runtimeKind: "opencode",
         reason: "An existing session cannot change runtime.",
       });
       expect(
-        harness.getLatest().modelPickerRuntimes.map((runtime) => runtime.descriptor.kind),
+        harness.getLatest().modelPicker.runtimes.map((runtime) => runtime.descriptor.kind),
       ).toEqual(["opencode", "codex"]);
       expect(loadCatalog).not.toHaveBeenCalled();
     } finally {
@@ -622,10 +622,10 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
       const selectedRuntime = harness
         .getLatest()
-        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
 
       expect(selectedRuntime?.resource.catalog).toBe(CATALOG);
-      expect(selectedRuntime?.resource.error).toBeNull();
+      expect(selectedRuntime?.resource.status).toBe("ready");
     } finally {
       await harness.unmount();
     }
@@ -658,10 +658,10 @@ describe("useAgentStudioChatComposer", () => {
       );
       let selectedRuntime = harness
         .getLatest()
-        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(selectedRuntime?.resource).toEqual(
-        expect.objectContaining({ catalog: CATALOG, isLoading: true, error: null }),
+        expect.objectContaining({ status: "refreshing", catalog: CATALOG }),
       );
 
       await harness.update(
@@ -672,10 +672,10 @@ describe("useAgentStudioChatComposer", () => {
       );
       selectedRuntime = harness
         .getLatest()
-        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(false);
       expect(selectedRuntime?.resource).toEqual(
-        expect.objectContaining({ catalog: ALTERNATE_CATALOG, isLoading: false, error: null }),
+        expect.objectContaining({ status: "ready", catalog: ALTERNATE_CATALOG }),
       );
 
       await harness.update(
@@ -689,11 +689,11 @@ describe("useAgentStudioChatComposer", () => {
       );
       selectedRuntime = harness
         .getLatest()
-        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode");
+        .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
       expect(selectedRuntime?.resource).toEqual(
         expect.objectContaining({
+          status: "failed",
           catalog: ALTERNATE_CATALOG,
-          isLoading: false,
           error: "Catalog refresh failed",
         }),
       );
@@ -1419,7 +1419,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModelPair({
+        harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
@@ -1428,7 +1428,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModelPair({
+        harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "opencode",
           providerId: "openai",
           modelId: "gpt-5",
@@ -1482,7 +1482,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await harness.run(() => {
-        harness.getLatest().handleSelectModelPair({
+        harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",
@@ -1768,7 +1768,7 @@ describe("useAgentStudioChatComposer", () => {
       );
 
       await harness.run(() => {
-        harness.getLatest().handleSelectModelPair({
+        harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "opencode",
           providerId: "anthropic",
           modelId: "claude-sonnet",

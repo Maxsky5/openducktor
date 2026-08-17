@@ -65,31 +65,35 @@ const activeViewFor = (
 };
 
 const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElement | null => {
-  if (runtime.resource.isLoading) {
+  const { resource } = runtime;
+  if (resource.status === "loading" || resource.status === "refreshing") {
     return (
       <div
         className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"
         role="status"
       >
         <LoaderCircle className="animate-spin" aria-hidden="true" />
-        Loading {runtime.descriptor.label} models...
+        {resource.status === "refreshing" ? "Refreshing" : "Loading"} {runtime.descriptor.label}{" "}
+        models...
       </div>
     );
   }
-  if (!runtime.resource.error) {
+  if (resource.status === "unavailable") {
+    return (
+      <div className="px-3 py-2 text-sm text-muted-foreground" role="status">
+        {runtime.descriptor.label}: {resource.reason}
+      </div>
+    );
+  }
+  if (resource.status === "ready") {
     return null;
   }
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm" role="alert">
       <span className="min-w-0 text-destructive">
-        {runtime.descriptor.label}: {runtime.resource.error}
+        {runtime.descriptor.label}: {resource.error}
       </span>
-      <Button
-        type="button"
-        variant="outline"
-        size="xs"
-        onClick={() => void runtime.resource.retry()}
-      >
+      <Button type="button" variant="outline" size="xs" onClick={() => void resource.retry()}>
         Retry
       </Button>
     </div>
@@ -402,7 +406,7 @@ export function ModelPicker({
       }
       return "No favorite models are available here. Use a model row's star to add one.";
     }
-    if (activeRuntime?.resource.isLoading || activeRuntime?.resource.error) {
+    if (activeRuntime && activeRuntime.resource.status !== "ready") {
       return null;
     }
     return `No ${activeRuntime?.descriptor.label ?? "runtime"} models are available.`;

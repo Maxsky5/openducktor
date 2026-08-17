@@ -6,7 +6,7 @@ import {
   resolveModelSelectionForModelChange,
   resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
-} from "@/features/agent-chat-composer/model-selection/model-selection-state";
+} from "@/features/model-selection/model-selection-state";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { roleDefaultSelectionFor } from "./session-start-selection";
 

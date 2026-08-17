@@ -3,7 +3,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo } from "react";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
-  type RuntimeModelCatalogResource,
+  type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
 } from "@/state/queries/use-runtime-model-catalogs";
 
@@ -14,7 +14,7 @@ type UseSettingsModalCatalogStateArgs = {
 };
 
 type SettingsModalCatalogState = {
-  resources: RuntimeModelCatalogResource[];
+  resources: RuntimeModelCatalogQueryResource[];
   catalogsByRuntime: Record<string, AgentModelCatalog | null>;
   catalogErrorsByRuntime: Record<string, string | null>;
   isLoadingCatalog: boolean;
@@ -45,7 +45,7 @@ export const useSettingsModalCatalogState = ({
     for (const resource of resources) {
       catalogs[resource.runtimeKind] = resource.catalog;
       errors[resource.runtimeKind] = resource.error;
-      if (resource.isLoading) {
+      if (resource.isFetching) {
         loading.push(resource.runtimeKind);
       }
     }

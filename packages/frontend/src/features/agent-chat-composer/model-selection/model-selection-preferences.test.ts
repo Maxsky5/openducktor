@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { resolvePreferredModelSelection } from "@/features/model-selection/model-selection-state";
 import {
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "./model-selection-preferences";
-import { resolvePreferredModelSelection } from "./model-selection-state";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,

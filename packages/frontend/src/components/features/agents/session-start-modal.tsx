@@ -48,7 +48,6 @@ export type SessionStartModalModel = {
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
   selectedRuntimeKind: RuntimeKind | null;
-  runtimeOptions: ComboboxOption[];
   modelPickerRuntimes: ModelPickerRuntime[];
   favoriteState: ModelPickerFavoriteState;
   supportsProfiles: boolean;
@@ -74,7 +73,6 @@ export type SessionStartModalModel = {
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
   onSelectSourceSessionValue: (sourceSessionValue: string) => void;
   onSelectTargetBranch?: (branch: string) => void;
-  onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectRuntimeProfile: (profileId: string) => void;
   onSelectModelPair: (value: ModelPickerValue) => void;
   onSelectVariant: (variant: string) => void;
