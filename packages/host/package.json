@@ -21,7 +21,7 @@
     "diff": "9.0.0",
     "drizzle-orm": "0.45.2",
     "effect": "^3.22.0",
-    "file-type": "^21.2.0",
+    "file-type": "^22.0.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
