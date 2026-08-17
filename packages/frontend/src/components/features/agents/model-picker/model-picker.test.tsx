@@ -23,6 +23,13 @@ const catalog = (runtimeKind: "opencode" | "codex"): AgentModelCatalog => ({
       modelId: "gpt-5",
       modelName: runtimeKind === "opencode" ? "GPT Five" : "GPT 5 Codex",
       variants: [],
+      contextWindow: 200_000,
+      attachmentSupport: {
+        image: true,
+        video: true,
+        audio: false,
+        pdf: true,
+      },
     },
   ],
   defaultModelsByProvider: {},
@@ -487,6 +494,29 @@ describe("ModelPicker", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("Catalog refetch failed");
     expect(screen.getAllByText("GPT Five")).toHaveLength(1);
+  });
+
+  test("shows context window and attachment support without the redundant runtime name", async () => {
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.getByText("OpenAI · gpt-5 · 200K context")).toBeTruthy();
+    expect(screen.queryByText(/OpenCode · OpenAI/)).toBeNull();
+    expect(screen.getByRole("img", { name: "Supports images" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Supports videos" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Supports PDF files" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Supports audio" })).toBeNull();
   });
 
   test("emits the exact pair and closes after model selection", async () => {

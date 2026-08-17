@@ -1,5 +1,14 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import { Check, ChevronsUpDown, LoaderCircle, Star } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  FileAudio2,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  LoaderCircle,
+  Star,
+} from "lucide-react";
 import {
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatTokenCompact } from "../agent-chat/format-token-count";
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
@@ -177,6 +187,35 @@ const RuntimeRailButton = ({
   );
 };
 
+const ModelCapabilityIcons = ({
+  model,
+}: {
+  model: ModelPickerItem["model"];
+}): ReactElement | null => {
+  const support = model.attachmentSupport;
+  if (!support) {
+    return null;
+  }
+  const capabilities = [
+    { supported: support.image, icon: ImageIcon, label: "Supports images" },
+    { supported: support.video, icon: Film, label: "Supports videos" },
+    { supported: support.audio, icon: FileAudio2, label: "Supports audio" },
+    { supported: support.pdf, icon: FileText, label: "Supports PDF files" },
+  ].filter((capability) => capability.supported);
+  if (capabilities.length === 0) {
+    return null;
+  }
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {capabilities.map(({ icon: Icon, label }) => (
+        <span key={label} role="img" aria-label={label} title={label}>
+          <Icon className="size-3.5" aria-hidden="true" />
+        </span>
+      ))}
+    </span>
+  );
+};
+
 const ModelRow = ({
   item,
   selected,
@@ -198,6 +237,7 @@ const ModelRow = ({
     ? `Remove ${item.model.modelName} from favorites`
     : `Add ${item.model.modelName} to favorites`;
   const favoriteTooltip = item.isFavorite ? "Remove from favorites" : "Add to favorites";
+  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
   const favoriteDisabledReasonId = useId();
   const favoriteDisabledReason = (() => {
     if (favoriteState.canMutate) {
@@ -250,8 +290,12 @@ const ModelRow = ({
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {item.runtime.label} · {item.model.providerName} · {item.model.modelId}
+          <span className="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="truncate">
+              {item.model.providerName} · {item.model.modelId}
+              {contextWindowLabel ? ` · ${contextWindowLabel} context` : ""}
+            </span>
+            <ModelCapabilityIcons model={item.model} />
           </span>
         </span>
         {selected ? <Check aria-label="Selected model" /> : null}
