@@ -45,8 +45,6 @@ Homebrew requires explicit trust for non-official taps. The fully-qualified comm
 2. Download the latest desktop asset that matches your machine.
 3. Launch OpenDucktor and open the local repository you want to work on.
 
-If macOS blocks the first launch, use Finder's standard `Open` action once to confirm you want to run the app.
-
 Homebrew installs the same signed and notarized desktop app that is published on GitHub Releases.
 
 Windows and Linux desktop builds are published from the Electron release pipeline, but they are experimental. They are useful for feedback and compatibility testing, not yet as stable as the macOS build. Please open issues with platform details, logs, and the action you were trying to perform.
@@ -84,6 +82,8 @@ Task data is stored in an OpenDucktor-managed SQLite database, so no external ta
 - Global and repository-level prompt customization for adapting agent behavior to your workflow.
 - A built-in OpenDucktor MCP server used internally by managed agent sessions and available externally through `@openducktor/mcp`.
 - A local web runner available through `@openducktor/web` for running the shared frontend with the TypeScript host in a browser.
+- Built-in terminal tabs to run commands and watch long-lived processes alongside a task.
+- A CI and pull-request review pane that shows checks, review outcomes, and GitHub comments for a task's pull request.
 
 ## How It Works
 
@@ -110,7 +110,7 @@ That keeps the workflow task-centric and auditable: agents act through a control
 - Supported runtimes today: OpenCode (`opencode`), Codex (`codex`), and Claude Code (`claude`)
   - OpenCode remains the default runtime.
   - More runtimes may be added through the runtime descriptor and adapter model.
-- The project is still early and should be treated as an active prototype
+- The project is in active development and changes between versions
 
 ## Troubleshooting Logs
 
