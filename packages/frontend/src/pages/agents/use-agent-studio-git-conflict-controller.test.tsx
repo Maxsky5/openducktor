@@ -28,7 +28,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   branch: "feature/task-10",
   detectedConflictedFiles: [],
   worktreeStatusSnapshotKey: null,
-  isBuilderSessionWorking: false,
   refreshDiffData: async () => {},
   clearActionErrors: () => {},
   setRebaseError: () => {},

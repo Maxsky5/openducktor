@@ -446,7 +446,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
       expect(taskWorktreeGetMock).not.toHaveBeenCalled();
       expect(harness.getLatest().context).toMatchObject({
-        isSelectedBuilderWorking: true,
         sessionWorkingDirectory: "/repo/.worktrees/task-24",
       });
       expect(harness.getLatest().gitPanelContextMode).toBe("worktree");

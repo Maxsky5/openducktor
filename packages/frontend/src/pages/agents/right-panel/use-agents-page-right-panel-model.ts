@@ -291,7 +291,6 @@ export function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
-    isBuilderSessionWorking: buildToolsSnapshot.context.isSelectedBuilderWorking,
     ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
   });
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(

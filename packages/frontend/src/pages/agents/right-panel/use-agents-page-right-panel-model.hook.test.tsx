@@ -21,7 +21,6 @@ type BuildToolsSnapshotModule =
   typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
 type GitActionsModule = typeof import("../use-agent-studio-git-actions");
 type PullRequestReviewQueriesModule = typeof import("@/state/queries/pull-request-review");
-type GitActionsArgs = Parameters<GitActionsModule["useAgentStudioGitActions"]>[0];
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
@@ -57,7 +56,6 @@ const createSnapshot = (gitConflictId: string | null) => ({
     taskId: "task-1",
     selectedTaskId: "task-1",
     viewRole: "build",
-    isSelectedBuilderWorking: true,
     sessionWorkingDirectory: "/repo",
     hasSelectedTask: true,
   },
@@ -335,69 +333,6 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.unmount();
 
     expect(events).toEqual(["A", "B", null]);
-  });
-
-  test("does not lock git actions for a builder session waiting for input", async () => {
-    const waitingInputSnapshot = createSnapshot("A");
-    buildToolsSnapshotState.current = {
-      ...waitingInputSnapshot,
-      context: {
-        ...waitingInputSnapshot.context,
-        isSelectedBuilderWorking: false,
-      },
-    };
-    const harness = createHookHarness(
-      useAgentsPageRightPanelModel,
-      createHookArgs({
-        selectedView: createSelectedView({
-          loadedSession: createAgentSessionFixture({
-            role: "build",
-            status: "running",
-            workingDirectory: "/repo",
-            pendingQuestions: [{ requestId: "question-1", questions: [] }],
-          }),
-        }),
-        activeTabId: "git",
-        isPanelOpen: true,
-      }),
-    );
-
-    await harness.mount();
-
-    const gitActionCalls = gitActionsMock.mock.calls as unknown as Array<[GitActionsArgs]>;
-    const latestGitActionArgs = gitActionCalls.at(-1)?.[0];
-    expect(latestGitActionArgs?.isBuilderSessionWorking).toBe(false);
-
-    await harness.unmount();
-  });
-
-  test("locks git actions from selected-session summary while the full session is loading", async () => {
-    const selectedSessionSummary = toAgentSessionSummary(
-      createAgentSessionFixture({
-        role: "build",
-        status: "running",
-        workingDirectory: "/repo/.worktrees/task-1",
-      }),
-    );
-    const harness = createHookHarness(
-      useAgentsPageRightPanelModel,
-      createHookArgs({
-        selectedView: createSelectedView({
-          loadedSession: null,
-          selectedSessionSummary,
-        }),
-        activeTabId: "git",
-        isPanelOpen: true,
-      }),
-    );
-
-    await harness.mount();
-
-    const gitActionCalls = gitActionsMock.mock.calls as unknown as Array<[GitActionsArgs]>;
-    const latestGitActionArgs = gitActionCalls.at(-1)?.[0];
-    expect(latestGitActionArgs?.isBuilderSessionWorking).toBe(true);
-
-    await harness.unmount();
   });
 
   test("prefetches CI review data in the background for linked pull requests", async () => {

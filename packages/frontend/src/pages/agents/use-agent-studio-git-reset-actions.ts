@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import type { AgentStudioPendingReset, GitConflict } from "@/features/agent-studio-git";
 import { host } from "@/state/operations/shared/host";
 import {
-  BUILDER_LOCK_REASON,
   CONFLICT_LOCK_REASON,
   type RefreshGitDiffData,
   toErrorMessage,
@@ -19,7 +18,6 @@ type UseAgentStudioGitResetActionsArgs = {
   diffHash: string | null;
   worktreeStatusSnapshotKey: string | null;
   isDiffDataLoading: boolean;
-  isBuilderSessionWorking: boolean;
   activeGitConflict: GitConflict | null;
   refreshDiffData: RefreshGitDiffData;
   clearActionErrors: () => void;
@@ -35,7 +33,6 @@ export function useAgentStudioGitResetActions({
   diffHash,
   worktreeStatusSnapshotKey,
   isDiffDataLoading,
-  isBuilderSessionWorking,
   activeGitConflict,
   refreshDiffData,
   clearActionErrors,
@@ -61,10 +58,6 @@ export function useAgentStudioGitResetActions({
   }
 
   const getResetBlockedReason = useCallback((): string | null => {
-    if (isBuilderSessionWorking) {
-      return BUILDER_LOCK_REASON;
-    }
-
     if (activeGitConflict != null) {
       return CONFLICT_LOCK_REASON;
     }
@@ -78,7 +71,7 @@ export function useAgentStudioGitResetActions({
     }
 
     return null;
-  }, [activeGitConflict, isBuilderSessionWorking, isDiffDataLoading, isResetting]);
+  }, [activeGitConflict, isDiffDataLoading, isResetting]);
 
   const resetDisabledReason = useMemo((): string | null => {
     if (!repoPath) {

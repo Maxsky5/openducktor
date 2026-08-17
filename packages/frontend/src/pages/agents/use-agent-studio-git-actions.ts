@@ -9,7 +9,7 @@ import type {
   GitDiffRefresh,
 } from "@/features/agent-studio-git";
 import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-errors";
-import { BUILDER_LOCK_REASON, type GitActionKind } from "./use-agent-studio-git-action-utils";
+import { CONFLICT_LOCK_REASON, type GitActionKind } from "./use-agent-studio-git-action-utils";
 import { useAgentStudioGitCommitActions } from "./use-agent-studio-git-commit-actions";
 import { useAgentStudioGitConflictController } from "./use-agent-studio-git-conflict-controller";
 import { useAgentStudioGitPushActions } from "./use-agent-studio-git-push-actions";
@@ -68,7 +68,6 @@ type UseAgentStudioGitActionsInput = {
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: GitDiffRefresh;
   isDiffDataLoading?: boolean;
-  isBuilderSessionWorking?: boolean;
   onResolveGitConflict?: (conflict: GitConflict) => Promise<boolean>;
 };
 
@@ -86,7 +85,6 @@ export function useAgentStudioGitActions({
   worktreeStatusSnapshotKey = null,
   refreshDiffData,
   isDiffDataLoading = false,
-  isBuilderSessionWorking = false,
   onResolveGitConflict,
 }: UseAgentStudioGitActionsInput): AgentStudioGitActionState {
   const {
@@ -120,7 +118,6 @@ export function useAgentStudioGitActions({
     detectedConflict,
     detectedConflictedFiles,
     worktreeStatusSnapshotKey,
-    isBuilderSessionWorking,
     refreshDiffData,
     clearActionErrors,
     setRebaseError,
@@ -133,7 +130,7 @@ export function useAgentStudioGitActions({
         return true;
       }
 
-      const lockReason = gitActionsLockReason ?? BUILDER_LOCK_REASON;
+      const lockReason = gitActionsLockReason ?? CONFLICT_LOCK_REASON;
 
       if (kind === "commit") {
         setCommitError(lockReason);
@@ -165,7 +162,6 @@ export function useAgentStudioGitActions({
     diffHash,
     worktreeStatusSnapshotKey,
     isDiffDataLoading,
-    isBuilderSessionWorking,
     activeGitConflict,
     refreshDiffData,
     clearActionErrors,
