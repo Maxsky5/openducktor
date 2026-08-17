@@ -1,7 +1,4 @@
-export type {
-  ModelPickerFavoriteState,
-  ModelPickerSelectionPolicy,
-} from "./model-picker";
+export type { ModelPickerFavoriteState, ModelPickerSelectionPolicy } from "./model-picker";
 export { ModelPicker } from "./model-picker";
 export type {
   ModelPickerCatalogResource,

@@ -53,6 +53,7 @@ describe("useOnboardingWorkspaceCompletion", () => {
       detectGithubRepository: async () => null,
       saveGlobalGitConfig: async () => {},
       saveSettingsSnapshot: async () => {},
+      saveAgentModelFavorites: async () => settingsSnapshot,
     } satisfies WorkspaceStateContextValue;
     const wrapper = ({ children }: PropsWithChildren): React.ReactElement => (
       <QueryClientProvider client={queryClient}>
