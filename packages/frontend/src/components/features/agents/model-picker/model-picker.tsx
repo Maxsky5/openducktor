@@ -1,4 +1,5 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import {
   Check,
   ChevronsUpDown,
@@ -195,11 +196,10 @@ const MODEL_CAPABILITY_ICONS = [
 ] as const;
 
 const ModelCapabilityIcons = ({
-  model,
+  support,
 }: {
-  model: ModelPickerItem["model"];
+  support: AgentModelAttachmentSupport | undefined;
 }): ReactElement | null => {
-  const support = model.attachmentSupport;
   if (!support) {
     return null;
   }
@@ -297,7 +297,7 @@ const ModelRow = ({
               {item.model.providerName} · {item.model.modelId}
               {contextWindowLabel ? ` · ${contextWindowLabel} context` : ""}
             </span>
-            <ModelCapabilityIcons model={item.model} />
+            <ModelCapabilityIcons support={item.model.attachmentSupport} />
           </span>
         </span>
         {selected ? <Check aria-label="Selected model" /> : null}
