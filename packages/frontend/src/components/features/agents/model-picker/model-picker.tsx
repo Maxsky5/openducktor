@@ -187,6 +187,13 @@ const RuntimeRailButton = ({
   );
 };
 
+const MODEL_CAPABILITY_ICONS = [
+  { key: "image", icon: ImageIcon, label: "Supports images" },
+  { key: "video", icon: Film, label: "Supports videos" },
+  { key: "audio", icon: FileAudio2, label: "Supports audio" },
+  { key: "pdf", icon: FileText, label: "Supports PDF files" },
+] as const;
+
 const ModelCapabilityIcons = ({
   model,
 }: {
@@ -196,12 +203,7 @@ const ModelCapabilityIcons = ({
   if (!support) {
     return null;
   }
-  const capabilities = [
-    { supported: support.image, icon: ImageIcon, label: "Supports images" },
-    { supported: support.video, icon: Film, label: "Supports videos" },
-    { supported: support.audio, icon: FileAudio2, label: "Supports audio" },
-    { supported: support.pdf, icon: FileText, label: "Supports PDF files" },
-  ].filter((capability) => capability.supported);
+  const capabilities = MODEL_CAPABILITY_ICONS.filter((capability) => support[capability.key]);
   if (capabilities.length === 0) {
     return null;
   }

@@ -519,6 +519,45 @@ describe("ModelPicker", () => {
     expect(screen.queryByRole("img", { name: "Supports audio" })).toBeNull();
   });
 
+  test("omits context and capability icons when the model descriptor lacks them", async () => {
+    const bareCatalog: AgentModelCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT Five",
+          variants: [],
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+    render(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            resource: { status: "ready", catalog: bareCatalog },
+          },
+        ]}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.getByText("OpenAI · gpt-5")).toBeTruthy();
+    expect(screen.queryByText(/context/)).toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
   test("emits the exact pair and closes after model selection", async () => {
     const onValueChange = mock(() => {});
     render(
