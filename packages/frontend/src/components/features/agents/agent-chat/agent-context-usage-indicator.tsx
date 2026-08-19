@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import { formatTokenCompact, formatTokenExact } from "./format-token-count";
+import { formatTokenCompact, formatTokenExact } from "../format-token-count";
 
 type AgentContextUsageIndicatorProps = {
   totalTokens: number;

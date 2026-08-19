@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatTokenCompact } from "../agent-chat/format-token-count";
+import { formatTokenCompact } from "../format-token-count";
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
