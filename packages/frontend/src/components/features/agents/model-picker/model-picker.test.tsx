@@ -511,7 +511,8 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
 
-    expect(screen.getByText("OpenAI · gpt-5 · 200K context")).toBeTruthy();
+    expect(screen.getByText("OpenAI · gpt-5")).toBeTruthy();
+    expect(screen.getByText("200K context")).toBeTruthy();
     expect(screen.queryByText(/OpenCode · OpenAI/)).toBeNull();
     expect(screen.getByRole("img", { name: "Supports images" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Supports videos" })).toBeTruthy();
