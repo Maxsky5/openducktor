@@ -12,6 +12,7 @@ import {
   readEventParentExternalSessionId,
   readEventSessionId,
   readSessionLifecycleEvent,
+  setMessagePart,
 } from "./event-stream/shared";
 import {
   childSessionCreatedEvent,
@@ -270,6 +271,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     },
     getSession: () => undefined,
     partsById: new Map(),
+    partIdsByMessageId: new Map(),
     messageRoleById: new Map(),
     compactionMessageIds: new Set(),
     pendingDeltasByPartId: new Map(),
@@ -1465,6 +1467,48 @@ describe("event-stream", () => {
       variant: "high",
     });
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
+  });
+
+  test("finalizes pending output without scanning transcript parts", async () => {
+    let partScans = 0;
+    const { emitted } = await runEventStreamWithSession(
+      [makeSessionStatusIdleEvent(), makeSessionIdleEvent()],
+      (session) => {
+        for (let index = 0; index < 100; index += 1) {
+          const messageId = `assistant-finalized-${index}`;
+          session.completedAssistantMessageIds.add(messageId);
+          session.emittedAssistantMessageIds.add(messageId);
+          session.messageRoleById.set(messageId, "assistant");
+        }
+        const pendingMessageId = "assistant-pending-final";
+        const pendingPart = makeAssistantTextPart({
+          messageId: pendingMessageId,
+          partId: "text-pending-final",
+          text: "Pending final output",
+          end: 1,
+        });
+        session.completedAssistantMessageIds.add(pendingMessageId);
+        session.pendingCompletedAssistantMessageIds.add(pendingMessageId);
+        session.messageRoleById.set(pendingMessageId, "assistant");
+        session.messageMetadataById.set(pendingMessageId, {
+          timestamp: "2026-02-22T12:00:00.000Z",
+          hasStopSignal: true,
+        });
+        setMessagePart(session, pendingPart);
+        const values = session.partsById.values.bind(session.partsById);
+        Object.defineProperty(session.partsById, "values", {
+          value: () => {
+            partScans += 1;
+            return values();
+          },
+        });
+      },
+    );
+
+    expect(partScans).toBe(0);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Pending final output" }),
+    ]);
   });
 
   test("emits session_idle for stop-finished assistant turns without visible text", async () => {

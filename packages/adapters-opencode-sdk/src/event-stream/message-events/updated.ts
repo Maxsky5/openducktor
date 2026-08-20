@@ -4,6 +4,7 @@ import { readMessageModelSelection } from "../../message-normalizers";
 import { toIsoFromEpoch } from "../../session-runtime-utils";
 import { readEventInfo, readEventProperties, readMessageCompletedAt } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
+import { setMessagePart } from "../shared";
 import {
   emitAssistantPart,
   emitKnownAssistantPartsForMessage,
@@ -116,7 +117,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
       );
       const partWithPendingDelta = applyPendingDeltas(runtime, rawPartId, normalizedPart);
 
-      runtime.partsById.set(rawPartId, partWithPendingDelta);
+      setMessagePart(runtime, partWithPendingDelta);
       normalizedParts.push(partWithPendingDelta);
       if (isAssistantRole) {
         emitAssistantPart(runtime, partWithPendingDelta, role);

@@ -185,6 +185,7 @@ export const createEventStreamRuntime = (
       ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
       : {}),
     partsById: session.partsById,
+    partIdsByMessageId: session.partIdsByMessageId,
     messageRoleById: session.messageRoleById,
     compactionMessageIds: session.compactionMessageIds,
     pendingDeltasByPartId: session.pendingDeltasByPartId,

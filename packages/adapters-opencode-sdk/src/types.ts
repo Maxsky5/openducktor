@@ -59,11 +59,13 @@ export type SessionRecord = {
   isAwaitingRuntimeTurnStart: boolean;
   activeAssistantMessageId: string | null;
   completedAssistantMessageIds: Set<string>;
+  pendingCompletedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;
   emittedUserMessageSignatures: Map<string, string>;
   emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
   pendingQueuedUserMessages: QueuedUserMessageSend[];
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
+  partIdsByMessageId: Map<string, Set<string>>;
   messageRoleById: Map<string, string>;
   messageMetadataById: Map<string, SessionMessageMetadata>;
   compactionMessageIds: Set<string>;

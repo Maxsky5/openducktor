@@ -4,19 +4,20 @@ import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
-import { applyDeltaToPart } from "../shared";
+import { applyDeltaToPart, deleteMessagePart, getMessageParts } from "../shared";
 
 export const suppressCompactionMessage = (runtime: EventStreamRuntime, messageId: string): void => {
   runtime.compactionMessageIds.add(messageId);
-  for (const [partId, part] of runtime.partsById) {
-    if (part.messageID === messageId) {
-      runtime.partsById.delete(partId);
-      runtime.pendingDeltasByPartId.delete(partId);
-    }
+  for (const part of getMessageParts(runtime, messageId)) {
+    deleteMessagePart(runtime, part.id);
+    runtime.pendingDeltasByPartId.delete(part.id);
   }
   runtime.messageRoleById.delete(messageId);
   const session = runtime.getSession(runtime.externalSessionId);
   session?.messageMetadataById.delete(messageId);
+  session?.completedAssistantMessageIds.delete(messageId);
+  session?.pendingCompletedAssistantMessageIds.delete(messageId);
+  session?.emittedAssistantMessageIds.delete(messageId);
   if (session?.activeAssistantMessageId === messageId) {
     session.activeAssistantMessageId = null;
   }
@@ -55,13 +56,7 @@ export const applyPendingDeltas = (
 };
 
 export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
-  const parts: Part[] = [];
-  for (const part of runtime.partsById.values()) {
-    if (part.messageID === messageId) {
-      parts.push(part);
-    }
-  }
-  return parts;
+  return getMessageParts(runtime, messageId);
 };
 
 const isTerminalAssistantFinish = (value: string | undefined): boolean =>

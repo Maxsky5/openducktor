@@ -158,10 +158,7 @@ export const emitKnownAssistantPartsForMessage = (
     return;
   }
 
-  for (const part of runtime.partsById.values()) {
-    if (part.messageID !== messageId) {
-      continue;
-    }
+  for (const part of getKnownMessageParts(runtime, messageId)) {
     emitAssistantPart(runtime, part, roleHint, markActive);
   }
 };
@@ -176,7 +173,8 @@ export const updateAssistantMessageCompletionState = (
     return;
   }
 
-  if (!isCompleted && session.completedAssistantMessageIds.has(messageId)) {
+  const wasCompleted = session.completedAssistantMessageIds.has(messageId);
+  if (!isCompleted && wasCompleted) {
     return;
   }
 
@@ -189,6 +187,9 @@ export const updateAssistantMessageCompletionState = (
       session.activeAssistantMessageId = null;
     }
     session.completedAssistantMessageIds.add(messageId);
+    if (!wasCompleted) {
+      session.pendingCompletedAssistantMessageIds.add(messageId);
+    }
   } else {
     session.activeAssistantMessageId = messageId;
   }
@@ -242,10 +243,12 @@ export const maybeEmitCompletedAssistantMessage = (
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
+    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
   if (session.emittedAssistantMessageIds.has(input.messageId)) {
+    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
@@ -259,6 +262,7 @@ export const maybeEmitCompletedAssistantMessage = (
     ...(assistantModel ? { model: assistantModel } : {}),
   });
   session.emittedAssistantMessageIds.add(input.messageId);
+  session.pendingCompletedAssistantMessageIds.delete(input.messageId);
   return true;
 };
 
@@ -267,7 +271,7 @@ export const emitCompletedAssistantMessages = (runtime: EventStreamRuntime): voi
   if (!session) {
     return;
   }
-  for (const messageId of session.completedAssistantMessageIds) {
+  for (const messageId of session.pendingCompletedAssistantMessageIds) {
     maybeEmitCompletedAssistantMessage(runtime, { messageId });
   }
 };

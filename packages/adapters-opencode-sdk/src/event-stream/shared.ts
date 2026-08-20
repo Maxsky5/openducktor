@@ -59,6 +59,7 @@ export type SubagentSessionLink = {
 
 export type EventStreamState = {
   partsById: Map<string, Part>;
+  partIdsByMessageId: Map<string, Set<string>>;
   messageRoleById: Map<string, string>;
   compactionMessageIds: Set<string>;
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
@@ -75,6 +76,60 @@ export type EventStreamState = {
 };
 
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
+
+type MessagePartState = Pick<EventStreamState, "partsById" | "partIdsByMessageId">;
+
+const removePartIdFromMessage = (
+  state: MessagePartState,
+  messageId: string,
+  partId: string,
+): void => {
+  const partIds = state.partIdsByMessageId.get(messageId);
+  if (!partIds) {
+    return;
+  }
+  partIds.delete(partId);
+  if (partIds.size === 0) {
+    state.partIdsByMessageId.delete(messageId);
+  }
+};
+
+export const setMessagePart = (state: MessagePartState, part: Part): void => {
+  const partId = part.id;
+  const previous = state.partsById.get(partId);
+  if (previous && previous.messageID !== part.messageID) {
+    removePartIdFromMessage(state, previous.messageID, partId);
+  }
+  state.partsById.set(partId, part);
+  const partIds = state.partIdsByMessageId.get(part.messageID) ?? new Set<string>();
+  partIds.add(partId);
+  state.partIdsByMessageId.set(part.messageID, partIds);
+};
+
+export const deleteMessagePart = (state: MessagePartState, partId: string): Part | undefined => {
+  const part = state.partsById.get(partId);
+  if (!part) {
+    return undefined;
+  }
+  state.partsById.delete(partId);
+  removePartIdFromMessage(state, part.messageID, partId);
+  return part;
+};
+
+export const getMessageParts = (state: MessagePartState, messageId: string): Part[] => {
+  const partIds = state.partIdsByMessageId.get(messageId);
+  if (!partIds) {
+    return [];
+  }
+  const parts: Part[] = [];
+  for (const partId of partIds) {
+    const part = state.partsById.get(partId);
+    if (part) {
+      parts.push(part);
+    }
+  }
+  return parts;
+};
 
 const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
 const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;

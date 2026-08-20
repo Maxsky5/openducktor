@@ -2,7 +2,13 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import { readNumberProp, readRecordProp, readStringProp, readUnknownProp } from "../../guards";
 import { readEventPart, readEventProperties } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
-import { applyDeltaToPart, isReasoningDeltaField, markSessionActive } from "../shared";
+import {
+  applyDeltaToPart,
+  deleteMessagePart,
+  isReasoningDeltaField,
+  markSessionActive,
+  setMessagePart,
+} from "../shared";
 import {
   emitAssistantPart,
   maybeEmitCompletedAssistantMessage,
@@ -64,7 +70,7 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   if (knownPart && field.length > 0) {
     const updatedPart = applyDeltaToPart(knownPart, field, delta);
     if (updatedPart) {
-      runtime.partsById.set(partId, updatedPart);
+      setMessagePart(runtime, updatedPart);
       emitAssistantPart(runtime, updatedPart);
       maybeEmitCompletedAssistantMessage(runtime, {
         messageId: updatedPart.messageID,
@@ -132,19 +138,19 @@ export const handleMessagePartUpdatedEvent = (
     if (messageId) {
       suppressCompactionMessage(runtime, messageId);
     }
-    runtime.partsById.delete(partId);
+    deleteMessagePart(runtime, partId);
     runtime.pendingDeltasByPartId.delete(partId);
     return true;
   }
   if (messageId && runtime.compactionMessageIds.has(messageId)) {
-    runtime.partsById.delete(partId);
+    deleteMessagePart(runtime, partId);
     runtime.pendingDeltasByPartId.delete(partId);
     return true;
   }
 
   const current = rawPartRecord as Part;
   const nextPart = applyPendingDeltas(runtime, partId, current);
-  runtime.partsById.set(partId, nextPart);
+  setMessagePart(runtime, nextPart);
   emitAssistantPart(runtime, nextPart);
   const nextMessageId = nextPart.messageID;
   const role = runtime.messageRoleById.get(nextMessageId);
@@ -176,7 +182,7 @@ export const handleMessagePartRemovedEvent = (
     return true;
   }
 
-  runtime.partsById.delete(removedPartId);
+  deleteMessagePart(runtime, removedPartId);
   runtime.pendingDeltasByPartId.delete(removedPartId);
   removeSubagentCorrelationForPart(runtime, removedPartId);
   return true;

@@ -30,7 +30,6 @@ import type {
 } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
-import { hasRuntimeActivitySincePendingMessage } from "../events/session-helpers";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { TaskSessionRecords } from "./task-session-records";
 
@@ -49,7 +48,7 @@ const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =
   status === "stopped" || status === "error";
 
 const projectObservedSessionActivity = (
-  current: AgentSessionState,
+  current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
   observedStatus: AgentSessionState["status"],
 ): Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt"> => {
   if (isTerminalSessionStatus(current.status)) {
@@ -64,17 +63,14 @@ const projectObservedSessionActivity = (
   if (current.status === "starting") {
     return current;
   }
-  if (
-    current.pendingUserMessageStartedAt !== undefined &&
-    !hasRuntimeActivitySincePendingMessage(current)
-  ) {
+  if (current.pendingUserMessageStartedAt !== undefined) {
     return { status: "running", pendingUserMessageStartedAt: current.pendingUserMessageStartedAt };
   }
   return { status: "idle", pendingUserMessageStartedAt: undefined };
 };
 
 const settleAbsentSessionActivity = (
-  current: AgentSessionState,
+  current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
 ): Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt"> => {
   if (
     current.pendingUserMessageStartedAt === undefined ||
