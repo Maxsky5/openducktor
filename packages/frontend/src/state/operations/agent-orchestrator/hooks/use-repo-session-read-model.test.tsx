@@ -294,7 +294,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps an unchanged association conflict failed after explicit retry", async () => {
+  test("keeps an unchanged association conflict failed after retry", async () => {
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
     const state = createState(
       (emit) => {
@@ -432,7 +432,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("does not restart a new repository for a pending retry from the previous repository", async () => {
+  test("does not restart a new repository for a pending retry from the old repository", async () => {
     const retry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
     const state = createRepositoryConflictRetryState(batchList, (emit, observeIndex) => {
@@ -1267,7 +1267,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps sibling scoped faults when an explicit retry fails before observation restarts", async () => {
+  test("keeps sibling scoped faults when retry fails before observation restarts", async () => {
     const secondRecord = { ...record, externalSessionId: "thread-2" };
     const batchList = mock(async () => {
       throw new Error("retry failed");
@@ -1333,7 +1333,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("explicit retry recovers a failed task session query without reloading healthy caches", async () => {
+  test("retry recovers a failed task session query without reloading healthy caches", async () => {
     const recoveredRecord = { ...record, externalSessionId: "thread-recovered" };
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [recoveredRecord] }]);
     const state = createState(
@@ -1343,7 +1343,7 @@ describe("useRepoSessionReadModel", () => {
       record,
       {
         agentSessionsList: async () => {
-          throw new Error("Exact reads are not used by explicit batch retry.");
+          throw new Error("Batch retry does not use exact reads.");
         },
         agentSessionsListForTasks: batchList,
       },

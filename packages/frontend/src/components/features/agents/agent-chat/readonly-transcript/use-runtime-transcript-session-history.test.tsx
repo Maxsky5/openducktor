@@ -90,7 +90,7 @@ const createHarness = (
 };
 
 describe("useRuntimeTranscriptSessionHistory", () => {
-  test("accepts an explicit workflow scope for a matching unbound live session", async () => {
+  test("uses a workflow target for a matching unbound live session", async () => {
     const readSessionHistory = mock(async () => []);
     const harness = createHarness(
       session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
@@ -112,7 +112,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("accepts an explicit repository scope for a matching unbound live session", async () => {
+  test("uses a repository target for a matching unbound live session", async () => {
     const readSessionHistory = mock(async () => []);
     const harness = createHarness(
       session({ runtimeKind: "opencode", sessionAssociation: { kind: "unbound" } }),
@@ -132,7 +132,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("accepts equal explicit and live workflow scopes", async () => {
+  test("uses matching target and live workflow scopes", async () => {
     const readSessionHistory = mock(async () => []);
     const workflowScope = { kind: "workflow", taskId: "task-1", role: "build" } as const;
     const harness = createHarness(
@@ -153,7 +153,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("rejects conflicting explicit and live workflow scopes", async () => {
+  test("rejects conflicting target and live workflow scopes", async () => {
     const readSessionHistory = mock(async () => []);
     const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory, {
       kind: "workflow",

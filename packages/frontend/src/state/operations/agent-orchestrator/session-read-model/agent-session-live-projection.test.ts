@@ -91,7 +91,7 @@ describe("agent session live projection", () => {
     });
   });
 
-  test("rejects repository-to-workflow persisted reconciliation", () => {
+  test("rejects a persisted repository-to-workflow scope change", () => {
     const current = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       taskSessionRecords: taskSessionRecords(),
@@ -115,7 +115,7 @@ describe("agent session live projection", () => {
     );
   });
 
-  test("accepts matching workflow persisted reconciliation", () => {
+  test("keeps a matching workflow scope from persisted records", () => {
     const current = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       taskSessionRecords: taskSessionRecords(),
@@ -141,7 +141,7 @@ describe("agent session live projection", () => {
     });
   });
 
-  test("rejects conflicting workflow persisted reconciliation", () => {
+  test("rejects a conflicting workflow scope from persisted records", () => {
     const current = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       taskSessionRecords: taskSessionRecords(),
@@ -255,7 +255,7 @@ describe("agent session live projection", () => {
     });
   });
 
-  test("accepts an explicit unbound-to-repository association transition", () => {
+  test("allows an unbound-to-repository scope change", () => {
     const initial = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       taskSessionRecords: taskSessionRecords(),
@@ -292,7 +292,7 @@ describe("agent session live projection", () => {
     });
   });
 
-  test("rejects a conflicting live association transition", () => {
+  test("rejects a conflicting live scope change", () => {
     const tasks = taskSessionRecords({
       taskId: "task-1",
       record: record("thread-1", { role: "build" }),

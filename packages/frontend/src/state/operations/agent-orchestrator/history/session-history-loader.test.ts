@@ -624,7 +624,7 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("reconciles a local accepted user send when baseline history confirms it", async () => {
+  test("keeps a local accepted user send when baseline history confirms it", async () => {
     let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
     const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
       resolveHistory = resolve;

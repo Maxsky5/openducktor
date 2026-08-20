@@ -68,8 +68,7 @@ export const fromPersistedSessionRecord = ({
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
     sessionAssociation: { kind: "workflow", taskId, role: record.role },
-    // Persisted task-store records are durable session fields only. Cold reads
-    // start idle; mounted refreshes may preserve current live state separately.
+    // Stored records lack live state, so cold reads start idle.
     status: "idle",
     runtimeStatusMessage: null,
     startedAt: record.startedAt,

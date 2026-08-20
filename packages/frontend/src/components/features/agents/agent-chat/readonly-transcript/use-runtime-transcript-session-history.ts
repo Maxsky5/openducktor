@@ -60,60 +60,6 @@ type RuntimeTranscriptSessionHistory = {
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
-type TranscriptSessionScopeResolution =
-  | { kind: "resolved"; sessionScope: AgentSessionScope | null }
-  | { kind: "conflict"; message: string };
-
-const resolveTranscriptSessionScope = ({
-  matchingSession,
-  targetSessionScope,
-}: {
-  matchingSession: AgentSessionState | null;
-  targetSessionScope: AgentSessionScope | null;
-}): TranscriptSessionScopeResolution => {
-  if (matchingSession === null) {
-    return { kind: "resolved", sessionScope: targetSessionScope };
-  }
-  if (targetSessionScope === null) {
-    return {
-      kind: "resolved",
-      sessionScope: resolveSessionRuntimeScope(matchingSession.sessionAssociation),
-    };
-  }
-
-  const transition = resolveAgentSessionAssociationTransition(
-    matchingSession.sessionAssociation,
-    targetSessionScope,
-  );
-  if (transition.kind === "conflict") {
-    return {
-      kind: "conflict",
-      message: `Cannot load transcript history for session '${matchingSession.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
-    };
-  }
-  return {
-    kind: "resolved",
-    sessionScope: resolveSessionRuntimeScope(transition.association),
-  };
-};
-
-const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
-  queryKey: ["runtime-transcript-session-history", "skipped"] as const,
-  staleTime: SESSION_HISTORY_STALE_TIME_MS,
-  refetchOnWindowFocus: false,
-});
-
-const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSessionRef>({
-  queryKey: ["runtime-session-history-ref", "skipped"] as const,
-  staleTime: Number.POSITIVE_INFINITY,
-  refetchOnWindowFocus: false,
-});
-
-const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentSkillCatalog>({
-  queryKey: ["runtime-transcript-skills", "skipped"] as const,
-  staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-});
-
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
   repoPath,
@@ -156,19 +102,18 @@ export function useRuntimeTranscriptSessionHistory({
     matchesAgentSessionIdentity(liveSession, stableTarget)
       ? liveSession
       : null;
-  const inheritedSessionScope = stableTarget?.sessionScope ?? null;
-  const sessionScopeResolution = useMemo(
+  const targetScope = stableTarget?.sessionScope ?? null;
+  const scopeResult = useMemo(
     () =>
-      resolveTranscriptSessionScope({
-        matchingSession,
-        targetSessionScope: inheritedSessionScope,
+      getTranscriptScope({
+        session: matchingSession,
+        targetScope,
       }),
-    [inheritedSessionScope, matchingSession],
+    [matchingSession, targetScope],
   );
-  const sessionScope =
-    sessionScopeResolution.kind === "resolved" ? sessionScopeResolution.sessionScope : null;
+  const sessionScope = scopeResult.kind === "resolved" ? scopeResult.sessionScope : null;
   const runtimeSessionRefInput = useMemo(() => {
-    if (repoPath === null || stableTarget === null || sessionScopeResolution.kind === "conflict") {
+    if (repoPath === null || stableTarget === null || scopeResult.kind === "conflict") {
       return null;
     }
     return {
@@ -176,7 +121,7 @@ export function useRuntimeTranscriptSessionHistory({
       repoPath,
       sessionScope,
     };
-  }, [repoPath, sessionScope, sessionScopeResolution.kind, stableTarget]);
+  }, [repoPath, scopeResult.kind, sessionScope, stableTarget]);
   const loadSettingsSnapshot = useCallback(
     () => queryClient.ensureQueryData(settingsSnapshotQueryOptions()),
     [queryClient],
@@ -227,8 +172,8 @@ export function useRuntimeTranscriptSessionHistory({
       : null;
   }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
-    if (sessionScopeResolution.kind === "conflict") {
-      return { kind: "failed", message: sessionScopeResolution.message };
+    if (scopeResult.kind === "conflict") {
+      return { kind: "failed", message: scopeResult.message };
     }
     if (session !== null) {
       return { kind: "visible" };
@@ -255,7 +200,7 @@ export function useRuntimeTranscriptSessionHistory({
     repoReadinessState,
     runtimePolicyError,
     session,
-    sessionScopeResolution,
+    scopeResult,
   ]);
   const retryHistory = useCallback(() => {
     void refetchHistory();
@@ -271,3 +216,57 @@ export function useRuntimeTranscriptSessionHistory({
     answerAgentQuestion,
   };
 }
+
+type TranscriptScopeResult =
+  | { kind: "resolved"; sessionScope: AgentSessionScope | null }
+  | { kind: "conflict"; message: string };
+
+const getTranscriptScope = ({
+  session,
+  targetScope,
+}: {
+  session: AgentSessionState | null;
+  targetScope: AgentSessionScope | null;
+}): TranscriptScopeResult => {
+  if (session === null) {
+    return { kind: "resolved", sessionScope: targetScope };
+  }
+  if (targetScope === null) {
+    return {
+      kind: "resolved",
+      sessionScope: resolveSessionRuntimeScope(session.sessionAssociation),
+    };
+  }
+
+  const transition = resolveAgentSessionAssociationTransition(
+    session.sessionAssociation,
+    targetScope,
+  );
+  if (transition.kind === "conflict") {
+    return {
+      kind: "conflict",
+      message: `Cannot load transcript history for session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
+    };
+  }
+  return {
+    kind: "resolved",
+    sessionScope: resolveSessionRuntimeScope(transition.association),
+  };
+};
+
+const skippedTranscriptHistoryQueryOptions = skippedQueryOptions<AgentSessionHistoryMessage[]>({
+  queryKey: ["runtime-transcript-session-history", "skipped"] as const,
+  staleTime: SESSION_HISTORY_STALE_TIME_MS,
+  refetchOnWindowFocus: false,
+});
+
+const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSessionRef>({
+  queryKey: ["runtime-session-history-ref", "skipped"] as const,
+  staleTime: Number.POSITIVE_INFINITY,
+  refetchOnWindowFocus: false,
+});
+
+const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentSkillCatalog>({
+  queryKey: ["runtime-transcript-skills", "skipped"] as const,
+  staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+});

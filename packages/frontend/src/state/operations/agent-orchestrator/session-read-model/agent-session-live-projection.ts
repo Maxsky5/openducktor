@@ -180,7 +180,10 @@ const applyDirectSnapshot = (
       `Cannot apply live snapshot for session '${current.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the incoming ${describeAgentSessionScope(transition.incoming)}.`,
     );
   }
-  const sessionAssociation = associationsEqual(current.sessionAssociation, transition.association)
+  const sessionAssociation = sameSessionAssociation(
+    current.sessionAssociation,
+    transition.association,
+  )
     ? current.sessionAssociation
     : transition.association;
   if (isTerminalSessionStatus(current.status)) {
@@ -235,7 +238,7 @@ const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSession
   );
 };
 
-const associationsEqual = (
+const sameSessionAssociation = (
   left: AgentSessionAssociation,
   right: AgentSessionAssociation,
 ): boolean => {
