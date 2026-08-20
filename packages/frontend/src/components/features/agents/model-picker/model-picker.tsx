@@ -188,10 +188,30 @@ const RuntimeRailButton = ({
 };
 
 const MODEL_CAPABILITY_ICONS = [
-  { key: "image", icon: ImageIcon, label: "Supports images" },
-  { key: "video", icon: Film, label: "Supports videos" },
-  { key: "audio", icon: FileAudio2, label: "Supports audio" },
-  { key: "pdf", icon: FileText, label: "Supports PDF files" },
+  {
+    key: "image",
+    icon: ImageIcon,
+    label: "Supports images",
+    description: "Accepts image attachments like screenshots and diagrams",
+  },
+  {
+    key: "video",
+    icon: Film,
+    label: "Supports videos",
+    description: "Accepts video attachments",
+  },
+  {
+    key: "audio",
+    icon: FileAudio2,
+    label: "Supports audio",
+    description: "Accepts audio attachments",
+  },
+  {
+    key: "pdf",
+    icon: FileText,
+    label: "Supports PDF files",
+    description: "Accepts PDF documents as attachments",
+  },
 ] as const;
 
 const ModelCapabilityIcons = ({
@@ -208,10 +228,15 @@ const ModelCapabilityIcons = ({
   }
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {capabilities.map(({ icon: Icon, label }) => (
-        <span key={label} role="img" aria-label={label} title={label}>
-          <Icon className="size-3.5" aria-hidden="true" />
-        </span>
+      {capabilities.map(({ icon: Icon, label, description }) => (
+        <Tooltip key={label}>
+          <TooltipTrigger asChild>
+            <span role="img" aria-label={label}>
+              <Icon className="size-3.5" aria-hidden="true" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{description}</TooltipContent>
+        </Tooltip>
       ))}
     </span>
   );

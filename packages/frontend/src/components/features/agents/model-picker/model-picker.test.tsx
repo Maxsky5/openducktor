@@ -520,6 +520,48 @@ describe("ModelPicker", () => {
     expect(screen.queryByRole("img", { name: "Supports audio" })).toBeNull();
   });
 
+  test("explains each capability icon with a tooltip on hover", async () => {
+    render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    await act(async () => {
+      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports images" }));
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("tooltip").textContent).toContain(
+          "Accepts image attachments like screenshots and diagrams",
+        );
+      },
+      { timeout: 750 },
+    );
+
+    await act(async () => {
+      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports PDF files" }));
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("tooltip").textContent).toContain(
+          "Accepts PDF documents as attachments",
+        );
+      },
+      { timeout: 750 },
+    );
+  });
+
   test("omits context and capability icons when the model descriptor lacks them", async () => {
     const bareCatalog: AgentModelCatalog = {
       runtime: OPENCODE_RUNTIME_DESCRIPTOR,
