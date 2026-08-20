@@ -38,10 +38,10 @@ const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
 }): boolean => {
   return Boolean(
     loadedSession &&
-      isWorkflowAgentSession(loadedSession) &&
-      loadedSession.sessionAssociation.role !== "build" &&
-      workflowAliasMetadataReady &&
-      !previousWorkflowAliasMetadataReady,
+    isWorkflowAgentSession(loadedSession) &&
+    loadedSession.sessionAssociation.role !== "build" &&
+    workflowAliasMetadataReady &&
+    !previousWorkflowAliasMetadataReady,
   );
 };
 
