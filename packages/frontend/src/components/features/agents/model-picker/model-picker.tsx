@@ -229,7 +229,7 @@ const ModelCapabilityIcons = ({
   return (
     <span className="flex shrink-0 items-center gap-1">
       {capabilities.map(({ icon: Icon, label, description }) => (
-        <Tooltip key={label}>
+        <Tooltip key={label} disableHoverableContent>
           <TooltipTrigger asChild>
             <span role="img" aria-label={label}>
               <Icon className="size-3.5" aria-hidden="true" />
@@ -240,6 +240,21 @@ const ModelCapabilityIcons = ({
       ))}
     </span>
   );
+};
+
+const modelMetadataDescription = (item: ModelPickerItem): string | null => {
+  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
+  const supportedCapabilities = MODEL_CAPABILITY_ICONS.filter(
+    (capability) => item.model.attachmentSupport?.[capability.key],
+  ).map((capability) => capability.label.replace("Supports ", "").toLowerCase());
+  const parts: string[] = [];
+  if (contextWindowLabel) {
+    parts.push(`${contextWindowLabel} token context window`);
+  }
+  if (supportedCapabilities.length > 0) {
+    parts.push(`Supports ${supportedCapabilities.join(", ")}`);
+  }
+  return parts.length > 0 ? parts.join(". ") : null;
 };
 
 const ModelRow = ({
@@ -264,6 +279,8 @@ const ModelRow = ({
     : `Add ${item.model.modelName} to favorites`;
   const favoriteTooltip = item.isFavorite ? "Remove from favorites" : "Add to favorites";
   const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
+  const metadataDescription = modelMetadataDescription(item);
+  const selectionDescription = [metadataDescription, disabledReason].filter(Boolean).join(". ");
   const favoriteDisabledReasonId = useId();
   const favoriteDisabledReason = (() => {
     if (favoriteState.canMutate) {
@@ -295,7 +312,7 @@ const ModelRow = ({
         disabled={disabledReason !== null}
         aria-label={`Select ${item.model.modelName} model`}
         aria-pressed={selected}
-        aria-description={disabledReason ?? undefined}
+        aria-description={selectionDescription || undefined}
         className={cn(
           "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
           selected && "bg-accent text-accent-foreground",
@@ -322,11 +339,21 @@ const ModelRow = ({
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
-          <span className="truncate text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "truncate text-xs",
+              selected ? "text-accent-foreground" : "text-muted-foreground",
+            )}
+          >
             {item.model.providerName} · {item.model.modelId}
           </span>
         </span>
-        <span className="ml-auto flex shrink-0 items-center gap-2 self-center text-xs text-muted-foreground">
+        <span
+          className={cn(
+            "ml-auto flex shrink-0 items-center gap-2 self-center text-xs",
+            selected ? "text-accent-foreground" : "text-muted-foreground",
+          )}
+        >
           <ModelCapabilityIcons support={item.model.attachmentSupport} />
           {contextWindowLabel ? (
             <span className="shrink-0">{contextWindowLabel} context</span>

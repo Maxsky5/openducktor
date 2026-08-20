@@ -40,15 +40,16 @@ const resource = (runtimeKind: "opencode" | "codex"): ModelPickerCatalogResource
   catalog: catalog(runtimeKind),
 });
 
-const opencodeRuntime = {
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-  resource: resource("opencode"),
-};
-const codexRuntime = {
-  descriptor: CODEX_RUNTIME_DESCRIPTOR,
-  resource: resource("codex"),
-};
-const runtimes = [opencodeRuntime, codexRuntime];
+const makeRuntimes = (): ModelPickerRuntime[] => [
+  {
+    descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+    resource: resource("opencode"),
+  },
+  {
+    descriptor: CODEX_RUNTIME_DESCRIPTOR,
+    resource: resource("codex"),
+  },
+];
 
 const value: AgentModelFavorite = {
   runtimeKind: "opencode",
@@ -75,7 +76,7 @@ describe("ModelPicker", () => {
   test("shows the selected runtime icon and model label in the trigger", () => {
     const { container } = render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -91,7 +92,7 @@ describe("ModelPicker", () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{
@@ -135,7 +136,7 @@ describe("ModelPicker", () => {
       const onOpenChange = mock(() => {});
       render(
         <ModelPicker
-          runtimes={runtimes}
+          runtimes={makeRuntimes()}
           value={value}
           favoriteState={favoriteState()}
           selectionPolicy={{
@@ -204,7 +205,7 @@ describe("ModelPicker", () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState({ toggleFavorite })}
         selectionPolicy={{ kind: "editable" }}
@@ -234,7 +235,7 @@ describe("ModelPicker", () => {
     async ({ isFavorite, interaction, expectedTooltip }) => {
       render(
         <ModelPicker
-          runtimes={runtimes}
+          runtimes={makeRuntimes()}
           value={value}
           favoriteState={favoriteState({ favorites: isFavorite ? [value] : [] })}
           selectionPolicy={{ kind: "editable" }}
@@ -269,7 +270,7 @@ describe("ModelPicker", () => {
     const toggleFavorite = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState({
           readError: "Settings read failed",
@@ -308,7 +309,7 @@ describe("ModelPicker", () => {
   test("renders model selection and favorite actions as sibling buttons", async () => {
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -335,7 +336,7 @@ describe("ModelPicker", () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -370,7 +371,7 @@ describe("ModelPicker", () => {
     const retryMutation = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState({
           readError: "Settings refetch failed",
@@ -405,7 +406,7 @@ describe("ModelPicker", () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState({ toggleFavorite })}
         selectionPolicy={{ kind: "editable" }}
@@ -435,7 +436,7 @@ describe("ModelPicker", () => {
   test("lets Escape close the picker when the star has focus", async () => {
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -476,7 +477,7 @@ describe("ModelPicker", () => {
           retry: async () => {},
         },
       },
-      codexRuntime,
+      ...makeRuntimes().filter((runtime) => runtime.descriptor.kind === "codex"),
     ];
     render(
       <ModelPicker
@@ -499,7 +500,7 @@ describe("ModelPicker", () => {
   test("shows context window and attachment support without the redundant runtime name", async () => {
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -523,7 +524,7 @@ describe("ModelPicker", () => {
   test("explains each capability icon with a tooltip on hover", async () => {
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
@@ -549,6 +550,17 @@ describe("ModelPicker", () => {
     );
 
     await act(async () => {
+      fireEvent.pointerMove(screen.getByRole("img", { name: "Supports videos" }));
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole("tooltip").textContent).toContain("Accepts video attachments");
+      },
+      { timeout: 750 },
+    );
+
+    await act(async () => {
       fireEvent.pointerMove(screen.getByRole("img", { name: "Supports PDF files" }));
     });
 
@@ -560,6 +572,39 @@ describe("ModelPicker", () => {
       },
       { timeout: 750 },
     );
+  });
+
+  test("marks the selected row with a paint-only accent bar", async () => {
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("Search models..."), {
+        target: { value: "gpt" },
+      });
+    });
+
+    const selectedButton = screen.getByRole("button", { name: "Select GPT Five model" });
+    const unselectedButton = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
+
+    expect(selectedButton.getAttribute("aria-pressed")).toBe("true");
+    expect(selectedButton.querySelector(".absolute.bg-primary")).not.toBeNull();
+    expect(selectedButton.getAttribute("aria-description")).toContain("200K token context window");
+    expect(selectedButton.getAttribute("aria-description")).toContain(
+      "Supports images, videos, pdf files",
+    );
+    expect(unselectedButton.getAttribute("aria-pressed")).toBe("false");
+    expect(unselectedButton.querySelector(".bg-primary")).toBeNull();
   });
 
   test("omits context and capability icons when the model descriptor lacks them", async () => {
@@ -601,11 +646,95 @@ describe("ModelPicker", () => {
     expect(screen.queryByRole("img")).toBeNull();
   });
 
+  test("shows the context window without capability icons when attachment support is absent", async () => {
+    const catalogWithoutSupport: AgentModelCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT Five",
+          variants: [],
+          contextWindow: 200_000,
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+    render(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            resource: { status: "ready", catalog: catalogWithoutSupport },
+          },
+        ]}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.getByText("200K context")).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  test("shows capability icons without a context window when the descriptor omits it", async () => {
+    const catalogWithoutContext: AgentModelCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT Five",
+          variants: [],
+          attachmentSupport: {
+            image: true,
+            video: false,
+            audio: false,
+            pdf: false,
+          },
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+    render(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            resource: { status: "ready", catalog: catalogWithoutContext },
+          },
+        ]}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+
+    expect(screen.queryByText(/context/)).toBeNull();
+    expect(screen.getByRole("img", { name: "Supports images" })).toBeTruthy();
+    expect(screen.queryByRole("img", { name: "Supports videos" })).toBeNull();
+  });
+
   test("emits the exact pair and closes after model selection", async () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
-        runtimes={runtimes}
+        runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}

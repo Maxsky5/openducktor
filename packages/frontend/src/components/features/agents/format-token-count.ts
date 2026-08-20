@@ -10,6 +10,9 @@ export const formatTokenCompact = (value: number | null | undefined): string | n
 
   if (value >= 1_000) {
     const thousands = value / 1_000;
+    if (Math.round(thousands) >= 1_000) {
+      return "1M";
+    }
     return `${thousands >= 100 ? Math.round(thousands) : thousands.toFixed(1).replace(/\.0$/, "")}K`;
   }
 
