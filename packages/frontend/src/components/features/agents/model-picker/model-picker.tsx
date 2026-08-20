@@ -297,17 +297,15 @@ const ModelRow = ({
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
-          <span className="flex w-full min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="truncate">
-              {item.model.providerName} · {item.model.modelId}
-            </span>
-            <span className="ml-auto flex shrink-0 items-center gap-2">
-              <ModelCapabilityIcons support={item.model.attachmentSupport} />
-              {contextWindowLabel ? (
-                <span className="shrink-0">{contextWindowLabel} context</span>
-              ) : null}
-            </span>
+          <span className="truncate text-xs text-muted-foreground">
+            {item.model.providerName} · {item.model.modelId}
           </span>
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2 self-center text-xs text-muted-foreground">
+          <ModelCapabilityIcons support={item.model.attachmentSupport} />
+          {contextWindowLabel ? (
+            <span className="shrink-0">{contextWindowLabel} context</span>
+          ) : null}
         </span>
       </Button>
       {favoriteDisabledReason ? (
