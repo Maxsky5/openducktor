@@ -398,6 +398,116 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("does not surface a stale retry failure after task IDs change", async () => {
+    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const batchList = mock(() => retry.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({ ...state.props, taskIds: [] });
+
+      retry.reject(new Error("stale retry failed"));
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("does not restart a new repository for a pending retry from the previous repository", async () => {
+    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const batchList = mock(() => retry.promise);
+    const state = createState(
+      (emit, observeIndex) => {
+        const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
+        emit({
+          type: "snapshot",
+          repoPath,
+          sessions:
+            observeIndex === 1
+              ? [
+                  snapshot({
+                    ref: { ...snapshot().ref, repoPath },
+                    sessionAssociation: { kind: "repository" },
+                  }),
+                ]
+              : [],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({
+        ...state.props,
+        taskIds: ["task-2"],
+        isLoadingTasks: true,
+      });
+      await state.harness.run(async () => {
+        retry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+        await retry.promise;
+        await Promise.resolve();
+      });
+
+      state.props.currentWorkspaceRepoPathRef.current = "/repo-b";
+      state.props.repoEpochRef.current += 1;
+      await state.harness.update({
+        ...state.props,
+        workspaceRepoPath: "/repo-b",
+        taskIds: [],
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "ready" &&
+          value.sessionReadModelLoadState.workspaceRepoPath === "/repo-b",
+      );
+
+      expect(state.observeAgentSessionLive.mock.calls.map(([input]) => input.repoPath)).toEqual([
+        "/repo",
+        "/repo-b",
+      ]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("keeps the persisted collection and reports an initial snapshot association conflict", async () => {
     const state = createState(() => undefined);
 
