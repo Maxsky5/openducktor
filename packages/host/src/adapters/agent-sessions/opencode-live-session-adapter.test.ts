@@ -765,6 +765,76 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     ]);
   });
 
+  test("projects status events without replacing them from a stale runtime read", async () => {
+    const harness = createRuntimeHarness();
+    harness.setSources([
+      nativeSource({
+        runtimeActivity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+      nativeSource({
+        externalSessionId: "session-2",
+        title: "Other OpenCode session",
+        runtimeActivity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    ]);
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+
+    await harness.emit({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: {
+        type: "session_status",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:02:00.000Z",
+        status: { type: "busy", message: null },
+      },
+    });
+
+    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "running" },
+    });
+    await expect(
+      Effect.runPromise(adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" })),
+    ).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+
+    await harness.emit({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: {
+        type: "session_status",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:03:00.000Z",
+        status: { type: "idle" },
+      },
+    });
+
+    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      type: "live",
+      session: { activity: "idle" },
+    });
+    expect(
+      publishedChanges
+        .filter((change) => change.type === "session_upsert")
+        .map((change) => (change.type === "session_upsert" ? change.snapshot.activity : null)),
+    ).toEqual(["running", "idle"]);
+  });
+
   test("releases only the owning adapter after an observation fault", async () => {
     const harness = createRuntimeHarness();
     const envelopes: Array<{ type: string }> = [];

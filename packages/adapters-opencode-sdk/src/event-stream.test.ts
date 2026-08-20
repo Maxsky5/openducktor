@@ -563,6 +563,7 @@ describe("event-stream", () => {
         completedAt: 2,
         info: { summary: true },
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -594,6 +595,7 @@ describe("event-stream", () => {
         completedAt: 3,
         info: { summary: true },
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1443,7 +1445,11 @@ describe("event-stream", () => {
       ],
     });
 
-    const { emitted } = await runEventStreamWithSession([assistantEvent, assistantEvent]);
+    const { emitted } = await runEventStreamWithSession([
+      assistantEvent,
+      assistantEvent,
+      makeSessionStatusIdleEvent(),
+    ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
     expect(assistantMessages).toHaveLength(1);
@@ -1483,6 +1489,7 @@ describe("event-stream", () => {
           ],
         },
       } as unknown as Event,
+      makeSessionIdleEvent(),
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -1499,6 +1506,7 @@ describe("event-stream", () => {
         text: "Error from provider (Console Go): Upstream request failed",
         partId: "text-provider-error-1",
       }),
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1598,6 +1606,7 @@ describe("event-stream", () => {
           },
         },
       } as unknown as Event,
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1692,7 +1701,7 @@ describe("event-stream", () => {
       partId: "text-duplicate-terminal-1",
     });
 
-    const emitted = await runEventStream([terminalEvent, terminalEvent]);
+    const emitted = await runEventStream([terminalEvent, terminalEvent, makeSessionIdleEvent()]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
@@ -1784,6 +1793,7 @@ describe("event-stream", () => {
           text: "Done after pending turn",
           partId: "text-pending-terminal-1",
         }),
+        makeSessionIdleEvent(),
       ],
       (session) => {
         session.streamTurnStatus = "idle";
@@ -1797,7 +1807,7 @@ describe("event-stream", () => {
     expect(sessionRecord.streamTurnStatus).toBe("idle");
   });
 
-  test("keeps late terminal part updates out of assistant_part emission once idle", async () => {
+  test("keeps terminal part updates live until authoritative idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
         messageId: "assistant-message-late-part-update",
@@ -1812,11 +1822,14 @@ describe("event-stream", () => {
         text: "Done later",
         end: 2,
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Done later" }),
+    ]);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
 
     const updatedPart = sessionRecord.partsById.get("text-late-part-update-1");
     if (updatedPart?.type !== "text") {
@@ -1825,7 +1838,7 @@ describe("event-stream", () => {
     expect(updatedPart.text).toBe("Done later");
   });
 
-  test("keeps late terminal part deltas out of assistant events once idle", async () => {
+  test("keeps terminal part deltas live until authoritative idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
         messageId: "assistant-message-late-delta",
@@ -1840,12 +1853,13 @@ describe("event-stream", () => {
         field: "text",
         delta: " later",
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
     expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
 
     const updatedPart = sessionRecord.partsById.get("text-late-delta-1");
     if (updatedPart?.type !== "text") {
@@ -1936,6 +1950,7 @@ describe("event-stream", () => {
         messageId: "assistant-message-late-stop-part",
         partId: "step-finish-late-stop-part-1",
       }),
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1985,12 +2000,13 @@ describe("event-stream", () => {
         field: "text",
         delta: " later",
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
     expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
     expect(sessionRecord.completedAssistantMessageIds.has("assistant-message-stale-update")).toBe(
       true,
     );

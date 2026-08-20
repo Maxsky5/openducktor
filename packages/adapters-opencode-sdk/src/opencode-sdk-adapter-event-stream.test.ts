@@ -60,6 +60,13 @@ describe("OpencodeSdkAdapter event stream", () => {
           ],
         },
       } as unknown as Event,
+      {
+        type: "session.status",
+        properties: {
+          sessionID: "session-opencode-1",
+          status: { type: "idle" },
+        },
+      } as unknown as Event,
     ];
 
     const mock = makeMockClient({
@@ -97,7 +104,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
   });
 
-  test("synthesizes session_idle from terminal assistant completion when no idle event follows", async () => {
+  test("emits session_idle from the authoritative runtime idle event", async () => {
     const streamEvents: Event[] = [
       {
         type: "session.status",
@@ -134,6 +141,10 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
+      } as unknown as Event,
+      {
+        type: "session.idle",
+        properties: { sessionID: "session-opencode-1" },
       } as unknown as Event,
     ];
 

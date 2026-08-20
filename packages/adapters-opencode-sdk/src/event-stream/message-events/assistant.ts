@@ -5,14 +5,14 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
-import { isStreamTurnIdle } from "../../session-activity";
+import {
+  isAwaitingRuntimeTurnStart,
+  isStreamTurnIdle,
+  markStreamTurnActive,
+} from "../../session-activity";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
-import {
-  emitSessionIdle,
-  flushPendingSubagentInputEventsForSession,
-  markSessionActive,
-} from "../shared";
+import { flushPendingSubagentInputEventsForSession, markSessionActive } from "../shared";
 import { flushPendingBackgroundTaskResultSubagentParts } from "./background-task-result";
 import {
   getKnownMessageParts,
@@ -182,6 +182,9 @@ export const updateAssistantMessageCompletionState = (
 
   const previousActiveAssistantMessageId = session.activeAssistantMessageId;
   if (isCompleted) {
+    if (isAwaitingRuntimeTurnStart(session)) {
+      markStreamTurnActive(session);
+    }
     if (session.activeAssistantMessageId === messageId) {
       session.activeAssistantMessageId = null;
     }
@@ -232,15 +235,13 @@ export const maybeEmitCompletedAssistantMessage = (
     ...(totalTokens !== undefined ? { totalTokens } : {}),
   });
 
-  if (!hasStopSignal || assistantParts.length === 0) {
+  if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
     return false;
   }
 
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
-    emitSessionIdle(runtime);
-    publishUserMessageReadStateChanges(runtime);
     return true;
   }
 
@@ -258,8 +259,15 @@ export const maybeEmitCompletedAssistantMessage = (
     ...(assistantModel ? { model: assistantModel } : {}),
   });
   session.emittedAssistantMessageIds.add(input.messageId);
-
-  emitSessionIdle(runtime);
-  publishUserMessageReadStateChanges(runtime);
   return true;
+};
+
+export const emitCompletedAssistantMessages = (runtime: EventStreamRuntime): void => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  if (!session) {
+    return;
+  }
+  for (const messageId of session.completedAssistantMessageIds) {
+    maybeEmitCompletedAssistantMessage(runtime, { messageId });
+  }
 };

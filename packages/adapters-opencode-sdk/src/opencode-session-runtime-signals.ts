@@ -36,8 +36,6 @@ const SESSION_INVALIDATION_EVENT_TYPES: ReadonlySet<string> = new Set([
   "session.created",
   "session.updated",
   "session.deleted",
-  "session.status",
-  "session.idle",
   "session.error",
   "permission.asked",
   "permission.v2.asked",

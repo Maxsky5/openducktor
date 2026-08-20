@@ -2,9 +2,7 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
 import {
-  clearAwaitingRuntimeTurnStart,
   isAwaitingRuntimeTurnStart,
-  isStreamTurnIdle,
   markStreamTurnActive,
   markStreamTurnIdle,
 } from "../session-activity";
@@ -200,41 +198,6 @@ export const bindSubagentExternalSession = (
   state.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
 };
 
-type SessionIdleEmitter = {
-  externalSessionId: string;
-  emit: (externalSessionId: string, event: AgentEvent) => void;
-  now: () => string;
-};
-
-const emitIdleForSession = (
-  session: SessionRecord | undefined,
-  emitter: SessionIdleEmitter,
-): boolean => {
-  if (!session) {
-    return false;
-  }
-  if (isStreamTurnIdle(session)) {
-    if (!isAwaitingRuntimeTurnStart(session)) {
-      return false;
-    }
-    // Covers terminal completion after early idle suppression or seeded/local idle state.
-    clearAwaitingRuntimeTurnStart(session);
-    emitter.emit(emitter.externalSessionId, {
-      type: "session_idle",
-      externalSessionId: emitter.externalSessionId,
-      timestamp: emitter.now(),
-    });
-    return true;
-  }
-  markStreamTurnIdle(session);
-  emitter.emit(emitter.externalSessionId, {
-    type: "session_idle",
-    externalSessionId: emitter.externalSessionId,
-    timestamp: emitter.now(),
-  });
-  return true;
-};
-
 const getSessionRecord = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): SessionRecord | undefined => {
@@ -257,12 +220,6 @@ export const isSessionAwaitingRuntimeTurnStart = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): boolean => {
   return isAwaitingRuntimeTurnStart(getSessionRecord(context));
-};
-
-export const emitSessionIdle = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession" | "emit" | "now">,
-): boolean => {
-  return emitIdleForSession(getSessionRecord(context), context);
 };
 
 export const isReasoningDeltaField = (field: string): boolean => {

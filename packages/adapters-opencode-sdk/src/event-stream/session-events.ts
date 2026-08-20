@@ -2,7 +2,11 @@ import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
 import { normalizeTodoList } from "../todo-normalizers";
-import { emitSubagentPartsForSession, publishUserMessageReadStateChanges } from "./message-events";
+import {
+  emitCompletedAssistantMessages,
+  emitSubagentPartsForSession,
+  publishUserMessageReadStateChanges,
+} from "./message-events";
 import { flushPendingBackgroundTaskResultSubagentParts } from "./message-events/background-task-result";
 import {
   parsePendingInputReplied,
@@ -14,9 +18,9 @@ import {
   readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime, PendingSubagentSessionBinding } from "./shared";
+import { isStreamTurnIdle } from "../session-activity";
 import {
   bindSubagentExternalSession,
-  emitSessionIdle,
   flushPendingSubagentInputEventsForSession,
   isSessionAwaitingRuntimeTurnStart,
   markSessionActive,
@@ -239,6 +243,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
         return true;
       }
       markSessionIdle(runtime);
+      emitCompletedAssistantMessages(runtime);
       publishUserMessageReadStateChanges(runtime);
     }
     runtime.emit(runtime.externalSessionId, {
@@ -382,7 +387,16 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
   if (isSessionAwaitingRuntimeTurnStart(runtime)) {
     return true;
   }
-  emitSessionIdle(runtime);
+  const wasIdle = isStreamTurnIdle(runtime.getSession(runtime.externalSessionId));
+  markSessionIdle(runtime);
+  emitCompletedAssistantMessages(runtime);
+  if (!wasIdle) {
+    runtime.emit(runtime.externalSessionId, {
+      type: "session_idle",
+      externalSessionId: runtime.externalSessionId,
+      timestamp: runtime.now(),
+    });
+  }
   publishUserMessageReadStateChanges(runtime);
   return true;
 };

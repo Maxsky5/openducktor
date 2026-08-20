@@ -652,6 +652,7 @@ describe("OpenCode session runtime connection", () => {
         },
       }),
     });
+    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
     await prepared.release();
   });
 
