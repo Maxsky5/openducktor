@@ -58,6 +58,11 @@ const createDeferred = <T,>() => {
   return { promise, reject, resolve };
 };
 
+type TaskSessionRecordBatch = Array<{
+  taskId: string;
+  agentSessions: AgentSessionRecord[];
+}>;
+
 const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessionLiveSnapshot => ({
   ref: {
     repoPath: "/repo",
@@ -168,6 +173,21 @@ const createState = (
     queryClient,
   };
 };
+
+const createRepositoryConflictRetryState = (
+  agentSessionsListForTasks: AgentSessionReadPort["agentSessionsListForTasks"],
+  duringObservation: Parameters<typeof createState>[0] = (emit) => {
+    emit({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+    });
+  },
+) =>
+  createState(duringObservation, [], {
+    agentSessionsList: async () => [],
+    agentSessionsListForTasks,
+  });
 
 describe("useRepoSessionReadModel", () => {
   test("observes the repository and commits snapshot plus ordered creation once", async () => {
@@ -358,22 +378,9 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not replay stale task records when task IDs change during conflict retry", async () => {
-    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const retry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
-    const state = createState(
-      (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
-        });
-      },
-      [],
-      {
-        agentSessionsList: async () => [],
-        agentSessionsListForTasks: batchList,
-      },
-    );
+    const state = createRepositoryConflictRetryState(batchList);
 
     try {
       await state.harness.mount();
@@ -399,22 +406,9 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not surface a stale retry failure after task IDs change", async () => {
-    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const retry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
-    const state = createState(
-      (emit) => {
-        emit({
-          type: "snapshot",
-          repoPath: "/repo",
-          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
-        });
-      },
-      [],
-      {
-        agentSessionsList: async () => [],
-        agentSessionsListForTasks: batchList,
-      },
-    );
+    const state = createRepositoryConflictRetryState(batchList);
 
     try {
       await state.harness.mount();
@@ -439,31 +433,24 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not restart a new repository for a pending retry from the previous repository", async () => {
-    const retry = createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const retry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
-    const state = createState(
-      (emit, observeIndex) => {
-        const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
-        emit({
-          type: "snapshot",
-          repoPath,
-          sessions:
-            observeIndex === 1
-              ? [
-                  snapshot({
-                    ref: { ...snapshot().ref, repoPath },
-                    sessionAssociation: { kind: "repository" },
-                  }),
-                ]
-              : [],
-        });
-      },
-      [],
-      {
-        agentSessionsList: async () => [],
-        agentSessionsListForTasks: batchList,
-      },
-    );
+    const state = createRepositoryConflictRetryState(batchList, (emit, observeIndex) => {
+      const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
+      emit({
+        type: "snapshot",
+        repoPath,
+        sessions:
+          observeIndex === 1
+            ? [
+                snapshot({
+                  ref: { ...snapshot().ref, repoPath },
+                  sessionAssociation: { kind: "repository" },
+                }),
+              ]
+            : [],
+      });
+    });
 
     try {
       await state.harness.mount();
@@ -1395,10 +1382,8 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("an older failed retry cannot overwrite a newer successful retry", async () => {
-    const firstRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
-    const secondRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const firstRetry = createDeferred<TaskSessionRecordBatch>();
+    const secondRetry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() =>
       batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
     );
@@ -1447,10 +1432,8 @@ describe("useRepoSessionReadModel", () => {
 
   test("an older successful retry cannot overwrite a newer failed retry", async () => {
     const staleRecord = { ...record, externalSessionId: "external-stale" };
-    const firstRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
-    const secondRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const firstRetry = createDeferred<TaskSessionRecordBatch>();
+    const secondRetry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() =>
       batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
     );

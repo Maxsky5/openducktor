@@ -222,46 +222,54 @@ export const useRepoSessionReadModel = ({
       retryAttemptRef.current === retryAttempt &&
       currentWorkspaceRepoPathRef.current === repoPath &&
       repoEpochRef.current === repoEpoch;
+    const retryFailureMessage = (error: unknown): string =>
+      `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`;
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-    const retryTaskSessionRecords = retriesReconciliationFailure
-      ? loadAgentSessionListsFromQuery(queryClient, repoPath, normalizedTaskIds, {
-          forceFresh: true,
-          readPort: sessionReadPort,
-        }).then(() => {
+    if (retriesReconciliationFailure) {
+      void loadAgentSessionListsFromQuery(queryClient, repoPath, normalizedTaskIds, {
+        forceFresh: true,
+        readPort: sessionReadPort,
+      }).then(
+        () => {
           if (!isCurrentRetry()) {
-            return false;
+            return;
           }
           setReconciliationRetryResult({
             kind: "refreshed",
             ...reconciliationRetryScope,
           });
-          return false;
-        })
-      : retryAgentSessionListQueries(
-          queryClient,
-          repoPath,
-          normalizedTaskIds,
-          sessionReadPort,
-        ).then(() => true);
-    void retryTaskSessionRecords.then(
-      (recordsReconciled) => {
-        if (recordsReconciled && isCurrentRetry()) {
+        },
+        (error: unknown) => {
+          if (!isCurrentRetry()) {
+            return;
+          }
+          setReconciliationRetryResult({
+            kind: "failed",
+            ...reconciliationRetryScope,
+            message: retryFailureMessage(error),
+          });
+        },
+      );
+      return;
+    }
+    void retryAgentSessionListQueries(
+      queryClient,
+      repoPath,
+      normalizedTaskIds,
+      sessionReadPort,
+    ).then(
+      () => {
+        if (isCurrentRetry()) {
           setReloadGeneration((current) => current + 1);
         }
       },
       (error: unknown) => {
-        if (isCurrentRetry()) {
-          const message = `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`;
-          if (retriesReconciliationFailure) {
-            setReconciliationRetryResult({
-              kind: "failed",
-              ...reconciliationRetryScope,
-              message,
-            });
-            return;
-          }
-          setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        if (!isCurrentRetry()) {
+          return;
         }
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(error)),
+        );
       },
     );
   }, [
