@@ -811,7 +811,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(afterIdleSnapshot, identity("thread-1"))?.status).toBe("idle");
   });
 
-  test("keeps an accepted OpenCode send only while the live session is still present", () => {
+  test("keeps an accepted OpenCode send until runtime activity makes idle authoritative", () => {
     const opencodeIdentity = {
       runtimeKind: "opencode" as const,
       workingDirectory,
@@ -834,11 +834,12 @@ describe("agent session live projection", () => {
     if (!current) {
       throw new Error("Expected projected OpenCode session.");
     }
-    const afterAcceptedSend = replaceAgentSession(loaded, {
+    const acceptedSession = {
       ...current,
-      status: "running",
+      status: "running" as const,
       pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
-    });
+    };
+    const afterAcceptedSend = replaceAgentSession(loaded, acceptedSession);
     const staleIdleSnapshot = snapshot("thread-1", {
       ref: { repoPath, ...opencodeIdentity },
     });
@@ -850,6 +851,22 @@ describe("agent session live projection", () => {
     });
     const afterIdleReconnect = buildAgentSessionLiveCollection({
       current: afterAcceptedSend,
+      taskSessionRecords: tasks,
+      snapshots: [staleIdleSnapshot],
+    });
+    const afterRuntimeActivity = replaceAgentSession(afterAcceptedSend, {
+      ...acceptedSession,
+      messages: createSessionMessagesState("thread-1", [
+        {
+          id: "assistant-live-1",
+          role: "assistant",
+          content: "Runtime output",
+          timestamp: "2026-07-16T08:00:02.000Z",
+        },
+      ]),
+    });
+    const afterActiveIdleReconnect = buildAgentSessionLiveCollection({
+      current: afterRuntimeActivity,
       taskSessionRecords: tasks,
       snapshots: [staleIdleSnapshot],
     });
@@ -871,6 +888,10 @@ describe("agent session live projection", () => {
     expect(getAgentSession(afterIdleReconnect, opencodeIdentity)).toMatchObject({
       status: "running",
       pendingUserMessageStartedAt: Date.parse("2026-07-16T08:00:01.000Z"),
+    });
+    expect(getAgentSession(afterActiveIdleReconnect, opencodeIdentity)).toMatchObject({
+      status: "idle",
+      pendingUserMessageStartedAt: undefined,
     });
     expect(getAgentSession(afterAbsentReconnect, opencodeIdentity)).toMatchObject({
       status: "idle",

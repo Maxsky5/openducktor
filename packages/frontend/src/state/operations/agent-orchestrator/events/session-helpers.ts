@@ -38,7 +38,7 @@ const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean =>
   );
 };
 
-const hasRuntimeActivitySincePendingMessage = (current: AgentSessionState): boolean => {
+export const hasRuntimeActivitySincePendingMessage = (current: AgentSessionState): boolean => {
   const pendingMessageStartedAt = current.pendingUserMessageStartedAt;
   if (pendingMessageStartedAt === undefined) {
     return false;
