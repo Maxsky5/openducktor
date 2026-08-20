@@ -289,7 +289,9 @@ const ModelRow = ({
         }}
         onClick={onSelect}
       >
-        {selected ? <Check aria-label="Selected model" className="size-4 shrink-0" /> : null}
+        <span className="flex w-4 shrink-0 items-center justify-center">
+          {selected ? <Check aria-label="Selected model" className="size-4" /> : null}
+        </span>
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
