@@ -1,7 +1,7 @@
 import type { AgentDescriptor, AgentModelCatalog } from "@openducktor/core";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { resolveAgentAccentColor } from "./agent-accent-color";
-import { formatTokenCompact } from "./agent-chat/format-token-count";
+import { formatTokenCompact } from "./format-token-count";
 
 const isVisibleAgent = (entry: AgentDescriptor): boolean => !entry.hidden;
 

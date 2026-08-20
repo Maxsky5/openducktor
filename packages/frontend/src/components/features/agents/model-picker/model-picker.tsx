@@ -1,5 +1,14 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import { Check, ChevronsUpDown, LoaderCircle, Star } from "lucide-react";
+import type { AgentModelAttachmentSupport } from "@openducktor/core";
+import {
+  ChevronsUpDown,
+  FileAudio2,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  LoaderCircle,
+  Star,
+} from "lucide-react";
 import {
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatTokenCompact } from "../format-token-count";
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
@@ -177,6 +187,76 @@ const RuntimeRailButton = ({
   );
 };
 
+const MODEL_CAPABILITY_ICONS = [
+  {
+    key: "image",
+    icon: ImageIcon,
+    label: "Supports images",
+    description: "Accepts image attachments like screenshots and diagrams",
+  },
+  {
+    key: "video",
+    icon: Film,
+    label: "Supports videos",
+    description: "Accepts video attachments",
+  },
+  {
+    key: "audio",
+    icon: FileAudio2,
+    label: "Supports audio",
+    description: "Accepts audio attachments",
+  },
+  {
+    key: "pdf",
+    icon: FileText,
+    label: "Supports PDF files",
+    description: "Accepts PDF documents as attachments",
+  },
+] as const;
+
+const ModelCapabilityIcons = ({
+  support,
+}: {
+  support: AgentModelAttachmentSupport | undefined;
+}): ReactElement | null => {
+  if (!support) {
+    return null;
+  }
+  const capabilities = MODEL_CAPABILITY_ICONS.filter((capability) => support[capability.key]);
+  if (capabilities.length === 0) {
+    return null;
+  }
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {capabilities.map(({ icon: Icon, label, description }) => (
+        <Tooltip key={label} disableHoverableContent>
+          <TooltipTrigger asChild>
+            <span role="img" aria-label={label}>
+              <Icon className="size-3.5" aria-hidden="true" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top">{description}</TooltipContent>
+        </Tooltip>
+      ))}
+    </span>
+  );
+};
+
+const modelMetadataDescription = (item: ModelPickerItem): string | null => {
+  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
+  const supportedCapabilities = MODEL_CAPABILITY_ICONS.filter(
+    (capability) => item.model.attachmentSupport?.[capability.key],
+  ).map((capability) => capability.label.replace("Supports ", "").toLowerCase());
+  const parts: string[] = [];
+  if (contextWindowLabel) {
+    parts.push(`${contextWindowLabel} token context window`);
+  }
+  if (supportedCapabilities.length > 0) {
+    parts.push(`Supports ${supportedCapabilities.join(", ")}`);
+  }
+  return parts.length > 0 ? parts.join(". ") : null;
+};
+
 const ModelRow = ({
   item,
   selected,
@@ -198,6 +278,9 @@ const ModelRow = ({
     ? `Remove ${item.model.modelName} from favorites`
     : `Add ${item.model.modelName} to favorites`;
   const favoriteTooltip = item.isFavorite ? "Remove from favorites" : "Add to favorites";
+  const contextWindowLabel = formatTokenCompact(item.model.contextWindow);
+  const metadataDescription = modelMetadataDescription(item);
+  const selectionDescription = [metadataDescription, disabledReason].filter(Boolean).join(". ");
   const favoriteDisabledReasonId = useId();
   const favoriteDisabledReason = (() => {
     if (favoriteState.canMutate) {
@@ -229,9 +312,9 @@ const ModelRow = ({
         disabled={disabledReason !== null}
         aria-label={`Select ${item.model.modelName} model`}
         aria-pressed={selected}
-        aria-description={disabledReason ?? undefined}
+        aria-description={selectionDescription || undefined}
         className={cn(
-          "min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
+          "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
           selected && "bg-accent text-accent-foreground",
         )}
         onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -247,14 +330,35 @@ const ModelRow = ({
         }}
         onClick={onSelect}
       >
+        {selected ? (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary"
+          />
+        ) : null}
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {item.runtime.label} · {item.model.providerName} · {item.model.modelId}
+          <span
+            className={cn(
+              "truncate text-xs",
+              selected ? "text-accent-foreground" : "text-muted-foreground",
+            )}
+          >
+            {item.model.providerName} · {item.model.modelId}
           </span>
         </span>
-        {selected ? <Check aria-label="Selected model" /> : null}
+        <span
+          className={cn(
+            "ml-auto flex shrink-0 items-center gap-2 self-center text-xs",
+            selected ? "text-accent-foreground" : "text-muted-foreground",
+          )}
+        >
+          <ModelCapabilityIcons support={item.model.attachmentSupport} />
+          {contextWindowLabel ? (
+            <span className="shrink-0">{contextWindowLabel} context</span>
+          ) : null}
+        </span>
       </Button>
       {favoriteDisabledReason ? (
         <span id={favoriteDisabledReasonId} className="sr-only">
