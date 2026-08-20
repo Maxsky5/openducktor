@@ -1,7 +1,6 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import {
-  Check,
   ChevronsUpDown,
   FileAudio2,
   FileText,
@@ -273,7 +272,7 @@ const ModelRow = ({
         aria-pressed={selected}
         aria-description={disabledReason ?? undefined}
         className={cn(
-          "min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
+          "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
           selected && "bg-accent text-accent-foreground",
         )}
         onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -289,9 +288,12 @@ const ModelRow = ({
         }}
         onClick={onSelect}
       >
-        <span className="flex w-4 shrink-0 items-center justify-center">
-          {selected ? <Check aria-label="Selected model" className="size-4" /> : null}
-        </span>
+        {selected ? (
+          <span
+            aria-hidden="true"
+            className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary"
+          />
+        ) : null}
         <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="truncate font-medium">{item.model.modelName}</span>
