@@ -5,16 +5,11 @@ import { normalizeAgentSessionTaskIds } from "./agent-sessions";
 
 export type TaskStopImpactReadPort = Pick<typeof host, "taskStopImpactGet">;
 
-export const taskStopImpactQueryKeys = {
+const taskStopImpactQueryKeys = {
   all: ["task-stop-impact"] as const,
-  get: (repoPath: string, taskIds: string[], operation: TaskStopImpactOperation) =>
-    [
-      ...taskStopImpactQueryKeys.all,
-      "get",
-      repoPath,
-      normalizeAgentSessionTaskIds(taskIds),
-      operation,
-    ] as const,
+  // Callers must pass IDs normalized by normalizeAgentSessionTaskIds.
+  get: (repoPath: string, normalizedTaskIds: string[], operation: TaskStopImpactOperation) =>
+    [...taskStopImpactQueryKeys.all, "get", repoPath, normalizedTaskIds, operation] as const,
 };
 
 type TaskStopImpactQueryArgs = {
@@ -36,5 +31,8 @@ export const taskStopImpactQueryOptions = ({
     queryFn: () => readPort.taskStopImpactGet(repoPath, normalizedTaskIds, operation),
     staleTime: 0,
     gcTime: 0,
+    // Surface preview failures at once so the destructive-confirm gate shows
+    // an actionable error instead of retrying in the background.
+    retry: false,
   });
 };

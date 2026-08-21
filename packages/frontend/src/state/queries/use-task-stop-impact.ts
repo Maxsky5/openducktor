@@ -53,7 +53,9 @@ export function useTaskStopImpact({
   }
   return {
     stoppableSessionCount: query.data?.stoppableSessionCount ?? null,
-    isLoading: query.isPending,
+    // A mounted observer keeps the cache entry alive, so a dialog reopen can
+    // hit cached data while a background refetch runs. Gate Confirm on both.
+    isLoading: query.isPending || query.isFetching,
     error: null,
   };
 }
