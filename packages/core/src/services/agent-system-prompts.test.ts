@@ -427,9 +427,11 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-1",
       },
-      targetBranch: {
-        remote: "origin",
-        branch: "release/2026.04",
+      git: {
+        targetBranch: {
+          remote: "origin",
+          branch: "release/2026.04",
+        },
       },
     });
     const prompt = result.prompt;
@@ -473,8 +475,10 @@ describe("kickoff and permission prompts", () => {
         task: {
           taskId: "task-1",
         },
-        targetBranch: {
-          branch: "@{upstream}",
+        git: {
+          targetBranch: {
+            branch: "@{upstream}",
+          },
         },
       }),
     ).toThrow(

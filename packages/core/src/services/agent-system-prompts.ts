@@ -39,9 +39,12 @@ export type BuildAgentKickoffPromptInput = {
     description?: string;
   };
   extraPlaceholders?: Partial<Record<"humanFeedback", string>>;
-  targetBranch?: GitTargetBranch;
-  git?: AgentPromptGitContext;
+  git?: AgentKickoffPromptGitContext;
   overrides?: RepoPromptOverrides;
+};
+
+export type AgentKickoffPromptGitContext = {
+  targetBranch?: GitTargetBranch;
 };
 
 export type AgentPromptGitContext = {
@@ -768,7 +771,7 @@ export const buildAgentKickoffPromptBundle = (
 ): BuiltAgentPrompt => {
   const pullRequestTarget =
     input.templateId === "kickoff.build_pull_request_generation"
-      ? resolvePullRequestTarget(input.targetBranch)
+      ? resolvePullRequestTarget(input.git?.targetBranch)
       : undefined;
 
   return buildPromptFromTemplates({
@@ -777,7 +780,6 @@ export const buildAgentKickoffPromptBundle = (
     task: input.task,
     ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),
     ...(pullRequestTarget ? { pullRequestTarget } : {}),
-    ...(input.git ? { git: input.git } : {}),
     overrides: input.overrides,
   });
 };

@@ -1,4 +1,4 @@
-import type { GitTargetBranch, RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptOverrides } from "@openducktor/contracts";
 import {
   type AgentKickoffTemplateId,
   type AgentPromptGitContext,
@@ -24,12 +24,18 @@ type TaskPromptContext = {
   description?: string;
 };
 
-type SessionStartPromptOptions = {
+type SharedPromptOptions = {
   overrides?: RepoPromptOverrides;
   task?: TaskPromptContext;
-  targetBranch?: GitTargetBranch;
-  git?: AgentPromptGitContext;
+};
+
+type SessionStartKickoffPromptOptions = SharedPromptOptions & {
+  git?: BuildAgentKickoffPromptInput["git"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
+};
+
+type SessionMessagePromptOptions = SharedPromptOptions & {
+  git?: AgentPromptGitContext;
 };
 
 export const LAUNCH_ACTIONS_BY_ROLE: Record<AgentRole, SessionLaunchActionId[]> = {
@@ -60,7 +66,7 @@ export const kickoffPromptForTemplate = (
   role: AgentRole,
   templateId: AgentKickoffTemplateId,
   taskId: string,
-  options?: SessionStartPromptOptions,
+  options?: SessionStartKickoffPromptOptions,
 ): string => {
   return buildAgentKickoffPrompt({
     role,
@@ -70,7 +76,6 @@ export const kickoffPromptForTemplate = (
       ...options?.task,
     },
     ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
-    ...(options?.targetBranch ? { targetBranch: options.targetBranch } : {}),
     ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });
@@ -80,7 +85,7 @@ export const kickoffPromptForLaunchAction = (
   role: AgentRole,
   actionId: SessionLaunchActionId,
   taskId: string,
-  options?: SessionStartPromptOptions,
+  options?: SessionStartKickoffPromptOptions,
 ): string => {
   const templateId = getSessionLaunchAction(actionId).kickoffTemplateId;
   if (!templateId) {
@@ -91,9 +96,7 @@ export const kickoffPromptForLaunchAction = (
 
 export const buildGitConflictResolutionPrompt = (
   taskId: string,
-  options?: SessionStartPromptOptions & {
-    git?: AgentPromptGitContext;
-  },
+  options?: SessionMessagePromptOptions,
 ): string => {
   return buildAgentMessagePrompt({
     role: "build",
