@@ -41,16 +41,14 @@ const textDraft = (text: string): AgentChatComposerDraft => ({
 
 type ResolvePartsInput = Parameters<typeof resolveAgentStudioSendDraftParts>[0];
 
-const resolveParts = (
+const resolveParts = async (
   input: Omit<ResolvePartsInput, "supportsAttachments"> &
     Partial<Pick<ResolvePartsInput, "supportsAttachments">>,
 ) =>
-  Promise.resolve(
-    resolveAgentStudioSendDraftParts({
-      supportsAttachments: true,
-      ...input,
-    }),
-  );
+  resolveAgentStudioSendDraftParts({
+    supportsAttachments: true,
+    ...input,
+  });
 
 describe("resolveAgentStudioSendDraftParts", () => {
   test("returns text message parts for a normal draft", async () => {
@@ -63,16 +61,18 @@ describe("resolveAgentStudioSendDraftParts", () => {
     ).resolves.toEqual([{ kind: "text", text: "hello" }]);
   });
 
-  test("returns null for empty drafts and invalid reusable prompt drafts", async () => {
-    const prompt = createPrompt();
+  test("returns null for empty drafts", async () => {
     await expect(
       resolveParts({
         draft: textDraft("   "),
-        reusablePrompts: [prompt],
+        reusablePrompts: [],
         selectedModelDescriptor,
       }),
     ).resolves.toBeNull();
+  });
 
+  test("reports invalid reusable prompt drafts", async () => {
+    const prompt = createPrompt();
     await expect(
       resolveParts({
         draft: {
@@ -85,7 +85,7 @@ describe("resolveAgentStudioSendDraftParts", () => {
         reusablePrompts: [prompt],
         selectedModelDescriptor,
       }),
-    ).resolves.toBeNull();
+    ).rejects.toThrow("Reusable prompt slash commands must be the first message item.");
   });
 
   test("expands reusable prompt drafts", async () => {

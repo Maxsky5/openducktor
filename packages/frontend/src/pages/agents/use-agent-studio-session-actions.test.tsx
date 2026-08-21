@@ -846,7 +846,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend returns false when a reusable prompt command is stale", async () => {
+  test("onSend reports when a reusable prompt command is stale", async () => {
     const sendAgentMessage = mock(async () => {});
     const draft: AgentChatComposerDraft = {
       segments: [
@@ -866,7 +866,9 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(draft)).resolves.toBe(false);
+      await expect(state.onSend(draft)).rejects.toThrow(
+        'Reusable prompt "review" is no longer available.',
+      );
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();

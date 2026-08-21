@@ -354,6 +354,28 @@ describe("AgentChatComposer attachments", () => {
     });
   });
 
+  test("sends pending review comments with Enter when the typed draft is empty", async () => {
+    const onSend = mock(async () => true);
+    const { container } = render(
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          onSend,
+          pendingSendItems: {
+            count: 1,
+            accessibleLabel: "1 pending review comment",
+          },
+        }}
+      />,
+    );
+
+    fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
   test("does not rehydrate a submitted slash command while its send is pending", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
