@@ -16,6 +16,7 @@ import {
 import {
   applyWorkflowSessionRecords,
   type LoadedWorkflowSessionRecords,
+  pruneVanishedWorkflowSessions,
 } from "./agent-session-workflow-records";
 
 const repoPath = "/repo";
@@ -459,6 +460,70 @@ describe("agent session workflow records", () => {
       });
     },
   );
+
+  test("pruning vanished records never rewrites saved fields on surviving sessions", () => {
+    const projected = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      snapshots: [
+        snapshot("live-thread", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
+    });
+    const liveSession = getAgentSession(projected, identity("live-thread"));
+    if (!liveSession) {
+      throw new Error("Expected live session.");
+    }
+    const editedModel = {
+      runtimeKind: "codex" as const,
+      providerId: "openai",
+      modelId: "gpt-5-new",
+    };
+    const withUserModel = replaceAgentSession(projected, {
+      ...liveSession,
+      selectedModel: editedModel,
+    });
+
+    // Deltas only prune, so a stale cached record cannot revert the user's
+    // in-memory model choice.
+    const prunedOnly = pruneVanishedWorkflowSessions({
+      projected: withUserModel,
+      records: {
+        loadedTaskIds: new Set(["task-1"]),
+        records: [
+          {
+            taskId: "task-1",
+            record: record("live-thread", {
+              selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5-old" },
+            }),
+          },
+        ],
+      },
+    });
+    expect(getAgentSession(prunedOnly, identity("live-thread"))?.selectedModel).toEqual(
+      editedModel,
+    );
+
+    // Snapshot and refresh commits keep applying saved fields (main parity).
+    const fullApply = applyWorkflowSessionRecords({
+      projected: withUserModel,
+      records: {
+        loadedTaskIds: new Set(["task-1"]),
+        records: [
+          {
+            taskId: "task-1",
+            record: record("live-thread", {
+              selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5-old" },
+            }),
+          },
+        ],
+      },
+    });
+    expect(getAgentSession(fullApply, identity("live-thread"))?.selectedModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-5-old",
+    });
+  });
 
   test("finishes deletion when a removal follows an already-applied record disappearance", () => {
     const withRecord = projectAndApplyRecords({

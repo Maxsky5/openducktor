@@ -21,15 +21,11 @@ export type LoadedWorkflowSessionRecords = {
 const persistedRecordIdentityKeys = (records: readonly PersistedTaskSessionRecord[]): Set<string> =>
   new Set(records.map(({ record }) => agentSessionIdentityKey(toPersistedSessionIdentity(record))));
 
-export const applyWorkflowSessionRecords = ({
-  projected,
-  records: workflowRecords,
-}: {
-  projected: AgentSessionCollection;
-  records: LoadedWorkflowSessionRecords;
-}): AgentSessionCollection => {
-  const { loadedTaskIds } = workflowRecords;
-  const persistedKeys = persistedRecordIdentityKeys(workflowRecords.records);
+const pruneRecordlessWorkflowSessions = (
+  projected: AgentSessionCollection,
+  { loadedTaskIds, records }: LoadedWorkflowSessionRecords,
+): AgentSessionCollection => {
+  const persistedKeys = persistedRecordIdentityKeys(records);
   let collection = projected;
   for (const session of listAgentSessions(projected)) {
     if (!isWorkflowAgentSession(session)) {
@@ -46,6 +42,34 @@ export const applyWorkflowSessionRecords = ({
       collection = removeAgentSession(collection, session);
     }
   }
+  return collection;
+};
+
+/**
+ * Drops workflow sessions whose record vanished, without touching any other
+ * field. Deltas use this pass so a stale record cache cannot rewrite saved
+ * fields that are already fresher in memory.
+ */
+export const pruneVanishedWorkflowSessions = ({
+  projected,
+  records: workflowRecords,
+}: {
+  projected: AgentSessionCollection;
+  records: LoadedWorkflowSessionRecords;
+}): AgentSessionCollection => {
+  const collection = pruneRecordlessWorkflowSessions(projected, workflowRecords);
+  return collection === projected ? projected : rebuildProjectedPendingInput(collection);
+};
+
+export const applyWorkflowSessionRecords = ({
+  projected,
+  records: workflowRecords,
+}: {
+  projected: AgentSessionCollection;
+  records: LoadedWorkflowSessionRecords;
+}): AgentSessionCollection => {
+  const pruned = pruneRecordlessWorkflowSessions(projected, workflowRecords);
+  let collection = pruned;
   for (const persistedRecord of workflowRecords.records) {
     const identity = toPersistedSessionIdentity(persistedRecord.record);
     const currentSession = getAgentSession(collection, identity);

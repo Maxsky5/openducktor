@@ -633,6 +633,151 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("shows loading while a hydrating task set supersedes a stale failure", async () => {
+    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => deferredB.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+    const threadThree = { ...record, externalSessionId: "thread-three", role: "qa" as const };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // Task 2's durable read fails for its exact list query.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Switching to task 3 demotes the stale failure to loading, and a live
+      // snapshot mid-hydration must not bring the old failure back.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      deferredB.resolve([{ taskId: "task-3", agentSessions: [threadThree] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(
+        state.getStoredSession({
+          externalSessionId: threadThree.externalSessionId,
+          runtimeKind: threadThree.runtimeKind,
+          workingDirectory: threadThree.workingDirectory,
+        }),
+      ).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+      deferredB.resolve([]);
+    }
+  });
+
+  test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // The live stream breaks.
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A task-record read failure then overwrites the public slot.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-1"),
+          queryFn: async () => {
+            throw new Error("record read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("record read failed");
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("record read failed"),
+      );
+
+      // The record read recovers; the live-stream failure must surface again.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-after-recovery" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const recoveredIdentity = {
+        externalSessionId: "thread-after-recovery",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the live-stream failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("The observation stream stopped.");
+
+      // A fresh authoritative snapshot proves the stream is healthy again.
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({
