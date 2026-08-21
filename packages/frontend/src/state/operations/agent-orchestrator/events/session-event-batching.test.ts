@@ -21,7 +21,7 @@ const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSession
 };
 
 describe("session-event-batching", () => {
-  test("preserves busy and idle transitions queued in the same batch", () => {
+  test("preserves repeated status transitions queued in the same batch", () => {
     const batcher = createSessionEventBatcher();
     const prepared = prepareQueuedEvents(batcher, [
       {
@@ -36,11 +36,18 @@ describe("session-event-batching", () => {
         status: { type: "idle" },
         timestamp: "2026-02-22T08:00:01.100Z",
       },
+      {
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "busy", message: null },
+        timestamp: "2026-02-22T08:00:01.200Z",
+      },
     ] satisfies QueuedSessionEvent[]);
 
     expect(prepared.readyEvents).toEqual([
       expect.objectContaining({ type: "session_status", status: { type: "busy", message: null } }),
       expect.objectContaining({ type: "session_status", status: { type: "idle" } }),
+      expect.objectContaining({ type: "session_status", status: { type: "busy", message: null } }),
     ]);
   });
 

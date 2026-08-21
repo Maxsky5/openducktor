@@ -3469,6 +3469,67 @@ describe("event-stream", () => {
     ).toBe(false);
   });
 
+  test("keeps unrelated child work when one pending subagent part is removed", async () => {
+    const childExternalSessionId = "child-session-1";
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.part.removed",
+          properties: {
+            sessionID: "external-session-1",
+            partID: "subtask-part-1",
+          },
+        } as unknown as Event,
+      ],
+      (record) => {
+        record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
+          {
+            part: {
+              id: "subtask-part-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-4",
+              type: "tool",
+              tool: "task",
+              callID: "call-1",
+              state: { status: "running", input: {} },
+            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+          },
+          {
+            part: {
+              id: "subtask-part-2",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-4",
+              type: "tool",
+              tool: "task",
+              callID: "call-2",
+              state: { status: "running", input: {} },
+            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+          },
+        ]);
+        record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
+          arrivalOrder: 1,
+        });
+        record.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, []);
+        record.pendingBackgroundTaskResultsByExternalSessionId.set(childExternalSessionId, []);
+      },
+    );
+
+    expect(
+      sessionRecord.pendingSubagentPartEmissionsByExternalSessionId
+        .get(childExternalSessionId)
+        ?.map((emission) => emission.part.id),
+    ).toEqual(["subtask-part-2"]);
+    expect(
+      sessionRecord.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+    expect(
+      sessionRecord.pendingBackgroundTaskResultsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+  });
+
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [

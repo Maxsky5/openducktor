@@ -166,7 +166,7 @@ const OPENCODE_EVENT_POLICY_BY_TYPE = {
   "session.next.revert.committed": IGNORE_EVENT,
   "message.part.delta": MESSAGE_EVENT,
   "session.diff": IGNORE_EVENT,
-  "session.error": INVALIDATING_SESSION_EVENT,
+  "session.error": SESSION_EVENT,
   "installation.updated": IGNORE_EVENT,
   "installation.update-available": IGNORE_EVENT,
   "file.edited": IGNORE_EVENT,

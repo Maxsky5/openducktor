@@ -690,6 +690,31 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("does not invalidate sessions after an authoritative session error", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+
+    await harness.emitAndWait({
+      type: "session.error",
+      properties: {
+        sessionID: "session-1",
+        error: { data: { message: "Provider failed" } },
+      },
+    } as unknown as Event);
+
+    expect(signals).toContainEqual({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: expect.objectContaining({ type: "session_error", message: "Provider failed" }),
+    });
+    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
+    await prepared.release();
+  });
+
   test("forwards runtime-start evidence before a stop-only turn becomes idle", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);

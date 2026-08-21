@@ -156,6 +156,10 @@ const reportRuntimeEventFailure = (input: {
   }
 
   if (!subscriberId) {
+    console.error("OpenCode runtime event projection failed without a session owner.", {
+      scope: input.scope,
+      error: failure,
+    });
     return;
   }
   input.emit(subscriberId, {
@@ -223,7 +227,7 @@ const ensureRuntimeEventTransport = (input: {
         });
         return false;
       }
-      let projectionError: unknown;
+      let projectionFailed = false;
       for (const subscriber of streamRecord.subscribers.values()) {
         try {
           const relevant = isRelevantSubscriberEvent(subscriber, event, {
@@ -252,20 +256,17 @@ const ensureRuntimeEventTransport = (input: {
               resolveSubagentSessionLink(input.sessions, childExternalSessionId),
           });
         } catch (error) {
-          projectionError ??= error;
+          projectionFailed = true;
+          reportRuntimeEventFailure({
+            eventTransport: streamRecord,
+            scope: { ...scope, externalSessionId: subscriber.externalSessionId },
+            error,
+            now: input.now,
+            emit: input.emit,
+          });
         }
       }
-      if (projectionError) {
-        reportRuntimeEventFailure({
-          eventTransport: streamRecord,
-          scope,
-          error: projectionError,
-          now: input.now,
-          emit: input.emit,
-        });
-        return false;
-      }
-      return true;
+      return !projectionFailed;
     },
     ready,
     streamDone: Promise.resolve(),

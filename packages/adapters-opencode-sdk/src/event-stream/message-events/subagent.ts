@@ -228,14 +228,13 @@ export const removeSubagentCorrelationForPart = (
   runtime: EventStreamRuntime,
   removedPartId: string,
 ): void => {
-  const removedExternalSessionIds = new Set<string>();
+  const removedCorrelationExternalSessionIds = new Set<string>();
   for (const [externalSessionId, pending] of runtime.session
     .pendingSubagentPartEmissionsByExternalSessionId) {
     const nextPending = pending.filter((emission) => emission.part.id !== removedPartId);
     if (nextPending.length === pending.length) {
       continue;
     }
-    removedExternalSessionIds.add(externalSessionId);
     if (nextPending.length === 0) {
       runtime.session.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
       continue;
@@ -254,7 +253,7 @@ export const removeSubagentCorrelationForPart = (
   }
   for (const [externalSessionId, partId] of runtime.session.subagentPartIdByExternalSessionId) {
     if (partId === removedPartId) {
-      removedExternalSessionIds.add(externalSessionId);
+      removedCorrelationExternalSessionIds.add(externalSessionId);
       runtime.session.subagentPartIdByExternalSessionId.delete(externalSessionId);
     }
   }
@@ -263,12 +262,12 @@ export const removeSubagentCorrelationForPart = (
     for (const [externalSessionId, correlationKey] of runtime.session
       .subagentCorrelationKeyByExternalSessionId) {
       if (correlationKey === removedCorrelationKey) {
-        removedExternalSessionIds.add(externalSessionId);
+        removedCorrelationExternalSessionIds.add(externalSessionId);
         runtime.session.subagentCorrelationKeyByExternalSessionId.delete(externalSessionId);
       }
     }
   }
-  for (const externalSessionId of removedExternalSessionIds) {
+  for (const externalSessionId of removedCorrelationExternalSessionIds) {
     runtime.session.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
     runtime.session.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
     runtime.session.pendingSubagentInputEventsByExternalSessionId.delete(externalSessionId);

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type {
   Event,
   EventSessionDeleted,
@@ -22,7 +22,7 @@ import {
   type TestGlobalEventPayload,
 } from "./event-stream.test-support";
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
-import type { RuntimeEventTransportRecord, SessionRecord } from "./types";
+import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionRecord } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
 
 type GlobalEventPayload = TestGlobalEventPayload;
@@ -285,6 +285,7 @@ const runRuntimeEventTransport = async (
   options?: {
     onTransport?: (transport: RuntimeEventTransportRecord) => void;
     externalSessionIds?: string[];
+    logEvent?: OpencodeEventLogger;
   },
 ): Promise<AgentEvent[]> => {
   const client = makeClientWithEvents(events);
@@ -309,6 +310,7 @@ const runRuntimeEventTransport = async (
       emit: (_externalSessionId, event) => {
         emitted.push(event);
       },
+      ...(options?.logEvent ? { logEvent: options.logEvent } : {}),
     });
   }
 
@@ -373,6 +375,61 @@ describe("session registry runtime event transport", () => {
         status: { type: "busy", message: null },
       }),
     );
+  });
+
+  test("attributes a subscriber projection failure to that subscriber", async () => {
+    const emitted = await runRuntimeEventTransport(
+      [
+        {
+          type: "session.status",
+          properties: {
+            sessionID: "external-session-1",
+            status: { type: "busy" },
+          },
+        } as unknown as GlobalEventPayload,
+      ],
+      {
+        externalSessionIds: ["external-session-1", "external-session-2"],
+        logEvent: ({ externalSessionId }) => {
+          if (externalSessionId === "external-session-2") {
+            throw new Error("Subscriber 2 projection failed.");
+          }
+        },
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "external-session-2",
+        message: "Subscriber 2 projection failed.",
+      }),
+    ]);
+  });
+
+  test("logs a runtime event failure that has no safe session owner", async () => {
+    const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const emitted = await runRuntimeEventTransport(
+        [
+          {
+            type: "session.created",
+            properties: { info: {} },
+          } as unknown as GlobalEventPayload,
+        ],
+        { externalSessionIds: ["external-session-1", "external-session-2"] },
+      );
+
+      expect(emitted.filter((event) => event.type === "session_error")).toHaveLength(0);
+      expect(consoleError).toHaveBeenCalledWith(
+        "OpenCode runtime event projection failed without a session owner.",
+        expect.objectContaining({
+          scope: { directory: "/repo" },
+          error: expect.any(Error),
+        }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   test("routes direct child session creation to the single pending subagent card", async () => {
