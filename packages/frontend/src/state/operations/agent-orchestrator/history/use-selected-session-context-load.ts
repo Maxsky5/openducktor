@@ -1,36 +1,27 @@
-import type { AgentSessionAssociation } from "@openducktor/contracts";
 import { useEffect, useMemo, useState } from "react";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
-import { useAgentOperations, useAgentSessionLiveAssociation } from "@/state/app-state-provider";
+import { useAgentOperations } from "@/state/app-state-provider";
 import type { AgentSessionContextLoadTarget, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 const missingContextTarget = ({
   session,
-  liveSessionAssociation,
   repoReadinessState,
 }: {
   session: AgentSessionState | null;
-  liveSessionAssociation: AgentSessionAssociation | null;
   repoReadinessState: RepoRuntimeReadinessState;
 }): AgentSessionContextLoadTarget | null => {
   if (session === null || session.contextUsage != null || repoReadinessState !== "ready") {
     return null;
   }
   const identity = toAgentSessionIdentity(session);
-  if (session.role !== null) {
-    return {
-      ...identity,
-      sessionScope: { kind: "workflow", taskId: session.taskId, role: session.role },
-    };
-  }
-  if (!liveSessionAssociation || liveSessionAssociation.kind === "unbound") {
+  if (session.sessionAssociation.kind === "unbound") {
     return identity;
   }
-  return { ...identity, sessionScope: liveSessionAssociation };
+  return { ...identity, sessionScope: session.sessionAssociation };
 };
 
 export const useSelectedSessionContextLoad = ({
@@ -41,11 +32,9 @@ export const useSelectedSessionContextLoad = ({
   repoReadinessState: RepoRuntimeReadinessState;
 }): string | null => {
   const { loadAgentSessionContext } = useAgentOperations();
-  const liveSessionAssociation = useAgentSessionLiveAssociation(session);
   const [loadError, setLoadError] = useState<string | null>(null);
   const target = missingContextTarget({
     session,
-    liveSessionAssociation,
     repoReadinessState,
   });
   const stableIdentity = useStableAgentSessionIdentity(target);

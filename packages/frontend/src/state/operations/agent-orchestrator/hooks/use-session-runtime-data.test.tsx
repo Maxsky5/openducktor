@@ -53,8 +53,7 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   const identity = sessionIdentity(overrides);
   return {
     ...identity,
-    taskId: "task-1",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     status: "idle",
     runtimeStatusMessage: null,
     startedAt: "2026-06-12T08:00:00.000Z",
@@ -70,15 +69,13 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
-  taskBinding: null,
-  liveSessionAssociation: null,
+  sessionAssociation: { kind: "unbound" as const },
   selectedModel: null,
 });
 
 const sessionTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
-  taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
-  liveSessionAssociation: null,
+  sessionAssociation: state.sessionAssociation,
   selectedModel: state.selectedModel,
 });
 

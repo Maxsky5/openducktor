@@ -9,6 +9,7 @@ import {
   findFirstChangedSessionMessageIndex,
   forEachSessionMessageFrom,
 } from "@/state/operations/agent-orchestrator/support/messages";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
@@ -37,8 +38,8 @@ const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
 }): boolean => {
   return Boolean(
     loadedSession &&
-    loadedSession.role !== "build" &&
-    loadedSession.runtimeKind &&
+    isWorkflowAgentSession(loadedSession) &&
+    loadedSession.sessionAssociation.role !== "build" &&
     workflowAliasMetadataReady &&
     !previousWorkflowAliasMetadataReady,
   );
@@ -187,7 +188,10 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    if (loadedSession.role === "build") {
+    if (
+      isWorkflowAgentSession(loadedSession) &&
+      loadedSession.sessionAssociation.role === "build"
+    ) {
       previousSessionKeyRef.current = selectedSessionKey;
       previousMessagesRef.current = loadedSession.messages;
       return;

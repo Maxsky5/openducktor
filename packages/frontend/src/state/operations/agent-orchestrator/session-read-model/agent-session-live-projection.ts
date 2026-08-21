@@ -1,11 +1,16 @@
 import type {
+  AgentSessionAssociation,
   AgentSessionLiveEnvelope,
   AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import {
+  agentSessionStatusFromActivity,
+  describeAgentSessionScope,
+  resolveAgentSessionAssociationTransition,
+} from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -20,10 +25,12 @@ import type {
   AgentPendingInputSource,
   AgentQuestionRequest,
   AgentSessionIdentity,
+  AgentSessionRuntimeTarget,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/persistence";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import type { TaskSessionRecords } from "./task-session-records";
 
 type LiveProjectionEnvelope = Extract<
@@ -77,7 +84,7 @@ const settleAbsentSessionActivity = (
 
 type PendingInputRouting = {
   source: AgentPendingInputSource;
-  responseSession: AgentSessionIdentity;
+  responseSession: AgentSessionRuntimeTarget;
 };
 
 const toApprovalRequest = (
@@ -164,9 +171,25 @@ const applyDirectSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionLiveSnapshot,
 ): AgentSessionState => {
+  const transition = resolveAgentSessionAssociationTransition(
+    current.sessionAssociation,
+    snapshot.sessionAssociation,
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot apply live snapshot for session '${current.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the incoming ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
+  const sessionAssociation = sameSessionAssociation(
+    current.sessionAssociation,
+    transition.association,
+  )
+    ? current.sessionAssociation
+    : transition.association;
   if (isTerminalSessionStatus(current.status)) {
     return {
       ...current,
+      sessionAssociation,
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -183,6 +206,7 @@ const applyDirectSnapshot = (
 
   return {
     ...current,
+    sessionAssociation,
     title: snapshot.title,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
@@ -193,17 +217,13 @@ const applyDirectSnapshot = (
   };
 };
 
-const createLiveOnlySession = (
-  snapshot: AgentSessionLiveSnapshot,
-  parent: AgentSessionState | null,
-): AgentSessionState => {
+const createLiveOnlySession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
   const identity = toSessionIdentity(snapshot.ref);
   return applyDirectSnapshot(
     {
       ...identity,
       title: snapshot.title,
-      taskId: parent?.taskId ?? "",
-      role: null,
+      sessionAssociation: snapshot.sessionAssociation,
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: snapshot.startedAt,
@@ -218,16 +238,18 @@ const createLiveOnlySession = (
   );
 };
 
-const findParentSession = (
-  collection: AgentSessionCollection,
-  ref: AgentSessionLiveRef,
-  parentExternalSessionId: string,
-): AgentSessionState | null =>
-  getAgentSession(collection, {
-    externalSessionId: parentExternalSessionId,
-    runtimeKind: ref.runtimeKind,
-    workingDirectory: ref.workingDirectory,
-  });
+const sameSessionAssociation = (
+  left: AgentSessionAssociation,
+  right: AgentSessionAssociation,
+): boolean => {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind !== "workflow") {
+    return true;
+  }
+  return right.kind === "workflow" && left.taskId === right.taskId && left.role === right.role;
+};
 
 const rebuildProjectedPendingInput = (
   collection: AgentSessionCollection,
@@ -244,10 +266,11 @@ const rebuildProjectedPendingInput = (
   const mirroredApprovalKeys = new Set<string>();
   const mirroredQuestionKeys = new Set<string>();
   for (const owner of listAgentSessions(rebuilt)) {
-    const ownerIdentity: AgentSessionIdentity = {
+    const ownerIdentity: AgentSessionRuntimeTarget = {
       externalSessionId: owner.externalSessionId,
       runtimeKind: owner.runtimeKind,
       workingDirectory: owner.workingDirectory,
+      sessionAssociation: owner.sessionAssociation,
     };
     const ownerKey = agentSessionIdentityKey(ownerIdentity);
     const visited = new Set([ownerKey]);
@@ -347,10 +370,11 @@ const materializePersistedSessions = ({
   const persistedKeys = persistedRecordKeys(taskSessionRecords);
   const carried: AgentSessionState[] = [];
   for (const session of listAgentSessions(current)) {
+    const workflowAssociation = isWorkflowAgentSession(session) ? session.sessionAssociation : null;
     const shouldCarrySession =
-      (session.role === null && liveSnapshotKeys.has(agentSessionIdentityKey(session))) ||
-      (session.role !== null &&
-        (!loadedTaskIds.has(session.taskId) ||
+      (workflowAssociation === null && liveSnapshotKeys.has(agentSessionIdentityKey(session))) ||
+      (workflowAssociation !== null &&
+        (!loadedTaskIds.has(workflowAssociation.taskId) ||
           session.status === "starting" ||
           persistedKeys.has(agentSessionIdentityKey(session))));
     if (shouldCarrySession) {
@@ -409,10 +433,7 @@ export const buildAgentSessionLiveCollection = ({
       collection = replaceAgentSession(collection, applyDirectSnapshot(session, snapshot));
       continue;
     }
-    const parent = snapshot.parentExternalSessionId
-      ? findParentSession(collection, snapshot.ref, snapshot.parentExternalSessionId)
-      : null;
-    collection = replaceAgentSession(collection, createLiveOnlySession(snapshot, parent));
+    collection = replaceAgentSession(collection, createLiveOnlySession(snapshot));
   }
   return rebuildProjectedPendingInput(collection);
 };
@@ -428,9 +449,10 @@ export const applyTaskSessionRecords = ({
   const persistedKeys = persistedRecordKeys(taskSessionRecords);
   let collection = current;
   for (const session of listAgentSessions(current)) {
+    const workflowAssociation = isWorkflowAgentSession(session) ? session.sessionAssociation : null;
     const recordDisappeared =
-      session.role !== null &&
-      loadedTaskIds.has(session.taskId) &&
+      workflowAssociation !== null &&
+      loadedTaskIds.has(workflowAssociation.taskId) &&
       session.status !== "starting" &&
       !persistedKeys.has(agentSessionIdentityKey(session));
     if (recordDisappeared) {
@@ -449,7 +471,7 @@ export const applyTaskSessionRecords = ({
       }),
     );
   }
-  return collection;
+  return rebuildProjectedPendingInput(collection);
 };
 
 export const applyAgentSessionLiveDelta = ({
@@ -464,14 +486,11 @@ export const applyAgentSessionLiveDelta = ({
   if (envelope.type === "session_upsert") {
     const identity = toSessionIdentity(envelope.session.ref);
     const session = getAgentSession(current, identity);
-    const parent = envelope.session.parentExternalSessionId
-      ? findParentSession(current, envelope.session.ref, envelope.session.parentExternalSessionId)
-      : null;
     const withDirectSnapshot = replaceAgentSession(
       current,
       session
         ? applyDirectSnapshot(session, envelope.session)
-        : createLiveOnlySession(envelope.session, parent),
+        : createLiveOnlySession(envelope.session),
     );
     return rebuildProjectedPendingInput(withDirectSnapshot);
   }

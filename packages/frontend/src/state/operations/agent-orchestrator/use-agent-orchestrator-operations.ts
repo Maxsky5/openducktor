@@ -107,15 +107,19 @@ export function useAgentOrchestratorOperations({
       }
 
       if (shouldPersist) {
+        if (!isWorkflowAgentSession(nextSession)) {
+          throw new Error(`Session '${nextSession.externalSessionId}' is not a workflow session.`);
+        }
+        const { taskId, role } = nextSession.sessionAssociation;
         runOrchestratorSideEffect(
           "operations-persist-session-snapshot",
-          persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
+          persistSessionRecord(taskId, toPersistedSessionRecord(nextSession)),
           {
             tags: {
               repoPath: workspaceRepoPath,
               externalSessionId: nextSession.externalSessionId,
-              taskId: nextSession.taskId,
-              role: nextSession.role,
+              taskId,
+              role,
             },
           },
         );
@@ -173,7 +177,6 @@ export function useAgentOrchestratorOperations({
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       readSessionSnapshot: sessionStore.getSessionSnapshot,
-      readLiveSessionAssociation: sessionStore.getLiveAssociationSnapshot,
       updateSession,
       taskRef,
       loadRepoPromptOverrides: queryBackedPromptOverrides,
@@ -223,7 +226,6 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
-    setLiveAssociations: sessionStore.setLiveAssociations,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
     recoverTranscriptGap,

@@ -7,7 +7,10 @@ import {
   removeAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   RuntimeDependencies,
   SessionDependencies,
@@ -84,12 +87,12 @@ export const createTaskDependenciesFixture = (
   ...overrides,
 });
 
-export const createBuildSessionFixture = (overrides = {}) =>
+export const createBuildSessionFixture = (overrides: AgentSessionFixtureOverrides = {}) =>
   createAgentSessionFixture(
     {
       externalSessionId: "ext-build",
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       status: "idle",
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",

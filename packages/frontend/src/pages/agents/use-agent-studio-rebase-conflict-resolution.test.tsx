@@ -26,8 +26,8 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
 const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
   createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
-    taskId: "task-1",
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
     status: "running",
     ...overrides,
   });
@@ -82,8 +82,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   const plannerSession = createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "planner-1",
-    taskId: "task-1",
-    role: "planner",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+
     status: "running",
   });
 
@@ -322,8 +322,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
   test("uses the live selected Builder session without a shell-side summary wrapper", async () => {
     const liveBuilderSession = createAgentSessionFixture({
       externalSessionId: "build-live-1",
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       status: "running",
       workingDirectory: "/repo/worktrees/task-1",
       selectedModel: {

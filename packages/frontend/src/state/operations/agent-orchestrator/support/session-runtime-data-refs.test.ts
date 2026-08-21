@@ -21,8 +21,7 @@ const sessionIdentity = (overrides: Partial<AgentSessionIdentity> = {}): AgentSe
 });
 const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   ...sessionIdentity(),
-  taskId: "task-1",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   title: "BUILD task-1",
   status: "idle",
   runtimeStatusMessage: null,
@@ -36,14 +35,12 @@ const sessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 });
 const identityTarget = (identity = sessionIdentity()) => ({
   identity,
-  taskBinding: null,
-  liveSessionAssociation: null,
+  sessionAssociation: { kind: "unbound" as const },
   selectedModel: null,
 });
 const stateTarget = (state = sessionState()) => ({
   identity: sessionIdentity(state),
-  taskBinding: state.role ? { taskId: state.taskId, role: state.role } : null,
-  liveSessionAssociation: null,
+  sessionAssociation: state.sessionAssociation,
   selectedModel: state.selectedModel,
 });
 
@@ -142,13 +139,13 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
-  test("forwards repository scope from the live policy association", () => {
+  test("forwards repository scope from the selected session association", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
         selectedSession: {
           ...identityTarget(),
-          liveSessionAssociation: { kind: "repository" },
+          sessionAssociation: { kind: "repository" },
         },
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
@@ -170,11 +167,11 @@ describe("resolveSessionRuntimeDataRefs", () => {
     });
   });
 
-  test("returns todo refs when selected workflow session has no known role", () => {
+  test("returns unscoped todo refs for an unbound session", () => {
     expect(
       resolveSessionRuntimeDataRefs({
         repoPath: "/repo",
-        selectedSession: stateTarget(sessionState({ role: null })),
+        selectedSession: stateTarget(sessionState({ sessionAssociation: { kind: "unbound" } })),
         runtimePolicy: { kind: "opencode" },
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
       }),

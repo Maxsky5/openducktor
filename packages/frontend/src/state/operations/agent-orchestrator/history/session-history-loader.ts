@@ -1,9 +1,4 @@
-import type {
-  AgentSessionAssociation,
-  RepoPromptOverrides,
-  SessionHistoryFailure,
-  TaskCard,
-} from "@openducktor/contracts";
+import type { RepoPromptOverrides, SessionHistoryFailure, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
@@ -14,7 +9,6 @@ import type { ReadSessionSnapshot } from "../support/session-invariants";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 import { resolveRuntimeSessionContextRef } from "../support/session-runtime-policy";
-import { toAgentTaskSessionBinding } from "../support/workflow-session";
 import {
   requestedSessionHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
@@ -30,7 +24,7 @@ type LoadSessionHistorySystemPromptContext = (
 
 type SessionHistoryPromptTarget = Pick<
   AgentSessionState,
-  "externalSessionId" | "taskId" | "role" | "startedAt"
+  "externalSessionId" | "sessionAssociation" | "startedAt"
 >;
 
 type CreateLoadAgentSessionHistoryArgs = {
@@ -40,7 +34,6 @@ type CreateLoadAgentSessionHistoryArgs = {
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   readSessionSnapshot: ReadSessionSnapshot;
-  readLiveSessionAssociation: (identity: AgentSessionIdentity) => AgentSessionAssociation | null;
   updateSession: UpdateSession;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -128,20 +121,21 @@ const buildSessionHistorySystemPromptContext = async ({
   session: SessionHistoryPromptTarget;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 }): Promise<AgentSessionHistorySystemPromptContext | undefined> => {
-  if (session.role === null) {
+  if (session.sessionAssociation.kind !== "workflow") {
     return undefined;
   }
 
-  const task = tasks.find((task) => task.id === session.taskId);
+  const { taskId, role } = session.sessionAssociation;
+  const task = tasks.find((task) => task.id === taskId);
   if (!task) {
     throw new Error(
-      `Cannot load history for '${session.externalSessionId}': task '${session.taskId}' is unavailable.`,
+      `Cannot load history for '${session.externalSessionId}': task '${taskId}' is unavailable.`,
     );
   }
 
   const { systemPrompt } = await loadSessionPromptContext({
     workspaceId,
-    role: session.role,
+    role,
     task,
     loadRepoPromptOverrides,
   });
@@ -156,7 +150,6 @@ type LoadSessionHistoryIntoStoreArgs = {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   readSessionSnapshot: ReadSessionSnapshot;
-  readLiveSessionAssociation: (identity: AgentSessionIdentity) => AgentSessionAssociation | null;
   updateSession: UpdateSession;
   identity: AgentSessionIdentity;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
@@ -170,7 +163,6 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   readSessionSnapshot,
   updateSession,
   identity,
-  readLiveSessionAssociation,
   policy,
   loadSettingsSnapshot,
   loadSystemPromptContext,
@@ -220,8 +212,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       repoPath,
       {
         identity: sessionForHistory,
-        taskBinding: toAgentTaskSessionBinding(sessionForHistory),
-        liveSessionAssociation: readLiveSessionAssociation(identity),
+        sessionAssociation: sessionForHistory.sessionAssociation,
         selectedModel: sessionForHistory.selectedModel,
       },
       loadSettingsSnapshot ??
@@ -293,7 +284,6 @@ const createLoadSessionHistoryWithPolicy = ({
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   readSessionSnapshot,
-  readLiveSessionAssociation,
   updateSession,
   taskRef,
   loadRepoPromptOverrides,
@@ -327,7 +317,6 @@ const createLoadSessionHistoryWithPolicy = ({
       repoPath,
       adapter,
       readSessionSnapshot,
-      readLiveSessionAssociation,
       updateSession,
       identity: sessionIdentity,
       policy,

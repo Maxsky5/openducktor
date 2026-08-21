@@ -1,7 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionAssociation } from "@openducktor/contracts";
 import type { PropsWithChildren } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-contexts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -12,8 +10,7 @@ import { useSelectedSessionContextLoad } from "./use-selected-session-context-lo
 
 const session = (externalSessionId: string): AgentSessionState => ({
   externalSessionId,
-  taskId: "task-1",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   runtimeKind: "codex",
   workingDirectory: "/repo/worktree",
   status: "idle",
@@ -27,17 +24,8 @@ const session = (externalSessionId: string): AgentSessionState => ({
   selectedModel: null,
 });
 
-const createWrapper = (
-  operations: AgentOperationsContextValue,
-  liveSession?: AgentSessionState,
-  liveAssociation?: AgentSessionAssociation,
-) => {
+const createWrapper = (operations: AgentOperationsContextValue) => {
   const sessionStore = createAgentSessionsStore("/repo");
-  if (liveSession && liveAssociation) {
-    sessionStore.setLiveAssociations(
-      () => new Map([[agentSessionIdentityKey(liveSession), liveAssociation]]),
-    );
-  }
   return ({ children }: PropsWithChildren) => (
     <AgentOperationsContext.Provider value={operations}>
       <AgentSessionsContext.Provider value={sessionStore}>{children}</AgentSessionsContext.Provider>
@@ -112,7 +100,7 @@ describe("useSelectedSessionContextLoad", () => {
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       {
-        session: { ...session("child-thread"), role: null },
+        session: { ...session("child-thread"), sessionAssociation: { kind: "unbound" } },
         repoReadinessState: "ready" as const,
       },
       { wrapper },
@@ -149,8 +137,11 @@ describe("useSelectedSessionContextLoad", () => {
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
     };
-    const repositorySession = { ...session("repository-thread"), taskId: "", role: null };
-    const wrapper = createWrapper(operations, repositorySession, { kind: "repository" });
+    const repositorySession: AgentSessionState = {
+      ...session("repository-thread"),
+      sessionAssociation: { kind: "repository" },
+    };
+    const wrapper = createWrapper(operations);
     const harness = createHookHarness(
       useSelectedSessionContextLoad,
       { session: repositorySession, repoReadinessState: "ready" as const },

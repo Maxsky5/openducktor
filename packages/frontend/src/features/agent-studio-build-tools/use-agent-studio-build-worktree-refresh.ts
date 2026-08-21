@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { forEachSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";
@@ -53,7 +54,12 @@ export function useAgentStudioBuildWorktreeRefresh({
   const wasHistoryLoadingRef = useRef(false);
 
   useEffect(() => {
-    if (role !== "build" || loadedSession?.role !== "build") {
+    if (
+      role !== "build" ||
+      !loadedSession ||
+      !isWorkflowAgentSession(loadedSession) ||
+      loadedSession.sessionAssociation.role !== "build"
+    ) {
       return;
     }
 

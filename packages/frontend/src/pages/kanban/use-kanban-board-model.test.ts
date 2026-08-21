@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskActivityStateByTaskId,
@@ -39,23 +41,21 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionSummary => {
-  const session: AgentSessionState = {
-    runtimeKind: "opencode",
-    externalSessionId: "external-1",
-    taskId: "task-1",
-    role: "build",
-    status: "running",
-    runtimeStatusMessage: null,
-    startedAt: "2026-03-17T10:00:00.000Z",
-    workingDirectory: "/repo",
-    messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...overrides,
-    historyLoadState: overrides.historyLoadState ?? "not_requested",
-  };
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionSummary => {
+  const session = createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "external-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-03-17T10:00:00.000Z",
+      workingDirectory: "/repo",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
   return toAgentSessionSummary(session);
 };
 
@@ -140,7 +140,7 @@ describe("use-kanban-board-model helpers", () => {
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        taskId: "task-waiting",
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
         pendingApprovals: [
           {
             requestId: "permission-1",
@@ -158,7 +158,10 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-with-session", externalSessionId: "session-2" }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-with-session", role: "spec" },
+        externalSessionId: "session-2",
+      }),
     ]);
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
@@ -183,7 +186,7 @@ describe("use-kanban-board-model helpers", () => {
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({
-        taskId: "task-1-waiting",
+        sessionAssociation: { kind: "workflow", taskId: "task-1-waiting", role: "spec" },
         externalSessionId: "session-1",
         pendingQuestions: [
           {
@@ -198,9 +201,12 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-2-active", externalSessionId: "session-2" }),
       createSession({
-        taskId: "task-4-waiting",
+        sessionAssociation: { kind: "workflow", taskId: "task-2-active", role: "spec" },
+        externalSessionId: "session-2",
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-4-waiting", role: "spec" },
         externalSessionId: "session-4",
         pendingApprovals: [
           {
@@ -219,7 +225,10 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-5-active", externalSessionId: "session-5" }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-5-active", role: "spec" },
+        externalSessionId: "session-5",
+      }),
     ]);
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
 
@@ -268,9 +277,12 @@ describe("use-kanban-board-model helpers", () => {
       createTaskCard({ id: "task-idle" }),
     ];
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
-      createSession({ taskId: "task-waiting", externalSessionId: "session-waiting" }),
       createSession({
-        taskId: "task-waiting",
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
+        externalSessionId: "session-waiting",
+      }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-waiting", role: "spec" },
         externalSessionId: "session-question",
         status: "idle",
         pendingQuestions: [
@@ -286,7 +298,10 @@ describe("use-kanban-board-model helpers", () => {
           },
         ],
       }),
-      createSession({ taskId: "task-active", externalSessionId: "session-active" }),
+      createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-active", role: "spec" },
+        externalSessionId: "session-active",
+      }),
     ]);
 
     const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
@@ -299,15 +314,15 @@ describe("use-kanban-board-model helpers", () => {
   test("buildActiveTaskSessionContextByTaskId prioritizes waiting-input session role", () => {
     const activeTaskSessionContextByTaskId = buildActiveTaskSessionContextByTaskId([
       createSession({
-        taskId: "task-1",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
         externalSessionId: "build-running",
         status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
       }),
       createSession({
-        taskId: "task-1",
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+
         externalSessionId: "qa-waiting",
         status: "idle",
         startedAt: "2026-03-20T10:00:00.000Z",

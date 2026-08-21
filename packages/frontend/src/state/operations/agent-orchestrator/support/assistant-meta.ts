@@ -1,3 +1,4 @@
+import type { AgentRole } from "@openducktor/core";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
@@ -6,7 +7,7 @@ import type {
 import { mergeModelSelection } from "./models";
 
 type AssistantMessageMetaInput = {
-  role: AgentSessionState["role"] | null;
+  role: AgentRole | null;
   model?: AgentSessionState["selectedModel"] | undefined;
   isFinal: boolean;
   durationMs?: number | undefined;
@@ -70,7 +71,7 @@ export const toAssistantMessageMeta = (
   model?: AgentSessionState["selectedModel"],
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
   return createAssistantMessageMeta({
-    role: session.role,
+    role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
     isFinal: true,
     model,
     durationMs,

@@ -23,9 +23,12 @@ export const buildInitialSession = ({
 }): AgentSessionState => ({
   externalSessionId: startedCtx.summary.externalSessionId,
   ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
-  taskId: startedCtx.taskId,
+  sessionAssociation: {
+    kind: "workflow",
+    taskId: startedCtx.taskId,
+    role: startedCtx.role,
+  },
   runtimeKind: startedCtx.summary.runtimeKind,
-  role: startedCtx.role,
   status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
   runtimeStatusMessage: null,
   startedAt: startedCtx.summary.startedAt,
@@ -59,8 +62,13 @@ export const persistInitialSession = async ({
   await runOrchestratorTask(
     "start-session-persist-initial-session",
     async () => {
+      if (initialSession.sessionAssociation.kind !== "workflow") {
+        throw new Error(
+          `Cannot persist initial session '${initialSession.externalSessionId}' because its association is ${initialSession.sessionAssociation.kind}.`,
+        );
+      }
       await session.persistSessionRecord(
-        initialSession.taskId,
+        initialSession.sessionAssociation.taskId,
         toPersistedSessionRecord(initialSession),
       );
     },

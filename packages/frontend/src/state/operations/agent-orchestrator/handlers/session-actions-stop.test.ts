@@ -29,7 +29,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         workingDirectory: "/tmp/repo",
         runtimeStatusMessage: "Safety buffering",
         pendingApprovals: [
@@ -139,7 +139,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     try {
       await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
-        "Failed to stop build session 'session-1': build stop failed",
+        "Failed to stop session 'session-1': build stop failed",
       );
       expect(localStopCalls).toBe(1);
       expect(sessionTurnState.turnMetadata.readModel(sessionKey)).toBeNull();
@@ -160,7 +160,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     };
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
     ]);
     const actions = createSessionActions({
@@ -197,7 +197,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         messages: [
           {
             id: "tool-running",
@@ -335,7 +335,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     const sessionsRef = createSessionsRef([
       buildSession({
         runtimeKind: "codex",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         messages: [
           {
             id: "tool-running",
@@ -434,7 +434,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
       }),
     ]);
 
@@ -577,6 +577,33 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     ]);
   });
 
+  test("does not call task persistence or task refresh for a repository session", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    adapter.stopSession = async () => {};
+    const taskCalls: string[] = [];
+    const sessionsRef = createSessionsRef([
+      buildSession({ sessionAssociation: { kind: "repository" } }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      persistSessionRecord: async () => {
+        taskCalls.push("persist");
+      },
+      refreshTaskData: async () => {
+        taskCalls.push("refresh");
+      },
+      invalidateSessionStopQueries: async () => {
+        taskCalls.push("invalidate");
+      },
+    });
+
+    await actions.stopAgentSession(getSession(sessionsRef));
+
+    expect(getSession(sessionsRef)?.status).toBe("stopped");
+    expect(taskCalls).toEqual([]);
+  });
+
   test("fails fast when stopping without an active workspace", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopTargets: SessionRef[] = [];
@@ -629,7 +656,10 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
       stopCalls += 1;
     };
     const sessionsRef = createSessionsRef([
-      buildSession({ status: "running", role: "build", taskId: "task-1" }),
+      buildSession({
+        status: "running",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
     ]);
 
     const actions = createSessionActions({

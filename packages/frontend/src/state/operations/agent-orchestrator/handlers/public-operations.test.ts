@@ -209,8 +209,7 @@ describe("agent-orchestrator-public-operations", () => {
   test("exposes store-backed session history loading as a command", async () => {
     const loadedSession: AgentSessionState = {
       externalSessionId: SESSION_IDENTITY.externalSessionId,
-      taskId: "task-1",
-      role: "build" as const,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       status: "idle",
       runtimeStatusMessage: null,
       startedAt: "2026-06-12T08:00:00.000Z",

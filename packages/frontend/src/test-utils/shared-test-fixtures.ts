@@ -96,9 +96,8 @@ export const TEST_EXTERNAL_SESSION_IDS = {
 
 const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
-  taskId: "task-1",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
   runtimeKind: "opencode",
-  role: "spec",
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:00:00.000Z",
@@ -274,7 +273,7 @@ export const createTaskCardFixture = (
 
 type AgentSessionFixtureMessages = SessionMessagesState | AgentChatMessage[];
 
-type LegacyAgentSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+export type AgentSessionFixtureOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: AgentSessionFixtureMessages;
   runId?: string | null;
 };
@@ -286,10 +285,22 @@ const toAgentSessionFixtureMessages = (
   return createSessionMessagesFixture(externalSessionId, messages);
 };
 
+const assertCanonicalAgentSessionFixtureInput = (input: AgentSessionFixtureOverrides): void => {
+  for (const legacyField of ["taskId", "role"] as const) {
+    if (Object.hasOwn(input, legacyField)) {
+      throw new Error(
+        `Agent session fixture overrides must declare sessionAssociation instead of ${legacyField}.`,
+      );
+    }
+  }
+};
+
 export const createAgentSessionFixture = (
-  defaults: LegacyAgentSessionOverrides = {},
-  overrides: LegacyAgentSessionOverrides = {},
+  defaults: AgentSessionFixtureOverrides = {},
+  overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionState => {
+  assertCanonicalAgentSessionFixtureInput(defaults);
+  assertCanonicalAgentSessionFixtureInput(overrides);
   const { runId: _defaultRunId, messages: defaultMessages, ...defaultSession } = defaults;
   const { runId: _overrideRunId, messages: overrideMessages, ...overrideSession } = overrides;
   const externalSessionId =
@@ -314,8 +325,8 @@ export const createAgentSessionFixture = (
 };
 
 export const createAgentSessionSummaryFixture = (
-  defaults: LegacyAgentSessionOverrides = {},
-  overrides: LegacyAgentSessionOverrides = {},
+  defaults: AgentSessionFixtureOverrides = {},
+  overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionSummary => toAgentSessionSummary(createAgentSessionFixture(defaults, overrides));
 
 export const createRepoRuntimeHealthFixture = (

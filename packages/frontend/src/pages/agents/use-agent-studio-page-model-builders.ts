@@ -92,9 +92,7 @@ export const buildWorkflowModelContext = ({
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
       agentSessionIdentityKey(session),
-      session.role !== null &&
-        roleWorkflowsByTask[session.role].available &&
-        session.activityState !== "waiting_input",
+      roleWorkflowsByTask[session.role].available && session.activityState !== "waiting_input",
     ]),
   );
   const fallbackSessionForSelectedRole = workflowSessionByRole[role];

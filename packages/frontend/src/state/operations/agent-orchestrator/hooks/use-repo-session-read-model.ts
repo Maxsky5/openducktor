@@ -5,13 +5,13 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import {
-  applyAgentSessionLiveAssociationDelta,
-  buildAgentSessionLiveAssociations,
-} from "@/state/agent-session-live-associations";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
-import { retryAgentSessionListQueries } from "@/state/queries/agent-sessions";
+import {
+  loadAgentSessionListsFromQuery,
+  normalizeAgentSessionTaskIds,
+  retryAgentSessionListQueries,
+} from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
@@ -53,7 +53,6 @@ type UseRepoSessionReadModelArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
-  setLiveAssociations: AgentSessionsStore["setLiveAssociations"];
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
@@ -67,6 +66,25 @@ export type RepoSessionReadModelState = {
   getSessionFault: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
 };
 
+type TaskRecordApplyState =
+  | { kind: "ready"; repoPath: string; records: TaskSessionRecords }
+  | {
+      kind: "failed";
+      repoPath: string;
+      failedAt: "load" | "apply";
+      message: string;
+    };
+
+type RecordRetryKey = {
+  retryId: number;
+  repoPath: string;
+  repoEpoch: number;
+  taskIdsKey: string;
+};
+
+type RecordRetryResult = RecordRetryKey &
+  ({ kind: "loaded" } | { kind: "failed"; message: string });
+
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
   `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 
@@ -77,7 +95,6 @@ export const useRepoSessionReadModel = ({
   currentWorkspaceRepoPathRef,
   repoEpochRef,
   commitSessionCollection,
-  setLiveAssociations,
   liveSessionPort,
   transcriptEvents,
   recoverTranscriptGap,
@@ -90,7 +107,10 @@ export const useRepoSessionReadModel = ({
     ReadonlyMap<string, AgentSessionTransientFault>
   >(() => new Map());
   const [reloadGeneration, setReloadGeneration] = useState(0);
-  const retryAttemptRef = useRef(0);
+  const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
+  const retryIdRef = useRef(0);
+  const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
+  const taskIdsKey = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const observeLiveSessions = useEffectEvent(
     (
@@ -145,39 +165,105 @@ export const useRepoSessionReadModel = ({
     },
     [sessionFaults, workspaceRepoPath],
   );
+  const applyTaskRecords = useCallback(
+    (repoPath: string, records: TaskSessionRecords): boolean => {
+      try {
+        commitSessionCollection((current) => ({
+          collection: applyTaskSessionRecords({
+            current,
+            taskSessionRecords: records,
+          }),
+          result: undefined,
+        }));
+        taskRecordApplyRef.current = {
+          kind: "ready",
+          repoPath,
+          records,
+        };
+        return true;
+      } catch (error: unknown) {
+        const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(error)}`;
+        taskRecordApplyRef.current = {
+          kind: "failed",
+          repoPath,
+          failedAt: "apply",
+          message,
+        };
+        setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        return false;
+      }
+    },
+    [commitSessionCollection],
+  );
   const reloadSessionReadModel = useCallback(() => {
-    const retryAttempt = retryAttemptRef.current + 1;
-    retryAttemptRef.current = retryAttempt;
+    const retryId = retryIdRef.current + 1;
+    retryIdRef.current = retryId;
+    setRecordRetryResult(null);
     if (!workspaceRepoPath) {
       setReloadGeneration((current) => current + 1);
       return;
     }
     const repoPath = workspaceRepoPath;
     const repoEpoch = repoEpochRef.current;
+    const retryTaskIds = normalizeAgentSessionTaskIds(taskIds);
+    const retryKey: RecordRetryKey = {
+      retryId,
+      repoPath,
+      repoEpoch,
+      taskIdsKey,
+    };
+    const taskRecordState = taskRecordApplyRef.current;
+    const retriesApplyFailure =
+      taskRecordState?.kind === "failed" &&
+      taskRecordState.repoPath === repoPath &&
+      taskRecordState.failedAt === "apply";
+    const isCurrentRetry = (): boolean =>
+      retryIdRef.current === retryId &&
+      currentWorkspaceRepoPathRef.current === repoPath &&
+      repoEpochRef.current === repoEpoch;
+    const retryFailureMessage = (error: unknown): string =>
+      `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`;
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-    void retryAgentSessionListQueries(queryClient, repoPath, taskIds, sessionReadPort).then(
+    if (retriesApplyFailure) {
+      void loadAgentSessionListsFromQuery(queryClient, repoPath, retryTaskIds, {
+        forceFresh: true,
+        readPort: sessionReadPort,
+      }).then(
+        () => {
+          if (!isCurrentRetry()) {
+            return;
+          }
+          setRecordRetryResult({
+            kind: "loaded",
+            ...retryKey,
+          });
+        },
+        (error: unknown) => {
+          if (!isCurrentRetry()) {
+            return;
+          }
+          setRecordRetryResult({
+            kind: "failed",
+            ...retryKey,
+            message: retryFailureMessage(error),
+          });
+        },
+      );
+      return;
+    }
+    void retryAgentSessionListQueries(queryClient, repoPath, retryTaskIds, sessionReadPort).then(
       () => {
-        if (
-          retryAttemptRef.current === retryAttempt &&
-          currentWorkspaceRepoPathRef.current === repoPath &&
-          repoEpochRef.current === repoEpoch
-        ) {
+        if (isCurrentRetry()) {
           setReloadGeneration((current) => current + 1);
         }
       },
       (error: unknown) => {
-        if (
-          retryAttemptRef.current === retryAttempt &&
-          currentWorkspaceRepoPathRef.current === repoPath &&
-          repoEpochRef.current === repoEpoch
-        ) {
-          setSessionReadModelLoadState(
-            failedAgentSessionReadModelLoadState(
-              repoPath,
-              `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`,
-            ),
-          );
+        if (!isCurrentRetry()) {
+          return;
         }
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(error)),
+        );
       },
     );
   }, [
@@ -186,6 +272,7 @@ export const useRepoSessionReadModel = ({
     repoEpochRef,
     sessionReadPort,
     taskIds,
+    taskIdsKey,
     workspaceRepoPath,
   ]);
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -202,20 +289,16 @@ export const useRepoSessionReadModel = ({
       }),
     [sessionReadModelLoadState, workspaceRepoPath],
   );
-  const taskSessionRecordsState = useTaskSessionRecords({
+  const taskRecords = useTaskSessionRecords({
     repoPath: workspaceRepoPath,
     taskIds,
     enabled: !isLoadingTasks,
     queryClient,
     readPort: sessionReadPort,
   });
-  const taskSessionRecordsRef = useRef<{
-    repoPath: string;
-    records: TaskSessionRecords;
-  } | null>(null);
   const observedRepoPathRef = useRef<string | null>(null);
   const canObserveRepo =
-    taskSessionRecordsState.kind === "ready" || observedRepoPathRef.current === workspaceRepoPath;
+    taskRecords.kind === "ready" || observedRepoPathRef.current === workspaceRepoPath;
 
   // Synchronizes an async query lifecycle with the parent-owned session read model.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -223,37 +306,85 @@ export const useRepoSessionReadModel = ({
     if (!workspaceRepoPath) {
       return;
     }
-    if (taskSessionRecordsState.kind === "loading") {
+    if (taskRecords.kind === "loading") {
       if (observedRepoPathRef.current !== workspaceRepoPath) {
         // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       }
       return;
     }
-    if (taskSessionRecordsState.kind === "failed") {
+    if (taskRecords.kind === "failed") {
+      const message = `Failed to load task session records for repo '${workspaceRepoPath}': ${errorMessage(
+        taskRecords.error,
+      )}`;
+      taskRecordApplyRef.current = {
+        kind: "failed",
+        repoPath: workspaceRepoPath,
+        failedAt: "load",
+        message,
+      };
       setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(
-          workspaceRepoPath,
-          `Failed to load task session records for repo '${workspaceRepoPath}': ${errorMessage(
-            taskSessionRecordsState.error,
-          )}`,
-        ),
+        failedAgentSessionReadModelLoadState(workspaceRepoPath, message),
       );
       return;
     }
 
-    taskSessionRecordsRef.current = {
-      repoPath: workspaceRepoPath,
-      records: taskSessionRecordsState.records,
-    };
-    commitSessionCollection((current) => ({
-      collection: applyTaskSessionRecords({
-        current,
-        taskSessionRecords: taskSessionRecordsState.records,
-      }),
-      result: undefined,
-    }));
-  }, [commitSessionCollection, taskSessionRecordsState, workspaceRepoPath]);
+    // This is the sole task-query-to-session-store write path.
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
+    applyTaskRecords(workspaceRepoPath, taskRecords.records);
+  }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
+
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect
+  useEffect(() => {
+    if (!recordRetryResult) {
+      return;
+    }
+    const retryIsCurrent =
+      recordRetryResult.retryId === retryIdRef.current &&
+      recordRetryResult.repoPath === workspaceRepoPath &&
+      recordRetryResult.repoEpoch === repoEpochRef.current;
+    if (!retryIsCurrent) {
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+      setRecordRetryResult(null);
+      return;
+    }
+    if (recordRetryResult.kind === "failed" && recordRetryResult.taskIdsKey === taskIdsKey) {
+      // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+      setRecordRetryResult(null);
+      setSessionReadModelLoadState(
+        failedAgentSessionReadModelLoadState(recordRetryResult.repoPath, recordRetryResult.message),
+      );
+      return;
+    }
+    if (taskRecords.kind === "loading") {
+      return;
+    }
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+    setRecordRetryResult(null);
+    if (taskRecords.kind === "failed" || !workspaceRepoPath) {
+      return;
+    }
+    const lastApply = taskRecordApplyRef.current;
+    const recordsAreCurrent =
+      lastApply?.kind === "ready" &&
+      lastApply.repoPath === workspaceRepoPath &&
+      lastApply.records === taskRecords.records;
+    let recordsApplied = recordsAreCurrent;
+    if (!recordsApplied) {
+      // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
+      recordsApplied = applyTaskRecords(workspaceRepoPath, taskRecords.records);
+    }
+    if (recordsApplied) {
+      setReloadGeneration((current) => current + 1);
+    }
+  }, [
+    applyTaskRecords,
+    repoEpochRef,
+    taskIdsKey,
+    recordRetryResult,
+    taskRecords,
+    workspaceRepoPath,
+  ]);
 
   useEffect(() => {
     if (!workspaceRepoPath || !canObserveRepo) {
@@ -290,9 +421,12 @@ export const useRepoSessionReadModel = ({
     let unsubscribe: (() => void) | null = null;
     let awaitingInitialSnapshot = true;
     const readTaskSessionRecords = (): TaskSessionRecords => {
-      const current = taskSessionRecordsRef.current;
+      const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath) {
         throw new Error(`Task session records are not ready for repo '${repoPath}'.`);
+      }
+      if (current.kind === "failed") {
+        throw new Error(current.message);
       }
       return current.records;
     };
@@ -334,7 +468,6 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      setLiveAssociations(() => buildAgentSessionLiveAssociations(envelope.sessions));
       const policyActions = commitSessionCollection((current) => {
         const collection = buildAgentSessionLiveCollection({
           current,
@@ -381,7 +514,6 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
-        setLiveAssociations((current) => applyAgentSessionLiveAssociationDelta(current, envelope));
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
@@ -465,6 +597,24 @@ export const useRepoSessionReadModel = ({
         return;
       }
     };
+    const reportEnvelopeFailure = (envelope: AgentSessionLiveEnvelope, error: unknown): void => {
+      if (envelope.type === "session_upsert") {
+        recordSessionFault(
+          envelope.session.ref,
+          `Failed to apply live-session update: ${errorMessage(error)}`,
+        );
+        return;
+      }
+      if (envelope.type === "snapshot") {
+        failObservation(
+          `Failed to apply initial live-session snapshot for repo '${repoPath}': ${errorMessage(error)}`,
+        );
+        return;
+      }
+      failObservation(
+        `Failed to apply live-session '${envelope.type}' event for repo '${repoPath}': ${errorMessage(error)}`,
+      );
+    };
 
     observedRepoPathRef.current = repoPath;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
@@ -473,7 +623,11 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
-      applyEnvelope(envelope);
+      try {
+        applyEnvelope(envelope);
+      } catch (error: unknown) {
+        reportEnvelopeFailure(envelope, error);
+      }
     })
       .then((stopObserving) => {
         if (isStaleRepoOperation()) {
@@ -505,7 +659,6 @@ export const useRepoSessionReadModel = ({
     clearSessionFault,
     clearSessionFaults,
     recordSessionFault,
-    setLiveAssociations,
     workspaceRepoPath,
   ]);
 

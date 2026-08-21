@@ -193,7 +193,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
     ...viewOverrides
   } = overrides;
   const defaultSession = createAgentSessionFixture({
-    role: "build",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     status: "running",
     workingDirectory: "/repo",
   });

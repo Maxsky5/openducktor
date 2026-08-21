@@ -69,6 +69,10 @@ const resolvePendingInputRuntimeSession = ({
           externalSessionId: responseSession.externalSessionId,
           runtimeKind: responseSession.runtimeKind,
           workingDirectory: responseSession.workingDirectory,
+          sessionAssociation:
+            request.responseSession?.sessionAssociation ??
+            loadedResponseSession?.sessionAssociation ??
+            contextSession.sessionAssociation,
         }
       : null,
   };

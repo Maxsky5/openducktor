@@ -13,8 +13,8 @@ const createBuilderSession = (
   overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
 ) =>
   createAgentSessionSummaryFixture({
-    role: "build",
-    taskId: "TASK-1",
+    sessionAssociation: { kind: "workflow", taskId: "TASK-1", role: "build" },
+
     ...overrides,
   });
 

@@ -41,7 +41,10 @@ describe("agent-studio-quick-actions", () => {
       },
     });
     const sessionsForTask = [
-      buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        externalSessionId: "builder-1",
+      }),
     ];
 
     const options = buildAgentStudioQuickActions({
@@ -117,8 +120,8 @@ describe("agent-studio-quick-actions", () => {
       ],
     });
     const humanReviewBuilderSession = buildSession({
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       externalSessionId: "builder-1",
     });
     const humanReviewOptions = buildAgentStudioQuickActions({
@@ -158,7 +161,10 @@ describe("agent-studio-quick-actions", () => {
     const humanReviewWithPullRequestOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTaskWithPullRequest,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
       createSessionDisabled: false,
@@ -253,7 +259,10 @@ describe("agent-studio-quick-actions", () => {
     const aiReviewWithoutPullRequestOptions = buildAgentStudioQuickActions({
       selectedTask: aiReviewTaskWithoutPullRequest,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithoutPullRequest),
       createSessionDisabled: false,
@@ -274,7 +283,10 @@ describe("agent-studio-quick-actions", () => {
     const aiReviewWithPullRequestOptions = buildAgentStudioQuickActions({
       selectedTask: aiReviewTaskWithPullRequest,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTaskWithPullRequest),
       createSessionDisabled: false,
@@ -362,7 +374,10 @@ describe("agent-studio-quick-actions", () => {
     const nonReviewOptions = buildAgentStudioQuickActions({
       selectedTask: nonReviewTask,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(nonReviewTask),
       createSessionDisabled: false,
@@ -386,7 +401,10 @@ describe("agent-studio-quick-actions", () => {
     const aiReviewOptions = buildAgentStudioQuickActions({
       selectedTask: aiReviewTask,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(aiReviewTask),
       createSessionDisabled: false,
@@ -401,8 +419,8 @@ describe("agent-studio-quick-actions", () => {
       status: "human_review",
     });
     const humanReviewBuilderSession = buildSession({
-      taskId: "task-1",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
       externalSessionId: "builder-1",
     });
     const humanReviewOptions = buildAgentStudioQuickActions({
@@ -484,7 +502,10 @@ describe("agent-studio-quick-actions", () => {
     const options = buildAgentStudioQuickActions({
       selectedTask: task,
       sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          externalSessionId: "builder-1",
+        }),
       ],
       roleEnabledByTask: {
         spec: true,

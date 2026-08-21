@@ -28,7 +28,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -478,7 +478,12 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "idle",
+      }),
+    ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -537,7 +542,12 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "starting" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "starting",
+      }),
+    ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -579,7 +589,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         status: "running",
         pendingUserMessageStartedAt: 123,
       }),
@@ -684,7 +694,12 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       replyApproval: async () => {},
     };
 
-    const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "idle",
+      }),
+    ]);
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -743,7 +758,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([
       buildSession({
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         messages: [
           {
             id: "msg-final",

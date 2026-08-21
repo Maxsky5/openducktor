@@ -58,6 +58,11 @@ const createDeferred = <T,>() => {
   return { promise, reject, resolve };
 };
 
+type TaskSessionRecordBatch = Array<{
+  taskId: string;
+  agentSessions: AgentSessionRecord[];
+}>;
+
 const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessionLiveSnapshot => ({
   ref: {
     repoPath: "/repo",
@@ -135,7 +140,6 @@ const createState = (
     currentWorkspaceRepoPathRef: { current: "/repo" },
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
-    setLiveAssociations: sessionStore.setLiveAssociations,
     liveSessionPort,
     transcriptEvents,
     recoverTranscriptGap,
@@ -147,12 +151,6 @@ const createState = (
     callOrder,
     getSession: () =>
       sessionStore.getSessionSnapshot({
-        externalSessionId: record.externalSessionId,
-        runtimeKind: record.runtimeKind,
-        workingDirectory: record.workingDirectory,
-      }),
-    getLiveAssociation: () =>
-      sessionStore.getLiveAssociationSnapshot({
         externalSessionId: record.externalSessionId,
         runtimeKind: record.runtimeKind,
         workingDirectory: record.workingDirectory,
@@ -175,6 +173,21 @@ const createState = (
     queryClient,
   };
 };
+
+const createRepositoryConflictRetryState = (
+  agentSessionsListForTasks: AgentSessionReadPort["agentSessionsListForTasks"],
+  duringObservation: Parameters<typeof createState>[0] = (emit) => {
+    emit({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+    });
+  },
+) =>
+  createState(duringObservation, [], {
+    agentSessionsList: async () => [],
+    agentSessionsListForTasks,
+  });
 
 describe("useRepoSessionReadModel", () => {
   test("observes the repository and commits snapshot plus ordered creation once", async () => {
@@ -207,7 +220,7 @@ describe("useRepoSessionReadModel", () => {
       expect(state.getSession()?.pendingApprovals).toEqual([
         expect.objectContaining({ requestId: "opaque-1" }),
       ]);
-      expect(state.getLiveAssociation()).toEqual({
+      expect(state.getSession()?.sessionAssociation).toEqual({
         kind: "workflow",
         taskId: "task-1",
         role: "build",
@@ -221,7 +234,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps repository policy association outside the projected session", async () => {
+  test("projects repository association into session state", async () => {
     const state = createState((emit) => {
       emit({
         type: "snapshot",
@@ -234,8 +247,322 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(state.getSession()).toMatchObject({ taskId: "", role: null });
-      expect(state.getLiveAssociation()).toEqual({ kind: "repository" });
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the current collection and reports a task-refresh association conflict", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+      });
+    }, []);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      });
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("failed");
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps an unchanged association conflict failed after retry", async () => {
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+      });
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("recovers an association conflict after retry reads corrected task records", async () => {
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+      expect(
+        state.queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("does not replay stale task records when task IDs change during conflict retry", async () => {
+    const retry = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => retry.promise);
+    const state = createRepositoryConflictRetryState(batchList);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({ ...state.props, taskIds: [] });
+
+      retry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-1"]);
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("does not surface a stale retry failure after task IDs change", async () => {
+    const retry = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => retry.promise);
+    const state = createRepositoryConflictRetryState(batchList);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({ ...state.props, taskIds: [] });
+
+      retry.reject(new Error("stale retry failed"));
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(2);
+      expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("does not restart a new repository for a pending retry from the old repository", async () => {
+    const retry = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => retry.promise);
+    const state = createRepositoryConflictRetryState(batchList, (emit, observeIndex) => {
+      const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
+      emit({
+        type: "snapshot",
+        repoPath,
+        sessions:
+          observeIndex === 1
+            ? [
+                snapshot({
+                  ref: { ...snapshot().ref, repoPath },
+                  sessionAssociation: { kind: "repository" },
+                }),
+              ]
+            : [],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [record]);
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => batchList.mock.calls.length === 1);
+      await state.harness.update({
+        ...state.props,
+        taskIds: ["task-2"],
+        isLoadingTasks: true,
+      });
+      await state.harness.run(async () => {
+        retry.resolve([{ taskId: "task-1", agentSessions: [record] }]);
+        await retry.promise;
+        await Promise.resolve();
+      });
+
+      state.props.currentWorkspaceRepoPathRef.current = "/repo-b";
+      state.props.repoEpochRef.current += 1;
+      await state.harness.update({
+        ...state.props,
+        workspaceRepoPath: "/repo-b",
+        taskIds: [],
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "ready" &&
+          value.sessionReadModelLoadState.workspaceRepoPath === "/repo-b",
+      );
+
+      expect(state.observeAgentSessionLive.mock.calls.map(([input]) => input.repoPath)).toEqual([
+        "/repo",
+        "/repo-b",
+      ]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the persisted collection and reports an initial snapshot association conflict", async () => {
+    const state = createState(() => undefined);
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot({ sessionAssociation: { kind: "repository" } })],
+        });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "failed",
+        workspaceRepoPath: "/repo",
+        message:
+          "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      });
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the current collection and records a later delta association conflict", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+    const identity = {
+      externalSessionId: record.externalSessionId,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "session_upsert",
+          session: snapshot({ sessionAssociation: { kind: "repository" } }),
+        });
+      });
+
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.harness.getLatest().getSessionFault(identity)).toEqual({
+        message:
+          "Failed to apply live-session update: Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
     } finally {
       await state.harness.unmount();
     }
@@ -388,7 +715,15 @@ describe("useRepoSessionReadModel", () => {
     };
     const state = createState(
       (emit) => {
-        emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [
+            snapshot({
+              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            }),
+          ],
+        });
       },
       { ...record, role: "spec" },
     );
@@ -421,7 +756,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(async () => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ pendingApprovals: [mutatingApproval] }),
+          session: snapshot({
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            pendingApprovals: [mutatingApproval],
+          }),
         });
       });
       await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
@@ -929,7 +1267,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps sibling scoped faults when an explicit retry fails before observation restarts", async () => {
+  test("keeps sibling scoped faults when retry fails before observation restarts", async () => {
     const secondRecord = { ...record, externalSessionId: "thread-2" };
     const batchList = mock(async () => {
       throw new Error("retry failed");
@@ -995,7 +1333,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("explicit retry recovers a failed task session query without reloading healthy caches", async () => {
+  test("retry recovers a failed task session query without reloading healthy caches", async () => {
     const recoveredRecord = { ...record, externalSessionId: "thread-recovered" };
     const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [recoveredRecord] }]);
     const state = createState(
@@ -1005,7 +1343,7 @@ describe("useRepoSessionReadModel", () => {
       record,
       {
         agentSessionsList: async () => {
-          throw new Error("Exact reads are not used by explicit batch retry.");
+          throw new Error("Batch retry does not use exact reads.");
         },
         agentSessionsListForTasks: batchList,
       },
@@ -1044,10 +1382,8 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("an older failed retry cannot overwrite a newer successful retry", async () => {
-    const firstRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
-    const secondRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const firstRetry = createDeferred<TaskSessionRecordBatch>();
+    const secondRetry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() =>
       batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
     );
@@ -1096,10 +1432,8 @@ describe("useRepoSessionReadModel", () => {
 
   test("an older successful retry cannot overwrite a newer failed retry", async () => {
     const staleRecord = { ...record, externalSessionId: "external-stale" };
-    const firstRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
-    const secondRetry =
-      createDeferred<Array<{ taskId: string; agentSessions: AgentSessionRecord[] }>>();
+    const firstRetry = createDeferred<TaskSessionRecordBatch>();
+    const secondRetry = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() =>
       batchList.mock.calls.length === 1 ? firstRetry.promise : secondRetry.promise,
     );
@@ -1169,7 +1503,12 @@ describe("useRepoSessionReadModel", () => {
         emit({
           type: "snapshot",
           repoPath: "/repo",
-          sessions: [snapshot({ pendingApprovals: [initialApproval] })],
+          sessions: [
+            snapshot({
+              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+              pendingApprovals: [initialApproval],
+            }),
+          ],
         });
       },
       { ...record, role: "spec" },
@@ -1205,7 +1544,10 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.run(async () => {
         state.emit({
           type: "session_upsert",
-          session: snapshot({ pendingApprovals: [initialApproval, laterApproval] }),
+          session: snapshot({
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+            pendingApprovals: [initialApproval, laterApproval],
+          }),
         });
       });
 

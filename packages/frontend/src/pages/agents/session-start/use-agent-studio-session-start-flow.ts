@@ -167,7 +167,13 @@ export function useAgentStudioSessionStartFlow({
               ? (selectionForNewSession ?? null)
               : null,
           taskSessions: sessionsForTask,
-          preferredSourceSession: isWorkflowAgentSession(loadedSession) ? loadedSession : null,
+          preferredSourceSession: isWorkflowAgentSession(loadedSession)
+            ? {
+                ...loadedSession,
+                taskId: loadedSession.sessionAssociation.taskId,
+                role: loadedSession.sessionAssociation.role,
+              }
+            : null,
           selectedTask: request.taskId === taskId ? selectedTask : null,
         }),
         async ({ decision }) => executeWithDecision(decision),

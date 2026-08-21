@@ -14,7 +14,11 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   AgentChatMessage,
   AgentSessionIdentity,
@@ -27,16 +31,18 @@ import { createTaskCardFixture } from "../test-utils";
 import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
-export type TestAgentSessionState = Omit<AgentSessionState, "messages"> & {
+export type TestAgentSessionState = AgentSessionFixtureOverrides & {
+  externalSessionId: string;
   messages: AgentChatMessage[] | SessionMessagesState;
 };
 
-const toAgentSessionStateFixture = (session: TestAgentSessionState): AgentSessionState => ({
-  ...session,
-  messages: Array.isArray(session.messages)
-    ? createSessionMessagesState(session.externalSessionId, session.messages)
-    : session.messages,
-});
+const toAgentSessionStateFixture = (session: TestAgentSessionState): AgentSessionState =>
+  createAgentSessionFixture({
+    ...session,
+    messages: Array.isArray(session.messages)
+      ? createSessionMessagesState(session.externalSessionId, session.messages)
+      : session.messages,
+  });
 
 export const createAgentSessionCollection = (sessions: Iterable<TestAgentSessionState>) =>
   createStrictAgentSessionCollection(Array.from(sessions, toAgentSessionStateFixture));
@@ -131,8 +137,8 @@ export const sessionFixture = (
   overrides: Partial<TestAgentSessionState> & { externalSessionId: string },
 ): TestAgentSessionState => ({
   runtimeKind: "opencode",
-  taskId: "task-1",
-  role: "build",
+  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
   status: "idle",
   runtimeStatusMessage: null,
   startedAt: "2026-02-22T08:10:00.000Z",

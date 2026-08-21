@@ -29,7 +29,7 @@ const createConsumerHarness = (
   const guardedUpdateSession: UpdateSession = (identity, updater, options) =>
     updateSession(identity, (current) => {
       const nextSession = updater(current);
-      if (options?.persist === true && nextSession.role === null) {
+      if (options?.persist === true && nextSession.sessionAssociation.kind !== "workflow") {
         throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
       }
       return nextSession;
@@ -54,7 +54,7 @@ describe("agent session transcript event consumer", () => {
   test("keeps child messages in the shared projection independently of modal lifetime", () => {
     const child = buildSession({
       externalSessionId: "child-thread",
-      role: null,
+      sessionAssociation: { kind: "unbound" },
       runtimeKind: "codex",
     });
     const { consumer, sessionsRef } = createConsumerHarness(0, child);
@@ -109,7 +109,7 @@ describe("agent session transcript event consumer", () => {
   test("does not persist child session errors as workflow sessions", () => {
     const child = buildSession({
       externalSessionId: "child-thread",
-      role: null,
+      sessionAssociation: { kind: "unbound" },
       runtimeKind: "claude",
     });
     const { consumer, sessionsRef } = createConsumerHarness(0, child);
@@ -132,7 +132,7 @@ describe("agent session transcript event consumer", () => {
       const childRef = { ...sessionRef, runtimeKind, externalSessionId: "child-thread" };
       const child = buildSession({
         externalSessionId: "child-thread",
-        role: null,
+        sessionAssociation: { kind: "unbound" },
         runtimeKind,
       });
       const { consumer, sessionsRef } = createConsumerHarness(60_000, child);
@@ -167,7 +167,7 @@ describe("agent session transcript event consumer", () => {
     };
     const child = buildSession({
       externalSessionId: "child-thread",
-      role: null,
+      sessionAssociation: { kind: "unbound" },
       runtimeKind: "claude",
       status: "running",
     });

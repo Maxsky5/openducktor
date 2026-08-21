@@ -1,23 +1,14 @@
-import type {
-  AgentSessionAssociation,
-  RepoRuntimeRef,
-  RuntimeDescriptor,
-} from "@openducktor/contracts";
+import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import type {
-  AgentSessionIdentity,
-  AgentSessionState,
-  AgentTaskSessionBinding,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
 import { resolveSessionRuntimeScope } from "./session-runtime-scope";
 
 export type SessionRuntimeDataTarget = {
   identity: AgentSessionIdentity;
   selectedModel: AgentSessionState["selectedModel"];
-  taskBinding: AgentTaskSessionBinding | null;
-  liveSessionAssociation: AgentSessionAssociation | null;
+  sessionAssociation: AgentSessionState["sessionAssociation"];
 };
 
 export type SessionRuntimeDataRefs =
@@ -92,7 +83,7 @@ export const resolveSessionRuntimeDataRefs = ({
     { ...selectedSession.identity, selectedModel: selectedSession.selectedModel },
     runtimePolicy,
   );
-  const sessionScope = resolveSessionRuntimeScope(selectedSession);
+  const sessionScope = resolveSessionRuntimeScope(selectedSession.sessionAssociation);
   return {
     kind: "available",
     catalogRef,

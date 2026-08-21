@@ -1,33 +1,35 @@
 import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
 import { useGitConflictResolution } from "./use-git-conflict-resolution";
 
 const buildSession = (
-  overrides: Partial<AgentSessionState> & { externalSessionId: string; workingDirectory: string },
+  overrides: AgentSessionFixtureOverrides & { externalSessionId: string; workingDirectory: string },
 ): AgentSessionSummary => {
   const { externalSessionId, workingDirectory, ...rest } = overrides;
-  return toAgentSessionSummary({
-    ...rest,
-    externalSessionId: `external-${externalSessionId}`,
-    taskId: "task-1",
-    runtimeKind: "opencode",
-    role: "build",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-03-18T10:00:00.000Z",
-    workingDirectory,
-    historyLoadState: rest.historyLoadState ?? "not_requested",
-    messages: createSessionMessagesState(`external-${externalSessionId}`),
-    contextUsage: null,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: rest.selectedModel ?? null,
-  });
+  return toAgentSessionSummary(
+    createAgentSessionFixture(
+      {
+        externalSessionId: `external-${externalSessionId}`,
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimeKind: "opencode",
+
+        status: "idle",
+        runtimeStatusMessage: null,
+        startedAt: "2026-03-18T10:00:00.000Z",
+        workingDirectory,
+        historyLoadState: rest.historyLoadState ?? "not_requested",
+        selectedModel: rest.selectedModel ?? null,
+      },
+      rest,
+    ),
+  );
 };
 
 const sessionIdentity = (

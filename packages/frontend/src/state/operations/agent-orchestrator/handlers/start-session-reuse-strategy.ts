@@ -1,6 +1,7 @@
 import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { throwIfRepoStale } from "../support/core";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
 import type {
   StartAgentSessionInput,
@@ -26,15 +27,13 @@ const unavailableSourceSessionError = (
   );
 
 const matchesLoadedSourceSession = (
-  session: Pick<
-    AgentSessionState,
-    "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
-  >,
+  session: AgentSessionState,
   ctx: StartSessionContext,
   sourceSession: AgentSessionIdentity,
 ): boolean =>
-  session.taskId === ctx.taskId &&
-  session.role === ctx.role &&
+  isWorkflowAgentSession(session) &&
+  session.sessionAssociation.taskId === ctx.taskId &&
+  session.sessionAssociation.role === ctx.role &&
   matchesAgentSessionIdentity(session, sourceSession);
 
 const loadSourceSessionWithHistory = async ({

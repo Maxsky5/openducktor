@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   closeTaskTab,
   ensureActiveTaskTab,
@@ -31,23 +33,23 @@ import {
   getTabStatusForTask,
 } from "./agents-page-session-tabs";
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionWorkflowSummary => {
-  const session: AgentSessionState = {
-    runtimeKind: "opencode",
-    externalSessionId: "ext-session-1",
-    taskId: "task-1",
-    role: "spec",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-20T10:00:00.000Z",
-    workingDirectory: "/tmp/work",
-    messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...overrides,
-    historyLoadState: overrides.historyLoadState ?? "not_requested",
-  };
+const buildSession = (
+  overrides: AgentSessionFixtureOverrides = {},
+): AgentSessionWorkflowSummary => {
+  const session = createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "ext-session-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-20T10:00:00.000Z",
+      workingDirectory: "/tmp/work",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
   const summary = toAgentSessionSummary(session);
   if (summary.role === null) {
     throw new Error("Workflow summary fixtures require a role.");
@@ -59,16 +61,19 @@ describe("agents-page-session-tabs", () => {
   test("selects latest session per task", () => {
     const map = buildLatestSessionByTaskMap([
       buildSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "older",
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "newer",
         startedAt: "2026-02-20T11:00:00.000Z",
       }),
-      buildSession({ taskId: "task-2", externalSessionId: "task-2-session" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
+        externalSessionId: "task-2-session",
+      }),
     ]);
 
     expect(map.get("task-1")?.externalSessionId).toBe("newer");
@@ -78,12 +83,12 @@ describe("agents-page-session-tabs", () => {
   test("uses deterministic tiebreaker when timestamps are equal", () => {
     const map = buildLatestSessionByTaskMap([
       buildSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "first",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
       buildSession({
-        taskId: "task-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "second",
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
@@ -108,7 +113,10 @@ describe("agents-page-session-tabs", () => {
     expect(
       getTabStatusForTask({
         task: buildTask({ status: "blocked" }),
-        session: buildSession({ role: "build", status: "stopped" }),
+        session: buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          status: "stopped",
+        }),
       }),
     ).toBe("waiting_input");
 
@@ -386,7 +394,10 @@ describe("agents-page-session-tabs", () => {
 
   test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "build", status: "stopped" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "stopped",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -409,7 +420,10 @@ describe("agents-page-session-tabs", () => {
 
   test("marks builder as in_progress when builder session exists but is stopped without build_completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "build", status: "stopped" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "stopped",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -432,7 +446,10 @@ describe("agents-page-session-tabs", () => {
 
   test("uses warning tone for blocked builder tasks even when the latest session is stopped", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "build", status: "stopped" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "stopped",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -478,7 +495,10 @@ describe("agents-page-session-tabs", () => {
 
   test("keeps blocked builder tasks in progress while the live builder session is still running", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "build", status: "running" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "running",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -501,7 +521,10 @@ describe("agents-page-session-tabs", () => {
 
   test("keeps blocked builder tasks failed when the latest builder session errored", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "build", status: "error" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "error",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: buildTask({ status: "blocked" }),
@@ -524,7 +547,10 @@ describe("agents-page-session-tabs", () => {
 
   test("marks workflow role as in_progress when latest role session is started but not completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "planner", status: "idle" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        status: "idle",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -567,7 +593,10 @@ describe("agents-page-session-tabs", () => {
 
   test("keeps workflow role in_progress while the latest role session is still running even if workflow is completed", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "spec", status: "running" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        status: "running",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -610,7 +639,10 @@ describe("agents-page-session-tabs", () => {
 
   test("does not mark unavailable roles as in_progress when a session exists", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
-      buildSession({ role: "qa", status: "idle" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        status: "idle",
+      }),
     ]);
     const states = buildWorkflowStateByRole({
       task: null,
@@ -675,7 +707,12 @@ describe("agents-page-session-tabs", () => {
         build: task.agentWorkflows.builder,
         qa: task.agentWorkflows.qa,
       },
-      liveSessionByRole: buildLiveSessionByRoleMap([buildSession({ role: "qa", status: "idle" })]),
+      liveSessionByRole: buildLiveSessionByRoleMap([
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+          status: "idle",
+        }),
+      ]),
     });
 
     expect(states).toEqual({
@@ -732,8 +769,14 @@ describe("agents-page-session-tabs", () => {
         qa: task.agentWorkflows.qa,
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
-        buildSession({ role: "build", status: "stopped" }),
-        buildSession({ role: "qa", status: "idle" }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+          status: "stopped",
+        }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+          status: "idle",
+        }),
       ]),
     });
 
@@ -748,18 +791,24 @@ describe("agents-page-session-tabs", () => {
   test.each([
     {
       name: "starting",
-      session: buildSession({ role: "qa", status: "starting" }),
+      session: buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        status: "starting",
+      }),
       expected: { tone: "in_progress" as const, liveSession: "starting" as const },
     },
     {
       name: "running",
-      session: buildSession({ role: "qa", status: "running" }),
+      session: buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        status: "running",
+      }),
       expected: { tone: "in_progress" as const, liveSession: "running" as const },
     },
     {
       name: "waiting_input",
       session: buildSession({
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         status: "running",
         pendingQuestions: [{ requestId: "q-1", questions: [] }],
       }),
@@ -767,7 +816,10 @@ describe("agents-page-session-tabs", () => {
     },
     {
       name: "error",
-      session: buildSession({ role: "qa", status: "error" }),
+      session: buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+        status: "error",
+      }),
       expected: { tone: "failed" as const, liveSession: "error" as const },
     },
   ])(
@@ -798,7 +850,10 @@ describe("agents-page-session-tabs", () => {
           qa: task.agentWorkflows.qa,
         },
         liveSessionByRole: buildLiveSessionByRoleMap([
-          buildSession({ role: "build", status: "stopped" }),
+          buildSession({
+            sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            status: "stopped",
+          }),
           session,
         ]),
       });
@@ -837,15 +892,21 @@ describe("agents-page-session-tabs", () => {
         qa: task.agentWorkflows.qa,
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
-        buildSession({ role: "spec", status: "idle" }),
-        buildSession({ role: "planner", status: "idle" }),
         buildSession({
-          role: "build",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+          status: "idle",
+        }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+          status: "idle",
+        }),
+        buildSession({
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           status: "stopped",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
         buildSession({
-          role: "qa",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
           status: "idle",
           startedAt: "2026-02-22T10:00:00.000Z",
         }),
@@ -914,13 +975,13 @@ describe("agents-page-session-tabs", () => {
   test("keeps the newest role session as the workflow target even when an older one is waiting", () => {
     const sessions = [
       buildSession({
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "session-newer",
         startedAt: "2026-02-22T11:00:00.000Z",
         status: "idle",
       }),
       buildSession({
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         externalSessionId: "session-waiting",
         startedAt: "2026-02-22T10:00:00.000Z",
         status: "running",
@@ -963,7 +1024,7 @@ describe("agents-page-session-tabs", () => {
       },
       liveSessionByRole: buildLiveSessionByRoleMap([
         buildSession({
-          role: "spec",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
           status: "running",
           pendingApprovals: [
             {
@@ -983,7 +1044,7 @@ describe("agents-page-session-tabs", () => {
           ],
         }),
         buildSession({
-          role: "planner",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
           status: "error",
         }),
       ]),
@@ -999,19 +1060,19 @@ describe("agents-page-session-tabs", () => {
     const specSessionOne = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-1",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T09:20:00.000Z",
     });
     const specSessionTwo = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "spec-2",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T08:20:00.000Z",
     });
     const plannerSession = buildSession({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       startedAt: "2026-02-22T10:20:00.000Z",
     });
     const groups = buildSessionSelectorGroups({
@@ -1034,18 +1095,18 @@ describe("agents-page-session-tabs", () => {
     const sessions = [
       buildSession({
         externalSessionId: "spec-1",
-        role: "spec",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         startedAt: "2026-02-20T08:00:00.000Z",
       }),
       buildSession({
         runtimeKind: "opencode",
         externalSessionId: "planner-1",
-        role: "planner",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         startedAt: "2026-02-20T10:00:00.000Z",
       }),
       buildSession({
         externalSessionId: "build-1",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
     ];
@@ -1061,12 +1122,12 @@ describe("agents-page-session-tabs", () => {
     const sessions = [
       buildSession({
         externalSessionId: "build-older",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         startedAt: "2026-02-20T09:00:00.000Z",
       }),
       buildSession({
         externalSessionId: "build-newer",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         startedAt: "2026-02-20T11:00:00.000Z",
       }),
     ];
@@ -1140,9 +1201,12 @@ describe("agents-page-session-tabs", () => {
 
   test("builds tabs with fallback title and active marker", () => {
     const latestByTask = buildLatestSessionByTaskMap([
-      buildSession({ taskId: "task-1", status: "running" }),
       buildSession({
-        taskId: "task-2",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        status: "running",
+      }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "spec" },
         status: "idle",
         pendingApprovals: [
           {
@@ -1194,7 +1258,10 @@ describe("agents-page-session-tabs", () => {
 
   test("builds blocked task tabs with warning status even when the latest session is idle or absent", () => {
     const latestByTask = buildLatestSessionByTaskMap([
-      buildSession({ taskId: "task-1", role: "build", status: "idle" }),
+      buildSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        status: "idle",
+      }),
     ]);
 
     const tabs = buildTaskTabs({

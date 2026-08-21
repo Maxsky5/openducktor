@@ -1,4 +1,8 @@
-import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentSessionAssociation,
+  RepoRuntimeRef,
+  RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentSessionTodoItem,
@@ -20,7 +24,6 @@ import {
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentTaskSessionBinding } from "@/types/agent-orchestrator";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
@@ -65,24 +68,38 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSession?.identity);
-  const selectedTaskId = selectedSession?.taskBinding?.taskId ?? null;
-  const selectedRole = selectedSession?.taskBinding?.role ?? null;
+  const selectedAssociationKind = selectedSession?.sessionAssociation.kind ?? null;
+  const selectedTaskId =
+    selectedSession?.sessionAssociation.kind === "workflow"
+      ? selectedSession.sessionAssociation.taskId
+      : null;
+  const selectedRole =
+    selectedSession?.sessionAssociation.kind === "workflow"
+      ? selectedSession.sessionAssociation.role
+      : null;
   const selectedModel = selectedSession?.selectedModel ?? null;
-  const liveSessionAssociation = selectedSession?.liveSessionAssociation ?? null;
   const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
-    if (!stableSelectedSessionIdentity) {
+    if (!stableSelectedSessionIdentity || !selectedAssociationKind) {
       return null;
     }
-    const taskBinding: AgentTaskSessionBinding | null =
-      selectedTaskId && selectedRole ? { taskId: selectedTaskId, role: selectedRole } : null;
+    let sessionAssociation: AgentSessionAssociation;
+    if (selectedAssociationKind === "workflow") {
+      if (!selectedTaskId || !selectedRole) {
+        throw new Error("Workflow session runtime data requires a task id and role.");
+      }
+      sessionAssociation = { kind: "workflow", taskId: selectedTaskId, role: selectedRole };
+    } else if (selectedAssociationKind === "repository") {
+      sessionAssociation = { kind: "repository" };
+    } else {
+      sessionAssociation = { kind: "unbound" };
+    }
     return {
       identity: stableSelectedSessionIdentity,
-      taskBinding,
-      liveSessionAssociation,
+      sessionAssociation,
       selectedModel,
     };
   }, [
-    liveSessionAssociation,
+    selectedAssociationKind,
     stableSelectedSessionIdentity,
     selectedModel,
     selectedRole,
@@ -94,7 +111,7 @@ export const useSessionRuntimeData = ({
     }
     return {
       runtimeKind: stableSelectedSession.identity.runtimeKind,
-      sessionScope: resolveSessionRuntimeScope(stableSelectedSession),
+      sessionScope: resolveSessionRuntimeScope(stableSelectedSession.sessionAssociation),
     };
   }, [stableSelectedSession]);
   const settingsSnapshotQuery = useQuery({

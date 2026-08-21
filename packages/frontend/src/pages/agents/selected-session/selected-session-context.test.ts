@@ -4,6 +4,7 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionFixtureOverrides } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -25,12 +26,12 @@ const createDoc = (markdown: string): TaskDocumentState => ({
   loaded: true,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
+const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
   createAgentSessionFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-1",
-    taskId: "task-1",
-    role: "spec",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+
     status: "idle",
     ...overrides,
   });
@@ -142,7 +143,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       AgentRole,
       string | null,
     ][]) {
-      const session = createSession({ role });
+      const session = createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
+      });
       const context = buildAgentStudioSelectedSessionContext(
         createInput({
           role,
@@ -159,12 +162,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
   test("keeps selected-session identity authoritative when loaded session state is stale", () => {
     const selectedSession = createSession({
       externalSessionId: "shared-session",
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       workingDirectory: "/repo/selected-worktree",
     });
     const staleLoadedSession = createSession({
       externalSessionId: "shared-session",
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       workingDirectory: "/repo/stale-worktree",
     });
     const context = buildAgentStudioSelectedSessionContext(
@@ -216,7 +219,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         qa: { required: true, canSkip: false, available: false, completed: false },
       },
     });
-    const qaSession = createSession({ role: "qa" });
+    const qaSession = createSession({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
+    });
 
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
@@ -357,7 +362,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     });
     const subagentSession = createSession({
       externalSessionId: "session-sub",
-      taskId: "other-task",
+      sessionAssociation: { kind: "workflow", taskId: "other-task", role: "spec" },
       pendingApprovals: [
         {
           requestId: "approval-sub",
@@ -423,6 +428,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
     });
+    const childTarget = {
+      ...childSession,
+      sessionAssociation: { kind: "repository" as const },
+    };
     const parentSession = createSession({
       externalSessionId: "session-parent",
       workingDirectory: "/repo/worktree",
@@ -435,7 +444,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           tool: { name: "shell" },
           mutation: "mutating",
           supportedReplyOutcomes: ["approve_once", "reject"],
-          responseSession: childSession,
+          responseSession: childTarget,
           source: {
             kind: "subagent",
             parentExternalSessionId: "session-parent",

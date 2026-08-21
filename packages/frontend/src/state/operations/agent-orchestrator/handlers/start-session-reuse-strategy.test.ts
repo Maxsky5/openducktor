@@ -133,7 +133,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
           externalSessionId: "ext-qa",
-          role: "qa",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         }),
       ]),
     });
@@ -168,7 +168,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
           externalSessionId: "ext-qa",
-          role: "qa",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
           workingDirectory: "/tmp/repo/old-worktree",
         }),
       ]),
@@ -205,7 +205,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
           externalSessionId: "ext-qa",
-          role: "qa",
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
         }),
       ]),
     });

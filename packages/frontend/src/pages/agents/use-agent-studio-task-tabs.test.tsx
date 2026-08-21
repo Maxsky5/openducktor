@@ -58,7 +58,7 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 const createSession = (taskId: string, externalSessionId: string) =>
   createAgentSessionSummaryFixture({
     externalSessionId: `ext-${externalSessionId}`,
-    taskId,
+    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
   });
 
 const taskSelection = (taskId: string): AgentStudioSelectionState => ({
@@ -191,15 +191,15 @@ describe("useAgentStudioTaskTabs", () => {
       const taskTwo = createTask("task-2");
       const runningBuildSession = createAgentSessionSummaryFixture({
         externalSessionId: "ext-session-build",
-        taskId: "task-2",
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
+
         status: "running",
         startedAt: "2026-02-22T09:00:00.000Z",
       });
       const newerIdleSession = createAgentSessionSummaryFixture({
         externalSessionId: "ext-session-newer",
-        taskId: "task-2",
-        role: "qa",
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+
         status: "idle",
         startedAt: "2026-02-22T10:00:00.000Z",
       });

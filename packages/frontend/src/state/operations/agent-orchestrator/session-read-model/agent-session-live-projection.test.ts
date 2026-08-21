@@ -9,10 +9,11 @@ import {
   getAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionRuntimeTarget } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
+  applyTaskSessionRecords,
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
 import { collectPendingApprovalPolicyActions } from "./pending-approval-policy";
@@ -67,7 +68,255 @@ const identity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
 });
 
+const target = (externalSessionId: string): AgentSessionRuntimeTarget => ({
+  ...identity(externalSessionId),
+  sessionAssociation: { kind: "unbound" },
+});
+
 describe("agent session live projection", () => {
+  test("hydrates persisted task records with a workflow association", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("thread-1", { role: "qa" }),
+      }),
+      snapshots: [],
+    });
+
+    expect(getAgentSession(sessions, identity("thread-1"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "qa",
+    });
+  });
+
+  test("rejects a persisted repository-to-workflow scope change", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "repository" },
+        }),
+      ],
+    });
+
+    expect(() =>
+      applyTaskSessionRecords({
+        current,
+        taskSessionRecords: taskSessionRecords({
+          taskId: "task-1",
+          record: record("thread-1"),
+        }),
+      }),
+    ).toThrow(
+      "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+    );
+  });
+
+  test("keeps a matching workflow scope from persisted records", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
+    });
+
+    const next = applyTaskSessionRecords({
+      current,
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("thread-1"),
+      }),
+    });
+
+    expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
+  });
+
+  test("rejects a conflicting workflow scope from persisted records", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("thread-1", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+        }),
+      ],
+    });
+
+    expect(() =>
+      applyTaskSessionRecords({
+        current,
+        taskSessionRecords: taskSessionRecords({
+          taskId: "task-2",
+          record: record("thread-1"),
+        }),
+      }),
+    ).toThrow(
+      "Cannot reconcile persisted session 'thread-1' because its registered workflow scope for task 'task-1' and role 'spec' does not match the incoming workflow scope for task 'task-2' and role 'build'.",
+    );
+  });
+
+  test("hydrates an unbound session from persisted workflow scope and refreshes parent routing", () => {
+    const current = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [
+        snapshot("parent-thread"),
+        snapshot("child-thread", {
+          parentExternalSessionId: "parent-thread",
+          pendingApprovals: [
+            {
+              requestId: "child-approval",
+              requestType: "command_execution",
+              title: "Run command",
+            },
+          ],
+          pendingQuestions: [
+            {
+              requestId: "child-question",
+              questions: [
+                {
+                  header: "Continue?",
+                  question: "Should the child continue?",
+                  options: [{ label: "Yes", description: "Continue." }],
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+
+    const next = applyTaskSessionRecords({
+      current,
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("child-thread"),
+      }),
+    });
+    const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
+
+    expect(getAgentSession(next, identity("child-thread"))?.sessionAssociation).toEqual(
+      workflowAssociation,
+    );
+    expect(getAgentSession(next, identity("parent-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({
+        requestId: "child-approval",
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+      }),
+    ]);
+    expect(getAgentSession(next, identity("parent-thread"))?.pendingQuestions).toEqual([
+      expect.objectContaining({
+        requestId: "child-question",
+        responseSession: { ...identity("child-thread"), sessionAssociation: workflowAssociation },
+      }),
+    ]);
+  });
+
+  test.each(["opencode", "codex", "claude"] as const)(
+    "projects a repository association for a live %s session",
+    (runtimeKind) => {
+      const runtimeIdentity = { ...identity(`${runtimeKind}-thread`), runtimeKind };
+      const sessions = buildAgentSessionLiveCollection({
+        current: emptyAgentSessionCollection(),
+        taskSessionRecords: taskSessionRecords(),
+        snapshots: [
+          snapshot(runtimeIdentity.externalSessionId, {
+            ref: { repoPath, ...runtimeIdentity },
+            sessionAssociation: { kind: "repository" },
+          }),
+        ],
+      });
+
+      expect(getAgentSession(sessions, runtimeIdentity)?.sessionAssociation).toEqual({
+        kind: "repository",
+      });
+    },
+  );
+
+  test("keeps a runtime-discovered session unbound", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [snapshot("unbound-thread")],
+    });
+
+    expect(getAgentSession(sessions, identity("unbound-thread"))?.sessionAssociation).toEqual({
+      kind: "unbound",
+    });
+  });
+
+  test("allows an unbound-to-repository scope change", () => {
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords(),
+      snapshots: [snapshot("thread-1")],
+    });
+    const next = applyAgentSessionLiveDelta({
+      current: initial,
+      taskSessionRecords: taskSessionRecords(),
+      envelope: {
+        type: "session_upsert",
+        session: snapshot("thread-1", { sessionAssociation: { kind: "repository" } }),
+      },
+    });
+
+    expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
+      kind: "repository",
+    });
+  });
+
+  test("retains a workflow association when a live snapshot is unbound", () => {
+    const sessions = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: taskSessionRecords({
+        taskId: "task-1",
+        record: record("thread-1", { role: "build" }),
+      }),
+      snapshots: [snapshot("thread-1")],
+    });
+
+    expect(getAgentSession(sessions, identity("thread-1"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
+  });
+
+  test("rejects a conflicting live scope change", () => {
+    const tasks = taskSessionRecords({
+      taskId: "task-1",
+      record: record("thread-1", { role: "build" }),
+    });
+    const initial = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      taskSessionRecords: tasks,
+      snapshots: [],
+    });
+
+    expect(() =>
+      applyAgentSessionLiveDelta({
+        current: initial,
+        taskSessionRecords: tasks,
+        envelope: {
+          type: "session_upsert",
+          session: snapshot("thread-1", { sessionAssociation: { kind: "repository" } }),
+        },
+      }),
+    ).toThrow(
+      "Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+    );
+  });
+
   test("commits an atomic initial snapshot with activity, pending input, and retained context", () => {
     const tasks = taskSessionRecords(
       { taskId: "task-1", record: record("thread-1") },
@@ -334,7 +583,7 @@ describe("agent session live projection", () => {
           parentExternalSessionId: "root-thread",
           childExternalSessionId: "grandchild-thread",
         },
-        responseSession: identity("grandchild-thread"),
+        responseSession: target("grandchild-thread"),
       }),
     ]);
     expect(
@@ -387,7 +636,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(sessions, identity("root-thread"))?.pendingQuestions).toEqual([
       expect.objectContaining({
         requestId: "grandchild-question",
-        responseSession: identity("grandchild-thread"),
+        responseSession: target("grandchild-thread"),
       }),
     ]);
   });
@@ -471,7 +720,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(sessions, identity("child-a"))?.pendingApprovals).toHaveLength(1);
     expect(getAgentSession(sessions, identity("child-b"))?.pendingApprovals).toEqual([]);
     expect(getAgentSession(sessions, identity("root-thread"))?.pendingApprovals).toEqual([
-      expect.objectContaining({ responseSession: identity("grandchild-a") }),
+      expect.objectContaining({ responseSession: target("grandchild-a") }),
     ]);
   });
 
@@ -497,7 +746,7 @@ describe("agent session live projection", () => {
     expect(getAgentSession(sessions, identity("root-thread"))?.pendingApprovals).toEqual([
       expect.objectContaining({
         requestId: "child-approval",
-        responseSession: identity("child-thread"),
+        responseSession: target("child-thread"),
       }),
     ]);
   });

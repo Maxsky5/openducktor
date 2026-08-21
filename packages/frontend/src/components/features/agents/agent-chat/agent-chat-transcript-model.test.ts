@@ -470,7 +470,7 @@ describe("agent chat transcript model", () => {
     ];
     const runningSession = buildSession({
       externalSessionId: "session-status",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       status: "running",
       messages: sharedMessages,
     });
@@ -504,7 +504,7 @@ describe("agent chat transcript model", () => {
     ];
     const idleSession = buildSession({
       externalSessionId: "session-resume",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       status: "idle",
       messages: sharedMessages,
     });

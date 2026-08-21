@@ -7,10 +7,9 @@ import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 export type AgentSessionRecencySummary = AgentSessionIdentity &
   Pick<AgentSessionState, "startedAt">;
 
-export type AgentSessionOptionSummary = AgentSessionRecencySummary &
-  Pick<AgentSessionState, "role"> & {
-    activityState: AgentSessionActivityState;
-  };
+export type AgentSessionOptionSummary = AgentSessionRecencySummary & { role: AgentRole } & {
+  activityState: AgentSessionActivityState;
+};
 
 export const compareAgentSessionRecency = (
   a: AgentSessionRecencySummary,
@@ -52,9 +51,6 @@ export const formatAgentSessionOptionLabel = (params: {
   sessionNumber: number;
   roleLabelByRole: Record<AgentRole, string>;
 }): string => {
-  if (params.session.role === null) {
-    throw new Error(`Session ${params.session.externalSessionId} is not a workflow session.`);
-  }
   const roleLabel = params.roleLabelByRole[params.session.role];
   return `${roleLabel} #${params.sessionNumber}`;
 };

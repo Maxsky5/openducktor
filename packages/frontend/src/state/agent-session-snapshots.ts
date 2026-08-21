@@ -11,7 +11,9 @@ import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import { isWorkflowAgentSession } from "./operations/agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
-  Pick<WorkflowAgentSessionState, "title" | "taskId" | "role" | "startedAt"> & {
+  Pick<WorkflowAgentSessionState, "title" | "startedAt"> & {
+    taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
+    role: WorkflowAgentSessionState["sessionAssociation"]["role"];
     activityState: AgentSessionActivityState;
     pendingApprovalCount: number;
     pendingQuestionCount: number;
@@ -29,15 +31,17 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
 export function toAgentSessionSummary(session: WorkflowAgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary;
 export function toAgentSessionSummary(session: AgentSessionState): AgentSessionSummary {
-  if (session.role === null) {
-    throw new Error("Cannot create an activity session summary for a role-less session.");
+  if (!isWorkflowAgentSession(session)) {
+    throw new Error(
+      `Cannot create an activity session summary for ${session.sessionAssociation.kind} session '${session.externalSessionId}'.`,
+    );
   }
 
   return {
     ...toAgentSessionIdentity(session),
     ...(session.title ? { title: session.title } : {}),
-    taskId: session.taskId,
-    role: session.role,
+    taskId: session.sessionAssociation.taskId,
+    role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,

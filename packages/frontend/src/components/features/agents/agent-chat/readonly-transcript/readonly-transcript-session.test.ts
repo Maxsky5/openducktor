@@ -114,13 +114,12 @@ describe("createReadonlyTranscriptSession", () => {
     ).not.toThrow();
   });
 
-  test("reconciles runtime and history subagent rows by child session identity", () => {
+  test("merges runtime and history subagent rows by child session identity", () => {
     const emptySession = createAgentSessionFixture({
       externalSessionId: "parent-thread",
       runtimeKind: "codex",
       workingDirectory: "/repo",
-      taskId: "",
-      role: null,
+      sessionAssociation: { kind: "unbound" },
       historyLoadState: "loading",
       messages: createSessionMessagesState("parent-thread"),
     });

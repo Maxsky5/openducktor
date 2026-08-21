@@ -73,9 +73,7 @@ export const createStopAgentSession = ({
         ...current,
         stopRequestedAt: null,
       }));
-      throw new Error(
-        `Failed to stop ${session.role} session '${externalSessionId}': ${errorMessage(error)}`,
-      );
+      throw new Error(`Failed to stop session '${externalSessionId}': ${errorMessage(error)}`);
     }
 
     const stoppedSessionRef = toRuntimeSessionRef(stopRepoPath, session);
@@ -99,17 +97,19 @@ export const createStopAgentSession = ({
 
     if (nextStoppedSession && isWorkflowAgentSession(nextStoppedSession)) {
       await persistSessionRecord(
-        nextStoppedSession.taskId,
+        nextStoppedSession.sessionAssociation.taskId,
         toPersistedSessionRecord(nextStoppedSession),
       );
     }
 
-    await Promise.all([
-      invalidateSessionStopQueries({
-        repoPath: stopRepoPath,
-        taskId: session.taskId,
-      }),
-      refreshTaskData(stopRepoPath),
-    ]);
+    if (isWorkflowAgentSession(session)) {
+      await Promise.all([
+        invalidateSessionStopQueries({
+          repoPath: stopRepoPath,
+          taskId: session.sessionAssociation.taskId,
+        }),
+        refreshTaskData(stopRepoPath),
+      ]);
+    }
   };
 };

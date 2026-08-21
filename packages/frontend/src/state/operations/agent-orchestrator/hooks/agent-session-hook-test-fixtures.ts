@@ -1,11 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -39,30 +39,27 @@ export const createTaskWithSession = (overrides: Partial<TaskCard> = {}): TaskCa
   ...overrides,
 });
 
-type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type CreateSessionOverrides = AgentSessionFixtureOverrides;
 
 export const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
-  const { messages, ...sessionOverrides } = overrides;
-  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+  return createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "external-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
 
-  return {
-    runtimeKind: "opencode",
-    externalSessionId,
-    taskId: "task-1",
-    role: "build",
-    status: "idle",
-    runtimeStatusMessage: null,
-    startedAt: "2026-03-01T09:00:00.000Z",
-    workingDirectory: "/tmp/repo/worktree",
-    messages: createSessionMessagesFixture(externalSessionId, messages),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...sessionOverrides,
-    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
-  };
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-03-01T09:00:00.000Z",
+      workingDirectory: "/tmp/repo/worktree",
+      messages: createSessionMessagesFixture("external-1"),
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
 };
 
 export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>

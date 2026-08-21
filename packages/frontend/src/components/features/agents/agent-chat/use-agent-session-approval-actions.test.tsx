@@ -101,7 +101,10 @@ describe("useAgentSessionApprovalActions", () => {
   test("passes surfaced approval requests to the operation boundary", async () => {
     const replyAgentApproval = mock(async () => {});
     const parentSession = sessionIdentity("parent-session");
-    const childSession = sessionIdentity("child-session");
+    const childSession = {
+      ...sessionIdentity("child-session"),
+      sessionAssociation: { kind: "repository" as const },
+    };
     const harness = createHookHarness(
       createBaseArgs({
         sessionIdentity: parentSession,

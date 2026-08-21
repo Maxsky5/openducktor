@@ -1,5 +1,10 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import { formatWorkflowAgentSessionTitle, requireSessionWorkingDirectory } from "@openducktor/core";
+import {
+  describeAgentSessionScope,
+  formatWorkflowAgentSessionTitle,
+  requireSessionWorkingDirectory,
+  resolveAgentSessionAssociationTransition,
+} from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
 import { normalizePersistedSelection } from "./models";
@@ -17,7 +22,7 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
 
   return {
     externalSessionId: session.externalSessionId,
-    role: session.role,
+    role: session.sessionAssociation.role,
     startedAt: session.startedAt,
     runtimeKind,
     workingDirectory: session.workingDirectory,
@@ -62,10 +67,8 @@ export const fromPersistedSessionRecord = ({
   return {
     externalSessionId: identity.externalSessionId,
     title: formatWorkflowAgentSessionTitle(record.role, taskId),
-    taskId,
-    role: record.role,
-    // Persisted task-store records are durable session fields only. Cold reads
-    // start idle; mounted refreshes may preserve current live state separately.
+    sessionAssociation: { kind: "workflow", taskId, role: record.role },
+    // Stored records lack live state, so cold reads start idle.
     status: "idle",
     runtimeStatusMessage: null,
     startedAt: record.startedAt,
@@ -101,12 +104,20 @@ export const toPersistedSessionView = ({
   if (!current) {
     return persisted;
   }
+  const transition = resolveAgentSessionAssociationTransition(
+    current.sessionAssociation,
+    persisted.sessionAssociation,
+  );
+  if (transition.kind === "conflict") {
+    throw new Error(
+      `Cannot reconcile persisted session '${current.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the incoming ${describeAgentSessionScope(transition.incoming)}.`,
+    );
+  }
 
   return {
     ...current,
-    taskId: persisted.taskId,
+    sessionAssociation: transition.association,
     runtimeKind: persisted.runtimeKind,
-    role: persisted.role,
     startedAt: persisted.startedAt,
     workingDirectory: persisted.workingDirectory,
     selectedModel: persisted.selectedModel,

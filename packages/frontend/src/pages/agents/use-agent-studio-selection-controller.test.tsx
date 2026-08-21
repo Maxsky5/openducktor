@@ -16,7 +16,10 @@ import {
   AgentSessionsContext,
 } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  type AgentSessionFixtureOverrides,
+  createRepoRuntimeHealthFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
@@ -125,11 +128,11 @@ const repoSettings: RepoSettingsInput = {
 const createSession = (
   taskId: string,
   externalSessionId: string,
-  overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {},
+  overrides: AgentSessionFixtureOverrides = {},
 ): AgentSessionSummary => {
   const session = createAgentSessionFixture({
     externalSessionId,
-    taskId,
+    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
     ...overrides,
   });
   createdSessionStateByKey.set(agentSessionIdentityKey(session), session);
@@ -393,7 +396,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(harness.getLatest().view.selectedSession.loadedSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
-        role: "build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         startedAt: "2026-02-22T10:00:00.000Z",
         status: "running",
       });
@@ -501,7 +504,7 @@ describe("useAgentStudioSelectionController", () => {
     });
     const codexSession = createSession("task-1", "codex-session", {
       runtimeKind: "codex",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("codex-session"),
     });
@@ -555,7 +558,7 @@ describe("useAgentStudioSelectionController", () => {
     });
     const codexSession = createSession("task-1", "codex-session", {
       runtimeKind: "codex",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       historyLoadState: "not_requested",
       messages: createSessionMessagesState("codex-session"),
     });
@@ -1020,12 +1023,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("prefers immediate selection state over stale query role and session", async () => {
     const specSession = createSession("task-1", "session-spec", {
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const plannerSession = createSession("task-1", "session-planner", {
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1059,7 +1062,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("keeps prepare-session role selection sessionless despite existing role sessions", async () => {
     const buildSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1092,7 +1095,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("uses concrete URL session when route selection has a session param", async () => {
     const buildSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1223,7 +1226,7 @@ describe("useAgentStudioSelectionController", () => {
       },
     ]);
     const buildSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       status: "running",
@@ -1259,6 +1262,69 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("keeps selected-session runtime data while the full session hydrates", async () => {
+    const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => [
+      {
+        id: "todo-1",
+        content: "Check startup",
+        status: "pending" as const,
+        priority: "medium" as const,
+      },
+    ]);
+    const buildSession = toAgentSessionSummary(
+      createAgentSessionFixture({
+        externalSessionId: "session-build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        status: "running",
+      }),
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(buildSession),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+      {
+        readSessionTodos,
+        runtimeDefinitionsContext: { loadRepoRuntimeCatalog },
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (latest) =>
+          latest.view.selectedSession.runtimeData.modelCatalog !== null &&
+          latest.view.selectedSession.runtimeData.todos.length === 1,
+      );
+
+      const selectedSession = harness.getLatest().view.selectedSession;
+      expect(selectedSession.loadedSession).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      });
+      expect(readSessionTodos).toHaveBeenCalledWith(
+        expect.objectContaining({
+          externalSessionId: "session-build",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      );
+      expect(selectedSession.runtimeData.todos[0]?.id).toBe("todo-1");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads runtime data only for the visible session when selected and view sessions differ", async () => {
     const readSessionTodos = mock(async ({ externalSessionId }: { externalSessionId: string }) => [
       {
@@ -1269,13 +1335,13 @@ describe("useAgentStudioSelectionController", () => {
       },
     ]);
     const activeSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-1",
       status: "running",
     });
     const viewSession = createSession("task-2", "session-qa", {
-      role: "qa",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-2",
       status: "running",
@@ -1349,7 +1415,7 @@ describe("useAgentStudioSelectionController", () => {
     const staleSession = createSession("task-1", "session-1", {
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       status: "running",
     });
     const harness = createHookHarness(
@@ -1426,12 +1492,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("resolves view session from the UI-active task tab", async () => {
     const sessionTaskOne = createSession("task-1", "session-1", {
-      role: "planner",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
       startedAt: "2026-02-22T12:00:00.000Z",
       status: "running",
     });
     const sessionTaskTwo = createSession("task-2", "session-2", {
-      role: "qa",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
       startedAt: "2026-02-22T13:00:00.000Z",
       status: "running",
     });
@@ -1474,12 +1540,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("tab shows working status when newer idle session exists but older session is running", async () => {
     const olderRunningSession = createSession("task-1", "session-old", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "running",
     });
     const newerIdleSession = createSession("task-1", "session-new", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1505,7 +1571,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("tab shows waiting-input status when a session is idle with pending input", async () => {
     const waitingSession = createSession("task-1", "session-waiting", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
       pendingQuestions: [
@@ -1522,7 +1588,7 @@ describe("useAgentStudioSelectionController", () => {
       ],
     });
     const newerIdleSession = createSession("task-1", "session-new", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1548,7 +1614,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("idle session is included in latestSessionByTaskId for navigation", async () => {
     const idleSession = createSession("task-1", "session-idle", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1574,7 +1640,7 @@ describe("useAgentStudioSelectionController", () => {
 
   test("defaults to build role for open task even when only optional-role session exists", async () => {
     const specSession = createSession("task-1", "session-spec", {
-      role: "spec",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1640,12 +1706,12 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const initialBuildSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const newerQaSession = createSession("task-1", "session-qa", {
-      role: "qa",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1695,12 +1761,12 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const buildSession = createSession("task-1", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-1", "session-qa", {
-      role: "qa",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });
@@ -1753,12 +1819,12 @@ describe("useAgentStudioSelectionController", () => {
       status: "human_review",
     });
     const buildSession = createSession("task-2", "session-build", {
-      role: "build",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
       startedAt: "2026-02-22T10:00:00.000Z",
       status: "idle",
     });
     const qaSession = createSession("task-2", "session-qa", {
-      role: "qa",
+      sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
       startedAt: "2026-02-22T11:00:00.000Z",
       status: "idle",
     });

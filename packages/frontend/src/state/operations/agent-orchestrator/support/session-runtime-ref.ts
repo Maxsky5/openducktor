@@ -16,7 +16,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 export type ObserveAgentSession = (session: PolicyBoundSessionRef) => Promise<void>;
 type RuntimeSessionContextSource = Pick<
   AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "sessionAssociation"
 > & {
   selectedModel?: AgentSessionState["selectedModel"];
 };
@@ -64,12 +64,17 @@ export const toWorkflowSessionRef = (
   repoPath: string,
   session: RuntimeSessionContextSource,
 ): WorkflowSessionRef => {
-  if (!session.role) {
-    throw new Error(`Workflow session '${session.externalSessionId}' is missing a role.`);
+  if (session.sessionAssociation.kind !== "workflow") {
+    throw new Error(
+      `Cannot create a workflow runtime reference for session '${session.externalSessionId}' because its association is ${session.sessionAssociation.kind}.`,
+    );
   }
   return {
     ...toRuntimeSessionRef(repoPath, session),
-    sessionScope: workflowAgentSessionScope(session.taskId, session.role),
+    sessionScope: workflowAgentSessionScope(
+      session.sessionAssociation.taskId,
+      session.sessionAssociation.role,
+    ),
   };
 };
 

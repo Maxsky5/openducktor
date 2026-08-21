@@ -3,12 +3,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
@@ -43,30 +42,23 @@ const createTaskCard = (id: string): TaskCard => ({
   createdAt: "2026-02-22T12:00:00.000Z",
 });
 
-type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
-  messages?: AgentChatMessage[] | SessionMessagesState;
-};
+type CreateSessionOverrides = AgentSessionFixtureOverrides;
 
 const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
-  const { messages, ...sessionOverrides } = overrides;
-  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+  return createAgentSessionFixture(
+    {
+      runtimeKind: "opencode",
+      externalSessionId: "external-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
 
-  return {
-    runtimeKind: "opencode",
-    externalSessionId,
-    taskId: "task-1",
-    role: "spec",
-    status: "running",
-    runtimeStatusMessage: null,
-    startedAt: "2026-02-22T12:00:00.000Z",
-    workingDirectory: "/repo",
-    messages: createSessionMessagesFixture(externalSessionId, messages),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel: null,
-    ...sessionOverrides,
-    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
-  };
+      status: "running",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T12:00:00.000Z",
+      workingDirectory: "/repo",
+      historyLoadState: overrides.historyLoadState ?? "not_requested",
+    },
+    overrides,
+  );
 };
 
 const createDocumentState = (markdown = ""): TaskDocumentState => ({
