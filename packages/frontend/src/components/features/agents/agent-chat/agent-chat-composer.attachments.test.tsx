@@ -354,6 +354,54 @@ describe("AgentChatComposer attachments", () => {
     });
   });
 
+  test("does not rehydrate a submitted slash command while its send is pending", async () => {
+    const storage = createMemoryStorage();
+    const identity = sessionIdentity("session-a");
+    const sendResult = createDeferred<boolean>();
+    const onSend = mock(() => sendResult.promise);
+    setAgentChatDraftStorageForTests(storage);
+    const slashCommand = {
+      id: "review",
+      trigger: "review",
+      title: "Review",
+      description: "Review the current changes",
+      hints: [],
+    };
+    const model = {
+      ...buildModel(),
+      onSend,
+      displayedSessionKey: "session-a",
+      draftScope: persistedDraftScope("draft-a", identity),
+      slashCommandCatalog: { commands: [slashCommand] },
+      slashCommands: [slashCommand],
+    };
+    const rendered = render(<AgentChatComposer model={model} />);
+
+    typeIntoComposer(rendered.container, "/");
+    fireEvent.pointerDown(
+      await screen.findByRole("option", { name: /review the current changes/i }),
+    );
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "/review",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    });
+
+    try {
+      rendered.unmount();
+      const remounted = render(<AgentChatComposer model={model} />);
+      expect(remounted.container.querySelector("[data-chip-segment-id]")).toBeNull();
+    } finally {
+      sendResult.resolve(true);
+    }
+  });
+
   test("keeps the composer empty when equivalent persistence refreshes during send", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
@@ -392,7 +440,7 @@ describe("AgentChatComposer attachments", () => {
     );
   });
 
-  test("clears a successfully sent attachment draft when staging resolves during send", async () => {
+  test("cancels attachment draft persistence when send starts", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
     const stagedPath = createDeferred<string>();
@@ -445,9 +493,7 @@ describe("AgentChatComposer attachments", () => {
 
     stagedPath.resolve("/tmp/staged/brief.pdf");
     await flushPromise;
-    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toContain(
-      "/tmp/staged/brief.pdf",
-    );
+    expect(storage.getItem(toAgentChatDraftStorageKey(identity))).toBeNull();
 
     sendResult.resolve(true);
 

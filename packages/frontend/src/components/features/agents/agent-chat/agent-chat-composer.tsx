@@ -700,6 +700,7 @@ export function AgentChatComposer({
     }
     const submittedDraft = latestDraftRef.current;
     const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
+    clearSubmittedDraft(submittedSnapshot);
     setDisplayedDraft(createEmptyComposerDraft());
     onComposerEditorInput();
     scheduleComposerFocus();
@@ -711,7 +712,6 @@ export function AgentChatComposer({
         scheduleComposerFocus();
         return;
       }
-      clearSubmittedDraft(submittedSnapshot);
       scheduleComposerFocus();
     } catch (error) {
       const description = error instanceof Error ? error.message : String(error);
