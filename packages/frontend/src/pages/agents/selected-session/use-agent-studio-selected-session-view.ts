@@ -53,6 +53,8 @@ export type AgentStudioSelectedSessionView = {
 
 const toSessionRuntimeDataTarget = (
   session: AgentSessionState | null,
+  identity: AgentSessionIdentity | null,
+  summary: AgentSessionSummary | null,
 ): SessionRuntimeDataTarget | null => {
   if (session) {
     return {
@@ -61,7 +63,18 @@ const toSessionRuntimeDataTarget = (
       selectedModel: session.selectedModel,
     };
   }
-  return null;
+  if (!identity || !summary || !matchesAgentSessionIdentity(summary, identity)) {
+    return null;
+  }
+  return {
+    identity,
+    sessionAssociation: {
+      kind: "workflow",
+      taskId: summary.taskId,
+      role: summary.role,
+    },
+    selectedModel: summary.selectedModel,
+  };
 };
 
 export function useAgentStudioSelectedSessionView({
@@ -210,7 +223,11 @@ export function useAgentStudioSelectedSessionView({
 
   const runtimeData = useSessionRuntimeData({
     repoPath: workspaceRepoPath,
-    selectedSession: toSessionRuntimeDataTarget(loadedSession),
+    selectedSession: toSessionRuntimeDataTarget(
+      loadedSession,
+      selectedSessionIdentity,
+      selection.sessionSummary,
+    ),
     runtimeDefinitions,
     repoReadinessState,
     loadRuntimeCatalog: loadRepoRuntimeCatalog,

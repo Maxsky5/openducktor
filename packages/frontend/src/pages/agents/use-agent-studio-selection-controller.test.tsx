@@ -1262,6 +1262,69 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("keeps selected-session runtime data while the full session hydrates", async () => {
+    const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
+    const readSessionTodos = mock(async () => [
+      {
+        id: "todo-1",
+        content: "Check startup",
+        status: "pending" as const,
+        priority: "medium" as const,
+      },
+    ]);
+    const buildSession = toAgentSessionSummary(
+      createAgentSessionFixture({
+        externalSessionId: "session-build",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        status: "running",
+      }),
+    );
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        sessions: [buildSession],
+        taskIdParam: "task-1",
+        sessionExternalIdParam: sessionExternalIdParam(buildSession),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+      {
+        readSessionTodos,
+        runtimeDefinitionsContext: { loadRepoRuntimeCatalog },
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (latest) =>
+          latest.view.selectedSession.runtimeData.modelCatalog !== null &&
+          latest.view.selectedSession.runtimeData.todos.length === 1,
+      );
+
+      const selectedSession = harness.getLatest().view.selectedSession;
+      expect(selectedSession.loadedSession).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+      });
+      expect(readSessionTodos).toHaveBeenCalledWith(
+        expect.objectContaining({
+          externalSessionId: "session-build",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      );
+      expect(selectedSession.runtimeData.todos[0]?.id).toBe("todo-1");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads runtime data only for the visible session when selected and view sessions differ", async () => {
     const readSessionTodos = mock(async ({ externalSessionId }: { externalSessionId: string }) => [
       {
