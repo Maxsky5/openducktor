@@ -28,6 +28,7 @@ import {
   runEventStream,
   runEventStreamWithSession,
   runtimeSourceSyncChildSessionCreatedEvent,
+  type TestGlobalEventPayload,
 } from "./event-stream.test-support";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -123,6 +124,31 @@ test("global event observation drops the raw envelope after normalizing sync eve
       directory: "/repo",
     },
   });
+});
+
+test("keeps session observation alive across OpenCode server heartbeats", async () => {
+  const heartbeat = {
+    id: "event-heartbeat-1",
+    type: "server.heartbeat",
+    properties: {},
+  } as unknown as TestGlobalEventPayload;
+  const emitted = await runEventStream([
+    heartbeat,
+    {
+      type: "session.status",
+      properties: {
+        sessionID: "external-session-1",
+        status: { type: "busy" },
+      },
+    } as unknown as Event,
+  ]);
+
+  expect(emitted).toEqual([
+    expect.objectContaining({
+      type: "session_status",
+      status: { type: "busy", message: null },
+    }),
+  ]);
 });
 
 test("projects direct and sync message removal events as Transcript retractions", async () => {

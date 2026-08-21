@@ -6,6 +6,7 @@ import {
   readEventSessionId,
   readSessionLifecycleEvent,
 } from "./event-stream/shared";
+import { asUnknownRecord } from "./guards";
 import {
   normalizeOpencodeGlobalEventPayload,
   opencodeEventUsesParentSessionRouting,
@@ -41,6 +42,9 @@ type GlobalEventStream = {
 type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
+
+const isServerHeartbeat = (event: GlobalEvent): boolean =>
+  asUnknownRecord(event.payload)?.type === "server.heartbeat";
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
   const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
@@ -123,6 +127,9 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
   for await (const event of stream) {
     if (input.controller.signal.aborted) {
       break;
+    }
+    if (isServerHeartbeat(event)) {
+      continue;
     }
     await input.onEvent(toDirectoryScopedEvent(event));
     if (!ready) {
