@@ -32,8 +32,8 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
   messageId: string,
   roleHint?: string,
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session || !isStreamTurnIdle(session)) {
+  const { session } = runtime;
+  if (!isStreamTurnIdle(session)) {
     return false;
   }
   return (
@@ -105,11 +105,12 @@ const flushPendingSubagentPartEmissionsForSession = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
 ): boolean => {
-  const pending = runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
+  const pending =
+    runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
   if (!pending || pending.length === 0) {
     return false;
   }
-  runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
+  runtime.session.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
   let emitted = false;
   for (const emission of pending) {
     emitted =
@@ -124,12 +125,12 @@ const readLinkedSubagentPart = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
 ): Part | null => {
-  const linkedPartId = runtime.subagentPartIdByExternalSessionId.get(externalSessionId);
+  const linkedPartId = runtime.session.subagentPartIdByExternalSessionId.get(externalSessionId);
   if (!linkedPartId) {
     return null;
   }
 
-  return runtime.partsById.get(linkedPartId) ?? null;
+  return runtime.session.partsById.get(linkedPartId) ?? null;
 };
 
 export const emitSubagentPartsForSession = (
@@ -168,10 +169,7 @@ export const updateAssistantMessageCompletionState = (
   messageId: string,
   isCompleted: boolean,
 ): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session) {
-    return;
-  }
+  const { session } = runtime;
 
   const wasCompleted = session.completedAssistantMessageIds.has(messageId);
   if (!isCompleted && wasCompleted) {
@@ -208,8 +206,8 @@ export const maybeEmitCompletedAssistantMessage = (
     hasStopSignal?: boolean;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session || !isAssistantMessage(runtime, input.messageId)) {
+  const { session } = runtime;
+  if (!isAssistantMessage(runtime, input.messageId)) {
     return false;
   }
 
@@ -267,10 +265,7 @@ export const maybeEmitCompletedAssistantMessage = (
 };
 
 export const emitCompletedAssistantMessages = (runtime: EventStreamRuntime): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session) {
-    return;
-  }
+  const { session } = runtime;
   for (const messageId of session.pendingCompletedAssistantMessageIds) {
     maybeEmitCompletedAssistantMessage(runtime, { messageId });
   }

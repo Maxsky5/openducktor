@@ -59,9 +59,10 @@ const queueSubagentInputEvent = (runtime: EventStreamRuntime, event: PendingInpu
   if (!childExternalSessionId) {
     return;
   }
-  const current = runtime.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
+  const current =
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
   const next = [...(current ?? []).filter((entry) => entry.requestId !== event.requestId), event];
-  runtime.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, next);
+  runtime.session.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, next);
 };
 
 type SubagentInputRouting = {
@@ -73,11 +74,11 @@ type SubagentInputRouting = {
 const readSinglePendingSubagentCorrelationKey = (
   runtime: EventStreamRuntime,
 ): string | undefined => {
-  if (runtime.pendingSubagentCorrelationKeys.length !== 1) {
+  if (runtime.session.pendingSubagentCorrelationKeys.length !== 1) {
     return undefined;
   }
 
-  return runtime.pendingSubagentCorrelationKeys[0];
+  return runtime.session.pendingSubagentCorrelationKeys[0];
 };
 
 const bindPendingSubagentCorrelation = (
@@ -86,13 +87,13 @@ const bindPendingSubagentCorrelation = (
   correlationKey: string,
 ): string => {
   bindSubagentExternalSession(
-    runtime,
+    runtime.session,
     childExternalSessionId,
     correlationKey,
-    runtime.subagentPartIdByCorrelationKey.get(correlationKey),
+    runtime.session.subagentPartIdByCorrelationKey.get(correlationKey),
   );
-  runtime.pendingSubagentSessionsByExternalSessionId.delete(childExternalSessionId);
-  removePendingSubagentCorrelationKey(runtime, correlationKey);
+  runtime.session.pendingSubagentSessionsByExternalSessionId.delete(childExternalSessionId);
+  removePendingSubagentCorrelationKey(runtime.session, correlationKey);
   emitSubagentPartsForSession(runtime, childExternalSessionId);
   flushPendingBackgroundTaskResultSubagentParts(runtime, childExternalSessionId, correlationKey);
   flushPendingSubagentInputEventsForSession(runtime, childExternalSessionId);
@@ -113,7 +114,7 @@ const bindChildSessionFromPendingInputEvent = (
   }
 
   const existingCorrelationKey =
-    runtime.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
+    runtime.session.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
   if (existingCorrelationKey) {
     return existingCorrelationKey;
   }
@@ -134,7 +135,7 @@ const bindSinglePendingSubagentInputEvent = (
 ): string | undefined => {
   if (
     childExternalSessionId === runtime.externalSessionId ||
-    runtime.subagentCorrelationKeyByExternalSessionId.has(childExternalSessionId) ||
+    runtime.session.subagentCorrelationKeyByExternalSessionId.has(childExternalSessionId) ||
     !isEventScopedToRuntimeWorkingDirectory
   ) {
     return undefined;
@@ -161,7 +162,7 @@ const resolveLocalSubagentInputLink = (
   }
 
   const subagentCorrelationKey =
-    runtime.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
+    runtime.session.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
   if (subagentCorrelationKey) {
     return {
       parentExternalSessionId: runtime.externalSessionId,
@@ -169,7 +170,7 @@ const resolveLocalSubagentInputLink = (
     };
   }
 
-  if (runtime.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId)) {
+  if (runtime.session.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId)) {
     return {
       parentExternalSessionId: runtime.externalSessionId,
     };
@@ -388,7 +389,7 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
   if (isSessionAwaitingRuntimeTurnStart(runtime)) {
     return true;
   }
-  const wasIdle = isStreamTurnIdle(runtime.getSession(runtime.externalSessionId));
+  const wasIdle = isStreamTurnIdle(runtime.session);
   markSessionIdle(runtime);
   emitCompletedAssistantMessages(runtime);
   if (!wasIdle) {
@@ -444,32 +445,32 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       ? (info as { time?: { created?: unknown } }).time?.created
       : undefined;
   const createdAtMs = typeof createdAtValue === "number" ? createdAtValue : undefined;
-  const existingSessionBinding = runtime.pendingSubagentSessionsByExternalSessionId.get(
+  const existingSessionBinding = runtime.session.pendingSubagentSessionsByExternalSessionId.get(
     normalizedChildExternalSessionId,
   );
   const nextSessionBinding: PendingSubagentSessionBinding = {
     arrivalOrder:
       existingSessionBinding?.arrivalOrder ??
-      runtime.pendingSubagentSessionsByExternalSessionId.size + 1,
+      runtime.session.pendingSubagentSessionsByExternalSessionId.size + 1,
   };
   const nextCreatedAtMs = createdAtMs ?? existingSessionBinding?.createdAtMs;
   if (typeof nextCreatedAtMs === "number") {
     nextSessionBinding.createdAtMs = nextCreatedAtMs;
   }
-  runtime.pendingSubagentSessionsByExternalSessionId.set(
+  runtime.session.pendingSubagentSessionsByExternalSessionId.set(
     normalizedChildExternalSessionId,
     nextSessionBinding,
   );
 
-  const existingCorrelationKey = runtime.subagentCorrelationKeyByExternalSessionId.get(
+  const existingCorrelationKey = runtime.session.subagentCorrelationKeyByExternalSessionId.get(
     normalizedChildExternalSessionId,
   );
   if (existingCorrelationKey && !existingCorrelationKey.startsWith("session:")) {
     bindSubagentExternalSession(
-      runtime,
+      runtime.session,
       normalizedChildExternalSessionId,
       existingCorrelationKey,
-      runtime.subagentPartIdByCorrelationKey.get(existingCorrelationKey),
+      runtime.session.subagentPartIdByCorrelationKey.get(existingCorrelationKey),
     );
     emitSubagentPartsForSession(runtime, normalizedChildExternalSessionId);
     flushPendingBackgroundTaskResultSubagentParts(
@@ -482,16 +483,18 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
   }
 
   const pendingSessionEntries = [
-    ...runtime.pendingSubagentSessionsByExternalSessionId.entries(),
+    ...runtime.session.pendingSubagentSessionsByExternalSessionId.entries(),
   ].filter(([externalSessionId]) => {
-    const correlationKey = runtime.subagentCorrelationKeyByExternalSessionId.get(externalSessionId);
+    const correlationKey =
+      runtime.session.subagentCorrelationKeyByExternalSessionId.get(externalSessionId);
     return !correlationKey || correlationKey.startsWith("session:");
   });
   const canResolveSingleBinding =
-    pendingSessionEntries.length === 1 && runtime.pendingSubagentCorrelationKeys.length === 1;
+    pendingSessionEntries.length === 1 &&
+    runtime.session.pendingSubagentCorrelationKeys.length === 1;
   const canResolveMultipleBindings =
     pendingSessionEntries.length > 1 &&
-    pendingSessionEntries.length === runtime.pendingSubagentCorrelationKeys.length;
+    pendingSessionEntries.length === runtime.session.pendingSubagentCorrelationKeys.length;
   if (!canResolveSingleBinding && !canResolveMultipleBindings) {
     return true;
   }
@@ -504,7 +507,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     }
     return left[1].arrivalOrder - right[1].arrivalOrder;
   });
-  const queuedCorrelationKeys = [...runtime.pendingSubagentCorrelationKeys];
+  const queuedCorrelationKeys = [...runtime.session.pendingSubagentCorrelationKeys];
   for (let index = 0; index < sortedPendingSessions.length; index += 1) {
     const pendingSession = sortedPendingSessions[index];
     const nextCorrelationKey = queuedCorrelationKeys[index];
@@ -513,13 +516,13 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     }
     const [externalSessionId] = pendingSession;
     bindSubagentExternalSession(
-      runtime,
+      runtime.session,
       externalSessionId,
       nextCorrelationKey,
-      runtime.subagentPartIdByCorrelationKey.get(nextCorrelationKey),
+      runtime.session.subagentPartIdByCorrelationKey.get(nextCorrelationKey),
     );
-    runtime.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
-    removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
+    runtime.session.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
+    removePendingSubagentCorrelationKey(runtime.session, nextCorrelationKey);
     emitSubagentPartsForSession(runtime, externalSessionId);
     flushPendingBackgroundTaskResultSubagentParts(runtime, externalSessionId, nextCorrelationKey);
     flushPendingSubagentInputEventsForSession(runtime, externalSessionId);

@@ -38,7 +38,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   const messageId = infoRecord
     ? readStringProp(infoRecord, ["id", "messageID", "messageId", "message_id"])
     : undefined;
-  if (messageId && runtime.compactionMessageIds.has(messageId)) {
+  if (messageId && runtime.session.compactionMessageIds.has(messageId)) {
     suppressCompactionMessage(runtime, messageId);
     return true;
   }
@@ -49,8 +49,8 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   })();
   const messageCompletedAt = infoRecord ? readMessageCompletedAt(infoRecord) : undefined;
   const messageModel = readMessageModelSelection(infoRecord);
-  const session = runtime.getSession(runtime.externalSessionId);
-  const previousRole = messageId ? runtime.messageRoleById.get(messageId) : undefined;
+  const { session } = runtime;
+  const previousRole = messageId ? session.messageRoleById.get(messageId) : undefined;
   const finish = infoRecord ? readStringProp(infoRecord, ["finish"]) : undefined;
   const rawParts = readRawMessageParts(properties, infoRecord);
   const parentId = infoRecord
@@ -58,7 +58,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
     : undefined;
   const existingMetadata = messageId ? session?.messageMetadataById.get(messageId) : undefined;
   if (messageId && role) {
-    runtime.messageRoleById.set(messageId, role);
+    session.messageRoleById.set(messageId, role);
     updateMessageMetadata(runtime, messageId, {
       timestamp: messageTimestamp,
       ...(messageModel
@@ -117,7 +117,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
       );
       const partWithPendingDelta = applyPendingDeltas(runtime, rawPartId, normalizedPart);
 
-      setMessagePart(runtime, partWithPendingDelta);
+      setMessagePart(runtime.session, partWithPendingDelta);
       normalizedParts.push(partWithPendingDelta);
       if (isAssistantRole) {
         emitAssistantPart(runtime, partWithPendingDelta, role);

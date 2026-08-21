@@ -395,65 +395,49 @@ test("runEventStreamWithSession emits permission v2 approval events", async () =
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
+  const session = makeSessionRecord(makeClientWithEvents([]));
+  session.subagentCorrelationKeyByExternalSessionId.set(
+    "external-child-session",
+    "part:assistant-1:subtask-1",
+  );
+  session.pendingSubagentInputEventsByExternalSessionId.set("external-child-session", [
+    {
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "perm-child-1",
+      requestType: "permission_grant",
+      title: "Approve permission: write",
+      summary: "Approval request for write.",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+      childExternalSessionId: "external-child-session",
+    },
+    {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:05:00.000Z",
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+      childExternalSessionId: "external-child-session",
+    },
+  ]);
   const runtime: EventStreamRuntime = {
     externalSessionId: "external-session-1",
     input: makeSessionInput(),
+    session,
     now: () => "2026-02-22T12:30:00.000Z",
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
-    getSession: () => undefined,
-    partsById: new Map(),
-    partIdsByMessageId: new Map(),
-    messageRoleById: new Map(),
-    compactionMessageIds: new Set(),
-    pendingDeltasByPartId: new Map(),
-    subagentCorrelationKeyByPartId: new Map<string, string>(),
-    subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
-      ["external-child-session", "part:assistant-1:subtask-1"],
-    ]),
-    subagentPartIdByCorrelationKey: new Map<string, string>(),
-    subagentPartIdByExternalSessionId: new Map<string, string>(),
-    pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
-    pendingSubagentCorrelationKeys: [],
-    pendingSubagentSessionsByExternalSessionId: new Map(),
-    pendingSubagentPartEmissionsByExternalSessionId: new Map(),
-    pendingSubagentInputEventsByExternalSessionId: new Map([
-      [
-        "external-child-session",
-        [
-          {
-            type: "approval_required",
-            externalSessionId: "external-session-1",
-            timestamp: "2026-02-22T12:00:00.000Z",
-            requestId: "perm-child-1",
-            requestType: "permission_grant",
-            title: "Approve permission: write",
-            summary: "Approval request for write.",
-            affectedPaths: ["src/**"],
-            action: { name: "write" },
-            mutation: "mutating",
-            supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
-            childExternalSessionId: "external-child-session",
-          },
-          {
-            type: "question_required",
-            externalSessionId: "external-session-1",
-            timestamp: "2026-02-22T12:05:00.000Z",
-            requestId: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-            childExternalSessionId: "external-child-session",
-          },
-        ],
-      ],
-    ]),
-    pendingBackgroundTaskResultsByExternalSessionId: new Map(),
   };
 
   flushPendingSubagentInputEventsForSession(runtime, "external-child-session");
@@ -491,7 +475,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     },
   ]);
   expect(
-    runtime.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
   ).toBeUndefined();
 });
 

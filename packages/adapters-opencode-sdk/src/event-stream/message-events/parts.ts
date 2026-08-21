@@ -59,18 +59,18 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   const deltaValue = readUnknownProp(deltaEvent, "delta");
   const delta = typeof deltaValue === "string" ? deltaValue : "";
 
-  const knownPart = partId ? runtime.partsById.get(partId) : undefined;
+  const knownPart = partId ? runtime.session.partsById.get(partId) : undefined;
   const deltaMessageId = knownPart?.messageID ?? messageId;
-  if (deltaMessageId && runtime.compactionMessageIds.has(deltaMessageId)) {
+  if (deltaMessageId && runtime.session.compactionMessageIds.has(deltaMessageId)) {
     if (partId) {
-      runtime.pendingDeltasByPartId.delete(partId);
+      runtime.session.pendingDeltasByPartId.delete(partId);
     }
     return true;
   }
   if (knownPart && field.length > 0) {
     const updatedPart = applyDeltaToPart(knownPart, field, delta);
     if (updatedPart) {
-      setMessagePart(runtime, updatedPart);
+      setMessagePart(runtime.session, updatedPart);
       emitAssistantPart(runtime, updatedPart);
       maybeEmitCompletedAssistantMessage(runtime, {
         messageId: updatedPart.messageID,
@@ -80,9 +80,9 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   }
 
   if (partId && field.length > 0) {
-    const pending = runtime.pendingDeltasByPartId.get(partId) ?? [];
+    const pending = runtime.session.pendingDeltasByPartId.get(partId) ?? [];
     pending.push({ field, delta });
-    runtime.pendingDeltasByPartId.set(partId, pending);
+    runtime.session.pendingDeltasByPartId.set(partId, pending);
     return true;
   }
 
@@ -92,7 +92,7 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   if (!messageId) {
     return true;
   }
-  const deltaRole = runtime.messageRoleById.get(messageId);
+  const deltaRole = runtime.session.messageRoleById.get(messageId);
   if (deltaRole !== "assistant") {
     return true;
   }
@@ -138,22 +138,22 @@ export const handleMessagePartUpdatedEvent = (
     if (messageId) {
       suppressCompactionMessage(runtime, messageId);
     }
-    deleteMessagePart(runtime, partId);
-    runtime.pendingDeltasByPartId.delete(partId);
+    deleteMessagePart(runtime.session, partId);
+    runtime.session.pendingDeltasByPartId.delete(partId);
     return true;
   }
-  if (messageId && runtime.compactionMessageIds.has(messageId)) {
-    deleteMessagePart(runtime, partId);
-    runtime.pendingDeltasByPartId.delete(partId);
+  if (messageId && runtime.session.compactionMessageIds.has(messageId)) {
+    deleteMessagePart(runtime.session, partId);
+    runtime.session.pendingDeltasByPartId.delete(partId);
     return true;
   }
 
   const current = rawPartRecord as Part;
   const nextPart = applyPendingDeltas(runtime, partId, current);
-  setMessagePart(runtime, nextPart);
+  setMessagePart(runtime.session, nextPart);
   emitAssistantPart(runtime, nextPart);
   const nextMessageId = nextPart.messageID;
-  const role = runtime.messageRoleById.get(nextMessageId);
+  const role = runtime.session.messageRoleById.get(nextMessageId);
   if (role === "assistant") {
     maybeEmitCompletedAssistantMessage(runtime, {
       messageId: nextMessageId,
@@ -182,8 +182,8 @@ export const handleMessagePartRemovedEvent = (
     return true;
   }
 
-  deleteMessagePart(runtime, removedPartId);
-  runtime.pendingDeltasByPartId.delete(removedPartId);
+  deleteMessagePart(runtime.session, removedPartId);
+  runtime.session.pendingDeltasByPartId.delete(removedPartId);
   removeSubagentCorrelationForPart(runtime, removedPartId);
   return true;
 };

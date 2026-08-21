@@ -5,12 +5,12 @@ import {
   type readMessageModelSelection,
   readVisibleUserTextFromDisplayParts,
 } from "../../message-normalizers";
-import type { SessionMessageMetadata } from "../../types";
+import type { SessionMessageMetadata, SessionRecord } from "../../types";
 import type { EventStreamRuntime } from "../shared";
 import { getKnownMessageParts } from "./helpers";
 
 export const persistUserMessageMetadata = (input: {
-  session: ReturnType<EventStreamRuntime["getSession"]>;
+  session: SessionRecord;
   messageId: string;
   timestamp: string;
   metadata?: SessionMessageMetadata;
@@ -18,7 +18,7 @@ export const persistUserMessageMetadata = (input: {
   visible: string;
   displayParts: AgentUserMessageDisplayPart[];
 }): void => {
-  input.session?.messageMetadataById.set(input.messageId, {
+  input.session.messageMetadataById.set(input.messageId, {
     timestamp: input.metadata?.timestamp ?? input.timestamp,
     ...(input.model
       ? { model: input.model }
@@ -59,8 +59,8 @@ const buildKnownUserMessageContent = (
     displayParts?: AgentUserMessageDisplayPart[];
   },
 ): { visible: string; displayParts: AgentUserMessageDisplayPart[] } | null => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  const metadata = session?.messageMetadataById.get(input.messageId);
+  const { session } = runtime;
+  const metadata = session.messageMetadataById.get(input.messageId);
   const fallbackText = metadata?.text ?? "";
   let displayParts = input.displayParts;
   if (displayParts === undefined) {
@@ -92,9 +92,9 @@ export const emitUserMessage = (
     model?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
+  const { session } = runtime;
   const signature = buildUserMessageSignature(input);
-  if (session?.emittedUserMessageSignatures.get(input.messageId) === signature) {
+  if (session.emittedUserMessageSignatures.get(input.messageId) === signature) {
     return true;
   }
 
@@ -108,8 +108,8 @@ export const emitUserMessage = (
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
   });
-  session?.emittedUserMessageSignatures.set(input.messageId, signature);
-  session?.emittedUserMessageStates.set(input.messageId, input.state);
+  session.emittedUserMessageSignatures.set(input.messageId, signature);
+  session.emittedUserMessageStates.set(input.messageId, input.state);
   return true;
 };
 
@@ -150,8 +150,8 @@ export const emitAdmittedUserMessage = (
     model?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  runtime.messageRoleById.set(input.messageId, "user");
+  const { session } = runtime;
+  session.messageRoleById.set(input.messageId, "user");
   persistUserMessageMetadata({
     session,
     messageId: input.messageId,
