@@ -8,7 +8,7 @@ import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openduck
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
-import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 
@@ -102,20 +102,3 @@ export type StartSessionExecutionDependencies = Pick<
   StartSessionDependencies,
   "session" | "runtime" | "task" | "model"
 >;
-
-export type FreshStartRuntimeContext = {
-  runtime: RuntimeInfo;
-  systemPrompt: string;
-};
-
-export type StartOrReuseResult =
-  | {
-      kind: "reused";
-      session: AgentSessionIdentity;
-    }
-  | {
-      kind: "started";
-      runtimeInfo: RuntimeInfo;
-      taskCard: TaskCard;
-      ctx: StartedSessionContext;
-    };

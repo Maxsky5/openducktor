@@ -1,59 +1,7 @@
-import type { AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
-import { createSessionMessagesState } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
-import { buildSessionHeaderMessages } from "../support/session-prompt";
-import type {
-  SessionDependencies,
-  SessionStartTags,
-  StartedSessionContext,
-} from "./start-session.types";
-
-export const buildInitialSession = ({
-  startedCtx,
-  selectedModel,
-  systemPrompt,
-  initialMessages,
-}: {
-  startedCtx: StartedSessionContext;
-  selectedModel: AgentModelSelection;
-  systemPrompt: string;
-  initialMessages?: AgentSessionState["messages"];
-}): AgentSessionState => {
-  const session: AgentSessionState = {
-    externalSessionId: startedCtx.summary.externalSessionId,
-    sessionAssociation: {
-      kind: "workflow",
-      taskId: startedCtx.taskId,
-      role: startedCtx.role,
-    },
-    runtimeKind: startedCtx.summary.runtimeKind,
-    status: startedCtx.holdForPostStartMessage ? "starting" : "idle",
-    runtimeStatusMessage: null,
-    startedAt: startedCtx.summary.startedAt,
-    workingDirectory: startedCtx.summary.workingDirectory,
-    historyLoadState: "loaded",
-    messages:
-      initialMessages ??
-      createSessionMessagesState(
-        startedCtx.summary.externalSessionId,
-        buildSessionHeaderMessages({
-          externalSessionId: startedCtx.summary.externalSessionId,
-          systemPrompt,
-          startedAt: startedCtx.summary.startedAt,
-        }),
-      ),
-    contextUsage: null,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    selectedModel,
-  };
-  if (startedCtx.summary.title) {
-    session.title = startedCtx.summary.title;
-  }
-  return session;
-};
+import type { SessionDependencies, SessionStartTags } from "./start-session.types";
 
 export const persistInitialSession = async ({
   initialSession,

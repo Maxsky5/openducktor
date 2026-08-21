@@ -2,20 +2,26 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
+import {
+  createExecutePreparedSessionLaunch,
+  type PreparedSessionLaunchResult,
+} from "./session-launch-executor";
 import type {
   StartAgentSessionInput,
   StartAgentSessionResult,
-  StartOrReuseResult,
   StartSessionContext,
   StartSessionDependencies,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
-import { executeForkStart } from "./start-session-fork-strategy";
-import { executeFreshStart } from "./start-session-fresh-strategy";
-import { resolveStartTask } from "./start-session-policies";
 import { executeReuseStart } from "./start-session-reuse-strategy";
-import { rollbackRegisteredStartedSession } from "./start-session-rollback";
+import { resolveStartTask } from "./start-session-policies";
+import { rollbackBootstrapAfterStartFailure } from "./start-session-rollback";
 import { serializeSelectedModelKey } from "./start-session-runtime";
+import {
+  commitWorkflowSessionLaunch,
+  prepareWorkflowForkLaunch,
+  prepareWorkflowFreshLaunch,
+} from "./start-session-workflow-launch";
 
 export type {
   StartAgentSessionInput,
@@ -41,6 +47,14 @@ export const createStartAgentSession = ({
   task,
   model,
 }: StartSessionDependencies) => {
+  const executePreparedLaunch = createExecutePreparedSessionLaunch({
+    adapter: runtime.adapter,
+    replaceSession: session.replaceSession,
+    removeSession: session.removeSession,
+    loadSettingsSnapshot: model.loadSettingsSnapshot,
+    repoEpochRef: repo.repoEpochRef,
+    currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
+  });
   return async (input: StartAgentSessionInput): Promise<StartAgentSessionResult> => {
     const { taskId, role, startMode } = input;
     const repoPath = requireWorkspaceRepoPath(repo.workspaceRepoPath);
@@ -68,6 +82,7 @@ export const createStartAgentSession = ({
     if (input.startMode === "fresh" && role === "qa") {
       resolveStartTask({ ctx: startCtx, task });
     }
+
     const sourceSessionKey =
       input.startMode === "fresh" ? "" : agentSessionIdentityKey(input.sourceSession);
     const freshStartTarget = resolveFreshStartTarget({
@@ -99,67 +114,45 @@ export const createStartAgentSession = ({
         task,
         model,
       };
-      let startResult: StartOrReuseResult;
       if (input.startMode === "reuse") {
-        startResult = await executeReuseStart({ ctx: startCtx, input, deps });
-      } else if (input.startMode === "fork") {
-        startResult = await executeForkStart({ ctx: startCtx, input, deps });
-      } else {
-        startResult = await executeFreshStart({
-          ctx: startCtx,
-          input,
-          targetWorkingDirectory: freshStartTarget?.targetWorkingDirectory,
-          deps,
-        });
-      }
-      if (startResult.kind === "reused") {
-        return startResult.session;
+        const reused = await executeReuseStart({ ctx: startCtx, input, deps });
+        return reused.session;
       }
 
-      let freshBootstrapCommitted = false;
-      let bootstrapCompletionAttempted = false;
-      let bootstrapCompleted = false;
+      const prepared =
+        input.startMode === "fork"
+          ? await prepareWorkflowForkLaunch({ ctx: startCtx, input, deps })
+          : await prepareWorkflowFreshLaunch({
+              ctx: startCtx,
+              input,
+              targetWorkingDirectory: freshStartTarget?.targetWorkingDirectory,
+              deps,
+            });
+
+      let commitStarted = false;
       try {
-        if (startResult.ctx.isStaleRepoOperation()) {
-          throw new Error(STALE_START_ERROR);
-        }
-        bootstrapCompletionAttempted = !!startResult.runtimeInfo.bootstrap;
-        await startResult.runtimeInfo.bootstrap?.complete();
-        bootstrapCompleted = !!startResult.runtimeInfo.bootstrap;
-        freshBootstrapCommitted = input.startMode === "fresh" && bootstrapCompleted;
-        if (startResult.ctx.isStaleRepoOperation()) {
-          throw new Error(STALE_START_ERROR);
-        }
+        const result: PreparedSessionLaunchResult = await executePreparedLaunch({
+          launch: prepared.launch,
+          commit: async (commitInput) => {
+            commitStarted = true;
+            await commitWorkflowSessionLaunch({
+              ...commitInput,
+              prepared,
+              ctx: startCtx,
+              deps: { session, runtime },
+            });
+          },
+        });
+        return result.identity;
       } catch (cause) {
-        if (freshBootstrapCommitted) {
+        if (commitStarted || !prepared.bootstrap) {
           throw cause;
         }
-        const identity = {
-          externalSessionId: startResult.ctx.summary.externalSessionId,
-          runtimeKind: startResult.runtimeInfo.runtimeKind,
-          workingDirectory: startResult.runtimeInfo.workingDirectory,
-        };
-        const rollbackInput: Parameters<typeof rollbackRegisteredStartedSession>[0] = {
-          message: cause instanceof Error ? cause.message : String(cause),
+        return rollbackBootstrapAfterStartFailure({
           cause,
-          startedCtx: startResult.ctx,
-          identity,
-          session,
-          runtime,
-          stopReason: "start-session-stop-after-bootstrap-failure",
-        };
-        if (startResult.runtimeInfo.bootstrap && !bootstrapCompleted) {
-          rollbackInput.bootstrap = startResult.runtimeInfo.bootstrap;
-          rollbackInput.commitBootstrapOnDeleteFailure = !bootstrapCompletionAttempted;
-        }
-        await rollbackRegisteredStartedSession(rollbackInput);
+          bootstrap: prepared.bootstrap,
+        });
       }
-
-      return {
-        externalSessionId: startResult.ctx.summary.externalSessionId,
-        runtimeKind: startResult.runtimeInfo.runtimeKind,
-        workingDirectory: startResult.runtimeInfo.workingDirectory,
-      };
     });
   };
 };
