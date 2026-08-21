@@ -8,7 +8,7 @@ import {
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
-  agentSessionLiveSnapshotIdentityKeys,
+  applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
 import { applyWorkflowSessionRecordOverlay } from "./agent-session-workflow-overlay";
@@ -16,7 +16,6 @@ import type { DurableWorkflowSessionRecords } from "./agent-session-workflow-ove
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
-const noLiveReportedIdentityKeys: ReadonlySet<string> = new Set();
 
 const record = (
   externalSessionId: string,
@@ -80,22 +79,18 @@ const projectAndOverlay = ({
   applyWorkflowSessionRecordOverlay({
     projected: buildAgentSessionLiveCollection({ current, snapshots }),
     durableRecords: records,
-    liveReportedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(snapshots),
   });
 
 const overlayOnly = ({
   projected,
   durableRecords: records,
-  liveReportedIdentityKeys = noLiveReportedIdentityKeys,
 }: {
   projected: ReturnType<typeof emptyAgentSessionCollection>;
   durableRecords: DurableWorkflowSessionRecords;
-  liveReportedIdentityKeys?: ReadonlySet<string>;
 }) =>
   applyWorkflowSessionRecordOverlay({
     projected,
     durableRecords: records,
-    liveReportedIdentityKeys,
   });
 
 describe("agent session workflow record overlay", () => {
@@ -362,47 +357,50 @@ describe("agent session workflow record overlay", () => {
   });
 
   test("keeps a live workflow session across snapshot reconcile and task refresh while the runtime reports it", () => {
-    const snapshots = [
-      snapshot("live-thread", {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-      }),
-    ];
-    const liveReportedIdentityKeys = agentSessionLiveSnapshotIdentityKeys(snapshots);
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots,
+      snapshots: [
+        snapshot("live-thread", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
     });
+    expect(getAgentSession(projected, identity("live-thread"))?.liveReported).toBe(true);
 
     const afterSnapshotReconcile = applyWorkflowSessionRecordOverlay({
       projected,
       durableRecords: durableRecords(),
-      liveReportedIdentityKeys,
     });
-    expect(getAgentSession(afterSnapshotReconcile, identity("live-thread"))).not.toBeNull();
+    expect(getAgentSession(afterSnapshotReconcile, identity("live-thread"))?.liveReported).toBe(
+      true,
+    );
 
     const afterTaskRefresh = overlayOnly({
       projected,
       durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
-      liveReportedIdentityKeys,
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).not.toBeNull();
   });
 
   test("a task refresh prunes a workflow projection the runtime stopped reporting", () => {
-    const snapshots = [
-      snapshot("live-thread", {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-      }),
-    ];
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
-      snapshots,
+      snapshots: [
+        snapshot("live-thread", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
     });
+    // The runtime removed the session; the settled projection loses live reportage.
+    const removed = applyAgentSessionLiveDelta({
+      current: projected,
+      envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
+    });
+    expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
 
     const afterTaskRefresh = overlayOnly({
-      projected,
+      projected: removed,
       durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
-      liveReportedIdentityKeys: noLiveReportedIdentityKeys,
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).toBeNull();
   });
@@ -460,7 +458,7 @@ describe("agent session workflow record overlay", () => {
     },
   );
 
-  test("clears ancestor mirrors when a pruned owner owned mirrored child input", () => {
+  test("keeps a snapshot-backed owner and its mirrors when its durable record moves away", () => {
     const composed = projectAndOverlay({
       snapshots: [
         snapshot("root-thread"),
@@ -481,10 +479,17 @@ describe("agent session workflow record overlay", () => {
 
     const refreshed = overlayOnly({
       projected: composed,
-      durableRecords: durableRecords({ taskId: "task-1", record: record("other-thread") }),
+      durableRecords: durableRecords({ taskId: "task-2", record: record("other-thread") }),
     });
 
-    expect(getAgentSession(refreshed, identity("owner-thread"))).toBeNull();
-    expect(getAgentSession(refreshed, identity("root-thread"))?.pendingApprovals).toEqual([]);
+    expect(getAgentSession(refreshed, identity("owner-thread"))).not.toBeNull();
+    expect(getAgentSession(refreshed, identity("root-thread"))?.pendingApprovals).toEqual([
+      expect.objectContaining({ requestId: "owned-approval" }),
+    ]);
+    expect(getAgentSession(refreshed, identity("other-thread"))?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-2",
+      role: "build",
+    });
   });
 });

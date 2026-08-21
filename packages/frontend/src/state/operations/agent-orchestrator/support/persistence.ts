@@ -75,6 +75,7 @@ export const fromPersistedSessionRecord = ({
     // Stored records lack live state, so cold reads start idle.
     status: "idle",
     runtimeStatusMessage: null,
+    liveReported: false,
     startedAt: record.startedAt,
     runtimeKind: identity.runtimeKind,
     workingDirectory: identity.workingDirectory,

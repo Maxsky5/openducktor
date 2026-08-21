@@ -289,6 +289,100 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps a live workflow session when records refresh during an observer restart gap", async () => {
+    const releaseRestartSnapshot = createDeferred<void>();
+    const state = createState((emit, observeIndex) => {
+      if (observeIndex === 1) {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+        return;
+      }
+      // The restarted observer delays its authoritative snapshot.
+      void releaseRestartSnapshot.promise.then(() => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      await state.harness.run(() => {
+        state.harness.getLatest().reloadSessionReadModel();
+      });
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 2);
+
+      // Task records refresh while the restarted observer waits for its snapshot.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in-gap" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const refreshedIdentity = {
+        externalSessionId: "thread-refreshed-in-gap",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      releaseRestartSnapshot.resolve();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+      releaseRestartSnapshot.resolve();
+    }
+  });
+
+  test("permits historical pruning after the runtime removes a live session", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      expect(state.getSession()).not.toBeNull();
+
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+      });
+      await state.harness.waitFor(() => state.getSession() === null);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("projects repository association into session state", async () => {
     const state = createState((emit) => {
       emit({

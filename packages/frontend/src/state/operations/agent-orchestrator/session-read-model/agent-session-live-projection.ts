@@ -227,6 +227,7 @@ const applyDirectSnapshot = (
     return {
       ...current,
       sessionAssociation,
+      liveReported: true,
       liveParentExternalSessionId: snapshot.parentExternalSessionId,
       pendingApprovals: [],
       pendingQuestions: [],
@@ -247,6 +248,7 @@ const applyDirectSnapshot = (
     title: snapshot.title,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
+    liveReported: true,
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
@@ -365,6 +367,7 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     ...session,
     ...activity,
     runtimeStatusMessage: null,
+    liveReported: false,
     liveParentExternalSessionId: undefined,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
@@ -381,6 +384,7 @@ const resetSessionLiveStateForSnapshot = (
     ? projectObservedSessionActivity(session, "idle")
     : settleAbsentSessionActivity(session)),
   runtimeStatusMessage: null,
+  liveReported: hasLiveSnapshot,
   liveParentExternalSessionId: undefined,
   pendingApprovals: [],
   pendingQuestions: [],
