@@ -656,6 +656,61 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("forwards runtime-start evidence before a stop-only turn becomes idle", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const transcriptEventTypes: string[] = [];
+    const sessionStatuses: string[] = [];
+    await prepared.startForwarding((signal) => {
+      if (signal.type !== "transcript_event") {
+        return;
+      }
+      transcriptEventTypes.push(signal.event.type);
+      if (signal.event.type === "session_status") {
+        sessionStatuses.push(signal.event.status.type);
+      }
+    });
+
+    await prepared.connection.sendUserMessage({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+      parts: [{ kind: "text", text: "Do the work" }],
+    });
+    await harness.emitAndWait({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "assistant-stop-only",
+          sessionID: "session-1",
+          role: "assistant",
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "assistant-stop-only-step",
+            sessionID: "session-1",
+            messageID: "assistant-stop-only",
+            type: "step-finish",
+            reason: "stop",
+          },
+        ],
+      },
+    } as unknown as Event);
+    await harness.emitAndWait({
+      type: "session.idle",
+      properties: { sessionID: "session-1" },
+    } as Event);
+
+    expect(sessionStatuses).toEqual(["busy"]);
+    expect(transcriptEventTypes).toContain("session_idle");
+    expect(transcriptEventTypes).not.toContain("assistant_message");
+    await prepared.release();
+  });
+
   test("retains initialization context and reads genuinely missing context on demand", async () => {
     let resolveListStarted: () => void = () => undefined;
     let releaseList: () => void = () => undefined;

@@ -23,11 +23,11 @@ import {
   replyToOpencodeApproval,
   replyToOpencodeQuestion,
 } from "./opencode-session-native-operations";
+import { opencodeEventInvalidatesSessions } from "./opencode-agent-session-projection";
 import {
   isOpencodeSessionTranscriptEvent,
   type OpencodeSessionContextUsage,
   type OpencodeSessionRuntimeSignal,
-  opencodeEventInvalidatesSessions,
   readOpencodeSessionContextSignal,
   toOpencodeObservationFailureMessage,
 } from "./opencode-session-runtime-signals";

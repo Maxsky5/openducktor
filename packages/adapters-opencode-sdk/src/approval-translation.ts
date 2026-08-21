@@ -28,12 +28,15 @@ const readString = (record: UnknownRecord, keys: string[]): string | undefined =
   return undefined;
 };
 
-const readStringArray = (record: UnknownRecord, key: string): string[] => {
-  const value = record[key];
-  if (!Array.isArray(value)) {
-    return [];
+const readStringArray = (record: UnknownRecord, keys: string[]): string[] => {
+  for (const key of keys) {
+    const value = record[key];
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    return value.filter((entry): entry is string => typeof entry === "string");
   }
-  return value.filter((entry): entry is string => typeof entry === "string");
+  return [];
 };
 
 const readOptionalString = (record: UnknownRecord | undefined, key: string): string | undefined => {
@@ -55,7 +58,7 @@ export const normalizeOpenCodeApprovalRequest = (value: unknown): AgentPendingAp
   }
 
   const requestId = readString(record, ["id", "requestID", "requestId"]);
-  const permission = readString(record, ["permission"]);
+  const permission = readString(record, ["permission", "action"]);
   if (!requestId) {
     throw new Error("Malformed Opencode pending approval payload: missing request id.");
   }
@@ -66,7 +69,7 @@ export const normalizeOpenCodeApprovalRequest = (value: unknown): AgentPendingAp
   return toAgentApprovalRequestFromOpenCodePermission({
     requestId,
     permission,
-    patterns: readStringArray(record, "patterns"),
+    patterns: readStringArray(record, ["patterns", "resources"]),
     ...(asRecord(record.metadata) ? { metadata: asRecord(record.metadata) as UnknownRecord } : {}),
   });
 };

@@ -230,10 +230,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
   }
 
   const properties = readEventProperties(event);
-  const status = properties ? parseSessionStatus(properties) : undefined;
-  if (!status) {
-    return true;
-  }
+  const status = parseSessionStatus(properties);
 
   if (status.type === "busy" || status.type === "idle") {
     if (status.type === "busy") {
@@ -296,7 +293,7 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
 };
 
 const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "question.asked") {
+  if (event.type !== "question.asked" && event.type !== "question.v2.asked") {
     return false;
   }
 
@@ -332,8 +329,12 @@ const readPendingInputResolvedEventType = (
 ): PendingInputResolvedEvent["type"] | undefined => {
   switch (event.type) {
     case "permission.replied":
+    case "permission.v2.replied":
       return "approval_resolved";
     case "question.replied":
+    case "question.v2.replied":
+    case "question.rejected":
+    case "question.v2.rejected":
       return "question_resolved";
     default:
       return undefined;

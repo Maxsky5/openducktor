@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, EventSessionUpdated } from "@opencode-ai/sdk/v2/client";
+import type {
+  Event,
+  EventSessionUpdated,
+  SyncEventMessageRemoved,
+} from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -119,6 +123,135 @@ test("global event observation drops the raw envelope after normalizing sync eve
       directory: "/repo",
     },
   });
+});
+
+test("projects direct and sync message removal events as Transcript retractions", async () => {
+  const directEvent = {
+    id: "event-message-removed",
+    type: "message.removed",
+    properties: {
+      sessionID: "external-session-1",
+      messageID: "assistant-removed",
+    },
+  } as const;
+  const syncEvent = {
+    type: "sync",
+    id: "sync-message-removed",
+    syncEvent: {
+      type: "message.removed.1",
+      id: "sync-event-message-removed",
+      seq: 1,
+      aggregateID: "external-session-1",
+      data: {
+        sessionID: "external-session-1",
+        messageID: "assistant-removed",
+      },
+    },
+  } satisfies SyncEventMessageRemoved;
+
+  for (const event of [directEvent, syncEvent]) {
+    const emitted = await runEventStream([event]);
+    expect(emitted).toEqual([
+      {
+        type: "transcript_retracted",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        messageIds: ["assistant-removed"],
+      },
+    ]);
+  }
+});
+
+test("does not emit removed pending assistant output when the session becomes idle", async () => {
+  const emitted = await runEventStream([
+    {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "assistant-removed-before-idle",
+          role: "assistant",
+          sessionID: "external-session-1",
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "assistant-removed-before-idle-text",
+            sessionID: "external-session-1",
+            messageID: "assistant-removed-before-idle",
+            type: "text",
+            text: "This output was removed",
+            time: { start: 1, end: 2 },
+          },
+        ],
+      },
+    } as unknown as Event,
+    {
+      id: "event-message-removed-before-idle",
+      type: "message.removed",
+      properties: {
+        sessionID: "external-session-1",
+        messageID: "assistant-removed-before-idle",
+      },
+    },
+    makeSessionIdleEvent(),
+  ]);
+
+  expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+  expect(emitted.filter((event) => event.type === "transcript_retracted")).toHaveLength(1);
+});
+
+test("projects current OpenCode pending-input event families", async () => {
+  const emitted = await runEventStream([
+    {
+      id: "permission-v2-asked",
+      type: "permission.v2.asked",
+      properties: {
+        id: "permission-v2-1",
+        sessionID: "external-session-1",
+        action: "write",
+        resources: ["src/**"],
+      },
+    },
+    {
+      id: "permission-v2-replied",
+      type: "permission.v2.replied",
+      properties: {
+        sessionID: "external-session-1",
+        requestID: "permission-v2-1",
+        reply: "once",
+      },
+    },
+    {
+      id: "question-v2-asked",
+      type: "question.v2.asked",
+      properties: {
+        id: "question-v2-1",
+        sessionID: "external-session-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Continue?",
+            options: [{ label: "Yes", description: "Continue" }],
+          },
+        ],
+      },
+    },
+    {
+      id: "question-v2-rejected",
+      type: "question.v2.rejected",
+      properties: {
+        sessionID: "external-session-1",
+        requestID: "question-v2-1",
+      },
+    },
+  ]);
+
+  expect(emitted.map((event) => event.type)).toEqual([
+    "approval_required",
+    "approval_resolved",
+    "question_required",
+    "question_resolved",
+  ]);
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -2622,7 +2755,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("normalizes unknown session.status types as retry payload", async () => {
+  test("reports unsupported session.status types", async () => {
     const emitted = await runEventStream([
       {
         type: "session.status",
@@ -2638,17 +2771,12 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
-    const statusEvents = emitted.filter((event) => event.type === "session_status");
-    expect(statusEvents).toHaveLength(1);
-    if (statusEvents[0]?.type !== "session_status") {
-      throw new Error("Expected session_status event");
-    }
-    expect(statusEvents[0].status).toEqual({
-      type: "retry",
-      attempt: 3,
-      message: "Reconnecting",
-      nextEpochMs: 500,
-    });
+    expect(emitted).toEqual([
+      expect.objectContaining({
+        type: "session_error",
+        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+      }),
+    ]);
   });
 
   test("forwards permission and question events", async () => {

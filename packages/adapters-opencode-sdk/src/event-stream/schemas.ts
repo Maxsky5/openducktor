@@ -113,34 +113,45 @@ const parseQuestion = (value: unknown): ParsedQuestion | null => {
   };
 };
 
-export const parseSessionStatus = (properties: unknown): ParsedSessionStatus | undefined => {
+export const parseSessionStatus = (properties: unknown): ParsedSessionStatus => {
   const status = readRecordProp(properties, "status");
   if (!status) {
-    return undefined;
+    throw new Error("OpenCode session.status event is missing its status object.");
   }
 
   const type = readStringProp(status, ["type"]);
   if (type === "busy" || type === "idle") {
     return { type };
   }
+  if (!type) {
+    throw new Error("OpenCode session.status event is missing status.type.");
+  }
+  if (type !== "retry") {
+    throw new Error(`OpenCode session.status event has unsupported status type '${type}'.`);
+  }
 
-  // Keep unknown/missing status types forward-compatible by normalizing to retry.
-  return {
-    type: "retry",
-    attempt: readNumberProp(status, ["attempt"]) ?? 0,
-    message: readStringProp(status, ["message"]) ?? "Retrying session",
-    nextEpochMs: readNumberProp(status, ["next"]) ?? 0,
-  };
+  const attempt = readNumberProp(status, ["attempt"]);
+  const message = readStringProp(status, ["message"]);
+  const nextEpochMs = readNumberProp(status, ["next"]);
+  if (attempt === undefined || !message || nextEpochMs === undefined) {
+    throw new Error(
+      "OpenCode retry status must include numeric attempt and next values plus a non-blank message.",
+    );
+  }
+  return { type, attempt, message, nextEpochMs };
 };
 
 export const parsePermissionAsked = (properties: unknown): ParsedPermissionAsked | undefined => {
   const requestId = readStringProp(properties, ["id"]);
-  const permission = readStringProp(properties, ["permission"]);
+  const permission = readStringProp(properties, ["permission", "action"]);
   if (!requestId || !permission) {
     return undefined;
   }
 
-  const patterns = readStringArrayProp(properties, "patterns") ?? [];
+  const patterns =
+    readStringArrayProp(properties, "patterns") ??
+    readStringArrayProp(properties, "resources") ??
+    [];
   const metadata = readRecordProp(properties, "metadata");
   return {
     requestId,

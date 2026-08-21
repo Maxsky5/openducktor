@@ -1,10 +1,5 @@
 import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { AgentEvent } from "@openducktor/core";
-import { handleMessageEvent } from "./event-stream/message-events";
-import { handleSessionEvent } from "./event-stream/session-events";
-import type { SubagentSessionLink } from "./event-stream/shared";
 import {
-  type EventStreamRuntime,
   isRelevantEvent,
   readEventDirectory,
   readEventParentExternalSessionId,
@@ -12,27 +7,13 @@ import {
   readSessionLifecycleEvent,
 } from "./event-stream/shared";
 import { asUnknownRecord } from "./guards";
-import type {
-  EventStreamSubscriber,
-  OpencodeEventLogger,
-  SessionInput,
-  SessionRecord,
-} from "./types";
+import {
+  type ProjectOpencodeAgentSessionEventInput,
+  projectOpencodeAgentSessionEvent,
+} from "./opencode-agent-session-projection";
+import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 
-type CreateEventStreamRuntimeInput = {
-  context: {
-    externalSessionId: string;
-    input: SessionInput;
-  };
-  now: () => string;
-  emit: (sessionId: string, event: AgentEvent) => void;
-  getSession: (sessionId: string) => SessionRecord | undefined;
-  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
-};
-
-type ProcessOpencodeEventInput = CreateEventStreamRuntimeInput & {
-  event: Event;
-};
+type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
 
 type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
@@ -57,6 +38,8 @@ type GlobalEventStream = {
 };
 
 type GlobalEventPayload = GlobalEvent["payload"];
+type SyncGlobalEventPayload = Extract<GlobalEventPayload, { type: "sync" }>;
+type SyncEventType = SyncGlobalEventPayload["syncEvent"]["type"];
 
 type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
@@ -64,12 +47,41 @@ type GlobalEventApi = {
 
 const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "message.updated.1": "message.updated",
+  "message.removed.1": "message.removed",
   "message.part.updated.1": "message.part.updated",
   "message.part.removed.1": "message.part.removed",
   "session.created.1": "session.created",
   "session.updated.1": "session.updated",
   "session.deleted.1": "session.deleted",
-} as const;
+  "session.next.agent.switched.1": "session.next.agent.switched",
+  "session.next.model.switched.1": "session.next.model.switched",
+  "session.next.moved.1": "session.next.moved",
+  "session.next.prompted.1": "session.next.prompted",
+  "session.next.prompt.admitted.1": "session.next.prompt.admitted",
+  "session.next.context.updated.1": "session.next.context.updated",
+  "session.next.synthetic.1": "session.next.synthetic",
+  "session.next.shell.started.1": "session.next.shell.started",
+  "session.next.shell.ended.1": "session.next.shell.ended",
+  "session.next.step.started.1": "session.next.step.started",
+  "session.next.step.ended.2": "session.next.step.ended",
+  "session.next.step.failed.2": "session.next.step.failed",
+  "session.next.text.started.1": "session.next.text.started",
+  "session.next.text.ended.1": "session.next.text.ended",
+  "session.next.reasoning.started.1": "session.next.reasoning.started",
+  "session.next.reasoning.ended.1": "session.next.reasoning.ended",
+  "session.next.tool.input.started.1": "session.next.tool.input.started",
+  "session.next.tool.input.ended.1": "session.next.tool.input.ended",
+  "session.next.tool.called.1": "session.next.tool.called",
+  "session.next.tool.progress.1": "session.next.tool.progress",
+  "session.next.tool.success.1": "session.next.tool.success",
+  "session.next.tool.failed.1": "session.next.tool.failed",
+  "session.next.retried.1": "session.next.retried",
+  "session.next.compaction.started.1": "session.next.compaction.started",
+  "session.next.compaction.ended.1": "session.next.compaction.ended",
+  "session.next.revert.staged.1": "session.next.revert.staged",
+  "session.next.revert.cleared.1": "session.next.revert.cleared",
+  "session.next.revert.committed.1": "session.next.revert.committed",
+} as const satisfies Record<SyncEventType, Event["type"]>;
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
   const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
@@ -117,13 +129,15 @@ const normalizeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
     );
   }
 
+  if (!Object.hasOwn(NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE, syncEventType)) {
+    throw new Error(
+      `OpenCode sync event '${syncEventType}' has no normalization decision; update the adapter for this SDK event.`,
+    );
+  }
   const eventType =
     NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[
       syncEventType as keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE
     ];
-  if (!eventType) {
-    return payload as unknown as Event;
-  }
   const data = asUnknownRecord(syncEvent.data);
   if (!data) {
     throw new Error(
@@ -167,54 +181,8 @@ const isEventDirectoryScopedToSubscriber = (
   );
 };
 
-export const createEventStreamRuntime = (
-  input: CreateEventStreamRuntimeInput,
-): EventStreamRuntime | null => {
-  const session = input.getSession(input.context.externalSessionId);
-  if (!session) {
-    return null;
-  }
-
-  return {
-    externalSessionId: input.context.externalSessionId,
-    input: input.context.input,
-    now: input.now,
-    emit: input.emit,
-    getSession: input.getSession,
-    ...(input.resolveSubagentSessionLink
-      ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
-      : {}),
-    partsById: session.partsById,
-    partIdsByMessageId: session.partIdsByMessageId,
-    messageRoleById: session.messageRoleById,
-    compactionMessageIds: session.compactionMessageIds,
-    pendingDeltasByPartId: session.pendingDeltasByPartId,
-    subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
-    subagentCorrelationKeyByExternalSessionId: session.subagentCorrelationKeyByExternalSessionId,
-    subagentPartIdByCorrelationKey: session.subagentPartIdByCorrelationKey,
-    subagentPartIdByExternalSessionId: session.subagentPartIdByExternalSessionId,
-    pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
-    pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
-    pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,
-    pendingSubagentPartEmissionsByExternalSessionId:
-      session.pendingSubagentPartEmissionsByExternalSessionId,
-    pendingSubagentInputEventsByExternalSessionId:
-      session.pendingSubagentInputEventsByExternalSessionId,
-    pendingBackgroundTaskResultsByExternalSessionId:
-      session.pendingBackgroundTaskResultsByExternalSessionId,
-  };
-};
-
 export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
-  const runtime = createEventStreamRuntime(input);
-  if (!runtime) {
-    return;
-  }
-
-  if (handleMessageEvent(input.event, runtime)) {
-    return;
-  }
-  handleSessionEvent(input.event, runtime);
+  projectOpencodeAgentSessionEvent(input);
 };
 
 export const logStreamEvent = ({ subscriber, event, relevant, logEvent }: LogEventInput): void => {
@@ -275,8 +243,13 @@ export const isRelevantSubscriberEvent = (
       (eventType === "permission.asked" ||
         eventType === "permission.v2.asked" ||
         eventType === "permission.replied" ||
+        eventType === "permission.v2.replied" ||
         eventType === "question.asked" ||
-        eventType === "question.replied") &&
+        eventType === "question.v2.asked" ||
+        eventType === "question.replied" ||
+        eventType === "question.v2.replied" ||
+        eventType === "question.rejected" ||
+        eventType === "question.v2.rejected") &&
       options?.resolveParentExternalSessionId?.(eventExternalSessionId) ===
         subscriber.externalSessionId
     ) {

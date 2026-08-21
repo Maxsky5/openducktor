@@ -32,24 +32,9 @@ export type OpencodeSessionRuntimeSignal =
     }
   | { readonly type: "fault"; readonly message: string };
 
-const SESSION_INVALIDATION_EVENT_TYPES: ReadonlySet<string> = new Set([
-  "session.created",
-  "session.updated",
-  "session.deleted",
-  "session.error",
-  "permission.asked",
-  "permission.v2.asked",
-  "permission.replied",
-  "question.asked",
-  "question.replied",
-]);
-
 export const isOpencodeSessionTranscriptEvent = (
   event: AgentEvent,
 ): event is OpencodeSessionTranscriptEvent => isAgentSessionTranscriptEventType(event.type);
-
-export const opencodeEventInvalidatesSessions = (event: Event): boolean =>
-  SESSION_INVALIDATION_EVENT_TYPES.has(String(event.type));
 
 export const readOpencodeSessionContextSignal = (
   event: Event,

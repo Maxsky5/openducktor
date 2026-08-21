@@ -7,8 +7,8 @@ import {
 } from "./schemas";
 
 describe("event-stream schemas", () => {
-  test("parseSessionStatus maps unknown type to retry payload", () => {
-    expect(
+  test("parseSessionStatus rejects unknown status types", () => {
+    expect(() =>
       parseSessionStatus({
         status: {
           type: "reconnect",
@@ -17,21 +17,11 @@ describe("event-stream schemas", () => {
           next: 900,
         },
       }),
-    ).toEqual({
-      type: "retry",
-      attempt: 4,
-      message: "Backoff",
-      nextEpochMs: 900,
-    });
+    ).toThrow("unsupported status type 'reconnect'");
   });
 
-  test("parseSessionStatus maps missing type to retry defaults", () => {
-    expect(parseSessionStatus({ status: {} })).toEqual({
-      type: "retry",
-      attempt: 0,
-      message: "Retrying session",
-      nextEpochMs: 0,
-    });
+  test("parseSessionStatus rejects a missing status type", () => {
+    expect(() => parseSessionStatus({ status: {} })).toThrow("missing status.type");
   });
 
   test("parsePermissionAsked normalizes invalid patterns as empty list", () => {
@@ -45,6 +35,22 @@ describe("event-stream schemas", () => {
       requestId: "perm-1",
       permission: "write",
       patterns: [],
+    });
+  });
+
+  test("parsePermissionAsked maps the OpenCode v2 action and resources", () => {
+    expect(
+      parsePermissionAsked({
+        id: "perm-v2-1",
+        action: "write",
+        resources: ["src/**"],
+        metadata: { tool: "edit" },
+      }),
+    ).toEqual({
+      requestId: "perm-v2-1",
+      permission: "write",
+      patterns: ["src/**"],
+      metadata: { tool: "edit" },
     });
   });
 
