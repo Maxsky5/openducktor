@@ -76,7 +76,7 @@ describe("resolveSessionStartKickoffPromptContext", () => {
         },
       },
     });
-    expect(loadRepoDefaultTargetBranch).toHaveBeenCalledTimes(1);
+    expect(loadRepoDefaultTargetBranch).not.toHaveBeenCalled();
   });
 
   test("uses the repository default for pull request context when the task has no target", async () => {

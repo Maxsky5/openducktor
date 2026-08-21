@@ -39,7 +39,7 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
   taskTargetBranch,
   loadRepoDefaultTargetBranch,
 }) => {
-  const repoDefaultTargetBranch = await loadRepoDefaultTargetBranch();
+  const repoDefaultTargetBranch = taskTargetBranch ? null : await loadRepoDefaultTargetBranch();
   return {
     git: {
       targetBranch: effectiveTaskTargetBranch(taskTargetBranch, repoDefaultTargetBranch),

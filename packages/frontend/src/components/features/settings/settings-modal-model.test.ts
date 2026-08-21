@@ -336,6 +336,23 @@ describe("settings-modal-model", () => {
     });
   });
 
+  test("ignores validation errors in disabled prompt overrides", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.build_pull_request_generation": {
+        template: "Publish the pull request.",
+        baseVersion: 4,
+        enabled: false,
+      },
+      "kickoff.spec_initial": {
+        template: "Unsupported {{task.foo}}",
+        baseVersion: 1,
+        enabled: false,
+      },
+    };
+
+    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({});
+  });
+
   test("enables prompt override and creates missing entries from fallback values", () => {
     const emptyOverrides: RepoPromptOverrides = {};
     const created = togglePromptOverrideEnabled(

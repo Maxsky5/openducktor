@@ -1,6 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { RepoConfig } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { workspaceQueryKeys } from "@/state/queries/workspace";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { startSessionWorkflow } from "./session-start-workflow";
 
 const BUILD_SELECTION = {
@@ -181,6 +186,74 @@ describe("session-start-workflow", () => {
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
     expect(sentText).toContain("Pull request base:\nmain");
     expect(sentText).not.toContain("origin/main");
+  });
+
+  test("uses the repository default target for a forked pull request kickoff", async () => {
+    const queryClient = new QueryClient();
+    const repoConfig = {
+      workspaceId: "workspace-pr",
+      workspaceName: "PR workspace",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "odt",
+      defaultTargetBranch: {
+        remote: "upstream",
+        branch: "develop",
+      },
+      git: { providers: {} },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeCopyPaths: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    } satisfies RepoConfig;
+    queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
+    queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture({
+        workspaces: {
+          "workspace-pr": repoConfig,
+        },
+      }),
+    );
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
+    const sourceSession = sessionIdentity("builder-session-fork");
+
+    await startSessionWorkflow({
+      workspaceId: "workspace-pr",
+      queryClient,
+      intent: {
+        taskId: "TASK-FORK",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        startMode: "fork",
+        sourceSession,
+        postStartAction: "kickoff",
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-FORK",
+        title: "Fork for pull request",
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith({
+      taskId: "TASK-FORK",
+      role: "build",
+      startMode: "fork",
+      selectedModel: BUILD_SELECTION,
+      sourceSession,
+      holdForPostStartMessage: true,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr-fork"), [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("Pull request base:\ndevelop"),
+      }),
+    ]);
   });
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {
