@@ -156,11 +156,7 @@ const reportRuntimeEventFailure = (input: {
   }
 
   if (!subscriberId) {
-    console.error("OpenCode runtime event projection failed without a session owner.", {
-      scope: input.scope,
-      error: failure,
-    });
-    return;
+    throw failure;
   }
   input.emit(subscriberId, {
     type: "session_error",

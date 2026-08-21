@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type {
   Event,
   EventSessionDeleted,
@@ -406,30 +406,29 @@ describe("session registry runtime event transport", () => {
     ]);
   });
 
-  test("logs a runtime event failure that has no safe session owner", async () => {
-    const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
-    try {
-      const emitted = await runRuntimeEventTransport(
+  test("terminates runtime observation when an event failure has no safe session owner", async () => {
+    const terminalFailures: Error[] = [];
+
+    await expect(
+      runRuntimeEventTransport(
         [
           {
             type: "session.created",
             properties: { info: {} },
           } as unknown as GlobalEventPayload,
         ],
-        { externalSessionIds: ["external-session-1", "external-session-2"] },
-      );
-
-      expect(emitted.filter((event) => event.type === "session_error")).toHaveLength(0);
-      expect(consoleError).toHaveBeenCalledWith(
-        "OpenCode runtime event projection failed without a session owner.",
-        expect.objectContaining({
-          scope: { directory: "/repo" },
-          error: expect.any(Error),
-        }),
-      );
-    } finally {
-      consoleError.mockRestore();
-    }
+        {
+          externalSessionIds: ["external-session-1", "external-session-2"],
+          onTransport: (transport) => {
+            transport.terminalObservers.add((error) => {
+              terminalFailures.push(error);
+            });
+          },
+        },
+      ),
+    ).rejects.toThrow();
+    expect(terminalFailures).toHaveLength(1);
+    expect(terminalFailures[0]?.message).toContain("session.created");
   });
 
   test("routes direct child session creation to the single pending subagent card", async () => {

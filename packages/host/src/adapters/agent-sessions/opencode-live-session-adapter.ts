@@ -200,13 +200,18 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                   ...signal.event,
                   sessionRef: ref,
                 });
-                const runtimeActivity = runtimeActivityFromTranscriptEvent(event);
+                let stateChanges: AgentSessionLiveAdapterMutation<void>["changes"] = [];
+                if (event.type === "session_error") {
+                  stateChanges = state.settleSessionError(ref);
+                } else {
+                  const runtimeActivity = runtimeActivityFromTranscriptEvent(event);
+                  if (runtimeActivity) {
+                    stateChanges = state.setRuntimeActivity(ref, runtimeActivity);
+                  }
+                }
                 return {
                   value: undefined,
-                  changes: [
-                    ...(runtimeActivity ? state.setRuntimeActivity(ref, runtimeActivity) : []),
-                    { type: "transcript_event", event },
-                  ],
+                  changes: [...stateChanges, { type: "transcript_event", event }],
                 };
               }),
             );

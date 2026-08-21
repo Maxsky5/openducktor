@@ -142,6 +142,67 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     ]);
   });
 
+  test("clears retained pending input when a session errors", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const before = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
+    if (before.type !== "live") {
+      throw new Error("Expected the OpenCode session to be retained.");
+    }
+    const approvalRequestId = before.session.pendingApprovals[0]?.requestId;
+    if (!approvalRequestId) {
+      throw new Error("Expected a pending OpenCode approval.");
+    }
+
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.emit({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: {
+        type: "session_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:04:00.000Z",
+        message: "Turn failed.",
+      },
+    });
+
+    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        adapter.replyApproval({
+          ...ref,
+          requestId: approvalRequestId,
+          outcome: "approve_once",
+        }),
+      ),
+    ).rejects.toThrow("Unknown or resolved OpenCode approval occurrence");
+    expect(publishedChanges).toContainEqual({
+      type: "session_upsert",
+      snapshot: expect.objectContaining({
+        ref,
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    });
+
+    await Effect.runPromise(adapter.releaseRuntime());
+  });
+
   test("keeps missing-context work demand-driven and shares one in-flight request", async () => {
     const harness = createRuntimeHarness();
     harness.setSources([

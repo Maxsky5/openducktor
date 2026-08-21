@@ -280,6 +280,26 @@ export const createOpenCodeLiveSessionState = ({
     return [{ type: "session_upsert", snapshot: retained.snapshot }];
   };
 
+  const settleSessionError = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
+    const retained = requireSession(ref);
+    pendingRequests.removeSession(ref);
+    retained.runtimeActivity = "idle";
+    const snapshot = parseSnapshot(
+      {
+        ...retained.snapshot,
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+      "opencode-live-session.settle-session-error",
+    );
+    if (snapshotsEqual(retained.snapshot, snapshot)) {
+      return [];
+    }
+    retained.snapshot = snapshot;
+    return [{ type: "session_upsert", snapshot }];
+  };
+
   const requirePendingRoute = (
     ref: AgentSessionLiveRef,
     occurrenceId: string,
@@ -363,6 +383,7 @@ export const createOpenCodeLiveSessionState = ({
     applyLoadedContext,
     retainControlSummary,
     setRuntimeActivity,
+    settleSessionError,
     requirePendingRoute,
     completePendingReply,
     removeSession,

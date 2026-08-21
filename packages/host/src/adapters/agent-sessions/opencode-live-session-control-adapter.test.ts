@@ -222,6 +222,99 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("serializes sends within one session while other sessions stay concurrent", async () => {
+    let releaseSends: () => void = () => undefined;
+    let resolveFirstSend: () => void = () => undefined;
+    let resolveSecondSend: () => void = () => undefined;
+    let resolveThirdSend: () => void = () => undefined;
+    const sendBarrier = new Promise<void>((resolve) => {
+      releaseSends = resolve;
+    });
+    const firstSendStarted = new Promise<void>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    const secondSendStarted = new Promise<void>((resolve) => {
+      resolveSecondSend = resolve;
+    });
+    const thirdSendStarted = new Promise<void>((resolve) => {
+      resolveThirdSend = resolve;
+    });
+    let startedSendCount = 0;
+    const harness = createRuntimeHarness({
+      sendUserMessageBarrier: sendBarrier,
+      onSendUserMessage: () => {
+        startedSendCount += 1;
+        if (startedSendCount === 1) {
+          resolveFirstSend();
+        } else if (startedSendCount === 2) {
+          resolveSecondSend();
+        } else if (startedSendCount === 3) {
+          resolveThirdSend();
+        }
+      },
+    });
+    harness.setSources([
+      nativeSource({ pendingApprovals: [], pendingQuestions: [] }),
+      nativeSource({
+        externalSessionId: "session-2",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    ]);
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    const send = (externalSessionId: string) =>
+      Effect.runPromise(
+        adapter.sendUserMessage({
+          ...ref,
+          externalSessionId,
+          sessionScope,
+          parts: [{ kind: "text", text: "Hello" }],
+        }),
+      );
+    const first = send("session-1");
+    let queued: ReturnType<typeof send> | undefined;
+    let other: ReturnType<typeof send> | undefined;
+
+    try {
+      await firstSendStarted;
+      queued = send("session-1");
+      expect(
+        await Promise.race([
+          secondSendStarted.then(() => "started" as const),
+          new Promise<"queued">((resolve) => setTimeout(() => resolve("queued"), 100)),
+        ]),
+      ).toBe("queued");
+
+      other = send("session-2");
+      expect(
+        await Promise.race([
+          secondSendStarted.then(() => "started" as const),
+          new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
+        ]),
+      ).toBe("started");
+
+      releaseSends();
+      await Promise.all([first, queued, other]);
+      await thirdSendStarted;
+      expect(
+        harness.controlCalls
+          .filter((call) => call.operation === "send")
+          .map((call) => (call.input as { externalSessionId: string }).externalSessionId),
+      ).toEqual(["session-1", "session-2", "session-1"]);
+    } finally {
+      releaseSends();
+      await Promise.allSettled([first, ...(queued ? [queued] : []), ...(other ? [other] : [])]);
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
+  });
+
   test("rejects a send result that arrives after the session is released", async () => {
     let resolveSendStarted: () => void = () => undefined;
     let releaseSend: () => void = () => undefined;
