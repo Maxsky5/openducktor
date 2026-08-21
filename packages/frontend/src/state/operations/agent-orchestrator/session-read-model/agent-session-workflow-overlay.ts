@@ -30,12 +30,12 @@ const persistedRecordIdentityKeys = (records: readonly PersistedTaskSessionRecor
 export const applyWorkflowSessionRecordOverlay = ({
   projected,
   durableRecords,
-  snapshotRetainedIdentityKeys,
+  liveReportedIdentityKeys,
 }: {
   projected: AgentSessionCollection;
   durableRecords: DurableWorkflowSessionRecords;
-  /** Identities the newest authoritative live snapshot still reports; the runtime outranks record absence. */
-  snapshotRetainedIdentityKeys: ReadonlySet<string>;
+  /** Identities the live stream currently reports; the runtime outranks record absence. */
+  liveReportedIdentityKeys: ReadonlySet<string>;
 }): AgentSessionCollection => {
   const { loadedTaskIds, records } = durableRecords;
   const persistedKeys = persistedRecordIdentityKeys(records);
@@ -48,7 +48,7 @@ export const applyWorkflowSessionRecordOverlay = ({
       loadedTaskIds.has(session.sessionAssociation.taskId) &&
       session.status !== "starting" &&
       !persistedKeys.has(agentSessionIdentityKey(session)) &&
-      !snapshotRetainedIdentityKeys.has(agentSessionIdentityKey(session));
+      !liveReportedIdentityKeys.has(agentSessionIdentityKey(session));
     if (recordDisappeared) {
       collection = removeAgentSession(collection, session);
     }

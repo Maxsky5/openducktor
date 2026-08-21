@@ -26,6 +26,7 @@ import type { AgentSessionTransientFault } from "@/types/agent-session-transient
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
+  agentSessionLiveRefIdentityKey,
   agentSessionLiveSnapshotIdentityKeys,
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
@@ -92,7 +93,31 @@ type RecordRetryResult = RecordRetryKey &
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
   `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 
-const noSnapshotRetainedIdentityKeys: ReadonlySet<string> = new Set();
+const withReportedLiveIdentity = (
+  keys: ReadonlySet<string>,
+  ref: AgentSessionLiveRef,
+): ReadonlySet<string> => {
+  const key = agentSessionLiveRefIdentityKey(ref);
+  if (keys.has(key)) {
+    return keys;
+  }
+  const next = new Set(keys);
+  next.add(key);
+  return next;
+};
+
+const withoutReportedLiveIdentity = (
+  keys: ReadonlySet<string>,
+  ref: AgentSessionLiveRef,
+): ReadonlySet<string> => {
+  const key = agentSessionLiveRefIdentityKey(ref);
+  if (!keys.has(key)) {
+    return keys;
+  }
+  const next = new Set(keys);
+  next.delete(key);
+  return next;
+};
 
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
@@ -116,6 +141,7 @@ export const useRepoSessionReadModel = ({
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
   const retryIdRef = useRef(0);
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
+  const liveReportedIdentityKeysRef = useRef<ReadonlySet<string>>(new Set());
   const taskIdsKey = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const observeLiveSessions = useEffectEvent(
@@ -178,7 +204,7 @@ export const useRepoSessionReadModel = ({
           collection: applyWorkflowSessionRecordOverlay({
             projected: current,
             durableRecords: toDurableWorkflowSessionRecords(records),
-            snapshotRetainedIdentityKeys: noSnapshotRetainedIdentityKeys,
+            liveReportedIdentityKeys: liveReportedIdentityKeysRef.current,
           }),
           result: undefined,
         }));
@@ -475,6 +501,7 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
+      const nextLiveReportedIdentityKeys = agentSessionLiveSnapshotIdentityKeys(envelope.sessions);
       const policyActions = commitSessionCollection((current) => {
         // This is the sole live-snapshot-to-session-store write path:
         // project the runtime stream first, then reconcile durable workflow records.
@@ -486,7 +513,7 @@ export const useRepoSessionReadModel = ({
         const collection = applyWorkflowSessionRecordOverlay({
           projected,
           durableRecords: toDurableWorkflowSessionRecords(taskSessionRecords),
-          snapshotRetainedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(envelope.sessions),
+          liveReportedIdentityKeys: nextLiveReportedIdentityKeys,
         });
         return {
           collection,
@@ -497,6 +524,7 @@ export const useRepoSessionReadModel = ({
           }),
         };
       });
+      liveReportedIdentityKeysRef.current = nextLiveReportedIdentityKeys;
       applyPendingApprovalPolicy(policyActions);
       awaitingInitialSnapshot = false;
       if (!isStaleRepoOperation()) {
@@ -527,7 +555,8 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
-        clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
+        const liveRef = envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref;
+        clearSessionFault(liveRef);
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
@@ -542,6 +571,10 @@ export const useRepoSessionReadModel = ({
             }),
           };
         });
+        liveReportedIdentityKeysRef.current =
+          envelope.type === "session_upsert"
+            ? withReportedLiveIdentity(liveReportedIdentityKeysRef.current, liveRef)
+            : withoutReportedLiveIdentity(liveReportedIdentityKeysRef.current, liveRef);
         applyPendingApprovalPolicy(policyActions);
         return;
       }
@@ -660,6 +693,7 @@ export const useRepoSessionReadModel = ({
       if (observedRepoPathRef.current === repoPath) {
         observedRepoPathRef.current = null;
       }
+      liveReportedIdentityKeysRef.current = new Set();
       unsubscribe?.();
     };
   }, [

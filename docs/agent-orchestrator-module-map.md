@@ -898,7 +898,10 @@ session state, and resets missing live-only fields on every new initial
 snapshot. `agent-session-workflow-overlay.ts` is the workflow persistence layer:
 it materializes historical sessions from durable records, overlays durable
 fields onto matching live sessions, and prunes a workflow projection only when a
-loaded task proves its record disappeared and no snapshot still reports it.
+loaded task proves its record disappeared and the live stream no longer reports
+the session. The read model tracks live-reported identities across snapshots,
+upserts, and removals so task-record refreshes apply the same runtime-outranks-
+records rule as snapshot commits.
 `useRepoSessionReadModel` composes live projection, then the overlay, then
 commits one collection without a second frontend cache.
 

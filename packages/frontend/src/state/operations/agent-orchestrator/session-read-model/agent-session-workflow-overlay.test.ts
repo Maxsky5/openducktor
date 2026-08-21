@@ -16,7 +16,7 @@ import type { DurableWorkflowSessionRecords } from "./agent-session-workflow-ove
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
-const noSnapshotRetainedIdentityKeys: ReadonlySet<string> = new Set();
+const noLiveReportedIdentityKeys: ReadonlySet<string> = new Set();
 
 const record = (
   externalSessionId: string,
@@ -80,20 +80,22 @@ const projectAndOverlay = ({
   applyWorkflowSessionRecordOverlay({
     projected: buildAgentSessionLiveCollection({ current, snapshots }),
     durableRecords: records,
-    snapshotRetainedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(snapshots),
+    liveReportedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(snapshots),
   });
 
 const overlayOnly = ({
   projected,
   durableRecords: records,
+  liveReportedIdentityKeys = noLiveReportedIdentityKeys,
 }: {
   projected: ReturnType<typeof emptyAgentSessionCollection>;
   durableRecords: DurableWorkflowSessionRecords;
+  liveReportedIdentityKeys?: ReadonlySet<string>;
 }) =>
   applyWorkflowSessionRecordOverlay({
     projected,
     durableRecords: records,
-    snapshotRetainedIdentityKeys: noSnapshotRetainedIdentityKeys,
+    liveReportedIdentityKeys,
   });
 
 describe("agent session workflow record overlay", () => {
@@ -359,7 +361,34 @@ describe("agent session workflow record overlay", () => {
     ).not.toBeNull();
   });
 
-  test("keeps a live workflow session the newest snapshot still reports even if its record disappeared", () => {
+  test("keeps a live workflow session across snapshot reconcile and task refresh while the runtime reports it", () => {
+    const snapshots = [
+      snapshot("live-thread", {
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ];
+    const liveReportedIdentityKeys = agentSessionLiveSnapshotIdentityKeys(snapshots);
+    const projected = buildAgentSessionLiveCollection({
+      current: emptyAgentSessionCollection(),
+      snapshots,
+    });
+
+    const afterSnapshotReconcile = applyWorkflowSessionRecordOverlay({
+      projected,
+      durableRecords: durableRecords(),
+      liveReportedIdentityKeys,
+    });
+    expect(getAgentSession(afterSnapshotReconcile, identity("live-thread"))).not.toBeNull();
+
+    const afterTaskRefresh = overlayOnly({
+      projected,
+      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      liveReportedIdentityKeys,
+    });
+    expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).not.toBeNull();
+  });
+
+  test("a task refresh prunes a workflow projection the runtime stopped reporting", () => {
     const snapshots = [
       snapshot("live-thread", {
         sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
@@ -370,16 +399,10 @@ describe("agent session workflow record overlay", () => {
       snapshots,
     });
 
-    const afterSnapshotReconcile = applyWorkflowSessionRecordOverlay({
-      projected,
-      durableRecords: durableRecords(),
-      snapshotRetainedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(snapshots),
-    });
-    expect(getAgentSession(afterSnapshotReconcile, identity("live-thread"))).not.toBeNull();
-
     const afterTaskRefresh = overlayOnly({
       projected,
       durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      liveReportedIdentityKeys: noLiveReportedIdentityKeys,
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).toBeNull();
   });

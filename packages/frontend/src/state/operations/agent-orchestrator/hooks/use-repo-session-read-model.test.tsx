@@ -155,6 +155,11 @@ const createState = (
         runtimeKind: record.runtimeKind,
         workingDirectory: record.workingDirectory,
       }),
+    getStoredSession: (identity: {
+      externalSessionId: string;
+      runtimeKind: AgentSessionRecord["runtimeKind"];
+      workingDirectory: string;
+    }) => sessionStore.getSessionSnapshot(identity),
     getActivitySummary: () =>
       summarizeAgentActivity({ sessions: sessionStore.getActivitySnapshot().sessions }),
     harness: createHookHarness(useRepoSessionReadModel, props),
@@ -229,6 +234,56 @@ describe("useRepoSessionReadModel", () => {
         { repoPath: "/repo" },
         expect.any(Function),
       );
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps a live workflow session across a later task-record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+
+      // The durable record list changes while the runtime still reports thread-1.
+      // A new historical record proves the refresh actually applied.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-in" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      const refreshedIdentity = {
+        externalSessionId: "thread-refreshed-in",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      expect(state.getStoredSession(refreshedIdentity)?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-1",
+        role: "build",
+      });
     } finally {
       await state.harness.unmount();
     }
