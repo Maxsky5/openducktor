@@ -53,6 +53,7 @@ export const prepareWorkflowFreshLaunch = async ({
 
   const systemPrompt = await loadStartSystemPrompt({ ctx, taskCard, deps });
 
+  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- worktree bootstrap is a side effect; a stale repo or failed prompt must throw before it starts
   const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
     workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
