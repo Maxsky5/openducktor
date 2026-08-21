@@ -3,7 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX, buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
-type SessionPromptTask = Pick<
+export type SessionPromptTask = Pick<
   TaskCard,
   "id" | "title" | "issueType" | "status" | "aiReviewEnabled" | "description"
 >;

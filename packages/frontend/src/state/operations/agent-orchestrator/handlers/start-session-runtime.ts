@@ -1,6 +1,6 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { throwIfRepoStale } from "../support/core";
-import { loadSessionPromptContext } from "../support/session-prompt";
+import { loadSessionPromptContext, type SessionPromptTask } from "../support/session-prompt";
 import type { StartSessionContext, StartSessionExecutionDependencies } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
 
@@ -10,7 +10,7 @@ export const loadStartSystemPrompt = async ({
   deps,
 }: {
   ctx: StartSessionContext;
-  taskCard: TaskCardForPrompt;
+  taskCard: SessionPromptTask;
   deps: Pick<StartSessionExecutionDependencies, "model">;
 }): Promise<string> => {
   const { systemPrompt } = await loadSessionPromptContext({
@@ -23,8 +23,6 @@ export const loadStartSystemPrompt = async ({
 
   return systemPrompt;
 };
-
-type TaskCardForPrompt = Parameters<typeof loadSessionPromptContext>[0]["task"];
 
 export const serializeSelectedModelKey = (
   selectedModel: AgentModelSelection | undefined,
