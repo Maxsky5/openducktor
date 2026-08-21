@@ -227,7 +227,6 @@ Use `odt_read_task_documents` only when you need document bodies:
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return empty markdown with `updatedAt: null`.
 - Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
-- Legacy Beads documents encoded as `gzip-base64-v1` are decoded during the SQLite migration.
 - New or updated SQLite workflow documents are stored as `plain_text` markdown by the OpenDucktor host.
 - Successful MCP reads return plain markdown from the SQLite task store.
 
