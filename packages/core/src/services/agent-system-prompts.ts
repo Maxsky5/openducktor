@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplateId,
+  type GitTargetBranch,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
@@ -38,8 +39,12 @@ export type BuildAgentKickoffPromptInput = {
     description?: string;
   };
   extraPlaceholders?: Partial<Record<"humanFeedback", string>>;
-  git?: AgentPromptGitContext;
+  git?: AgentKickoffPromptGitContext;
   overrides?: RepoPromptOverrides;
+};
+
+export type AgentKickoffPromptGitContext = {
+  targetBranch?: GitTargetBranch;
 };
 
 export type AgentPromptGitContext = {
@@ -460,17 +465,30 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template: joinPromptBlocks(
-      "Focus only on pull request publication work for the current Builder session.",
-      lineSection("Pull request context", ["- targetBranch: {{git.targetBranch}}"]),
-      bulletSection("Publication workflow", [
-        "Treat the targetBranch above as the pull-request base branch for this task.",
-        "Inspect the current source branch, remote branch, and existing pull-request state before deciding whether to create a new pull request or update an existing one.",
-        "Always rebase on targetBranch before pushing the source branch.",
-        "Then create or update the pull request against the exact targetBranch above using the provider-native tooling available.",
-        "Write a pull request title and body grounded in the task, spec, plan, and actual implementation diff.",
+      "Publish a review-ready pull request for the current task.",
+      lineSection("Pull request base", ["{{git.targetBranch}}"]),
+      bulletSection("Prepare", [
+        "Use the base branch for Git diffs, rebases, and pull request provider tools.",
+        "Treat the current task artifacts and live repository state as the source of truth.",
+        "Read the repository's contribution guidance and pull request template when present.",
+        "Inspect the source branch, any existing pull request, and the diff against the base branch.",
+        "If the source branch is behind the base branch, rebase it and resolve conflicts.",
+        "Run every required local check. Fix root causes and rerun affected checks until all pass.",
+        "Preparation is complete when the diff matches the current task and every required local check passes.",
+      ]),
+      bulletSection("Publish", [
+        "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
+        "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
+        "Follow the repository's pull request template and fill every relevant section. Keep the body focused on the current task.",
+        "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
+      ]),
+      bulletSection("Complete", [
         "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
+        "Wait for required pull request checks to finish. If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
+        "Completion criterion: the task references the pull request and every required pull request check passes.",
+        "Report the pull request URL and the passed local and pull request checks.",
       ]),
       "Use taskId {{task.id}} for every odt_* tool call.",
     ),
@@ -517,6 +535,22 @@ const compact = (value: string | undefined): string => {
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
+const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string => {
+  const branch = targetBranch?.branch.trim();
+  if (!branch) {
+    throw new Error(
+      'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
+    );
+  }
+  if (branch === "@{upstream}") {
+    throw new Error(
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
+    );
+  }
+
+  return branch;
+};
+
 const compactList = (values: string[] | undefined): string => {
   const normalized = (values ?? [])
     .map((value) => value.trim())
@@ -542,14 +576,17 @@ const buildPlaceholderValues = ({
   role,
   task,
   extraPlaceholders,
+  pullRequestTarget,
   git,
 }: {
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
+  pullRequestTarget?: string;
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
   const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
+  const targetBranchPlaceholder = pullRequestTarget ?? compact(git?.targetBranch);
 
   if (extraPlaceholders?.humanFeedback !== undefined && !humanFeedback) {
     throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
@@ -569,13 +606,13 @@ const buildPlaceholderValues = ({
           humanFeedback,
         }
       : {}),
-    ...(git
+    ...(git || pullRequestTarget
       ? {
-          "git.operationLabel": compact(git.operationLabel),
-          "git.currentBranch": compact(git.currentBranch),
-          "git.targetBranch": compact(git.targetBranch),
-          "git.conflictedFiles": compactList(git.conflictedFiles),
-          "git.conflictOutput": compact(git.conflictOutput),
+          "git.operationLabel": compact(git?.operationLabel),
+          "git.currentBranch": compact(git?.currentBranch),
+          "git.targetBranch": targetBranchPlaceholder,
+          "git.conflictedFiles": compactList(git?.conflictedFiles),
+          "git.conflictOutput": compact(git?.conflictOutput),
         }
       : {}),
   };
@@ -658,6 +695,7 @@ const buildPromptFromTemplates = ({
   role,
   task,
   extraPlaceholders,
+  pullRequestTarget,
   git,
   overrides,
 }: {
@@ -665,6 +703,7 @@ const buildPromptFromTemplates = ({
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
+  pullRequestTarget?: string;
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
@@ -672,6 +711,7 @@ const buildPromptFromTemplates = ({
     role,
     task,
     ...(extraPlaceholders ? { extraPlaceholders } : {}),
+    ...(pullRequestTarget ? { pullRequestTarget } : {}),
     ...(git ? { git } : {}),
   });
   const templates = templateIds.map((templateId) =>
@@ -717,21 +757,17 @@ export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
 export const buildAgentKickoffPromptBundle = (
   input: BuildAgentKickoffPromptInput,
 ): BuiltAgentPrompt => {
-  if (input.templateId === "kickoff.build_pull_request_generation") {
-    const targetBranch = input.git?.targetBranch?.trim();
-    if (!targetBranch) {
-      throw new Error(
-        'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
-      );
-    }
-  }
+  const pullRequestTarget =
+    input.templateId === "kickoff.build_pull_request_generation"
+      ? resolvePullRequestTarget(input.git?.targetBranch)
+      : undefined;
 
   return buildPromptFromTemplates({
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
     ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),
-    ...(input.git ? { git: input.git } : {}),
+    ...(pullRequestTarget ? { pullRequestTarget } : {}),
     overrides: input.overrides,
   });
 };

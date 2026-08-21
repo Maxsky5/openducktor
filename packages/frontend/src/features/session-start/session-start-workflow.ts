@@ -6,13 +6,16 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { StartAgentSession } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
+import {
+  FEEDBACK_MESSAGE_REQUIRED_ERROR,
+  resolveSessionStartKickoffPromptContext,
+} from "./session-start-prompt-context";
 import { kickoffPromptForTemplate } from "./session-start-prompts";
 
 export type SendAgentMessage = (
@@ -157,8 +160,6 @@ const toError = (error: unknown): Error => {
   return error instanceof Error ? error : new Error(String(error));
 };
 
-const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
-
 const buildPostStartMessage = async ({
   queryClient,
   intent,
@@ -180,41 +181,25 @@ const buildPostStartMessage = async ({
   if (!kickoffTemplateId) {
     throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
   }
-  const humanFeedback =
-    kickoffTemplateId === "kickoff.build_after_human_request_changes"
-      ? (intent.message?.trim() ?? "")
-      : undefined;
-  if (kickoffTemplateId === "kickoff.build_after_human_request_changes" && !humanFeedback) {
-    throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
-  }
   const promptOverrides = workspaceId
     ? await loadEffectivePromptOverrides(workspaceId, queryClient)
     : undefined;
-  const repoDefaultTargetBranch = workspaceId
-    ? (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch
-    : null;
-  const git =
-    kickoffTemplateId === "kickoff.build_pull_request_generation"
-      ? {
-          targetBranch: canonicalTargetBranch(
-            effectiveTaskTargetBranch(
-              intent.targetBranch ?? task?.targetBranch,
-              repoDefaultTargetBranch,
-            ),
-          ),
-        }
-      : undefined;
+  const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
+  const promptContext = await resolveSessionStartKickoffPromptContext({
+    templateId: kickoffTemplateId,
+    ...(intent.message === undefined ? {} : { message: intent.message }),
+    ...(taskTargetBranch ? { taskTargetBranch } : {}),
+    loadRepoDefaultTargetBranch: async () => {
+      if (!workspaceId) {
+        return null;
+      }
+      return (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch;
+    },
+  });
 
   return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
     overrides: promptOverrides ?? {},
-    ...(humanFeedback
-      ? {
-          extraPlaceholders: {
-            humanFeedback,
-          },
-        }
-      : {}),
-    ...(git ? { git } : {}),
+    ...promptContext,
     task:
       task === null
         ? {}

@@ -271,7 +271,7 @@ export const buildPromptOverrideValidationErrors = (
   for (const [templateId, override] of Object.entries(overrides) as Array<
     [AgentPromptTemplateId, RepoPromptOverrides[AgentPromptTemplateId]]
   >) {
-    if (!override) {
+    if (!override || override.enabled === false) {
       continue;
     }
 

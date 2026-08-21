@@ -308,7 +308,8 @@ describe("settings-modal-model", () => {
         enabled: true,
       },
       "kickoff.build_pull_request_generation": {
-        template: "Bad {{task.foo}} and {{unknown.value}}",
+        template:
+          "Bad {{task.foo}} and {{unknown.value}} with {{git.targetBranch}} and {{git.pullRequestBaseBranch}}",
         baseVersion: 1,
         enabled: true,
       },
@@ -316,7 +317,7 @@ describe("settings-modal-model", () => {
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
       "kickoff.build_pull_request_generation":
-        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
     });
   });
 
@@ -333,6 +334,23 @@ describe("settings-modal-model", () => {
       "kickoff.build_after_human_request_changes":
         "Missing required placeholder: {{humanFeedback}}.",
     });
+  });
+
+  test("ignores validation errors in disabled prompt overrides", () => {
+    const overrides: RepoPromptOverrides = {
+      "kickoff.build_pull_request_generation": {
+        template: "Publish the pull request.",
+        baseVersion: 4,
+        enabled: false,
+      },
+      "kickoff.spec_initial": {
+        template: "Unsupported {{task.foo}}",
+        baseVersion: 1,
+        enabled: false,
+      },
+    };
+
+    expect(buildPromptOverrideValidationErrors(overrides)).toEqual({});
   });
 
   test("enables prompt override and creates missing entries from fallback values", () => {

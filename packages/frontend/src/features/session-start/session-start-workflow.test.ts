@@ -1,6 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { RepoConfig } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { workspaceQueryKeys } from "@/state/queries/workspace";
+import {
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { startSessionWorkflow } from "./session-start-workflow";
 
 const BUILD_SELECTION = {
@@ -109,7 +114,7 @@ describe("session-start-workflow", () => {
           workingDirectory: "/repo/worktree",
         },
         targetBranch: {
-          remote: "origin",
+          remote: "upstream",
           branch: "release/2026.04",
         },
         postStartAction: "kickoff",
@@ -137,14 +142,153 @@ describe("session-start-workflow", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
       expect.objectContaining({
         kind: "text",
-        text: expect.stringContaining("targetBranch: origin/release/2026.04"),
+        text: expect.stringContaining("Pull request base:\nrelease/2026.04"),
       }),
     ]);
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).not.toContain("targetBranch: origin/main");
+    expect(sentText).not.toContain("upstream/release/2026.04");
+  });
+
+  test("ignores the remote when building the pull request kickoff prompt", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-origin"));
+
+    await startSessionWorkflow({
+      workspaceId: null,
+      queryClient: new QueryClient(),
+      intent: {
+        taskId: "TASK-ORIGIN",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        startMode: "reuse",
+        sourceSession: sessionIdentity("builder-session-origin"),
+        postStartAction: "kickoff",
+      },
+      selection: null,
+      task: createTaskCardFixture({
+        id: "TASK-ORIGIN",
+        title: "Generate origin PR",
+        targetBranch: {
+          remote: "origin",
+          branch: "main",
+        },
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
+      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
+    >;
+    const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
+    expect(sentText).toContain("Pull request base:\nmain");
+    expect(sentText).not.toContain("origin/main");
+  });
+
+  test("uses the repository default target for a forked pull request kickoff", async () => {
+    const queryClient = new QueryClient();
+    const repoConfig = {
+      workspaceId: "workspace-pr",
+      workspaceName: "PR workspace",
+      repoPath: "/repo",
+      defaultRuntimeKind: "opencode",
+      branchPrefix: "odt",
+      defaultTargetBranch: {
+        remote: "upstream",
+        branch: "develop",
+      },
+      git: { providers: {} },
+      hooks: { preStart: [], postComplete: [] },
+      devServers: [],
+      worktreeCopyPaths: [],
+      promptOverrides: {},
+      agentDefaults: {},
+    } satisfies RepoConfig;
+    queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
+    queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture({
+        workspaces: {
+          "workspace-pr": repoConfig,
+        },
+      }),
+    );
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
+    const sourceSession = sessionIdentity("builder-session-fork");
+
+    await startSessionWorkflow({
+      workspaceId: "workspace-pr",
+      queryClient,
+      intent: {
+        taskId: "TASK-FORK",
+        role: "build",
+        launchActionId: "build_pull_request_generation",
+        startMode: "fork",
+        sourceSession,
+        postStartAction: "kickoff",
+      },
+      selection: BUILD_SELECTION,
+      task: createTaskCardFixture({
+        id: "TASK-FORK",
+        title: "Fork for pull request",
+      }),
+      startAgentSession,
+      sendAgentMessage,
+    });
+
+    expect(startAgentSession).toHaveBeenCalledWith({
+      taskId: "TASK-FORK",
+      role: "build",
+      startMode: "fork",
+      selectedModel: BUILD_SELECTION,
+      sourceSession,
+      holdForPostStartMessage: true,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr-fork"), [
+      expect.objectContaining({
+        kind: "text",
+        text: expect.stringContaining("Pull request base:\ndevelop"),
+      }),
+    ]);
+  });
+
+  test("rejects upstream-relative targets before creating a pull request session", async () => {
+    const sendAgentMessage = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("session-pr-upstream"));
+
+    await expect(
+      startSessionWorkflow({
+        workspaceId: null,
+        queryClient: new QueryClient(),
+        intent: {
+          taskId: "TASK-UPSTREAM",
+          role: "build",
+          launchActionId: "build_pull_request_generation",
+          startMode: "reuse",
+          sourceSession: sessionIdentity("builder-session-upstream"),
+          targetBranch: {
+            branch: "@{upstream}",
+          },
+          postStartAction: "kickoff",
+        },
+        selection: null,
+        task: createTaskCardFixture({
+          id: "TASK-UPSTREAM",
+          title: "Generate upstream PR",
+        }),
+        startAgentSession,
+        sendAgentMessage,
+      }),
+    ).rejects.toThrow(
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
+    );
+
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(sendAgentMessage).not.toHaveBeenCalled();
   });
 
   test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {

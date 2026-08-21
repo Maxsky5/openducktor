@@ -420,26 +420,42 @@ describe("kickoff and permission prompts", () => {
     ).toThrow('Prompt placeholder "humanFeedback" must not be empty.');
   });
 
-  test("pull request generation kickoff supports reused sessions and forks", () => {
-    const prompt = buildAgentKickoffPrompt({
+  test("pull request generation kickoff drives repo-aware publication for reused sessions and forks", () => {
+    const result = buildAgentKickoffPromptBundle({
       role: "build",
       templateId: "kickoff.build_pull_request_generation",
       task: {
         taskId: "task-1",
       },
       git: {
-        targetBranch: "origin/release/2026.04",
+        targetBranch: {
+          remote: "origin",
+          branch: "release/2026.04",
+        },
       },
     });
+    const prompt = result.prompt;
 
     expectPromptToContainAll(prompt, [
-      "Focus only on pull request publication work for the current Builder session.",
-      "targetBranch: origin/release/2026.04",
-      "Treat the targetBranch above as the pull-request base branch for this task.",
-      "Always rebase on targetBranch before pushing the source branch.",
-      "Then create or update the pull request against the exact targetBranch above using the provider-native tooling available.",
+      "Publish a review-ready pull request for the current task.",
+      "Pull request base:\nrelease/2026.04",
+      "Use the base branch for Git diffs, rebases, and pull request provider tools.",
+      "Treat the current task artifacts and live repository state as the source of truth.",
+      "If the source branch is behind the base branch, rebase it and resolve conflicts.",
+      "Preparation is complete when the diff matches the current task and every required local check passes.",
+      "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
+      "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
+      "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
       "After the pull request exists, call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
+      "If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
+      "Completion criterion: the task references the pull request and every required pull request check passes.",
+      "Report the pull request URL and the passed local and pull request checks.",
     ]);
+    expect(prompt).not.toContain("Builder session");
+    expect(prompt).not.toContain("comparison");
+    expect(prompt).not.toContain("origin/release/2026.04");
+    expect(prompt).not.toContain("target");
+    expect(result.templates[0]?.builtinVersion).toBe(5);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
@@ -453,6 +469,25 @@ describe("kickoff and permission prompts", () => {
       }),
     ).toThrow(
       'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
+    );
+  });
+
+  test("rejects an upstream-relative pull request target", () => {
+    expect(() =>
+      buildAgentKickoffPrompt({
+        role: "build",
+        templateId: "kickoff.build_pull_request_generation",
+        task: {
+          taskId: "task-1",
+        },
+        git: {
+          targetBranch: {
+            branch: "@{upstream}",
+          },
+        },
+      }),
+    ).toThrow(
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
     );
   });
 
