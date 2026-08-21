@@ -231,33 +231,7 @@ const registeredSessionState = (): AgentSessionState => ({
   selectedModel: null,
 });
 
-const startLaunchFixture = (): Extract<
-  import("./prepared-session-launch").PreparedSessionLaunch,
-  { mode: "start" }
-> => ({
-  mode: "start",
-  repoPath: REPO_PATH,
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-  systemPrompt: "System prompt:\n\nImplement feature",
-  selectedModel: {
-    runtimeKind: "opencode",
-    providerId: "openai",
-    modelId: "gpt-5",
-  },
-});
-
-const forkLaunchFixture = () => ({
-  ...startLaunchFixture(),
-  mode: "fork" as const,
-  parentExternalSessionId: "source-session",
-});
-
-const commitInputFor = (
-  harness: Harness,
-  launch: ReturnType<typeof startLaunchFixture> | ReturnType<typeof forkLaunchFixture>,
-) => {
+const commitInputFor = (harness: Harness) => {
   const summary: AgentSessionSummary = {
     externalSessionId: "external-commit",
     runtimeKind: "opencode",
@@ -275,16 +249,12 @@ const commitInputFor = (
     } satisfies AgentSessionIdentity,
     sessionState: registeredSessionState(),
     isStaleOperation: harness.ctx.isStaleRepoOperation,
-    prepared: {
-      launch,
-      taskCard: taskCard(),
-      bootstrap: {
-        complete: async () => {
-          harness.calls.bootstrapComplete += 1;
-        },
-        abort: async () => {
-          harness.calls.bootstrapAbort += 1;
-        },
+    bootstrap: {
+      complete: async () => {
+        harness.calls.bootstrapComplete += 1;
+      },
+      abort: async () => {
+        harness.calls.bootstrapAbort += 1;
       },
     },
     ctx: harness.ctx,
@@ -470,7 +440,7 @@ describe("commitWorkflowSessionLaunch", () => {
   test("persists the workflow session record and completes the bootstrap", async () => {
     const harness = createHarness();
 
-    await commitWorkflowSessionLaunch(commitInputFor(harness, startLaunchFixture()));
+    await commitWorkflowSessionLaunch(commitInputFor(harness));
 
     expect(harness.calls.persistSessionRecord).toHaveLength(1);
     expect(harness.calls.persistSessionRecord[0]?.taskId).toBe("task-1");
@@ -488,9 +458,7 @@ describe("commitWorkflowSessionLaunch", () => {
       throw new Error("persist failed");
     };
 
-    await expect(
-      commitWorkflowSessionLaunch(commitInputFor(harness, startLaunchFixture())),
-    ).rejects.toThrow(
+    await expect(commitWorkflowSessionLaunch(commitInputFor(harness))).rejects.toThrow(
       'Failed to persist started session "external-commit": persist failed. The started session was stopped and removed locally. The durable session record was deleted.',
     );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
@@ -502,8 +470,8 @@ describe("commitWorkflowSessionLaunch", () => {
 
   test("rolls back without retrying bootstrap completion when completion fails", async () => {
     const harness = createHarness();
-    const committedInput = commitInputFor(harness, startLaunchFixture());
-    committedInput.prepared.bootstrap.complete = async () => {
+    const committedInput = commitInputFor(harness);
+    committedInput.bootstrap.complete = async () => {
       throw new Error("bootstrap completion failed");
     };
 
@@ -518,9 +486,9 @@ describe("commitWorkflowSessionLaunch", () => {
 
   test("cleans up the session while preserving committed resources when stale after bootstrap commits", async () => {
     const harness = createHarness();
-    const committedInput = commitInputFor(harness, startLaunchFixture());
-    const originalComplete = committedInput.prepared.bootstrap.complete;
-    committedInput.prepared.bootstrap.complete = async () => {
+    const committedInput = commitInputFor(harness);
+    const originalComplete = committedInput.bootstrap.complete;
+    committedInput.bootstrap.complete = async () => {
       await originalComplete();
       harness.setStale();
     };
@@ -538,9 +506,9 @@ describe("commitWorkflowSessionLaunch", () => {
     const harness = createHarness();
     harness.setStale();
 
-    await expect(
-      commitWorkflowSessionLaunch(commitInputFor(harness, startLaunchFixture())),
-    ).rejects.toThrow(STALE_START_ERROR);
+    await expect(commitWorkflowSessionLaunch(commitInputFor(harness))).rejects.toThrow(
+      STALE_START_ERROR,
+    );
     expect(harness.calls.stopSession).toEqual(["external-commit"]);
     expect(harness.calls.deleteSessionRecord).toEqual(["external-commit"]);
     expect(harness.calls.removeSession).toEqual(["external-commit"]);
@@ -557,14 +525,10 @@ describe("commitWorkflowSessionLaunch", () => {
       throw new Error("runtime unavailable");
     };
 
-    await expect(
-      commitWorkflowSessionLaunch(commitInputFor(harness, forkLaunchFixture())),
-    ).rejects.toThrow(
+    await expect(commitWorkflowSessionLaunch(commitInputFor(harness))).rejects.toThrow(
       'Failed to persist started session "external-commit": persist failed. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.',
     );
     expect(harness.calls.deleteSessionRecord).toHaveLength(0);
-    expect(listLocalRemovals(harness)).toHaveLength(0);
+    expect(harness.calls.removeSession).toHaveLength(0);
   });
 });
-
-const listLocalRemovals = (harness: Harness): string[] => harness.calls.removeSession;

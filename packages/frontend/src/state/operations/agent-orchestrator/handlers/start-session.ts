@@ -137,7 +137,7 @@ export const createStartAgentSession = ({
             commitStarted = true;
             await commitWorkflowSessionLaunch({
               ...commitInput,
-              prepared,
+              bootstrap: prepared.bootstrap,
               ctx: startCtx,
               deps: { session, runtime },
             });

@@ -156,9 +156,6 @@ const stopLaunchedSessionOnStaleAndThrow = async ({
   try {
     await runOrchestratorTask(reason, () => stopLaunchedSession({ adapter, repoPath, identity }));
   } catch (error) {
-    if (error instanceof SessionLaunchStopError) {
-      throw error;
-    }
     throw new SessionLaunchStopError(
       `${STALE_START_ERROR} Failed to stop stale started session '${identity.externalSessionId}': ${errorMessage(error)}`,
       { cause: error },

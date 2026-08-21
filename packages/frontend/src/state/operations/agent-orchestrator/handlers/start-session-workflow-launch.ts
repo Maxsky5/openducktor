@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
@@ -27,7 +26,6 @@ import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
 
 export type WorkflowPreparedLaunch = {
   launch: Extract<PreparedSessionLaunch, { mode: "start" | "fork" }>;
-  taskCard: TaskCard;
   bootstrap: RuntimeInfo["bootstrap"];
 };
 
@@ -83,7 +81,6 @@ export const prepareWorkflowFreshLaunch = async ({
       selectedModel: selectedModelWithRuntime,
       holdForPostStartMessage: ctx.holdForPostStartMessage,
     },
-    taskCard,
     bootstrap: runtime.bootstrap,
   };
 };
@@ -168,7 +165,6 @@ export const prepareWorkflowForkLaunch = async ({
         selectedModel,
         holdForPostStartMessage: ctx.holdForPostStartMessage,
       },
-      taskCard,
       bootstrap: lease.bootstrap,
     };
   } catch (cause) {
@@ -177,7 +173,7 @@ export const prepareWorkflowForkLaunch = async ({
 };
 
 export const commitWorkflowSessionLaunch = async ({
-  prepared,
+  bootstrap,
   ctx,
   summary,
   identity,
@@ -185,12 +181,11 @@ export const commitWorkflowSessionLaunch = async ({
   isStaleOperation,
   deps,
 }: PreparedSessionLaunchCommitInput & {
-  prepared: WorkflowPreparedLaunch;
+  bootstrap: RuntimeInfo["bootstrap"];
   ctx: StartSessionContext;
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
 }): Promise<void> => {
   const startedCtx: StartedSessionContext = { ...ctx, summary };
-  const bootstrap = prepared.bootstrap;
 
   try {
     await persistInitialSession({
