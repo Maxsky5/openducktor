@@ -8,7 +8,7 @@ export type AgentSessionReadModelLoadState =
       kind: "failed";
       workspaceRepoPath: string;
       message: string;
-      /** Which producer owns this failure; a durable-record success supersedes only its own source. */
+      /** Which producer owns this failure; a successful record load clears only its own source. */
       source: AgentSessionReadModelFailureSource;
     };
 

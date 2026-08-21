@@ -457,8 +457,8 @@ export const useRepoSessionReadModel = ({
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
         return null;
       }
-      // Records applied for a prior task set are stale scope: the current set
-      // is unloaded until its own read succeeds, and it never proves deletion.
+      // Records applied for a prior task set are stale: the current set stays
+      // unloaded until its own read succeeds, so it cannot prove deletion.
       const appliedTaskIdsKey = JSON.stringify(
         normalizeAgentSessionTaskIds(current.records.taskIds),
       );
@@ -467,10 +467,10 @@ export const useRepoSessionReadModel = ({
       }
       return toDurableWorkflowSessionRecords(current.records);
     };
-    // Every stream commit publishes through the same project-then-overlay
-    // composition; an unloaded, failed, or stale record read never becomes
-    // deletion proof, so the overlay only runs on loaded records.
-    const reconcileDurableRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
+    // Every stream commit projects the runtime first, then overlays loaded
+    // records. An unloaded, failed, or stale record read never proves
+    // deletion, so the overlay runs only on loaded records.
+    const overlayLoadedRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
       const durableRecords = readLoadedDurableRecords();
       return durableRecords
         ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
@@ -516,7 +516,7 @@ export const useRepoSessionReadModel = ({
     ): void => {
       const policyActions = commitSessionCollection((current) => {
         // This is the sole live-snapshot-to-session-store write path.
-        const collection = reconcileDurableRecords(
+        const collection = overlayLoadedRecords(
           buildAgentSessionLiveCollection({
             current,
             snapshots: envelope.sessions,
@@ -576,7 +576,7 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
         const policyActions = commitSessionCollection((current) => {
-          const collection = reconcileDurableRecords(
+          const collection = overlayLoadedRecords(
             applyAgentSessionLiveDelta({
               current,
               envelope,

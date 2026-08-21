@@ -98,7 +98,7 @@ const overlayOnly = ({
   });
 
 describe("agent session workflow record overlay", () => {
-  test("materializes a historical workflow session when no live runtime session exists", () => {
+  test("restores a historical workflow session when no live runtime session exists", () => {
     const sessions = overlayOnly({
       projected: emptyAgentSessionCollection(),
       durableRecords: durableRecords({
@@ -257,7 +257,7 @@ describe("agent session workflow record overlay", () => {
     ]);
   });
 
-  test("reconciles one mixed snapshot with workflow, repository, and unbound sessions", () => {
+  test("overlays one mixed snapshot with workflow, repository, and unbound sessions", () => {
     const sessions = projectAndOverlay({
       snapshots: [
         snapshot("live-workflow-thread", {
@@ -360,7 +360,7 @@ describe("agent session workflow record overlay", () => {
     ).not.toBeNull();
   });
 
-  test("keeps a live workflow session across snapshot reconcile and task refresh while the runtime reports it", () => {
+  test("keeps a live workflow session across snapshot and task refresh while the runtime reports it", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [
@@ -395,7 +395,7 @@ describe("agent session workflow record overlay", () => {
         }),
       ],
     });
-    // The runtime removed the session; the settled projection loses live reportage.
+    // The runtime removed the session; the settled projection is no longer reported.
     const removed = applyAgentSessionLiveDelta({
       current: projected,
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
@@ -433,7 +433,7 @@ describe("agent session workflow record overlay", () => {
   });
 
   test.each(["opencode", "codex", "claude"] as const)(
-    "reconciles %s workflow records with the same association rules",
+    "overlays %s workflow records with the same association rules",
     (runtimeKind) => {
       const runtimeIdentity = identity(`${runtimeKind}-thread`, { runtimeKind });
       const sessions = projectAndOverlay({
@@ -480,8 +480,8 @@ describe("agent session workflow record overlay", () => {
     });
     expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.liveReported).toBe(true);
 
-    // The runtime withdraws live evidence; reconciling that delta against the
-    // already-loaded records must finish the deletion without another query.
+    // The runtime withdraws live evidence; overlaying that delta against
+    // the already-loaded records must finish the deletion without another query.
     const removed = applyAgentSessionLiveDelta({
       current: refreshedWhileLive,
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
@@ -513,8 +513,9 @@ describe("agent session workflow record overlay", () => {
     } as const satisfies AgentSessionState;
     const projected = replaceAgentSession(emptyAgentSessionCollection(), launched);
 
-    // Any unrelated delta reconciles records; the launch's durable record has
-    // not landed yet and no runtime report arrived, so nothing proves deletion.
+    // Any unrelated delta overlays loaded records; the launch's durable
+    // record has not landed yet and no runtime report arrived, so nothing
+    // proves deletion.
     const refreshed = overlayOnly({
       projected,
       durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },

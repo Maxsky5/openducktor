@@ -44,9 +44,8 @@ export const applyWorkflowSessionRecordOverlay = ({
     const recordDisappeared =
       loadedTaskIds.has(session.sessionAssociation.taskId) &&
       session.status !== "starting" &&
-      // Only projections explicitly known to be unreported are prunable.
-      // Undefined reportage belongs to freshly launched sessions whose live
-      // evidence has not arrived yet.
+      // Only sessions known to be unreported can be pruned. An unset flag
+      // belongs to a fresh launch whose live evidence has not arrived yet.
       session.liveReported === false &&
       !persistedKeys.has(agentSessionIdentityKey(session));
     if (recordDisappeared) {

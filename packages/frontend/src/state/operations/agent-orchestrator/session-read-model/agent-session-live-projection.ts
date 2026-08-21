@@ -40,13 +40,10 @@ const toSessionIdentity = (ref: AgentSessionLiveRef): AgentSessionIdentity => ({
   workingDirectory: ref.workingDirectory,
 });
 
-const agentSessionLiveRefIdentityKey = (ref: AgentSessionLiveRef): string =>
-  agentSessionIdentityKey(toSessionIdentity(ref));
-
 const agentSessionLiveSnapshotIdentityKeys = (
   snapshots: readonly AgentSessionLiveSnapshot[],
 ): ReadonlySet<string> =>
-  new Set(snapshots.map((snapshot) => agentSessionLiveRefIdentityKey(snapshot.ref)));
+  new Set(snapshots.map((snapshot) => agentSessionIdentityKey(toSessionIdentity(snapshot.ref))));
 
 const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";

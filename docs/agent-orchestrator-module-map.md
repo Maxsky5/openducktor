@@ -896,15 +896,15 @@ Live projection during repo reads is split by ownership.
 host snapshots and ordered deltas, carries the exact runtime association into
 session state, and resets missing live-only fields on every new initial
 snapshot. `agent-session-workflow-overlay.ts` is the workflow persistence layer:
-it materializes historical sessions from durable records, overlays durable
-fields onto matching live sessions, and prunes a workflow projection only when a
-loaded task proves its record disappeared and the projected session no longer
-carries live reportage. Live reportage is a field on the projected session
-state, committed atomically by live snapshot and delta projection, so task
-refreshes read the same single source of truth without a presence store.
+it restores past sessions from durable records, overlays durable fields onto
+matching live sessions, and prunes a workflow projection only when a loaded
+task proves its record disappeared and the projected session no longer carries
+its live-reported flag. That flag lives on the projected session state,
+committed atomically by live snapshot and delta projection, so task refreshes
+read the same single source of truth without a presence store.
 `useRepoSessionReadModel` composes live projection, then the overlay, then
 commits one collection for snapshots, ordered deltas, and task refreshes
-alike; snapshot and delta commits reconcile records only from the latest
+alike; snapshot and delta commits overlay records only from the latest
 successfully loaded read for the current task set. An unloaded or failed
 read, a failed repo, or records applied for a prior task set never prove
 deletion, so those commits project the runtime stream without the overlay.
@@ -922,7 +922,7 @@ recovery failures keep their own source and stay failed until recovered.
    one live-state refresh for the active repository.
 4. The refresh publishes the complete normalized host snapshot before later deltas.
    `buildAgentSessionLiveCollection` projects it, the workflow record overlay
-   reconciles durable records, and the session collection commits once.
+   applies loaded durable records, and the session collection commits once.
 5. Session rows, activity, pending input, retained context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog

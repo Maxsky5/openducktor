@@ -274,7 +274,7 @@ describe("agent session live projection", () => {
     expect(retainedIds.has("unbound-thread")).toBe(false);
   });
 
-  test("commits live reportage with the same projection that applies runtime evidence", () => {
+  test("commits the live-reported flag with the same projection that applies runtime evidence", () => {
     const initial = build({
       snapshots: [
         snapshot("live-thread", { sessionAssociation: workflowAssociation }),
@@ -283,14 +283,14 @@ describe("agent session live projection", () => {
     });
     expect(getAgentSession(initial, identity("live-thread"))?.liveReported).toBe(true);
 
-    // A reconnect snapshot without the workflow session clears its reportage
+    // A reconnect snapshot without the workflow session clears its flag,
     // in the same commit that settles it.
     const reconnectedWithoutIt = build({ current: initial, snapshots: [] });
     expect(getAgentSession(reconnectedWithoutIt, identity("live-thread"))?.liveReported).toBe(
       false,
     );
 
-    // A later upsert restores reportage; an explicit removal clears it again.
+    // A later upsert restores it; an explicit removal clears it again.
     const upserted = delta(reconnectedWithoutIt, {
       type: "session_upsert",
       session: snapshot("live-thread", { sessionAssociation: workflowAssociation }),
