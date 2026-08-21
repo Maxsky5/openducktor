@@ -454,6 +454,78 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("recovers the read model when a successful task set follows a failed one", async () => {
+    const batchList = mock(async () => [
+      {
+        taskId: "task-3",
+        agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+      },
+    ]);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+    const threadThreeIdentity = {
+      externalSessionId: "thread-three",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // Task 2's durable read fails for its exact list query.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Task 3 loads successfully on the same live observation; its collection
+      // applies and the stale task-2 failure no longer describes this scope.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      await state.harness.waitFor(() => state.getStoredSession(threadThreeIdentity) !== null);
+      const threadThree = state.getStoredSession(threadThreeIdentity);
+      if (!threadThree) {
+        throw new Error("Expected task-3 historical session.");
+      }
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      expect(threadThree.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-3",
+        role: "qa",
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(batchList).toHaveBeenCalledTimes(1);
+      expect(batchList).toHaveBeenCalledWith("/repo", ["task-3"]);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({

@@ -338,7 +338,16 @@ export const useRepoSessionReadModel = ({
 
     // This is the sole task-query-to-session-store write path.
     // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
-    applyTaskRecords(workspaceRepoPath, taskRecords.records);
+    const applied = applyTaskRecords(workspaceRepoPath, taskRecords.records);
+    if (!applied) {
+      return;
+    }
+    // Current-scope records loaded: a prior failure no longer describes this
+    // read model, and a healthy live stream must not keep surfacing it.
+    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+    setSessionReadModelLoadState((current) =>
+      current.kind === "failed" ? readyAgentSessionReadModelLoadState(workspaceRepoPath) : current,
+    );
   }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
 
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect

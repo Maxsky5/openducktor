@@ -908,6 +908,9 @@ alike; snapshot and delta commits reconcile records only from the latest
 successfully loaded read for the current task set. An unloaded or failed
 read, a failed repo, or records applied for a prior task set never prove
 deletion, so those commits project the runtime stream without the overlay.
+When a current-scope record read succeeds, it also clears any prior failed
+read-model state so route and transcript surfaces follow the current task
+set without restarting the live stream.
 
 ## Startup Flow
 
