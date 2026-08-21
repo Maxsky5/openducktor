@@ -15,7 +15,6 @@ import {
   replaceTaskInList,
   runTaskLocalCleanup,
   taskHasSessionsForRoles,
-  workflowCleanupSessionRoleNames,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
@@ -92,12 +91,16 @@ export const createTaskCloseUseCase = ({
           );
         }
         if (hasWorkflowSessions && taskActivityGuard) {
-          const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
+          const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
             repoPath: effectiveRepoPath,
-            taskId,
-            sessions: currentSessions,
-            operationLabel: "close task",
-            sessionRoles: [...workflowCleanupSessionRoleNames],
+            taskSessions: [
+              {
+                taskId,
+                sessions: currentSessions.filter((session) =>
+                  workflowCleanupSessionRoles.has(session.role.trim()),
+                ),
+              },
+            ],
           });
           recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }

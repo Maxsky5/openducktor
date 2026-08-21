@@ -18,27 +18,23 @@ type LiveSession = {
   workingDirectory: string;
 };
 
+type TaskActivityGuardTaskSessions = Parameters<TaskActivityGuardPort["stopLiveSessions"]>[0];
+
 const collectLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
   repoPath: string,
   sessions: AgentSessionRecord[],
-  sessionRoles: string[],
 ) =>
   Effect.gen(function* () {
-    const allowedRoles = new Set(sessionRoles.map((role) => role.trim()).filter(Boolean));
     const liveSessions: LiveSession[] = [];
     for (const session of sessions) {
-      const role = session.role.trim();
-      if (!allowedRoles.has(role)) {
-        continue;
-      }
       const externalSessionId = session.externalSessionId.trim();
       if (!externalSessionId) {
         continue;
       }
-      // An unsupported probe means the runtime cannot report liveness. Treating
-      // that as active blocked delete/reset forever for idle or offline
-      // runtimes, so unsupported probes are ignored here.
+      // An unsupported probe means the runtime cannot report liveness. Such
+      // probes must not block destructive cleanup; offline runtimes would
+      // otherwise make delete and reset impossible forever.
       const probe = yield* runtimeRegistry.probeSessionStatus({
         runtimeKind: session.runtimeKind.trim(),
         repoPath,
@@ -48,7 +44,7 @@ const collectLiveSessions = (
       if (probe.supported && probe.hasLiveSession) {
         liveSessions.push({
           externalSessionId,
-          role,
+          role: session.role.trim(),
           runtimeKind: session.runtimeKind.trim(),
           workingDirectory: session.workingDirectory,
         });
@@ -57,7 +53,33 @@ const collectLiveSessions = (
     return liveSessions;
   });
 
-const stopLiveSessions = (
+const collectTaskLiveSessions = (
+  runtimeRegistry: RuntimeRegistryPort,
+  input: TaskActivityGuardTaskSessions & { operation: string; failureContext: string },
+) =>
+  Effect.gen(function* () {
+    const liveSessions: LiveSession[] = [];
+    for (const task of input.taskSessions) {
+      const taskLiveSessions = yield* collectLiveSessions(
+        runtimeRegistry,
+        input.repoPath,
+        task.sessions,
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new HostOperationError({
+              operation: input.operation,
+              message: `Failed checking live runtime state before ${input.failureContext} (${task.taskId})`,
+              cause: error,
+            }),
+        ),
+      );
+      liveSessions.push(...taskLiveSessions);
+    }
+    return liveSessions;
+  });
+
+const stopLiveSessionRecords = (
   runtimeRegistry: RuntimeRegistryPort,
   repoPath: string,
   operation: string,
@@ -95,76 +117,30 @@ const stopLiveSessions = (
     return stoppedSessionCount;
   });
 
-const requireLiveSessionsForRoles = (
-  runtimeRegistry: RuntimeRegistryPort,
-  input: {
-    repoPath: string;
-    operation: string;
-    failureContext: string;
-    sessions: AgentSessionRecord[];
-    sessionRoles: string[];
-  },
-) =>
-  collectLiveSessions(runtimeRegistry, input.repoPath, input.sessions, input.sessionRoles).pipe(
-    Effect.mapError(
-      (error) =>
-        new HostOperationError({
-          operation: input.operation,
-          message: `Failed checking live runtime state before ${input.failureContext}`,
-          cause: error,
-        }),
-    ),
-  );
-
 export const createRuntimeTaskActivityGuard = ({
   runtimeRegistry,
 }: CreateRuntimeTaskActivityGuardInput): TaskActivityGuardPort => ({
   countLiveSessions(input) {
     return Effect.gen(function* () {
-      const liveSessions = yield* requireLiveSessionsForRoles(runtimeRegistry, {
-        repoPath: input.repoPath,
+      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
+        ...input,
         operation: "runtimeTaskActivityGuard.countLiveSessions",
         failureContext: "counting live task sessions",
-        sessions: input.sessions,
-        sessionRoles: input.sessionRoles,
       });
       return { liveSessionCount: liveSessions.length };
     });
   },
-  stopActiveTaskDeleteRuns(input) {
+  stopLiveSessions(input) {
     return Effect.gen(function* () {
-      let stoppedSessionCount = 0;
-      for (const task of input.taskSessions) {
-        const liveSessions = yield* requireLiveSessionsForRoles(runtimeRegistry, {
-          repoPath: input.repoPath,
-          operation: "runtimeTaskActivityGuard.stopActiveTaskDeleteRuns",
-          failureContext: `deleting task ${task.taskId}`,
-          sessions: task.sessions,
-          sessionRoles: task.sessions.map((session) => session.role),
-        });
-        stoppedSessionCount += yield* stopLiveSessions(
-          runtimeRegistry,
-          input.repoPath,
-          "runtimeTaskActivityGuard.stopActiveTaskDeleteRuns",
-          liveSessions,
-        );
-      }
-      return { stoppedSessionCount } satisfies TaskActivityGuardStopResult;
-    });
-  },
-  stopActiveTaskResetActivity(input) {
-    return Effect.gen(function* () {
-      const liveSessions = yield* requireLiveSessionsForRoles(runtimeRegistry, {
-        repoPath: input.repoPath,
-        operation: "runtimeTaskActivityGuard.stopActiveTaskResetActivity",
-        failureContext: `${input.operationLabel} task ${input.taskId}`,
-        sessions: input.sessions,
-        sessionRoles: input.sessionRoles,
+      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
+        ...input,
+        operation: "runtimeTaskActivityGuard.stopLiveSessions",
+        failureContext: "stopping live task sessions",
       });
-      const stoppedSessionCount = yield* stopLiveSessions(
+      const stoppedSessionCount = yield* stopLiveSessionRecords(
         runtimeRegistry,
         input.repoPath,
-        "runtimeTaskActivityGuard.stopActiveTaskResetActivity",
+        "runtimeTaskActivityGuard.stopLiveSessions",
         liveSessions,
       );
       return { stoppedSessionCount } satisfies TaskActivityGuardStopResult;

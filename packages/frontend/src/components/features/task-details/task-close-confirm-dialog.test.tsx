@@ -77,4 +77,36 @@ describe("TaskCloseConfirmDialog", () => {
 
     unmount();
   });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    const { unmount } = render(
+      <TaskCloseConfirmDialog
+        open
+        onOpenChange={() => {}}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        taskId="TASK-3"
+        isLoadingImpact={false}
+        hasManagedSessionCleanup={false}
+        managedWorktreeCount={0}
+        terminalCount={0}
+        activeSessionCount={null}
+        activeSessionCountError="host unavailable"
+        impactError={null}
+        isClosePending={false}
+        closeError={null}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Close task/i }).disabled).toBe(
+      true,
+    );
+
+    unmount();
+  });
 });

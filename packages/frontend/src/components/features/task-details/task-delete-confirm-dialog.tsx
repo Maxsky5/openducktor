@@ -1,5 +1,6 @@
 import { Loader2, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
+import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -76,15 +76,11 @@ export function TaskDeleteConfirmDialog({
                 {impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.
               </p>
             )}
-            {impact.activeSessionCount !== null && impact.activeSessionCount > 0 ? (
-              <p>{formatActiveSessionStopMessage(impact.activeSessionCount, "delete")}</p>
-            ) : null}
-            {impact.activeSessionCountError ? (
-              <p className="text-destructive-muted">
-                Unable to check how many active sessions will be stopped:{" "}
-                {impact.activeSessionCountError}
-              </p>
-            ) : null}
+            <TaskStopImpactNotice
+              count={impact.activeSessionCount}
+              error={impact.activeSessionCountError}
+              operation="delete"
+            />
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (

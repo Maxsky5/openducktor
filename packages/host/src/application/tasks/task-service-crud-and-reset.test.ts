@@ -780,24 +780,11 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns(input) {
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
             return { stoppedSessionCount: 0 };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      stopActiveTaskResetActivity() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected reset activity guard");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -965,24 +952,11 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns(input) {
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
             return { stoppedSessionCount: 0 };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      stopActiveTaskResetActivity() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected reset activity guard");
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1069,14 +1043,11 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns(input) {
+      stopLiveSessions(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
           return { stoppedSessionCount: 0 };
         });
-      },
-      stopActiveTaskResetActivity() {
-        return Effect.dieMessage("unexpected reset activity guard");
       },
     };
     await expect(
@@ -1445,20 +1416,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete activity guard");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      stopActiveTaskResetActivity(input) {
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
@@ -1517,10 +1475,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "resetActivityGuard",
         input: {
           repoPath: "/repo",
-          taskId: "task-1",
-          sessions: currentSessions,
-          operationLabel: "reset implementation",
-          sessionRoles: ["build", "qa"],
+          taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
@@ -1758,20 +1713,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete activity guard");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      stopActiveTaskResetActivity(input) {
+      stopLiveSessions(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
@@ -1817,10 +1759,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "resetActivityGuard",
         input: {
           repoPath: "/repo",
-          taskId: "task-1",
-          sessions: currentSessions,
-          operationLabel: "reset task",
-          sessionRoles: ["spec", "planner", "build", "qa"],
+          taskSessions: [{ taskId: "task-1", sessions: currentSessions }],
         },
       },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },

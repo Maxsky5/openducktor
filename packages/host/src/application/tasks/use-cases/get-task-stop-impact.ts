@@ -6,7 +6,7 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
-import { workflowCleanupSessionRoleNames } from "../support/task-cleanup-support";
+import { workflowCleanupSessionRoles } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export type TaskStopImpactInput = {
@@ -50,16 +50,16 @@ const requireTaskStopImpactDependencies = (
   return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
-// Role allowlists mirror the matching mutation's guard inputs so the preview
-// probes exactly the sessions stopActiveTask* would stop.
-const selectStopCandidateRoles = (
+// Candidate selection must mirror the matching mutation's guard inputs so the
+// preview probes exactly the sessions stopLiveSessions would stop.
+const selectStopCandidates = (
   operation: TaskStopImpactOperation,
-  candidates: AgentSessionRecord[],
-): string[] => {
-  if (operation === "reset_implementation" || operation === "delete") {
-    return candidates.map((session) => session.role.trim());
+  sessions: AgentSessionRecord[],
+): AgentSessionRecord[] => {
+  if (operation === "reset_task" || operation === "close") {
+    return sessions.filter((session) => workflowCleanupSessionRoles.has(session.role.trim()));
   }
-  return [...workflowCleanupSessionRoleNames];
+  return sessions;
 };
 
 export const createTaskStopImpactUseCase = ({
@@ -79,29 +79,35 @@ export const createTaskStopImpactUseCase = ({
       );
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const taskIds = [...new Set(input.taskIds)];
-      let stoppableSessionCount = 0;
+      const tasksWithSessions: Array<{ taskId: string; sessions: AgentSessionRecord[] }> = [];
       for (const taskId of taskIds) {
         const metadata = yield* taskStore.getTaskMetadata({
           repoPath: input.repoPath,
           taskId,
         });
-        const sessions = metadata.agentSessions;
-        if (sessions.length === 0) {
+        if (metadata.agentSessions.length === 0) {
           continue;
         }
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "task_stop_impact_get",
-              message:
-                "task_stop_impact_get requires runtime session activity checks for tasks with agent sessions.",
-              details: { repoPath: input.repoPath, taskId },
-            }),
-          );
-        }
+        tasksWithSessions.push({ taskId, sessions: metadata.agentSessions });
+      }
+      if (tasksWithSessions.length === 0) {
+        return { stoppableSessionCount: 0 };
+      }
+      if (!taskActivityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_stop_impact_get",
+            message:
+              "task_stop_impact_get requires runtime session activity checks for tasks with agent sessions.",
+            details: { repoPath: input.repoPath, taskId: tasksWithSessions[0]?.taskId },
+          }),
+        );
+      }
 
-        let candidates = sessions;
+      const previewTasks: Array<{ taskId: string; sessions: AgentSessionRecord[] }> = [];
+      for (const { taskId, sessions } of tasksWithSessions) {
+        let candidates = selectStopCandidates(input.operation, sessions);
         if (input.operation === "reset_implementation") {
           const { sessionState } = yield* collectImplementationResetSessionState(
             dependencies,
@@ -114,14 +120,16 @@ export const createTaskStopImpactUseCase = ({
         if (candidates.length === 0) {
           continue;
         }
-        const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
-          repoPath: effectiveRepoPath,
-          sessions: candidates,
-          sessionRoles: selectStopCandidateRoles(input.operation, candidates),
-        });
-        stoppableSessionCount += liveSessionCount;
+        previewTasks.push({ taskId, sessions: candidates });
       }
-      return { stoppableSessionCount };
+      if (previewTasks.length === 0) {
+        return { stoppableSessionCount: 0 };
+      }
+      const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
+        repoPath: effectiveRepoPath,
+        taskSessions: previewTasks,
+      });
+      return { stoppableSessionCount: liveSessionCount };
     });
   },
 });

@@ -22,16 +22,14 @@ export const formatManagedSessionCleanupLoadingMessage = (
 ): string =>
   `Checking linked task worktree cleanup impact before ${cleanupOperationLabels[operation]}.`;
 
+const activeSessionStopPhrases: Record<TaskCleanupOperationLabel, string> = {
+  close: "before closing.",
+  delete: "before deletion.",
+  reset: "before the reset.",
+};
+
 export const formatActiveSessionStopMessage = (
   activeSessionCount: number,
   operation: TaskCleanupOperationLabel,
-): string => {
-  const subject = `${activeSessionCount} active agent session${activeSessionCount === 1 ? "" : "s"}`;
-  if (operation === "delete") {
-    return `${subject} will be stopped before deletion.`;
-  }
-  if (operation === "close") {
-    return `${subject} will be stopped before closing.`;
-  }
-  return `${subject} will be stopped before the reset.`;
-};
+): string =>
+  `${activeSessionCount} active agent session${activeSessionCount === 1 ? "" : "s"} will be stopped ${activeSessionStopPhrases[operation]}`;

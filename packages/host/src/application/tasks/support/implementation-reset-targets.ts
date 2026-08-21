@@ -68,7 +68,7 @@ export const stopActiveImplementationResetActivity = (
 ) =>
   Effect.gen(function* () {
     if (sessions.length === 0) {
-      return { stoppedSessionCount: 0 };
+      return;
     }
     if (!taskActivityGuard) {
       return yield* Effect.fail(
@@ -81,15 +81,11 @@ export const stopActiveImplementationResetActivity = (
         }),
       );
     }
-    const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
+    const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
       repoPath,
-      taskId,
-      sessions,
-      operationLabel: "reset implementation",
-      sessionRoles: [...new Set(sessions.map((session) => session.role.trim()))],
+      taskSessions: [{ taskId, sessions }],
     });
     recordStoppedAgentSessionCount(progress, stoppedSessionCount);
-    return { stoppedSessionCount };
   });
 
 export const resolveCanonicalImplementationResetTarget = (

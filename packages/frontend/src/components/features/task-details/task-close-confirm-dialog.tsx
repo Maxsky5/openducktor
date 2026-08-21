@@ -1,5 +1,6 @@
 import { CircleCheckBig, Loader2 } from "lucide-react";
 import type { ReactElement } from "react";
+import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -70,14 +70,11 @@ export function TaskCloseConfirmDialog({
                 ? "No running task terminals will be stopped."
                 : `${terminalCount} associated terminal${terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
             </p>
-            {activeSessionCount !== null && activeSessionCount > 0 ? (
-              <p>{formatActiveSessionStopMessage(activeSessionCount, "close")}</p>
-            ) : null}
-            {activeSessionCountError ? (
-              <p className="text-destructive-muted">
-                Unable to check how many active sessions will be stopped: {activeSessionCountError}
-              </p>
-            ) : null}
+            <TaskStopImpactNotice
+              count={activeSessionCount}
+              error={activeSessionCountError}
+              operation="close"
+            />
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (

@@ -11,24 +11,21 @@ export type TaskActivityGuardStopResult = {
   stoppedSessionCount: number;
 };
 
-export type TaskActivityGuardPort = {
-  countLiveSessions(input: {
-    repoPath: string;
-    sessions: AgentSessionRecord[];
-    sessionRoles: string[];
-  }): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
-  stopActiveTaskDeleteRuns(input: {
-    repoPath: string;
-    taskSessions: Array<{
-      taskId: string;
-      sessions: AgentSessionRecord[];
-    }>;
-  }): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
-  stopActiveTaskResetActivity(input: {
-    repoPath: string;
+type TaskActivityGuardTaskSessions = {
+  repoPath: string;
+  taskSessions: Array<{
     taskId: string;
     sessions: AgentSessionRecord[];
-    operationLabel: string;
-    sessionRoles: string[];
-  }): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
+  }>;
+};
+
+// Callers pre-filter sessions to the set the mutation would act on; the
+// adapter probes and stops exactly what it receives.
+export type TaskActivityGuardPort = {
+  countLiveSessions(
+    input: TaskActivityGuardTaskSessions,
+  ): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
+  stopLiveSessions(
+    input: TaskActivityGuardTaskSessions,
+  ): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
 };

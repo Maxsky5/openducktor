@@ -17,7 +17,6 @@ import {
   replaceTaskInList,
   runTaskLocalCleanup,
   taskHasSessionsForRoles,
-  workflowCleanupSessionRoleNames,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
@@ -94,12 +93,16 @@ export const createTaskFullResetUseCase = ({
             }),
           );
         }
-        const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
+        const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
           repoPath: effectiveRepoPath,
-          taskId,
-          sessions: currentSessions,
-          operationLabel: "reset task",
-          sessionRoles: [...workflowCleanupSessionRoleNames],
+          taskSessions: [
+            {
+              taskId,
+              sessions: currentSessions.filter((session) =>
+                workflowCleanupSessionRoles.has(session.role.trim()),
+              ),
+            },
+          ],
         });
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
@@ -148,7 +151,7 @@ export const createTaskFullResetUseCase = ({
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
-          roles: [...workflowCleanupSessionRoleNames],
+          roles: [...workflowCleanupSessionRoles],
         });
         cleanupProgress.completedSteps.push("cleared linked agent sessions");
         yield* storeDependencies.setPullRequest({

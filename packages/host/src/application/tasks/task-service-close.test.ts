@@ -407,8 +407,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
-      stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -493,8 +492,7 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
-      stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -557,9 +555,10 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
-      stopActiveTaskResetActivity: (input) => {
-        calls.push(`${input.operationLabel}:${input.repoPath}:${input.sessionRoles.join(",")}`);
+      stopLiveSessions: (input) => {
+        calls.push(
+          `close task:${input.repoPath}:${input.taskSessions[0]?.sessions.length ?? 0} sessions`,
+        );
         return Effect.succeed({ stoppedSessionCount: 0 });
       },
     };
@@ -576,7 +575,7 @@ describe("TaskService.closeTask", () => {
 
     await run(service.closeTask({ repoPath: "/repo-alias", taskId: "task-1" }));
 
-    expect(calls[0]).toBe("close task:/repo:spec,planner,build,qa");
+    expect(calls[0]).toBe("close task:/repo:1 sessions");
   });
 
   test("aborts destructive cleanup when task terminal termination fails", async () => {
@@ -715,9 +714,10 @@ describe("TaskService.closeTask", () => {
     };
     const activityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
-      stopActiveTaskResetActivity: (input) => {
-        calls.push(`${input.operationLabel}:${input.sessionRoles.join(",")}`);
+      stopLiveSessions: (input) => {
+        calls.push(
+          `close task:${input.taskSessions[0]?.sessions.map((session) => session.role).join(",")}`,
+        );
         return Effect.succeed({ stoppedSessionCount: 0 });
       },
     };
@@ -741,7 +741,7 @@ describe("TaskService.closeTask", () => {
 
     expect(closed.status).toBe("closed");
     expect(calls).toEqual([
-      "close task:spec,planner,build,qa",
+      "close task:spec,planner",
       "stop-dev:task-1",
       "remove-worktree:/worktrees/repo/planner-session",
       "remove-path:/worktrees/repo/planner-session",

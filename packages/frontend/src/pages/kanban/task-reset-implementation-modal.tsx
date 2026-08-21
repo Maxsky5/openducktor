@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatActiveSessionStopMessage } from "@/components/features/task-details/task-cleanup-impact-model";
+import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
@@ -68,15 +68,11 @@ export function TaskResetImplementationModal({
             <p className="font-medium">
               This action removes Builder and QA session history for this task.
             </p>
-            {model.activeSessionCount !== null && model.activeSessionCount > 0 ? (
-              <p>{formatActiveSessionStopMessage(model.activeSessionCount, "reset")}</p>
-            ) : null}
-            {model.activeSessionCountError ? (
-              <p className="text-destructive-muted">
-                Unable to check how many active sessions will be stopped:{" "}
-                {model.activeSessionCountError}
-              </p>
-            ) : null}
+            <TaskStopImpactNotice
+              count={model.activeSessionCount}
+              error={model.activeSessionCountError}
+              operation="reset"
+            />
             {model.hasCanonicalWorktree ? <p>{formatManagedCleanupMessage()}</p> : null}
             {model.legacyWorktreeCount > 0 ? (
               <p>{formatLegacyCleanupMessage(model.legacyWorktreeCount)}</p>

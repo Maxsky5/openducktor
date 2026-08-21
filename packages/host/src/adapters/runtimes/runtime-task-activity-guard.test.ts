@@ -115,7 +115,7 @@ const session = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecor
   ...overrides,
 });
 describe("createRuntimeTaskActivityGuard", () => {
-  test("counts live sessions without stopping them", async () => {
+  test("counts live sessions across tasks without stopping them", async () => {
     const probeCalls: unknown[] = [];
     const stopCalls: string[] = [];
     const guard = createRuntimeTaskActivityGuard({
@@ -129,14 +129,24 @@ describe("createRuntimeTaskActivityGuard", () => {
       Effect.runPromise(
         guard.countLiveSessions({
           repoPath: "/repo",
-          sessions: [session()],
-          sessionRoles: ["build", "qa"],
+          taskSessions: [
+            { taskId: "task-1", sessions: [session()] },
+            {
+              taskId: "task-2",
+              sessions: [
+                session({
+                  externalSessionId: "external-idle-session",
+                }),
+              ],
+            },
+          ],
         }),
       ),
     ).resolves.toEqual({ liveSessionCount: 1 });
     expect(stopCalls).toEqual([]);
+    expect(probeCalls).toHaveLength(2);
   });
-  test("count ignores unsupported probes and out-of-role sessions", async () => {
+  test("ignores unsupported runtime probes and sessions without an external id", async () => {
     const stopCalls: string[] = [];
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({ probeSupported: false, stopCalls }),
@@ -145,12 +155,38 @@ describe("createRuntimeTaskActivityGuard", () => {
       Effect.runPromise(
         guard.countLiveSessions({
           repoPath: "/repo",
-          sessions: [session()],
-          sessionRoles: ["build"],
+          taskSessions: [
+            {
+              taskId: "task-1",
+              sessions: [session(), session({ externalSessionId: "" })],
+            },
+          ],
         }),
       ),
     ).resolves.toEqual({ liveSessionCount: 0 });
     expect(stopCalls).toEqual([]);
+  });
+  test("probes sessions by durable runtime context", async () => {
+    const probeCalls: unknown[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ probeCalls }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.countLiveSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).resolves.toEqual({ liveSessionCount: 0 });
+    expect(probeCalls).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        externalSessionId: "external-build-session",
+        workingDirectory: "/repo/worktree",
+      },
+    ]);
   });
   test("stops a live session before implementation reset and reports the stopped count", async () => {
     const stopCalls: string[] = [];
@@ -162,107 +198,13 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
+        guard.stopLiveSessions({
           repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset implementation",
-          sessionRoles: ["build", "qa"],
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
       ),
     ).resolves.toEqual({ stoppedSessionCount: 1 });
     expect(stopCalls).toEqual(["external-build-session"]);
-  });
-  test("stops nothing when the matching runtime reports no live session", async () => {
-    const stopCalls: string[] = [];
-    const guard = createRuntimeTaskActivityGuard({
-      runtimeRegistry: registry({ stopCalls }),
-    });
-    await expect(
-      Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset task",
-          sessionRoles: ["spec", "planner", "build", "qa"],
-        }),
-      ),
-    ).resolves.toEqual({ stoppedSessionCount: 0 });
-    expect(stopCalls).toEqual([]);
-  });
-  test("probes sessions by durable runtime context", async () => {
-    const probeCalls: unknown[] = [];
-    const guard = createRuntimeTaskActivityGuard({
-      runtimeRegistry: registry({ probeCalls }),
-    });
-    await expect(
-      Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset task",
-          sessionRoles: ["build"],
-        }),
-      ),
-    ).resolves.toEqual({ stoppedSessionCount: 0 });
-    expect(probeCalls).toEqual([
-      {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-        externalSessionId: "external-build-session",
-        workingDirectory: "/repo/worktree",
-      },
-    ]);
-  });
-  test("treats unsupported runtime probes as not live so destructive cleanup can proceed", async () => {
-    const stopCalls: string[] = [];
-    const guard = createRuntimeTaskActivityGuard({
-      runtimeRegistry: registry({ probeSupported: false, stopCalls }),
-    });
-    await expect(
-      Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset implementation",
-          sessionRoles: ["build"],
-        }),
-      ),
-    ).resolves.toEqual({ stoppedSessionCount: 0 });
-    expect(stopCalls).toEqual([]);
-  });
-  test("skips sessions outside the guarded roles and sessions without an external id", async () => {
-    const probeCalls: unknown[] = [];
-    const stopCalls: string[] = [];
-    const guard = createRuntimeTaskActivityGuard({
-      runtimeRegistry: registry({
-        liveSessions: new Set(["external-planner-session"]),
-        probeCalls,
-        stopCalls,
-      }),
-    });
-    await expect(
-      Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
-          repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [
-            session({
-              externalSessionId: "external-planner-session",
-              role: "planner",
-            }),
-            session({ externalSessionId: "" }),
-          ],
-          operationLabel: "reset task",
-          sessionRoles: ["build", "qa"],
-        }),
-      ),
-    ).resolves.toEqual({ stoppedSessionCount: 0 });
-    expect(probeCalls).toEqual([]);
-    expect(stopCalls).toEqual([]);
   });
   test("stops live sessions across every target task before delete and reports the total", async () => {
     const stopCalls: string[] = [];
@@ -274,7 +216,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopActiveTaskDeleteRuns({
+        guard.stopLiveSessions({
           repoPath: "/repo",
           taskSessions: [
             {
@@ -296,6 +238,21 @@ describe("createRuntimeTaskActivityGuard", () => {
     ).resolves.toEqual({ stoppedSessionCount: 2 });
     expect(stopCalls).toEqual(["external-qa-session", "external-build-session"]);
   });
+  test("stops nothing when every runtime reports no live session", async () => {
+    const stopCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ stopCalls }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.stopLiveSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).resolves.toEqual({ stoppedSessionCount: 0 });
+    expect(stopCalls).toEqual([]);
+  });
   test("surfaces stop failures as actionable errors instead of proceeding with cleanup", async () => {
     const guard = createRuntimeTaskActivityGuard({
       runtimeRegistry: registry({
@@ -305,12 +262,9 @@ describe("createRuntimeTaskActivityGuard", () => {
     });
     await expect(
       Effect.runPromise(
-        guard.stopActiveTaskResetActivity({
+        guard.stopLiveSessions({
           repoPath: "/repo",
-          taskId: "task-1",
-          sessions: [session()],
-          operationLabel: "reset implementation",
-          sessionRoles: ["build"],
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
       ),
     ).rejects.toThrow(

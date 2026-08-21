@@ -116,7 +116,7 @@ export const createTaskDeleteUseCase = ({
             }),
           );
         }
-        const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskDeleteRuns({
+        const { stoppedSessionCount } = yield* taskActivityGuard.stopLiveSessions({
           repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions,
         });

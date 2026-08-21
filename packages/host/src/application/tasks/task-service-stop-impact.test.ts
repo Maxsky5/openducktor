@@ -38,25 +38,25 @@ const makeGuard = (
   countLiveSessions(input) {
     return Effect.sync(() => {
       countCalls.push({
-        sessionIds: input.sessions.map((session) => session.externalSessionId),
-        sessionRoles: [...input.sessionRoles],
+        sessionIds: input.taskSessions.flatMap((task) =>
+          task.sessions.map((session) => session.externalSessionId),
+        ),
+        sessionRoles: [
+          ...new Set(input.taskSessions.flatMap((task) => task.sessions.map((s) => s.role))),
+        ],
       });
       return {
-        liveSessionCount: input.sessions.filter((session) =>
-          liveSessions.has(session.externalSessionId),
-        ).length,
+        liveSessionCount: input.taskSessions.reduce(
+          (count, task) =>
+            count +
+            task.sessions.filter((session) => liveSessions.has(session.externalSessionId)).length,
+          0,
+        ),
       };
     });
   },
-  stopActiveTaskDeleteRuns() {
-    return Effect.fail(
-      new HostOperationError({ operation: "test", message: "unexpected delete stop" }),
-    );
-  },
-  stopActiveTaskResetActivity() {
-    return Effect.fail(
-      new HostOperationError({ operation: "test", message: "unexpected reset stop" }),
-    );
+  stopLiveSessions() {
+    return Effect.fail(new HostOperationError({ operation: "test", message: "unexpected stop" }));
   },
 });
 
@@ -120,12 +120,8 @@ describe("getTaskStopImpact", () => {
     expect(result).toEqual({ stoppableSessionCount: 1 });
     expect(countCalls).toEqual([
       {
-        sessionIds: ["live-build"],
-        sessionRoles: ["build"],
-      },
-      {
-        sessionIds: ["idle-planner"],
-        sessionRoles: ["planner"],
+        sessionIds: ["live-build", "idle-planner"],
+        sessionRoles: ["build", "planner"],
       },
     ]);
   });
@@ -161,7 +157,7 @@ describe("getTaskStopImpact", () => {
     expect(countCalls).toEqual([
       {
         sessionIds: ["root-planner", "idle-build"],
-        sessionRoles: ["spec", "planner", "build", "qa"],
+        sessionRoles: ["planner", "build"],
       },
     ]);
   });
@@ -204,6 +200,66 @@ describe("getTaskStopImpact", () => {
     ]);
   });
 
+  test("reset implementation probes nothing when only non-guarded sessions exist", async () => {
+    const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
+    const guard = makeGuard(new Set(["root-planner"]), countCalls);
+    const service = createService(
+      {
+        "task-1": [
+          createAgentSessionRecord({
+            externalSessionId: "root-spec",
+            role: "spec",
+            workingDirectory: "/repo",
+          }),
+          createAgentSessionRecord({
+            externalSessionId: "root-planner",
+            role: "planner",
+            workingDirectory: "/repo",
+          }),
+        ],
+      },
+      guard,
+    );
+
+    const result = await Effect.runPromise(
+      service.getTaskStopImpact({
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        operation: "reset_implementation",
+      }),
+    );
+
+    expect(result).toEqual({ stoppableSessionCount: 0 });
+    expect(countCalls).toEqual([]);
+  });
+
+  test("duplicate task ids collapse to a single preview pass per task", async () => {
+    const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
+    const guard = makeGuard(new Set(["live-build"]), countCalls);
+    const service = createService(
+      {
+        "task-1": [createAgentSessionRecord({ externalSessionId: "live-build" })],
+      },
+      guard,
+    );
+
+    const result = await Effect.runPromise(
+      service.getTaskStopImpact({
+        repoPath: "/repo",
+        taskIds: ["task-1", "task-1"],
+        operation: "delete",
+      }),
+    );
+
+    expect(result).toEqual({ stoppableSessionCount: 1 });
+    expect(countCalls).toEqual([
+      {
+        sessionIds: ["live-build"],
+        sessionRoles: ["build"],
+      },
+    ]);
+  });
+
   test("close previews workflow-role sessions for the single task", async () => {
     const countCalls: Array<{ sessionIds: string[]; sessionRoles: string[] }> = [];
     const guard = makeGuard(new Set(["live-qa"]), countCalls);
@@ -231,7 +287,7 @@ describe("getTaskStopImpact", () => {
     expect(countCalls).toEqual([
       {
         sessionIds: ["live-qa"],
-        sessionRoles: ["spec", "planner", "build", "qa"],
+        sessionRoles: ["qa"],
       },
     ]);
   });

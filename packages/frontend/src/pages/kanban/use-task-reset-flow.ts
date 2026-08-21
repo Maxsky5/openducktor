@@ -131,7 +131,6 @@ export function useTaskResetFlow({
       isSubmitting,
       activeSessionCount,
       activeSessionCountError: stopImpactError,
-      // Confirm stays disabled until the authoritative stop-count read resolves.
       isLoadingImpact: isLoadingImpact || isLoadingStopImpact,
       hasCanonicalWorktree,
       hasManagedSessionCleanup,
