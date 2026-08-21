@@ -9,6 +9,7 @@ import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from 
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
+import { admitUserMessage } from "./user-message-admission";
 
 type TestAdapterInternals = {
   sessions: Map<string, SessionRecord>;
@@ -1818,6 +1819,7 @@ describe("opencode-sdk-adapter", () => {
   test("sendUserMessage slash command does not hold idle snapshots awaiting prompt async", async () => {
     const mock = makeMockClient();
     const commandCalls: unknown[] = [];
+    const commandStarted = createDeferred<{ messageID: string }>();
     const slashCommandClient = {
       ...mock.client,
       session: {
@@ -1826,8 +1828,9 @@ describe("opencode-sdk-adapter", () => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
-        command: async (input: unknown) => {
+        command: async (input: { messageID: string }) => {
           commandCalls.push(input);
+          commandStarted.resolve(input);
           return { data: undefined, error: undefined };
         },
       },
@@ -1867,7 +1870,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    await adapter.sendUserMessage({
+    const send = adapter.sendUserMessage({
       ...sessionRuntimeRef("external-session-1", {
         sessionScope: opencodeWorkflowScope("build"),
       }),
@@ -1878,6 +1881,15 @@ describe("opencode-sdk-adapter", () => {
         },
       ],
     });
+    const { messageID } = await commandStarted.promise;
+    const admittedSession = (adapter as unknown as TestAdapterInternals).sessions.get(
+      "external-session-1",
+    );
+    if (!admittedSession) {
+      throw new Error("Expected test session to be registered.");
+    }
+    admitUserMessage(admittedSession, messageID);
+    await send;
 
     const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: defaultRepoPath,

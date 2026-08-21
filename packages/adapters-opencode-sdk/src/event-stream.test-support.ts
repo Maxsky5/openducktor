@@ -203,6 +203,7 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   emittedAssistantMessageIds: new Set<string>(),
   emittedUserMessageSignatures: new Map<string, string>(),
   emittedUserMessageStates: new Map(),
+  pendingUserMessageAdmissions: new Map(),
   pendingQueuedUserMessages: [],
   partsById: new Map(),
   partIdsByMessageId: new Map(),

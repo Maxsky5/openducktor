@@ -66,6 +66,7 @@ import {
 } from "./live-session-snapshots";
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
+import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
   adoptPreparedOpencodeSessionPolicy,
   applyRuntimeContextToSession,
@@ -106,6 +107,7 @@ import type {
   SessionRecord,
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
+import { waitForUserMessageAdmission } from "./user-message-admission";
 import {
   ensureTrustedOdtMcpServerConnected,
   resolveRepositoryToolSelection,
@@ -726,6 +728,10 @@ export class OpencodeSdkAdapter
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
   ): Promise<AcceptedAgentUserMessage> {
     const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
+    const waitsForRuntimeAdmission =
+      systemInvocation.kind === "not_system" && !expectsPromptTurnStart;
+    const messageId = waitsForRuntimeAdmission ? createOpenCodeMessageId() : undefined;
+    const admission = messageId ? waitForUserMessageAdmission(session, messageId) : undefined;
     const begunSend = beginOpencodeUserMessageSend({
       session,
       expectsPromptTurnStart,
@@ -742,6 +748,8 @@ export class OpencodeSdkAdapter
         session,
         request: input,
         tools,
+        ...(messageId ? { messageId } : {}),
+        ...(admission ? { admission: admission.promise } : {}),
       });
       const timestamp = this.now();
       const event: AcceptedAgentUserMessage = {
@@ -775,6 +783,7 @@ export class OpencodeSdkAdapter
       }
       throw error;
     } finally {
+      admission?.dispose();
       completeOpencodeUserMessageSend(session);
     }
   }

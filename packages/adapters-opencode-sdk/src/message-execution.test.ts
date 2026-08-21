@@ -109,16 +109,19 @@ describe("message-execution", () => {
       tools: {},
     });
 
-    expect(command).toHaveBeenCalledWith({
-      sessionID: "session-opencode-1",
-      directory: "/repo",
-      messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-      command: "review",
-      arguments: "summarize latest session",
-      model: "openai/gpt-5",
-      variant: "high",
-      agent: "hephaestus",
-    });
+    expect(command).toHaveBeenCalledWith(
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+        messageID: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
+        command: "review",
+        arguments: "summarize latest session",
+        model: "openai/gpt-5",
+        variant: "high",
+        agent: "hephaestus",
+      },
+      { fetch: expect.any(Function) },
+    );
     expect(promptAsync).not.toHaveBeenCalled();
   });
 

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { Part } from "@opencode-ai/sdk/v2";
+import type { Event, Part } from "@opencode-ai/sdk/v2";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
+  flushAsync,
   makeMockClient,
   OpencodeSdkAdapter,
   sessionRuntimeRef,
@@ -11,6 +12,70 @@ import {
 } from "./test-support";
 
 const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+};
+
+const installSlashCommandAdmission = (
+  mock: ReturnType<typeof makeMockClient>,
+  assistantMessageId?: string,
+): void => {
+  const runtimeEvents = deferred<Event[]>();
+  Object.assign(mock.client.global, {
+    event: async (options?: { signal?: AbortSignal }) => ({
+      stream: (async function* () {
+        const events = await runtimeEvents.promise;
+        for (const event of events) {
+          if (options?.signal?.aborted) {
+            return;
+          }
+          yield { directory: "/repo", payload: event };
+        }
+      })(),
+    }),
+  });
+  Object.assign(mock.client.session, {
+    command: async (input: { messageID: string }) => {
+      mock.session.commandCalls.push(input);
+      runtimeEvents.resolve([
+        {
+          type: "message.updated",
+          properties: {
+            info: {
+              id: input.messageID,
+              role: "user",
+              sessionID: "session-opencode-1",
+              time: { created: Date.parse("2026-02-17T12:00:00Z") },
+            },
+          },
+        } as Event,
+        ...(assistantMessageId
+          ? [
+              {
+                type: "message.updated",
+                properties: {
+                  info: {
+                    id: assistantMessageId,
+                    role: "assistant",
+                    sessionID: "session-opencode-1",
+                    time: { created: Date.parse("2026-02-17T12:00:01Z") },
+                  },
+                },
+              } as Event,
+            ]
+          : []),
+      ]);
+      return { data: undefined, error: undefined };
+    },
+  });
+};
 
 describe("OpencodeSdkAdapter user message", () => {
   test("manual compaction bypasses workflow-tool discovery", async () => {
@@ -356,6 +421,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
   test("sendUserMessage uses the native session command endpoint for slash commands", async () => {
     const mock = makeMockClient({});
+    installSlashCommandAdmission(mock);
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
@@ -400,8 +466,94 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("sendUserMessage accepts a slash command when its user-message event arrives", async () => {
+    const mock = makeMockClient({});
+    const runtimeEvent = deferred<Event>();
+    const commandStarted = deferred<{ messageID: string }>();
+    const commandResponse = deferred<{ data?: unknown; error?: unknown }>();
+    Object.assign(mock.client.global, {
+      event: async (options?: { signal?: AbortSignal }) => ({
+        stream: (async function* () {
+          const event = await runtimeEvent.promise;
+          if (!options?.signal?.aborted) {
+            yield { directory: "/repo", payload: event };
+          }
+        })(),
+      }),
+    });
+    Object.assign(mock.client.session, {
+      command: async (input: { messageID: string }) => {
+        mock.session.commandCalls.push(input);
+        commandStarted.resolve(input);
+        return commandResponse.promise;
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
+    );
+    const send = adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      parts: [
+        {
+          kind: "slash_command",
+          command: {
+            id: "review",
+            trigger: "review",
+            title: "review",
+            hints: [],
+          },
+        },
+      ],
+    });
+    let accepted = false;
+    void send.then(
+      () => {
+        accepted = true;
+      },
+      () => undefined,
+    );
+
+    try {
+      const command = await commandStarted.promise;
+      runtimeEvent.resolve({
+        type: "message.updated",
+        properties: {
+          info: {
+            id: command.messageID,
+            role: "user",
+            sessionID: "session-opencode-1",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+        },
+      } as Event);
+      await flushAsync();
+
+      expect(accepted).toBe(true);
+      expect(events.filter((event) => event.type === "user_message")).toHaveLength(1);
+      expect(events.some((event) => event.type === "session_idle")).toBe(false);
+    } finally {
+      commandResponse.reject(
+        Object.assign(new Error("fetch failed"), { code: "UND_ERR_HEADERS_TIMEOUT" }),
+      );
+      await send.catch(() => undefined);
+      unsubscribe();
+    }
+
+    await flushAsync();
+    expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
   test("sendUserMessage emits a busy status immediately for slash commands", async () => {
     const mock = makeMockClient({});
+    installSlashCommandAdmission(mock);
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
@@ -630,17 +782,9 @@ describe("OpencodeSdkAdapter user message", () => {
     ]);
   });
 
-  test("sendUserMessage pre-queues follow-ups after a slash command establishes an assistant boundary", async () => {
-    const mock = makeMockClient({
-      commandResult: {
-        mode: "success",
-        data: {
-          info: {
-            id: "msg-command-assistant-1",
-          },
-        },
-      },
-    });
+  test("sendUserMessage pre-queues follow-ups after runtime events establish a slash-command assistant boundary", async () => {
+    const mock = makeMockClient({});
+    installSlashCommandAdmission(mock, "msg-command-assistant-1");
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",

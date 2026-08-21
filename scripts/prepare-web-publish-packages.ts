@@ -7,8 +7,6 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
 };
 
-const runtimeDependencyNames = ["@anthropic-ai/claude-agent-sdk"] as const;
-
 const expectedPackageFiles = [
   "dist/cli.js",
   "dist/openducktor-mcp.js",
@@ -27,18 +25,37 @@ if (
 const repoRoot = path.resolve(import.meta.dir, "..");
 const hostManifestPath = path.join(repoRoot, "packages/host/package.json");
 const hostManifest = JSON.parse(readFileSync(hostManifestPath, "utf8")) as PackageManifest;
+const opencodeAdapterManifestPath = path.join(
+  repoRoot,
+  "packages/adapters-opencode-sdk/package.json",
+);
+const opencodeAdapterManifest = JSON.parse(
+  readFileSync(opencodeAdapterManifestPath, "utf8"),
+) as PackageManifest;
 const packageRoot = path.join(repoRoot, "packages/openducktor-web");
 const manifestPath = path.join(packageRoot, "package.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest;
+const runtimeDependencySources = [
+  {
+    name: "@anthropic-ai/claude-agent-sdk",
+    manifest: hostManifest,
+    manifestPath: hostManifestPath,
+  },
+  {
+    name: "undici",
+    manifest: opencodeAdapterManifest,
+    manifestPath: opencodeAdapterManifestPath,
+  },
+] as const;
 const allowedRuntimeDependencies = Object.fromEntries(
-  runtimeDependencyNames.map((dependencyName) => {
-    const dependencyVersion = hostManifest.dependencies?.[dependencyName];
+  runtimeDependencySources.map(({ name, manifest: sourceManifest, manifestPath: sourcePath }) => {
+    const dependencyVersion = sourceManifest.dependencies?.[name];
     if (!dependencyVersion) {
-      throw new Error(`Expected ${hostManifestPath} to depend on ${dependencyName}.`);
+      throw new Error(`Expected ${sourcePath} to depend on ${name}.`);
     }
-    return [dependencyName, dependencyVersion];
+    return [name, dependencyVersion];
   }),
-) as Record<(typeof runtimeDependencyNames)[number], string>;
+) as Record<(typeof runtimeDependencySources)[number]["name"], string>;
 
 if (manifest.name !== "@openducktor/web") {
   throw new Error(`Expected ${manifestPath} to describe @openducktor/web.`);

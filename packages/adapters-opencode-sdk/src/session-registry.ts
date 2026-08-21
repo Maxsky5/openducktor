@@ -399,6 +399,7 @@ export const registerSession = (
     emittedAssistantMessageIds: new Set<string>(),
     emittedUserMessageSignatures: new Map<string, string>(),
     emittedUserMessageStates: new Map(),
+    pendingUserMessageAdmissions: new Map(),
     pendingQueuedUserMessages: [],
     partsById: new Map(),
     partIdsByMessageId: new Map(),

@@ -6,6 +6,7 @@ import {
   readTextFromMessageInfo,
 } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
+import { admitUserMessage } from "../../user-message-admission";
 import type { EventStreamRuntime } from "../shared";
 import { emitBackgroundTaskResultSubagentParts } from "./background-task-result";
 import { getKnownMessageParts } from "./helpers";
@@ -90,6 +91,7 @@ export const handleUserMessageUpdated = (
   },
 ): boolean => {
   const { session } = runtime;
+  admitUserMessage(session, input.messageId);
   const userParts =
     input.normalizedParts.length > 0
       ? input.normalizedParts
