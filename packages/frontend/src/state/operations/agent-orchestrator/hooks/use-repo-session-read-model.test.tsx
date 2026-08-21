@@ -397,6 +397,63 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps a removed live session while the switched task set is still hydrating", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: () => task2Hydration.promise,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()?.liveReported).toBe(true);
+
+      // Same-repo task-set change while task 2 hydration is still pending.
+      const threadTwo = { ...record, externalSessionId: "thread-two", role: "qa" as const };
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+
+      // The runtime withdraws the live session before any current-scope read
+      // has succeeded; the stale task-1 records must not become deletion proof.
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.liveReported).toBe(false);
+
+      // Task 2 finishes hydrating; its owner set cannot prove anything about
+      // the task-1 session either.
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [threadTwo] }]);
+        await task2Hydration.promise;
+      });
+      const threadTwoIdentity = {
+        externalSessionId: threadTwo.externalSessionId,
+        runtimeKind: threadTwo.runtimeKind,
+        workingDirectory: threadTwo.workingDirectory,
+      };
+      await state.harness.waitFor(() => state.getStoredSession(threadTwoIdentity) !== null);
+      expect(state.getStoredSession(threadTwoIdentity)?.sessionAssociation).toEqual({
+        kind: "workflow",
+        taskId: "task-2",
+        role: "qa",
+      });
+      expect(state.getSession()).not.toBeNull();
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({

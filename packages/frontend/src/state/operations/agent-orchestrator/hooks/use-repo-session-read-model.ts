@@ -118,6 +118,7 @@ export const useRepoSessionReadModel = ({
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
   const taskIdsKey = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
+  const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -426,19 +427,17 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let awaitingInitialSnapshot = true;
-    const readTaskSessionRecords = (): TaskSessionRecords => {
-      const current = taskRecordApplyRef.current;
-      if (!current || current.repoPath !== repoPath) {
-        throw new Error(`Task session records are not ready for repo '${repoPath}'.`);
-      }
-      if (current.kind === "failed") {
-        throw new Error(current.message);
-      }
-      return current.records;
-    };
     const readLoadedDurableRecords = (): DurableWorkflowSessionRecords | null => {
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
+        return null;
+      }
+      // Records applied for a prior task set are stale scope: the current set
+      // is unloaded until its own read succeeds, and it never proves deletion.
+      const appliedTaskIdsKey = JSON.stringify(
+        normalizeAgentSessionTaskIds(current.records.taskIds),
+      );
+      if (appliedTaskIdsKey !== readCurrentTaskIdsKey()) {
         return null;
       }
       return toDurableWorkflowSessionRecords(current.records);
@@ -483,14 +482,16 @@ export const useRepoSessionReadModel = ({
     ): void => {
       const policyActions = commitSessionCollection((current) => {
         // This is the sole live-snapshot-to-session-store write path:
-        // project the runtime stream first, then reconcile durable workflow records.
-        const collection = applyWorkflowSessionRecordOverlay({
-          projected: buildAgentSessionLiveCollection({
-            current,
-            snapshots: envelope.sessions,
-          }),
-          durableRecords: toDurableWorkflowSessionRecords(readTaskSessionRecords()),
+        // project the runtime stream first, then reconcile durable workflow
+        // records only when the current task set is loaded.
+        const projected = buildAgentSessionLiveCollection({
+          current,
+          snapshots: envelope.sessions,
         });
+        const durableRecords = readLoadedDurableRecords();
+        const collection = durableRecords
+          ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
+          : projected;
         return {
           collection,
           result: collectPendingApprovalPolicyActions({
@@ -502,9 +503,22 @@ export const useRepoSessionReadModel = ({
       });
       applyPendingApprovalPolicy(policyActions);
       awaitingInitialSnapshot = false;
-      if (!isStaleRepoOperation()) {
-        setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
+      if (isStaleRepoOperation()) {
+        return;
       }
+      // A healthy stream must not mask a failed task-record read.
+      const appliedRecords = taskRecordApplyRef.current;
+      if (
+        appliedRecords &&
+        appliedRecords.repoPath === repoPath &&
+        appliedRecords.kind === "failed"
+      ) {
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message),
+        );
+        return;
+      }
+      setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
     };
     const applyEnvelope = (envelope: AgentSessionLiveEnvelope): void => {
       if (isStaleRepoOperation()) {

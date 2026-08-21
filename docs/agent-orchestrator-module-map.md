@@ -904,8 +904,10 @@ state, committed atomically by live snapshot and delta projection, so task
 refreshes read the same single source of truth without a presence store.
 `useRepoSessionReadModel` composes live projection, then the overlay, then
 commits one collection for snapshots, ordered deltas, and task refreshes
-alike; deltas skip the overlay only while the latest task-record read is
-unloaded or failed, because failure is never deletion proof.
+alike; snapshot and delta commits reconcile records only from the latest
+successfully loaded read for the current task set. An unloaded or failed
+read, a failed repo, or records applied for a prior task set never prove
+deletion, so those commits project the runtime stream without the overlay.
 
 ## Startup Flow
 
