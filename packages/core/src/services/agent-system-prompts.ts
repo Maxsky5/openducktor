@@ -470,11 +470,11 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
       "Publish a review-ready pull request for the current task.",
       lineSection("Pull request base", ["{{git.targetBranch}}"]),
       bulletSection("Prepare", [
-        "Use the base ref for Git diffs and rebases. Use the base branch with pull request provider tools.",
+        "Use the base branch for Git diffs, rebases, and pull request provider tools.",
         "Treat the current task artifacts and live repository state as the source of truth.",
         "Read the repository's contribution guidance and pull request template when present.",
-        "Inspect the source branch, its remote, any existing pull request, and the diff against the base ref.",
-        "If the source branch is behind the base ref, rebase it and resolve conflicts.",
+        "Inspect the source branch, any existing pull request, and the diff against the base branch.",
+        "If the source branch is behind the base branch, rebase it and resolve conflicts.",
         "Run every required local check. Fix root causes and rerun affected checks until all pass.",
         "Preparation is complete when the diff matches the current task and every required local check passes.",
       ]),
@@ -535,14 +535,7 @@ const compact = (value: string | undefined): string => {
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
-type PullRequestTargetContext = {
-  comparisonRef: string;
-  branch: string;
-};
-
-const resolvePullRequestTarget = (
-  targetBranch: GitTargetBranch | undefined,
-): PullRequestTargetContext => {
+const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string => {
   const branch = targetBranch?.branch.trim();
   if (!branch) {
     throw new Error(
@@ -551,15 +544,11 @@ const resolvePullRequestTarget = (
   }
   if (branch === "@{upstream}") {
     throw new Error(
-      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
     );
   }
 
-  const remote = targetBranch?.remote?.trim();
-  return {
-    comparisonRef: remote ? `${remote}/${branch}` : branch,
-    branch,
-  };
+  return branch;
 };
 
 const compactList = (values: string[] | undefined): string => {
@@ -593,16 +582,11 @@ const buildPlaceholderValues = ({
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
-  pullRequestTarget?: PullRequestTargetContext;
+  pullRequestTarget?: string;
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
   const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
-  const targetBranchPlaceholder = pullRequestTarget
-    ? [
-        `- Base ref: ${pullRequestTarget.comparisonRef}`,
-        `- Base branch: ${pullRequestTarget.branch}`,
-      ].join("\n")
-    : compact(git?.targetBranch);
+  const targetBranchPlaceholder = pullRequestTarget ?? compact(git?.targetBranch);
 
   if (extraPlaceholders?.humanFeedback !== undefined && !humanFeedback) {
     throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
@@ -719,7 +703,7 @@ const buildPromptFromTemplates = ({
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
-  pullRequestTarget?: PullRequestTargetContext;
+  pullRequestTarget?: string;
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {

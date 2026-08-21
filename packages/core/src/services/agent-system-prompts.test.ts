@@ -438,11 +438,10 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(prompt, [
       "Publish a review-ready pull request for the current task.",
-      "Base ref: origin/release/2026.04",
-      "Base branch: release/2026.04",
-      "Use the base ref for Git diffs and rebases. Use the base branch with pull request provider tools.",
+      "Pull request base:\nrelease/2026.04",
+      "Use the base branch for Git diffs, rebases, and pull request provider tools.",
       "Treat the current task artifacts and live repository state as the source of truth.",
-      "If the source branch is behind the base ref, rebase it and resolve conflicts.",
+      "If the source branch is behind the base branch, rebase it and resolve conflicts.",
       "Preparation is complete when the diff matches the current task and every required local check passes.",
       "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
       "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
@@ -454,6 +453,7 @@ describe("kickoff and permission prompts", () => {
     ]);
     expect(prompt).not.toContain("Builder session");
     expect(prompt).not.toContain("comparison");
+    expect(prompt).not.toContain("origin/release/2026.04");
     expect(prompt).not.toContain("target");
     expect(result.templates[0]?.builtinVersion).toBe(5);
   });
@@ -487,7 +487,7 @@ describe("kickoff and permission prompts", () => {
         },
       }),
     ).toThrow(
-      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
     );
   });
 

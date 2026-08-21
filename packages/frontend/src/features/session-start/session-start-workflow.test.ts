@@ -137,18 +137,17 @@ describe("session-start-workflow", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
       expect.objectContaining({
         kind: "text",
-        text: expect.stringContaining("Base ref: upstream/release/2026.04"),
+        text: expect.stringContaining("Pull request base:\nrelease/2026.04"),
       }),
     ]);
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).toContain("Base branch: release/2026.04");
-    expect(sentText).not.toContain("Base ref: origin/main");
+    expect(sentText).not.toContain("upstream/release/2026.04");
   });
 
-  test("uses the explicit branch name as the provider base for origin targets", async () => {
+  test("ignores the remote when building the pull request kickoff prompt", async () => {
     const sendAgentMessage = mock(async () => undefined);
     const startAgentSession = mock(async () => sessionIdentity("session-pr-origin"));
 
@@ -180,8 +179,8 @@ describe("session-start-workflow", () => {
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).toContain("Base ref: origin/main");
-    expect(sentText).toContain("Base branch: main");
+    expect(sentText).toContain("Pull request base:\nmain");
+    expect(sentText).not.toContain("origin/main");
   });
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {
@@ -212,7 +211,7 @@ describe("session-start-workflow", () => {
         sendAgentMessage,
       }),
     ).rejects.toThrow(
-      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
     );
 
     expect(startAgentSession).not.toHaveBeenCalled();
