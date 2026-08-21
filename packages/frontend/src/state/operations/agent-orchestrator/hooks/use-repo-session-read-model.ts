@@ -196,7 +196,9 @@ export const useRepoSessionReadModel = ({
           failedAt: "apply",
           message,
         };
-        setSessionReadModelLoadState(failedAgentSessionReadModelLoadState(repoPath, message));
+        setSessionReadModelLoadState(
+          failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+        );
         return false;
       }
     },
@@ -269,7 +271,11 @@ export const useRepoSessionReadModel = ({
           return;
         }
         setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(cause)),
+          failedAgentSessionReadModelLoadState(
+            repoPath,
+            retryFailureMessage(cause),
+            "task-records",
+          ),
         );
       },
     );
@@ -331,7 +337,7 @@ export const useRepoSessionReadModel = ({
         message,
       };
       setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(workspaceRepoPath, message),
+        failedAgentSessionReadModelLoadState(workspaceRepoPath, message, "task-records"),
       );
       return;
     }
@@ -342,11 +348,16 @@ export const useRepoSessionReadModel = ({
     if (!applied) {
       return;
     }
-    // Current-scope records loaded: a prior failure no longer describes this
-    // read model, and a healthy live stream must not keep surfacing it.
+    // Current-scope records loaded: a prior task-record failure no longer
+    // describes this read model. Live observation, transcript recovery, and
+    // protocol failures stay failed until their own source recovers.
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setSessionReadModelLoadState((current) =>
-      current.kind === "failed" ? readyAgentSessionReadModelLoadState(workspaceRepoPath) : current,
+      current.kind === "failed" &&
+      current.source === "task-records" &&
+      current.workspaceRepoPath === workspaceRepoPath
+        ? readyAgentSessionReadModelLoadState(workspaceRepoPath)
+        : current,
     );
   }, [applyTaskRecords, taskRecords, workspaceRepoPath]);
 
@@ -368,7 +379,11 @@ export const useRepoSessionReadModel = ({
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
       setRecordRetryResult(null);
       setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(recordRetryResult.repoPath, recordRetryResult.message),
+        failedAgentSessionReadModelLoadState(
+          recordRetryResult.repoPath,
+          recordRetryResult.message,
+          "task-records",
+        ),
       );
       return;
     }
@@ -523,7 +538,7 @@ export const useRepoSessionReadModel = ({
         appliedRecords.kind === "failed"
       ) {
         setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message),
+          failedAgentSessionReadModelLoadState(repoPath, appliedRecords.message, "task-records"),
         );
         return;
       }

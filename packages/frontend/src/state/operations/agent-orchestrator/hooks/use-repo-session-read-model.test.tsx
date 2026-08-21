@@ -526,6 +526,113 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps an unresolved repository fault failed across a successful record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    const refreshedIdentity = {
+      externalSessionId: "thread-refreshed",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A healthy durable-record refresh applies, proves it applied by
+      // materializing its session, and still cannot clear the live fault.
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the observation failure to stay failed.");
+      }
+      expect(latest.source).toBe("observation");
+      expect(latest.message).toContain("The observation stream stopped.");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps an unresolved transcript-gap recovery failure across a successful record refresh", async () => {
+    const state = createState((emit) => {
+      emit({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot()],
+      });
+    });
+    state.recoverTranscriptGap.mockImplementation(async () => {
+      throw new Error("history reload failed");
+    });
+    const refreshedIdentity = {
+      externalSessionId: "thread-refreshed-gap",
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      await state.harness.run(async () => {
+        state.emit({
+          type: "transcript_gap",
+          repoPath: "/repo",
+          message: "Host event replay skipped transcript events.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("history reload failed"),
+      );
+
+      const refreshedRecords = [{ ...record, externalSessionId: "thread-refreshed-gap" }];
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+          refreshedRecords,
+        );
+      });
+      await state.harness.waitFor(() => state.getStoredSession(refreshedIdentity) !== null);
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the transcript-gap recovery failure to stay failed.");
+      }
+      expect(latest.source).toBe("observation");
+      expect(latest.message).toContain("history reload failed");
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({
@@ -598,6 +705,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+        source: "task-records",
       });
 
       await state.harness.run(() => {
@@ -647,6 +755,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to reconcile task session records for repo '/repo': Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
+        source: "task-records",
       });
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
       expect(state.getSession()?.sessionAssociation).toEqual({ kind: "repository" });
@@ -846,6 +955,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
+        source: "observation",
       });
     } finally {
       await state.harness.unmount();
@@ -1350,6 +1460,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
+        source: "observation",
       });
     } finally {
       await state.harness.unmount();
@@ -1579,6 +1690,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message: "Live-session observation failed: The observation stream stopped.",
+        source: "observation",
       });
     } finally {
       await state.harness.unmount();
@@ -1796,6 +1908,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message: "Failed to retry task session records for repo '/repo': newer retry failed",
+        source: "task-records",
       });
       const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
       expect(state.queryClient.getQueryData<AgentSessionRecord[]>(queryKey)).toEqual([record]);
