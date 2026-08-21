@@ -65,6 +65,7 @@ export function TaskDetailsSheet({
   historicalSessions = EMPTY_HISTORICAL_SESSIONS,
   hasActiveSession = false,
   activeSessionRole,
+  activeSessionCountsByTaskId,
   open,
   onOpenChange,
   workflowActionsEnabled = true,
@@ -104,6 +105,7 @@ export function TaskDetailsSheet({
     onResetTask,
     onCloseTask,
     onDelete,
+    ...(activeSessionCountsByTaskId ? { activeSessionCountsByTaskId } : {}),
   };
   if (task) {
     viewModelInput.resolveSessionOptionsByRole = (role: AgentRole) =>
@@ -224,6 +226,7 @@ export function TaskDetailsSheet({
             hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
             managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
             terminalCount: viewModel.deleteTerminalCount,
+            activeSessionCount: viewModel.deleteActiveSessionCount,
             error: viewModel.deleteImpactError,
           }}
           deletion={{
@@ -244,6 +247,7 @@ export function TaskDetailsSheet({
           hasManagedSessionCleanup={viewModel.hasManagedResetSessionCleanup}
           managedWorktreeCount={viewModel.resetManagedWorktreeCount}
           terminalCount={viewModel.resetTerminalCount}
+          activeSessionCount={viewModel.resetActiveSessionCount}
           impactError={viewModel.resetImpactError}
           isResetPending={viewModel.isResetPending}
           resetError={viewModel.resetError}
@@ -261,6 +265,7 @@ export function TaskDetailsSheet({
           hasManagedSessionCleanup={viewModel.hasManagedCloseSessionCleanup}
           managedWorktreeCount={viewModel.closeManagedWorktreeCount}
           terminalCount={viewModel.closeTerminalCount}
+          activeSessionCount={viewModel.closeActiveSessionCount}
           impactError={viewModel.closeImpactError}
           isClosePending={viewModel.isClosePending}
           closeError={viewModel.closeError}

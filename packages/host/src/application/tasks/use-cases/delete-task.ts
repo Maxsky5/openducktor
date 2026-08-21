@@ -98,6 +98,7 @@ export const createTaskDeleteUseCase = ({
           sessions: metadata.agentSessions,
         });
       }
+      const cleanupProgress = createTaskCleanupProgressState();
       if (
         targetTaskSessions.some((entry) =>
           taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
@@ -114,10 +115,15 @@ export const createTaskDeleteUseCase = ({
             }),
           );
         }
-        yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
+        const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskDeleteRuns({
           repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions,
         });
+        if (stoppedSessionCount > 0) {
+          cleanupProgress.completedSteps.push(
+            `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+          );
+        }
       }
 
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
@@ -138,7 +144,6 @@ export const createTaskDeleteUseCase = ({
         branchPrefix,
         targetTaskIds,
       );
-      const cleanupProgress = createTaskCleanupProgressState();
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({

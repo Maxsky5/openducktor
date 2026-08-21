@@ -7,19 +7,23 @@ import type {
 
 export type TaskActivityGuardError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
+export type TaskActivityGuardStopResult = {
+  stoppedSessionCount: number;
+};
+
 export type TaskActivityGuardPort = {
-  ensureNoActiveTaskDeleteRuns(input: {
+  stopActiveTaskDeleteRuns(input: {
     repoPath: string;
     taskSessions: Array<{
       taskId: string;
       sessions: AgentSessionRecord[];
     }>;
-  }): Effect.Effect<void, TaskActivityGuardError>;
-  ensureNoActiveTaskResetActivity(input: {
+  }): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
+  stopActiveTaskResetActivity(input: {
     repoPath: string;
     taskId: string;
     sessions: AgentSessionRecord[];
     operationLabel: string;
     sessionRoles: string[];
-  }): Effect.Effect<void, TaskActivityGuardError>;
+  }): Effect.Effect<TaskActivityGuardStopResult, TaskActivityGuardError>;
 };

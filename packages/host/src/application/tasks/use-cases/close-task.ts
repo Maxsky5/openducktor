@@ -91,13 +91,18 @@ export const createTaskCloseUseCase = ({
           );
         }
         if (hasWorkflowSessions && taskActivityGuard) {
-          yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+          const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
             repoPath: effectiveRepoPath,
             taskId,
             sessions: currentSessions,
             operationLabel: "close task",
             sessionRoles: [...workflowCleanupSessionRoleNames],
           });
+          if (stoppedSessionCount > 0) {
+            cleanupProgress.completedSteps.push(
+              `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+            );
+          }
         }
 
         const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);

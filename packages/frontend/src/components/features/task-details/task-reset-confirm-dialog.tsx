@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -26,6 +27,7 @@ type TaskResetConfirmDialogProps = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
+  activeSessionCount: number;
   impactError: string | null;
   isResetPending: boolean;
   resetError: string | null;
@@ -41,6 +43,7 @@ export function TaskResetConfirmDialog({
   hasManagedSessionCleanup,
   managedWorktreeCount,
   terminalCount,
+  activeSessionCount,
   impactError,
   isResetPending,
   resetError,
@@ -69,6 +72,9 @@ export function TaskResetConfirmDialog({
                 terminated before the task resets.
               </p>
             )}
+            {activeSessionCount > 0 ? (
+              <p>{formatActiveSessionStopMessage(activeSessionCount, "reset")}</p>
+            ) : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
             ) : impactError ? (

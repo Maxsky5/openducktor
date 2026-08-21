@@ -4,9 +4,9 @@ import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
   appendImplementationResetCleanupProgress,
-  ensureNoActiveImplementationResetActivity,
   excludeCanonicalImplementationTargets,
   resolveCanonicalImplementationResetTarget,
+  stopActiveImplementationResetActivity,
 } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
@@ -92,11 +92,13 @@ export const createTaskImplementationResetUseCase = ({
         currentSessions,
         canonicalWorktree,
       );
-      yield* ensureNoActiveImplementationResetActivity(
+      const cleanupProgress = createTaskCleanupProgressState();
+      yield* stopActiveImplementationResetActivity(
         taskActivityGuard,
         effectiveRepoPath,
         taskId,
         canonicalSessionState.guarded,
+        cleanupProgress,
       );
       const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const rollbackStatus = resetImplementationRollbackStatus(current);
@@ -130,7 +132,6 @@ export const createTaskImplementationResetUseCase = ({
         relatedBranches,
         canonicalTarget,
       );
-      const cleanupProgress = createTaskCleanupProgressState();
       let taskStoreWriteCompleted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({

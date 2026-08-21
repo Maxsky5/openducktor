@@ -15,6 +15,7 @@ describe("TaskResetConfirmDialog", () => {
         hasManagedSessionCleanup
         managedWorktreeCount={2}
         terminalCount={2}
+        activeSessionCount={1}
         impactError={null}
         isResetPending={false}
         resetError={null}
@@ -28,6 +29,9 @@ describe("TaskResetConfirmDialog", () => {
     expect(screen.getByText(/pull request and direct-merge metadata/i)).toBeDefined();
     expect(screen.getByText(/2 linked task worktrees/i)).toBeDefined();
     expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
+    expect(
+      screen.getByText("1 active agent session will be stopped before the reset."),
+    ).toBeDefined();
   });
 
   test("disables submit while cleanup impact is loading", () => {
@@ -42,6 +46,7 @@ describe("TaskResetConfirmDialog", () => {
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}
+        activeSessionCount={0}
         impactError={null}
         isResetPending={false}
         resetError={null}

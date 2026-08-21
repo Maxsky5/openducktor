@@ -18,6 +18,7 @@ describe("TaskCloseConfirmDialog", () => {
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={0}
+        activeSessionCount={0}
         impactError={null}
         isClosePending={false}
         closeError={null}
@@ -55,6 +56,7 @@ describe("TaskCloseConfirmDialog", () => {
         hasManagedSessionCleanup={false}
         managedWorktreeCount={0}
         terminalCount={2}
+        activeSessionCount={3}
         impactError="Could not preview cleanup"
         isClosePending={false}
         closeError="Close failed"
@@ -63,6 +65,9 @@ describe("TaskCloseConfirmDialog", () => {
 
     expect(screen.getByText("Could not preview cleanup")).toBeDefined();
     expect(screen.getByText("Close failed")).toBeDefined();
+    expect(
+      screen.getByText("3 active agent sessions will be stopped before closing."),
+    ).toBeDefined();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Close task/i }).disabled).toBe(
       false,
     );

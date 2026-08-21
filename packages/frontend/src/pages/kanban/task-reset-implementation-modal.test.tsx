@@ -11,6 +11,7 @@ const makeModel = (
   taskTitle: "Task One",
   targetStatusLabel: "Ready for Dev",
   isSubmitting: false,
+  activeSessionCount: 0,
   isLoadingImpact: false,
   hasCanonicalWorktree: true,
   hasManagedSessionCleanup: true,
@@ -57,6 +58,20 @@ describe("TaskResetImplementationModal", () => {
     render(<TaskResetImplementationModal model={{ ...makeModel(0), terminalCount: 2 }} />);
 
     expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
+  });
+
+  test("says how many active sessions will be stopped before the reset", () => {
+    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: 2 }} />);
+
+    expect(
+      screen.getByText("2 active agent sessions will be stopped before the reset."),
+    ).toBeDefined();
+  });
+
+  test("hides session-stop copy when no active sessions exist", () => {
+    render(<TaskResetImplementationModal model={makeModel(0)} />);
+
+    expect(screen.queryByText(/active agent session/i)).toBeNull();
   });
 
   test("does not claim retention when only legacy worktrees exist", () => {

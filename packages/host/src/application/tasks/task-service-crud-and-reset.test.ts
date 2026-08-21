@@ -779,10 +779,11 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      stopActiveTaskDeleteRuns(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -792,7 +793,7 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      ensureNoActiveTaskResetActivity() {
+      stopActiveTaskResetActivity() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected reset activity guard");
@@ -962,10 +963,11 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      stopActiveTaskDeleteRuns(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "activityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -975,7 +977,7 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      ensureNoActiveTaskResetActivity() {
+      stopActiveTaskResetActivity() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected reset activity guard");
@@ -1064,12 +1066,13 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns(input) {
+      stopActiveTaskDeleteRuns(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
+          return { stoppedSessionCount: 0 };
         });
       },
-      ensureNoActiveTaskResetActivity() {
+      stopActiveTaskResetActivity() {
         return Effect.dieMessage("unexpected reset activity guard");
       },
     };
@@ -1438,7 +1441,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns() {
+      stopActiveTaskDeleteRuns() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected delete activity guard");
@@ -1451,10 +1454,11 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      ensureNoActiveTaskResetActivity(input) {
+      stopActiveTaskResetActivity(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1749,7 +1753,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns() {
+      stopActiveTaskDeleteRuns() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected delete activity guard");
@@ -1762,10 +1766,11 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      ensureNoActiveTaskResetActivity(input) {
+      stopActiveTaskResetActivity(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "resetActivityGuard", input });
+            return { stoppedSessionCount: 0 };
           },
           catch: (cause) =>
             new HostOperationError({

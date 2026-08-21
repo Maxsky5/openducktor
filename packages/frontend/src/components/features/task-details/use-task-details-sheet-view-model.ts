@@ -49,11 +49,13 @@ type TaskDetailsSheetViewModel = {
   deleteManagedWorktreeCount: number;
   deleteImpactError: string | null;
   deleteTerminalCount: number;
+  deleteActiveSessionCount: number;
   isLoadingResetImpact: boolean;
   hasManagedResetSessionCleanup: boolean;
   resetManagedWorktreeCount: number;
   resetImpactError: string | null;
   resetTerminalCount: number;
+  resetActiveSessionCount: number;
   isResetDialogOpen: boolean;
   isResetPending: boolean;
   resetError: string | null;
@@ -65,6 +67,7 @@ type TaskDetailsSheetViewModel = {
   closeManagedWorktreeCount: number;
   closeImpactError: string | null;
   closeTerminalCount: number;
+  closeActiveSessionCount: number;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -98,6 +101,7 @@ type UseTaskDetailsSheetViewModelOptions = {
   onResetTask: TaskDetailsSheetProps["onResetTask"] | undefined;
   onCloseTask: TaskDetailsSheetProps["onCloseTask"] | undefined;
   onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
+  activeSessionCountsByTaskId?: Map<string, number>;
   taskDocumentsHook?: typeof useTaskDocuments;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
 };
@@ -121,6 +125,7 @@ export function useTaskDetailsSheetViewModel({
   onResetTask,
   onCloseTask,
   onDelete,
+  activeSessionCountsByTaskId,
   taskDocumentsHook = useTaskDocuments,
   taskCleanupImpactHook = useTaskCleanupImpact,
 }: UseTaskDetailsSheetViewModelOptions): TaskDetailsSheetViewModel {
@@ -137,6 +142,20 @@ export function useTaskDetailsSheetViewModel({
   );
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
+  // The host stops live sessions authoritatively during destructive cleanup;
+  // these counts are advisory UX for the confirm dialogs.
+  const activeSessionCountFor = useCallback(
+    (id: string): number => activeSessionCountsByTaskId?.get(id) ?? 0,
+    [activeSessionCountsByTaskId],
+  );
+  const deleteActiveSessionCount = useMemo(
+    () => deleteImpactTaskIds.reduce((count, id) => count + activeSessionCountFor(id), 0),
+    [activeSessionCountFor, deleteImpactTaskIds],
+  );
+  const singleTaskActiveSessionCount = useMemo(
+    () => (taskId ? activeSessionCountFor(taskId) : 0),
+    [activeSessionCountFor, taskId],
+  );
   const shouldRenderSubtasks = task?.issueType === "epic";
   const taskLabels = useMemo(() => toTaskLabels(task?.labels), [task?.labels]);
 
@@ -300,12 +319,14 @@ export function useTaskDetailsSheetViewModel({
     deleteManagedWorktreeCount,
     deleteImpactError,
     deleteTerminalCount,
+    deleteActiveSessionCount,
     // Reset and close both use the selected task's own build/QA session cleanup impact.
     isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     resetImpactError: singleTaskCleanupImpactError,
     resetTerminalCount: singleTaskTerminalCount,
+    resetActiveSessionCount: singleTaskActiveSessionCount,
     isResetDialogOpen,
     isResetPending,
     resetError,
@@ -317,6 +338,7 @@ export function useTaskDetailsSheetViewModel({
     closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     closeImpactError: singleTaskCleanupImpactError,
     closeTerminalCount: singleTaskTerminalCount,
+    closeActiveSessionCount: singleTaskActiveSessionCount,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

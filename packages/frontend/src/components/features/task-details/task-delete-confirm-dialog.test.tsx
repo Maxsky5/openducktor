@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import {
+  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
 } from "./task-cleanup-impact-model";
 import { TaskDeleteConfirmDialog } from "./task-delete-confirm-dialog";
 
-const renderDialog = (terminalCount: number) =>
+const renderDialog = (terminalCount: number, activeSessionCount = 0) =>
   render(
     <TaskDeleteConfirmDialog
       open
@@ -22,6 +23,7 @@ const renderDialog = (terminalCount: number) =>
         hasManagedSessionCleanup: false,
         managedWorktreeCount: 0,
         terminalCount,
+        activeSessionCount,
         error: null,
       }}
       deletion={{ isPending: false, error: null }}
@@ -48,6 +50,30 @@ describe("TaskDeleteConfirmDialog", () => {
     expect(screen.getByText(/2 associated terminals will be terminated/i)).toBeDefined();
 
     rendered.unmount();
+  });
+
+  test("hides session-stop copy when no active sessions exist", () => {
+    const rendered = renderDialog(0);
+
+    expect(screen.queryByText(/active agent session/i)).toBeNull();
+
+    rendered.unmount();
+  });
+
+  test("says how many active sessions will be stopped before deletion", () => {
+    const rendered = renderDialog(0, 2);
+
+    expect(
+      screen.getByText("2 active agent sessions will be stopped before deletion."),
+    ).toBeDefined();
+
+    rendered.unmount();
+  });
+
+  test("formats singular session-stop copy", () => {
+    expect(formatActiveSessionStopMessage(1, "delete")).toBe(
+      "1 active agent session will be stopped before deletion.",
+    );
   });
 
   test("mentions worktree and related branch cleanup when managed sessions exist", () => {

@@ -1492,7 +1492,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
-    "reset implementation is blocked while a task role is active in a worktree",
+    "reset implementation opens the modal and reports active sessions instead of blocking",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1534,12 +1534,10 @@ describe("KanbanPage session start modal flow", () => {
         await Promise.resolve();
       });
 
-      expect(renderer.getResetImplementationModalModel()).toBeNull();
-      expect(toastErrorMock).toHaveBeenCalledWith("Stop active work first", {
-        description:
-          "A task session is still active for TASK-123. Stop the active session before resetting the implementation.",
-      });
-      expect(resetTaskImplementationMock).not.toHaveBeenCalled();
+      const resetModal = renderer.getResetImplementationModalModel();
+      expect(resetModal).not.toBeNull();
+      expect(resetModal?.activeSessionCount).toBe(1);
+      expect(toastErrorMock).not.toHaveBeenCalled();
 
       await act(async () => {
         renderer.unmount();
@@ -1548,35 +1546,14 @@ describe("KanbanPage session start modal flow", () => {
   );
 
   kanbanTest(
-    "reset implementation allows a legacy root-backed Spec session to remain active",
+    "reset implementation reports zero active sessions when no task sessions are active",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
         status: "in_progress",
         availableActions: ["reset_implementation"],
       });
-      currentSessionsFixture = [
-        createAgentSessionFixture({
-          runtimeKind: "opencode",
-          externalSessionId: "legacy-root-spec",
-          sessionAssociation: { kind: "workflow", taskId: "TASK-123", role: "spec" },
-
-          workingDirectory: "/repo/",
-          status: "idle",
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Decision",
-                  question: "Can reset continue?",
-                  options: [{ label: "No", description: "Keep waiting" }],
-                },
-              ],
-            },
-          ],
-        }),
-      ];
+      currentSessionsFixture = [];
       const renderer = await renderPage();
 
       await act(async () => {
@@ -1588,8 +1565,9 @@ describe("KanbanPage session start modal flow", () => {
         await Promise.resolve();
       });
 
-      expect(renderer.getResetImplementationModalModel()).not.toBeNull();
-      expect(toastErrorMock).not.toHaveBeenCalledWith("Stop active work first", expect.anything());
+      const resetModal = renderer.getResetImplementationModalModel();
+      expect(resetModal).not.toBeNull();
+      expect(resetModal?.activeSessionCount).toBe(0);
 
       await act(async () => {
         renderer.unmount();

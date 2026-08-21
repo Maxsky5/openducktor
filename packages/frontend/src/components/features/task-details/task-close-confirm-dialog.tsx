@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -26,6 +27,7 @@ type TaskCloseConfirmDialogProps = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
+  activeSessionCount: number;
   impactError: string | null;
   isClosePending: boolean;
   closeError: string | null;
@@ -41,6 +43,7 @@ export function TaskCloseConfirmDialog({
   hasManagedSessionCleanup,
   managedWorktreeCount,
   terminalCount,
+  activeSessionCount,
   impactError,
   isClosePending,
   closeError,
@@ -65,6 +68,9 @@ export function TaskCloseConfirmDialog({
                 ? "No running task terminals will be stopped."
                 : `${terminalCount} associated terminal${terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
             </p>
+            {activeSessionCount > 0 ? (
+              <p>{formatActiveSessionStopMessage(activeSessionCount, "close")}</p>
+            ) : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (

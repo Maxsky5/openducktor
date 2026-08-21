@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  formatActiveSessionStopMessage,
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
@@ -29,6 +30,7 @@ type TaskDeleteConfirmDialogProps = {
     hasManagedSessionCleanup: boolean;
     managedWorktreeCount: number;
     terminalCount: number;
+    activeSessionCount: number;
     error: string | null;
   };
   deletion: {
@@ -73,6 +75,9 @@ export function TaskDeleteConfirmDialog({
                 {impact.terminalCount === 1 ? "" : "s"} will be terminated before deletion.
               </p>
             )}
+            {impact.activeSessionCount > 0 ? (
+              <p>{formatActiveSessionStopMessage(impact.activeSessionCount, "delete")}</p>
+            ) : null}
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (

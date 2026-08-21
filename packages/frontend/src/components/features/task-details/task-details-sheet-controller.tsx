@@ -86,6 +86,13 @@ export function TaskDetailsSheetController({
   const selectedActiveSessionContext = activeTaskId
     ? activeTaskSessionContextByTaskId.get(activeTaskId)
     : undefined;
+  // Kanban task sessions are pre-filtered to active activity states, so the
+  // list length is the per-task count of sessions a destructive cleanup would stop.
+  const activeSessionCountsByTaskId = useMemo(
+    () =>
+      new Map([...taskSessionsByTaskId.entries()].map(([id, sessions]) => [id, sessions.length])),
+    [taskSessionsByTaskId],
+  );
 
   return (
     <TaskDetailsSheet
@@ -95,6 +102,7 @@ export function TaskDetailsSheetController({
       taskSessions={selectedTaskSessions}
       historicalSessions={selectedHistoricalSessions}
       hasActiveSession={Boolean(selectedActiveSessionContext)}
+      activeSessionCountsByTaskId={activeSessionCountsByTaskId}
       {...(selectedActiveSessionContext?.role
         ? { activeSessionRole: selectedActiveSessionContext.role }
         : {})}

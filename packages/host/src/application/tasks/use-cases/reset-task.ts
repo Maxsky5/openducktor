@@ -80,6 +80,7 @@ export const createTaskFullResetUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      const cleanupProgress = createTaskCleanupProgressState();
       if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
@@ -92,13 +93,18 @@ export const createTaskFullResetUseCase = ({
             }),
           );
         }
-        yield* taskActivityGuard.ensureNoActiveTaskResetActivity({
+        const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
           repoPath: effectiveRepoPath,
           taskId,
           sessions: currentSessions,
           operationLabel: "reset task",
           sessionRoles: [...workflowCleanupSessionRoleNames],
         });
+        if (stoppedSessionCount > 0) {
+          cleanupProgress.completedSteps.push(
+            `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+          );
+        }
       }
 
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
@@ -122,7 +128,6 @@ export const createTaskFullResetUseCase = ({
         branchPrefix,
         [taskId],
       );
-      const cleanupProgress = createTaskCleanupProgressState();
       let taskStoreWriteCompleted = false;
 
       return yield* Effect.gen(function* () {

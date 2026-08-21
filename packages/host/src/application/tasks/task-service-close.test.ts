@@ -406,8 +406,8 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
-      ensureNoActiveTaskResetActivity: () => Effect.succeed(undefined),
+      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -491,8 +491,8 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
-      ensureNoActiveTaskResetActivity: () => Effect.succeed(undefined),
+      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
@@ -554,10 +554,10 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
-      ensureNoActiveTaskResetActivity: (input) => {
+      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopActiveTaskResetActivity: (input) => {
         calls.push(`${input.operationLabel}:${input.repoPath}:${input.sessionRoles.join(",")}`);
-        return Effect.succeed(undefined);
+        return Effect.succeed({ stoppedSessionCount: 0 });
       },
     };
     const service = createTaskService({
@@ -711,10 +711,10 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
-      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
-      ensureNoActiveTaskResetActivity: (input) => {
+      stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
+      stopActiveTaskResetActivity: (input) => {
         calls.push(`${input.operationLabel}:${input.sessionRoles.join(",")}`);
-        return Effect.succeed(undefined);
+        return Effect.succeed({ stoppedSessionCount: 0 });
       },
     };
     const service = createTaskService({

@@ -25,32 +25,42 @@ export const appendImplementationResetCleanupProgress = <E>(
     completedSteps: progress.completedSteps,
   });
 
-export const ensureNoActiveImplementationResetActivity = (
+export const stopActiveImplementationResetActivity = (
   taskActivityGuard: TaskActivityGuardPort | undefined,
   repoPath: string,
   taskId: string,
   sessions: AgentSessionRecord[],
-) => {
-  if (sessions.length === 0) return Effect.void;
-  if (!taskActivityGuard) {
-    return Effect.fail(
-      new HostDependencyError({
-        dependency: "taskActivityGuard",
-        operation: "task_reset_implementation",
-        message:
-          "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
-        details: { repoPath, taskId },
-      }),
-    );
-  }
-  return taskActivityGuard.ensureNoActiveTaskResetActivity({
-    repoPath,
-    taskId,
-    sessions,
-    operationLabel: "reset implementation",
-    sessionRoles: [...new Set(sessions.map((session) => session.role.trim()))],
+  progress: TaskCleanupProgressState,
+) =>
+  Effect.gen(function* () {
+    if (sessions.length === 0) {
+      return { stoppedSessionCount: 0 };
+    }
+    if (!taskActivityGuard) {
+      return yield* Effect.fail(
+        new HostDependencyError({
+          dependency: "taskActivityGuard",
+          operation: "task_reset_implementation",
+          message:
+            "task_reset_implementation requires runtime session activity checks for task sessions that may use the canonical worktree.",
+          details: { repoPath, taskId },
+        }),
+      );
+    }
+    const { stoppedSessionCount } = yield* taskActivityGuard.stopActiveTaskResetActivity({
+      repoPath,
+      taskId,
+      sessions,
+      operationLabel: "reset implementation",
+      sessionRoles: [...new Set(sessions.map((session) => session.role.trim()))],
+    });
+    if (stoppedSessionCount > 0) {
+      progress.completedSteps.push(
+        `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+      );
+    }
+    return { stoppedSessionCount };
   });
-};
 
 export const resolveCanonicalImplementationResetTarget = (
   gitPort: GitPort,
