@@ -215,7 +215,6 @@ export const commitWorkflowSessionLaunch = async ({
 
   let bootstrapCompletionAttempted = false;
   let bootstrapCompleted = false;
-  let launchBootstrapCommitted = false;
   try {
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
@@ -223,14 +222,10 @@ export const commitWorkflowSessionLaunch = async ({
     bootstrapCompletionAttempted = !!bootstrap;
     await bootstrap?.complete();
     bootstrapCompleted = !!bootstrap;
-    launchBootstrapCommitted = prepared.launch.mode === "start" && bootstrapCompleted;
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
   } catch (cause) {
-    if (launchBootstrapCommitted) {
-      throw cause;
-    }
     await rollbackRegisteredStartedSession({
       message: cause instanceof Error ? cause.message : String(cause),
       cause,

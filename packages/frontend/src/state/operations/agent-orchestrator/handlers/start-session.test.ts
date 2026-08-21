@@ -822,11 +822,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeDefined();
   });
 
-  test("preserves a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
+  test("stops and deletes a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+    const sessionsRef = { current: emptyAgentSessionCollection() };
     const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     let stopCalls = 0;
@@ -845,6 +846,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const { start } = createStartSessionTestHarness({
       adapter,
+      sessionsRef,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
@@ -878,16 +880,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
     completion.resolve();
 
     await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
-    expect(stopCalls).toBe(0);
-    expect(deletedSessionIds).toEqual([]);
+    expect(stopCalls).toBe(1);
+    expect(deletedSessionIds).toEqual(["external-stale-bootstrap"]);
     expect(abortCalls).toBe(0);
+    expect(getSession(sessionsRef.current, "external-stale-bootstrap")).toBeUndefined();
   });
 
-  test("preserves a fresh Builder session when the repository changes after bootstrap commits", async () => {
+  test("stops and deletes a fresh Builder session when the repository changes after bootstrap commits", async () => {
     const completionStarted = createDeferred<void>();
     const completion = createDeferred<void>();
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+    const sessionsRef = { current: emptyAgentSessionCollection() };
     const deletedSessionIds: string[] = [];
     let abortCalls = 0;
     let stopCalls = 0;
@@ -906,6 +910,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const { start } = createStartSessionTestHarness({
       adapter,
+      sessionsRef,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
@@ -939,9 +944,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     completion.resolve();
 
     await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
-    expect(stopCalls).toBe(0);
-    expect(deletedSessionIds).toEqual([]);
+    expect(stopCalls).toBe(1);
+    expect(deletedSessionIds).toEqual(["external-committed-builder"]);
     expect(abortCalls).toBe(0);
+    expect(getSession(sessionsRef.current, "external-committed-builder")).toBeUndefined();
   });
 
   test("clears session observation state when bootstrap completion fails", async () => {

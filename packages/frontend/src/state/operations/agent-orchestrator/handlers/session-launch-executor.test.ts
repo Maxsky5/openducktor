@@ -351,6 +351,86 @@ describe("session-launch-executor", () => {
     expect(harness.calls.stopSession).toHaveLength(0);
   });
 
+  test("stops the launch before any side effect when only the caller context is stale", async () => {
+    const harness = createExecutorHarness();
+
+    await expect(
+      harness.execute({
+        launch: repositoryStartLaunch(),
+        isCallerContextStale: () => true,
+      }),
+    ).rejects.toThrow("Workspace changed while starting session.");
+    expect(harness.calls.startSession).toHaveLength(0);
+    expect(harness.calls.replaceSession).toHaveLength(0);
+  });
+
+  test("stops the launched session when the caller context becomes stale after launch", async () => {
+    const harness = createExecutorHarness();
+    let callerContextStale = false;
+    const originalStart = harness.deps.adapter.startSession;
+    harness.deps.adapter.startSession = async (input) => {
+      const summary = await originalStart.call(harness.deps.adapter, input);
+      callerContextStale = true;
+      return summary;
+    };
+
+    await expect(
+      harness.execute({
+        launch: repositoryStartLaunch(),
+        isCallerContextStale: () => callerContextStale,
+      }),
+    ).rejects.toThrow("Workspace changed while starting session.");
+    expect(harness.calls.stopSession).toHaveLength(1);
+    expect(harness.calls.replaceSession).toHaveLength(0);
+  });
+
+  test("removes the local registration when the caller context becomes stale after registration", async () => {
+    const harness = createExecutorHarness();
+    let callerContextStale = false;
+    const originalReplace = harness.deps.replaceSession;
+    harness.deps.replaceSession = (session) => {
+      originalReplace(session);
+      callerContextStale = true;
+    };
+
+    await expect(
+      harness.execute({
+        launch: repositoryStartLaunch(),
+        isCallerContextStale: () => callerContextStale,
+      }),
+    ).rejects.toThrow("Workspace changed while starting session.");
+    expect(harness.calls.removeSession).toHaveLength(1);
+    expect(harness.calls.stopSession).toHaveLength(1);
+  });
+
+  test("rolls back the launched runtime session when local registration fails", async () => {
+    const harness = createExecutorHarness();
+    harness.deps.replaceSession = () => {
+      throw new Error("registration failed");
+    };
+
+    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
+      'Failed to register started session "started-1": registration failed. The started session was stopped and removed locally.',
+    );
+    expect(harness.calls.stopSession).toHaveLength(1);
+    expect(harness.calls.removeSession).toHaveLength(1);
+  });
+
+  test("keeps rollback failure visible when registration cleanup cannot stop the runtime", async () => {
+    const harness = createExecutorHarness();
+    harness.deps.replaceSession = () => {
+      throw new Error("registration failed");
+    };
+    harness.deps.adapter.stopSession = async () => {
+      throw new Error("runtime unavailable");
+    };
+
+    await expect(harness.execute({ launch: repositoryStartLaunch() })).rejects.toThrow(
+      'Failed to register started session "started-1": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
+    );
+    expect(harness.calls.removeSession).toHaveLength(0);
+  });
+
   test("keeps commit ownership explicit and passes stale guard plus registered state", async () => {
     const harness = createExecutorHarness();
     const commitInputs: unknown[] = [];

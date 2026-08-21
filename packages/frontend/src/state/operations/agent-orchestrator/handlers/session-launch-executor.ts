@@ -41,6 +41,7 @@ export type PreparedSessionLaunchCommitInput = {
 export type ExecutePreparedSessionLaunchInput = {
   launch: PreparedSessionLaunch;
   commit?: ((input: PreparedSessionLaunchCommitInput) => Promise<void>) | undefined;
+  isCallerContextStale?: (() => boolean) | undefined;
 };
 
 export type PreparedSessionLaunchResult = {
@@ -208,14 +209,55 @@ const buildForkInitialMessages = (
     }),
   ]);
 
+const rollbackFailedRegistration = async ({
+  cause,
+  adapter,
+  repoPath,
+  identity,
+  removeSession,
+}: {
+  cause: unknown;
+  adapter: AgentEnginePort;
+  repoPath: string;
+  identity: AgentSessionIdentity;
+  removeSession: (identity: AgentSessionIdentity) => void;
+}): Promise<never> => {
+  const messagePrefix = `Failed to register started session "${identity.externalSessionId}": ${errorMessage(cause)}.`;
+  let cleanupFailed = false;
+  let cleanupError: unknown;
+  try {
+    await runOrchestratorTask("session-launch-stop-after-registration-failure", () =>
+      stopLaunchedSession({ adapter, repoPath, identity }),
+    );
+    removeSession(identity);
+  } catch (error) {
+    cleanupFailed = true;
+    cleanupError = error;
+  }
+  if (cleanupFailed) {
+    throw new SessionLaunchStopError(
+      `${messagePrefix} Failed to roll back the started session after the registration failure: ${errorMessage(cleanupError)}`,
+      { cause },
+    );
+  }
+  throw new Error(
+    `${messagePrefix} The started session was stopped and removed locally.`,
+    cause instanceof Error ? { cause } : undefined,
+  );
+};
+
 export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDependencies) => {
   return async (input: ExecutePreparedSessionLaunchInput): Promise<PreparedSessionLaunchResult> => {
     const { launch } = input;
-    const isStaleOperation = createRepoStaleGuard({
+    const repositoryStaleGuard = createRepoStaleGuard({
       repoPath: launch.repoPath,
       repoEpochRef: deps.repoEpochRef,
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
     });
+    const isStaleOperation =
+      input.isCallerContextStale === undefined
+        ? repositoryStaleGuard
+        : (): boolean => repositoryStaleGuard() || input.isCallerContextStale?.() === true;
     throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
 
     const summary = await callPreparedRuntimeLaunch(deps.adapter, launch);
@@ -268,7 +310,17 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
 
     const sessionState = buildLaunchedSessionState({ launch, summary, initialMessages });
     throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
-    deps.replaceSession(sessionState);
+    try {
+      deps.replaceSession(sessionState);
+    } catch (cause) {
+      await rollbackFailedRegistration({
+        cause,
+        adapter: deps.adapter,
+        repoPath: launch.repoPath,
+        identity,
+        removeSession: deps.removeSession,
+      });
+    }
     if (isStaleOperation()) {
       deps.removeSession(sessionState);
       await stopLaunchedSessionOnStaleAndThrow({
