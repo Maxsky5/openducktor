@@ -21,7 +21,7 @@ import {
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
 import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
-import { type TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
+import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 type TaskDetailsSheetViewModel = {
@@ -216,17 +216,17 @@ export function useTaskDetailsSheetViewModel({
     isLoadingImpact: isLoadingSingleTaskCleanupImpact,
     terminalCount: singleTaskTerminalCount,
   } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, shouldLoadSingleTaskImpact);
-  const deleteStopImpact: TaskStopImpactState = taskStopImpactHook({
+  const deleteStopImpact = taskStopImpactHook({
     taskIds: deleteImpactTaskIds,
     operation: "delete",
     enabled: shouldLoadDeleteImpact,
   });
-  const resetStopImpact: TaskStopImpactState = taskStopImpactHook({
+  const resetStopImpact = taskStopImpactHook({
     taskIds: singleTaskCleanupImpactTaskIds,
     operation: "reset_task",
     enabled: isResetDialogOpen && onResetTask !== undefined,
   });
-  const closeStopImpact: TaskStopImpactState = taskStopImpactHook({
+  const closeStopImpact = taskStopImpactHook({
     taskIds: singleTaskCleanupImpactTaskIds,
     operation: "close",
     enabled: isCloseDialogOpen && onCloseTask !== undefined,

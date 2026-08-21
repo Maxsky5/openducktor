@@ -62,12 +62,12 @@ const makeGuard = (
 
 const createService = (
   sessionsByTaskId: Record<string, TestSession[]>,
-  guard: TaskActivityGuardPort,
+  guard?: TaskActivityGuardPort,
 ) =>
   createTaskService({
     gitPort: createStopImpactGitPort(),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
-    taskActivityGuard: guard,
+    ...(guard ? { taskActivityGuard: guard } : {}),
     taskStore: createStopImpactTaskStore(sessionsByTaskId),
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
@@ -237,12 +237,9 @@ describe("getTaskStopImpact", () => {
   });
 
   test("fails with an actionable dependency error when a guard is required but missing", async () => {
-    const service = createService(
-      {
-        "task-1": [createAgentSessionRecord()],
-      },
-      undefined as unknown as TaskActivityGuardPort,
-    );
+    const service = createService({
+      "task-1": [createAgentSessionRecord()],
+    });
 
     await expect(
       Effect.runPromise(

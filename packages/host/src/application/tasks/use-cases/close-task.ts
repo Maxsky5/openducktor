@@ -11,6 +11,7 @@ import {
   collectRelatedTaskBranches,
   createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
+  recordStoppedAgentSessionCount,
   replaceTaskInList,
   runTaskLocalCleanup,
   taskHasSessionsForRoles,
@@ -98,11 +99,7 @@ export const createTaskCloseUseCase = ({
             operationLabel: "close task",
             sessionRoles: [...workflowCleanupSessionRoleNames],
           });
-          if (stoppedSessionCount > 0) {
-            cleanupProgress.completedSteps.push(
-              `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
-            );
-          }
+          recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
         }
 
         const taskWorktreePath = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);

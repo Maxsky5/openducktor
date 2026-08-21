@@ -323,6 +323,17 @@ export const createTaskCleanupProgressState = (): TaskCleanupProgressState => ({
   completedSteps: [],
 });
 
+export const recordStoppedAgentSessionCount = (
+  progress: TaskCleanupProgressState,
+  stoppedSessionCount: number,
+): void => {
+  if (stoppedSessionCount > 0) {
+    progress.completedSteps.push(
+      `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
+    );
+  }
+};
+
 const requireTaskCleanupWorktreeFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
   operation: TaskWorktreeCleanupOperation,

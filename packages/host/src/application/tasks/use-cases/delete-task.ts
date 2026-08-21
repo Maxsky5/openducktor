@@ -11,6 +11,7 @@ import {
   collectTaskDeleteTargets,
   createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
+  recordStoppedAgentSessionCount,
   runTaskLocalCleanup,
   type TaskSessionRecords,
   taskHasSessionsForRoles,
@@ -119,11 +120,7 @@ export const createTaskDeleteUseCase = ({
           repoPath: effectiveRepoPath,
           taskSessions: targetTaskSessions,
         });
-        if (stoppedSessionCount > 0) {
-          cleanupProgress.completedSteps.push(
-            `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
-          );
-        }
+        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
 
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(

@@ -21,15 +21,11 @@ type TaskStopImpactDependencies = {
   workspaceSettingsService: WorkspaceSettingsService;
 };
 
-const requireTaskStopImpactDependencies = ({
-  gitPort,
-  settingsConfig,
-  workspaceSettingsService,
-}: {
-  gitPort?: GitPort;
-  settingsConfig?: SettingsConfigPort;
-  workspaceSettingsService?: WorkspaceSettingsService;
-}): TaskStopImpactDependencies => {
+const requireTaskStopImpactDependencies = (
+  gitPort: GitPort | undefined,
+  settingsConfig: SettingsConfigPort | undefined,
+  workspaceSettingsService: WorkspaceSettingsService | undefined,
+): TaskStopImpactDependencies => {
   if (!gitPort) {
     throw new HostDependencyError({
       dependency: "gitPort",
@@ -76,11 +72,7 @@ export const createTaskStopImpactUseCase = ({
   getTaskStopImpact(input: TaskStopImpactInput) {
     return Effect.gen(function* () {
       const dependencies = yield* requireDependencies(() =>
-        requireTaskStopImpactDependencies({
-          ...(gitPort ? { gitPort } : {}),
-          ...(settingsConfig ? { settingsConfig } : {}),
-          ...(workspaceSettingsService ? { workspaceSettingsService } : {}),
-        }),
+        requireTaskStopImpactDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
       const repoConfig = yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(
         input.repoPath,

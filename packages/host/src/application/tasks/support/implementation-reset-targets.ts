@@ -10,6 +10,7 @@ import {
   appendTaskCleanupProgress,
   collectSessionsUsingCanonicalWorktree,
   managedWorktreeBaseForRepoConfig,
+  recordStoppedAgentSessionCount,
   type TaskCleanupProgressState,
 } from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
@@ -87,11 +88,7 @@ export const stopActiveImplementationResetActivity = (
       operationLabel: "reset implementation",
       sessionRoles: [...new Set(sessions.map((session) => session.role.trim()))],
     });
-    if (stoppedSessionCount > 0) {
-      progress.completedSteps.push(
-        `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
-      );
-    }
+    recordStoppedAgentSessionCount(progress, stoppedSessionCount);
     return { stoppedSessionCount };
   });
 

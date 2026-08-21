@@ -13,6 +13,7 @@ import {
   collectResetWorktreePaths,
   createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
+  recordStoppedAgentSessionCount,
   replaceTaskInList,
   runTaskLocalCleanup,
   taskHasSessionsForRoles,
@@ -100,11 +101,7 @@ export const createTaskFullResetUseCase = ({
           operationLabel: "reset task",
           sessionRoles: [...workflowCleanupSessionRoleNames],
         });
-        if (stoppedSessionCount > 0) {
-          cleanupProgress.completedSteps.push(
-            `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
-          );
-        }
+        recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
 
       const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
