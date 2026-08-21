@@ -18,13 +18,9 @@ _Avoid_: workspace, project, folder when the user-facing codebase is meant
 A boundary term for external or technical identity where OpenDucktor must name a scoped execution context, such as MCP workspace identity or runtime workflow scope. Do not use **Workspace** as the user-facing word for a local codebase; use **Repository** for that.
 _Avoid_: repository, project, folder when the local codebase is meant
 
-**Beads**:
-The task system that owns OpenDucktor's V1 task records and persisted lifecycle state. OpenDucktor treats Beads as the current source of truth for **Tasks**, **Task Statuses**, and **Task Metadata**, while keeping the product language broader than Beads itself.
-_Avoid_: local task cache, issue mirror, permanent domain model
-
 **Task Store**:
-The replaceable boundary through which OpenDucktor reads and writes **Tasks**, **Task Statuses**, and **Task Metadata**. The current **Task Store** is Beads-backed; use **Task Store** in developer/agent discussions about building OpenDucktor, not as UI wording.
-_Avoid_: Beads when the replaceable boundary is meant, task cache, user-facing label
+The workspace-scoped SQLite source of truth through which OpenDucktor reads and writes **Tasks**, **Task Statuses**, and **Task Metadata**. Use **Task Store** in developer and agent discussions about building OpenDucktor, not as UI wording.
+_Avoid_: task cache, issue mirror, user-facing label
 
 **Agent Studio**:
 The OpenDucktor surface for starting, resuming, and inspecting **Agent Sessions**. For now, **Agent Studio** includes **Task-bound Sessions** and is expected to include **Repository Sessions**, though this product boundary may split later.
