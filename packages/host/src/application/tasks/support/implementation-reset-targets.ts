@@ -1,11 +1,17 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
+import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { appendTaskCleanupProgress, type TaskCleanupProgressState } from "./task-cleanup-support";
+import {
+  appendTaskCleanupProgress,
+  collectSessionsUsingCanonicalWorktree,
+  managedWorktreeBaseForRepoConfig,
+  type TaskCleanupProgressState,
+} from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 
 type CanonicalImplementationResetTarget = {
@@ -23,6 +29,33 @@ export const appendImplementationResetCleanupProgress = <E>(
     removedWorktrees: progress.removedWorktrees,
     deletedBranches: progress.deletedBranches,
     completedSteps: progress.completedSteps,
+  });
+
+// Single source for how implementation reset derives the canonical worktree
+// and which sessions it guards. The mutation and its stop-count preview both
+// consume this so their candidate sets cannot drift.
+export const collectImplementationResetSessionState = (
+  dependencies: { gitPort: GitPort; settingsConfig: SettingsConfigPort },
+  repoConfig: RepoConfig,
+  taskId: string,
+  sessions: AgentSessionRecord[],
+) =>
+  Effect.gen(function* () {
+    const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
+      dependencies.settingsConfig,
+      repoConfig,
+    );
+    const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
+    return {
+      managedWorktreeBasePath,
+      canonicalWorktree,
+      sessionState: yield* collectSessionsUsingCanonicalWorktree(
+        dependencies.gitPort,
+        dependencies.settingsConfig,
+        sessions,
+        canonicalWorktree,
+      ),
+    };
   });
 
 export const stopActiveImplementationResetActivity = (

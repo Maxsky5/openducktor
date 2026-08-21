@@ -4,6 +4,7 @@ import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
   appendImplementationResetCleanupProgress,
+  collectImplementationResetSessionState,
   excludeCanonicalImplementationTargets,
   resolveCanonicalImplementationResetTarget,
   stopActiveImplementationResetActivity,
@@ -16,7 +17,6 @@ import {
 import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  collectSessionsUsingCanonicalWorktree,
   createTaskCleanupProgressState,
   implementationSessionRoleNames,
   replaceTaskInList,
@@ -82,15 +82,15 @@ export const createTaskImplementationResetUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const managedWorktreeBasePath = repoConfig.worktreeBasePath
-        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-      const canonicalWorktree = dependencies.settingsConfig.join(managedWorktreeBasePath, taskId);
-      const canonicalSessionState = yield* collectSessionsUsingCanonicalWorktree(
-        dependencies.gitPort,
-        dependencies.settingsConfig,
-        currentSessions,
+      const {
+        managedWorktreeBasePath,
         canonicalWorktree,
+        sessionState: canonicalSessionState,
+      } = yield* collectImplementationResetSessionState(
+        dependencies,
+        repoConfig,
+        taskId,
+        currentSessions,
       );
       const cleanupProgress = createTaskCleanupProgressState();
       yield* stopActiveImplementationResetActivity(

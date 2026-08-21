@@ -1,15 +1,12 @@
-import { type TaskStopImpactOperation } from "@openducktor/contracts";
+import { type AgentSessionRecord, type TaskStopImpactOperation } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
-import {
-  collectSessionsUsingCanonicalWorktree,
-  managedWorktreeBaseForRepoConfig,
-  workflowCleanupSessionRoleNames,
-} from "../support/task-cleanup-support";
+import { workflowCleanupSessionRoleNames } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export type TaskStopImpactInput = {
@@ -57,8 +54,18 @@ const requireTaskStopImpactDependencies = ({
   return { gitPort, settingsConfig, workspaceSettingsService };
 };
 
-// Candidate selection must mirror the matching mutation's guard inputs so the
-// previewed count matches what stopActiveTask* will actually stop.
+// Role allowlists mirror the matching mutation's guard inputs so the preview
+// probes exactly the sessions stopActiveTask* would stop.
+const selectStopCandidateRoles = (
+  operation: TaskStopImpactOperation,
+  candidates: AgentSessionRecord[],
+): string[] => {
+  if (operation === "reset_implementation" || operation === "delete") {
+    return candidates.map((session) => session.role.trim());
+  }
+  return [...workflowCleanupSessionRoleNames];
+};
+
 export const createTaskStopImpactUseCase = ({
   gitPort,
   taskStore,
@@ -79,10 +86,6 @@ export const createTaskStopImpactUseCase = ({
         input.repoPath,
       );
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
-      const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
-        dependencies.settingsConfig,
-        repoConfig,
-      );
       const taskIds = [...new Set(input.taskIds)];
       let stoppableSessionCount = 0;
       for (const taskId of taskIds) {
@@ -105,28 +108,24 @@ export const createTaskStopImpactUseCase = ({
             }),
           );
         }
-        const candidates =
-          input.operation === "reset_implementation"
-            ? (yield* collectSessionsUsingCanonicalWorktree(
-                dependencies.gitPort,
-                dependencies.settingsConfig,
-                sessions,
-                dependencies.settingsConfig.join(managedWorktreeBasePath, taskId),
-              )).guarded
-            : sessions;
+
+        let candidates = sessions;
+        if (input.operation === "reset_implementation") {
+          const { sessionState } = yield* collectImplementationResetSessionState(
+            dependencies,
+            repoConfig,
+            taskId,
+            sessions,
+          );
+          candidates = sessionState.guarded;
+        }
         if (candidates.length === 0) {
           continue;
         }
-        const sessionRoles =
-          input.operation === "reset_implementation"
-            ? candidates.map((session) => session.role.trim())
-            : input.operation === "delete"
-              ? candidates.map((session) => session.role)
-              : [...workflowCleanupSessionRoleNames];
         const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
           repoPath: effectiveRepoPath,
           sessions: candidates,
-          sessionRoles,
+          sessionRoles: selectStopCandidateRoles(input.operation, candidates),
         });
         stoppableSessionCount += liveSessionCount;
       }
