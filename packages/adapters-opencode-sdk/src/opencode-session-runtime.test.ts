@@ -305,6 +305,40 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("keeps the startup snapshot available after an OpenCode heartbeat", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    let resolveObservation: (outcome: "fault" | "status") => void = () => undefined;
+    const observation = new Promise<"fault" | "status">((resolve) => {
+      resolveObservation = resolve;
+    });
+    await prepared.startForwarding((signal) => {
+      if (signal.type === "fault") {
+        resolveObservation("fault");
+      }
+      if (signal.type === "transcript_event" && signal.event.type === "session_status") {
+        resolveObservation("status");
+      }
+    });
+
+    harness.emit({
+      id: "event-heartbeat-1",
+      type: "server.heartbeat",
+      properties: {},
+    } as unknown as Event);
+    harness.emit({
+      type: "session.status",
+      properties: {
+        sessionID: "session-1",
+        status: { type: "busy" },
+      },
+    } as Event);
+
+    expect(await observation).toBe("status");
+    expect(await prepared.connection.readSessionSources()).toHaveLength(1);
+    await prepared.release();
+  });
+
   test("preserves a retained repository association when runtime sources refresh", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);

@@ -18,6 +18,7 @@ import {
   readSessionLifecycleEvent,
   setMessagePart,
 } from "./event-stream/shared";
+import { normalizeOpencodeGlobalEventPayload } from "./opencode-agent-session-projection";
 import {
   childSessionCreatedEvent,
   childSessionCreatedEventWithParentAlias,
@@ -124,6 +125,16 @@ test("global event observation drops the raw envelope after normalizing sync eve
       directory: "/repo",
     },
   });
+});
+
+test("classifies OpenCode server heartbeats at the global transport boundary", () => {
+  const heartbeat = {
+    id: "event-heartbeat-1",
+    type: "server.heartbeat",
+    properties: {},
+  } as const;
+
+  expect(normalizeOpencodeGlobalEventPayload(heartbeat)).toEqual({ kind: "heartbeat" });
 });
 
 test("keeps session observation alive across OpenCode server heartbeats", async () => {

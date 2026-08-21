@@ -32,9 +32,17 @@ type ProjectAdmittedUserMessageInput = OpencodeAgentSessionProjectionContext & {
   message: Parameters<typeof emitAdmittedUserMessage>[1];
 };
 
-type GlobalEventPayload = GlobalEvent["payload"];
-type SyncGlobalEventPayload = Extract<GlobalEventPayload, { type: "sync" }>;
+type SdkGlobalEventPayload = GlobalEvent["payload"];
+type ServerHeartbeatPayload = {
+  id: string;
+  type: "server.heartbeat";
+  properties: Record<string, never>;
+};
+export type OpencodeGlobalEventPayload = SdkGlobalEventPayload | ServerHeartbeatPayload;
+type SyncGlobalEventPayload = Extract<SdkGlobalEventPayload, { type: "sync" }>;
 type SyncEventType = SyncGlobalEventPayload["syncEvent"]["type"];
+
+type OpencodeGlobalEventPayloadDecision = { kind: "heartbeat" } | { kind: "event"; event: Event };
 
 const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "message.updated.1": "message.updated",
@@ -204,10 +212,15 @@ const OPENCODE_EVENT_POLICY_BY_TYPE = {
   "server.instance.disposed": IGNORE_EVENT,
 } as const satisfies Record<Event["type"], OpencodeEventPolicy>;
 
-export const normalizeOpencodeGlobalEventPayload = (payload: GlobalEventPayload): Event => {
+export const normalizeOpencodeGlobalEventPayload = (
+  payload: OpencodeGlobalEventPayload,
+): OpencodeGlobalEventPayloadDecision => {
   const payloadRecord = asUnknownRecord(payload);
+  if (payloadRecord?.type === "server.heartbeat") {
+    return { kind: "heartbeat" };
+  }
   if (payloadRecord?.type !== "sync") {
-    return payload as Event;
+    return { kind: "event", event: payload as Event };
   }
 
   const syncEvent = asUnknownRecord(payloadRecord.syncEvent);
@@ -239,10 +252,13 @@ export const normalizeOpencodeGlobalEventPayload = (payload: GlobalEventPayload)
       syncEventType as keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE
     ];
   return {
-    ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
-    type: eventType,
-    properties: data,
-  } as Event;
+    kind: "event",
+    event: {
+      ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
+      type: eventType,
+      properties: data,
+    } as Event,
+  };
 };
 
 const readOpencodeEventPolicy = (event: Event): OpencodeEventPolicy => {

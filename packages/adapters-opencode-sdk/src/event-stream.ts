@@ -6,10 +6,10 @@ import {
   readEventSessionId,
   readSessionLifecycleEvent,
 } from "./event-stream/shared";
-import { asUnknownRecord } from "./guards";
 import {
   normalizeOpencodeGlobalEventPayload,
   opencodeEventUsesParentSessionRouting,
+  type OpencodeGlobalEventPayload,
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
@@ -36,15 +36,16 @@ type RelevantSubscriberEventOptions = {
 };
 
 type GlobalEventStream = {
-  stream: AsyncIterable<GlobalEvent>;
+  stream: AsyncIterable<OpencodeGlobalEvent>;
+};
+
+type OpencodeGlobalEvent = Omit<GlobalEvent, "payload"> & {
+  payload: OpencodeGlobalEventPayload;
 };
 
 type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
-
-const isServerHeartbeat = (event: GlobalEvent): boolean =>
-  asUnknownRecord(event.payload)?.type === "server.heartbeat";
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
   const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
@@ -59,7 +60,7 @@ const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
 const resolveGlobalEventStream = async (
   client: OpencodeClient,
   signal: AbortSignal,
-): Promise<AsyncIterable<GlobalEvent>> => {
+): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
   const stream = await getGlobalEventApi(client).event({ signal });
   if (
     typeof stream === "object" &&
@@ -73,15 +74,13 @@ const resolveGlobalEventStream = async (
   throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
 };
 
-const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
-  const payload = normalizeOpencodeGlobalEventPayload(event.payload) as Event & {
-    properties?: Record<string, unknown>;
-  };
+const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
+  const properties = "properties" in event ? event.properties : undefined;
   return {
-    ...payload,
+    ...event,
     properties: {
-      ...payload.properties,
-      directory: event.directory,
+      ...properties,
+      directory,
     },
   } as Event;
 };
@@ -128,10 +127,11 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     if (input.controller.signal.aborted) {
       break;
     }
-    if (isServerHeartbeat(event)) {
+    const payloadDecision = normalizeOpencodeGlobalEventPayload(event.payload);
+    if (payloadDecision.kind === "heartbeat") {
       continue;
     }
-    await input.onEvent(toDirectoryScopedEvent(event));
+    await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
     if (!ready) {
       ready = true;
       input.onReady?.();
