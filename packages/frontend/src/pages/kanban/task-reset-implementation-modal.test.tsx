@@ -12,6 +12,7 @@ const makeModel = (
   targetStatusLabel: "Ready for Dev",
   isSubmitting: false,
   activeSessionCount: 0,
+  activeSessionCountError: null,
   isLoadingImpact: false,
   hasCanonicalWorktree: true,
   hasManagedSessionCleanup: true,
@@ -78,6 +79,27 @@ describe("TaskResetImplementationModal", () => {
     render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: null }} />);
 
     expect(screen.queryByText(/active agent session/i)).toBeNull();
+  });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    render(
+      <TaskResetImplementationModal
+        model={{
+          ...makeModel(0),
+          activeSessionCount: null,
+          activeSessionCountError: "host unavailable",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect(
+      (screen.getByRole("button", { name: "Reset implementation" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   test("does not claim retention when only legacy worktrees exist", () => {

@@ -28,6 +28,7 @@ type TaskCloseConfirmDialogProps = {
   managedWorktreeCount: number;
   terminalCount: number;
   activeSessionCount: number | null;
+  activeSessionCountError: string | null;
   impactError: string | null;
   isClosePending: boolean;
   closeError: string | null;
@@ -44,6 +45,7 @@ export function TaskCloseConfirmDialog({
   managedWorktreeCount,
   terminalCount,
   activeSessionCount,
+  activeSessionCountError,
   impactError,
   isClosePending,
   closeError,
@@ -71,6 +73,11 @@ export function TaskCloseConfirmDialog({
             {activeSessionCount !== null && activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(activeSessionCount, "close")}</p>
             ) : null}
+            {activeSessionCountError ? (
+              <p className="text-destructive-muted">
+                Unable to check how many active sessions will be stopped: {activeSessionCountError}
+              </p>
+            ) : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("close")}</p>
             ) : impactError ? (
@@ -96,7 +103,7 @@ export function TaskCloseConfirmDialog({
           <Button
             type="button"
             variant="warning"
-            disabled={isClosePending || isLoadingImpact}
+            disabled={isClosePending || isLoadingImpact || activeSessionCountError !== null}
             aria-busy={isClosePending || isLoadingImpact}
             onClick={onConfirm}
           >

@@ -1,5 +1,6 @@
 import type { TaskStopImpactOperation } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
+import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   type TaskStopImpactReadPort,
@@ -9,6 +10,7 @@ import {
 export type TaskStopImpactState = {
   stoppableSessionCount: number | null;
   isLoading: boolean;
+  error: string | null;
 };
 
 type UseTaskStopImpactArgs = {
@@ -19,8 +21,8 @@ type UseTaskStopImpactArgs = {
 };
 
 // The count is a host-computed preview of how many live sessions the matching
-// destructive mutation would stop. Null while loading or unavailable so the UI
-// never promises a count the host would not deliver.
+// destructive mutation would stop. It stays null until the authoritative read
+// succeeds so the UI never promises a count the host would not deliver.
 export function useTaskStopImpact({
   taskIds,
   operation,
@@ -40,10 +42,18 @@ export function useTaskStopImpact({
     enabled: shouldRead,
   });
   if (!shouldRead) {
-    return { stoppableSessionCount: null, isLoading: false };
+    return { stoppableSessionCount: null, isLoading: false, error: null };
+  }
+  if (query.isError) {
+    return {
+      stoppableSessionCount: null,
+      isLoading: false,
+      error: errorMessage(query.error),
+    };
   }
   return {
     stoppableSessionCount: query.data?.stoppableSessionCount ?? null,
     isLoading: query.isPending,
+    error: null,
   };
 }

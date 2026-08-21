@@ -225,6 +225,7 @@ export function TaskDetailsSheet({
             managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
             terminalCount: viewModel.deleteTerminalCount,
             activeSessionCount: viewModel.deleteActiveSessionCount,
+            activeSessionCountError: viewModel.deleteActiveSessionCountError,
             error: viewModel.deleteImpactError,
           }}
           deletion={{
@@ -246,6 +247,7 @@ export function TaskDetailsSheet({
           managedWorktreeCount={viewModel.resetManagedWorktreeCount}
           terminalCount={viewModel.resetTerminalCount}
           activeSessionCount={viewModel.resetActiveSessionCount}
+          activeSessionCountError={viewModel.resetActiveSessionCountError}
           impactError={viewModel.resetImpactError}
           isResetPending={viewModel.isResetPending}
           resetError={viewModel.resetError}
@@ -264,6 +266,7 @@ export function TaskDetailsSheet({
           managedWorktreeCount={viewModel.closeManagedWorktreeCount}
           terminalCount={viewModel.closeTerminalCount}
           activeSessionCount={viewModel.closeActiveSessionCount}
+          activeSessionCountError={viewModel.closeActiveSessionCountError}
           impactError={viewModel.closeImpactError}
           isClosePending={viewModel.isClosePending}
           closeError={viewModel.closeError}

@@ -28,6 +28,7 @@ type TaskResetConfirmDialogProps = {
   managedWorktreeCount: number;
   terminalCount: number;
   activeSessionCount: number | null;
+  activeSessionCountError: string | null;
   impactError: string | null;
   isResetPending: boolean;
   resetError: string | null;
@@ -44,6 +45,7 @@ export function TaskResetConfirmDialog({
   managedWorktreeCount,
   terminalCount,
   activeSessionCount,
+  activeSessionCountError,
   impactError,
   isResetPending,
   resetError,
@@ -74,6 +76,11 @@ export function TaskResetConfirmDialog({
             )}
             {activeSessionCount !== null && activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(activeSessionCount, "reset")}</p>
+            ) : null}
+            {activeSessionCountError ? (
+              <p className="text-destructive-muted">
+                Unable to check how many active sessions will be stopped: {activeSessionCountError}
+              </p>
             ) : null}
             {isLoadingImpact ? (
               <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
@@ -106,7 +113,7 @@ export function TaskResetConfirmDialog({
             type="button"
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-destructive/80 disabled:text-destructive-foreground disabled:opacity-100"
-            disabled={isResetPending || isLoadingImpact}
+            disabled={isResetPending || isLoadingImpact || activeSessionCountError !== null}
             aria-busy={isResetPending || isLoadingImpact}
             onClick={onConfirm}
           >

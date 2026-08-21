@@ -8,7 +8,11 @@ import {
 } from "./task-cleanup-impact-model";
 import { TaskDeleteConfirmDialog } from "./task-delete-confirm-dialog";
 
-const renderDialog = (terminalCount: number, activeSessionCount = 0) =>
+const renderDialog = (
+  terminalCount: number,
+  activeSessionCount: number | null = 0,
+  activeSessionCountError: string | null = null,
+) =>
   render(
     <TaskDeleteConfirmDialog
       open
@@ -24,6 +28,7 @@ const renderDialog = (terminalCount: number, activeSessionCount = 0) =>
         managedWorktreeCount: 0,
         terminalCount,
         activeSessionCount,
+        activeSessionCountError,
         error: null,
       }}
       deletion={{ isPending: false, error: null }}
@@ -66,6 +71,21 @@ describe("TaskDeleteConfirmDialog", () => {
     expect(
       screen.getByText("2 active agent sessions will be stopped before deletion."),
     ).toBeDefined();
+
+    rendered.unmount();
+  });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    const rendered = renderDialog(0, null, "host unavailable");
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
 
     rendered.unmount();
   });

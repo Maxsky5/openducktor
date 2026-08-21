@@ -51,12 +51,14 @@ type TaskDetailsSheetViewModel = {
   deleteImpactError: string | null;
   deleteTerminalCount: number;
   deleteActiveSessionCount: number | null;
+  deleteActiveSessionCountError: string | null;
   isLoadingResetImpact: boolean;
   hasManagedResetSessionCleanup: boolean;
   resetManagedWorktreeCount: number;
   resetImpactError: string | null;
   resetTerminalCount: number;
   resetActiveSessionCount: number | null;
+  resetActiveSessionCountError: string | null;
   isResetDialogOpen: boolean;
   isResetPending: boolean;
   resetError: string | null;
@@ -69,6 +71,7 @@ type TaskDetailsSheetViewModel = {
   closeImpactError: string | null;
   closeTerminalCount: number;
   closeActiveSessionCount: number | null;
+  closeActiveSessionCountError: string | null;
   openDeleteDialog: () => void;
   closeDeleteDialog: () => void;
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
@@ -228,7 +231,6 @@ export function useTaskDetailsSheetViewModel({
     operation: "close",
     enabled: isCloseDialogOpen && onCloseTask !== undefined,
   });
-
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
       runTaskWorkflowAction(
@@ -316,31 +318,34 @@ export function useTaskDetailsSheetViewModel({
     isDeleteDialogOpen,
     isDeletePending,
     deleteError,
-    isLoadingDeleteImpact,
+    isLoadingDeleteImpact: isLoadingDeleteImpact || deleteStopImpact.isLoading,
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
     deleteTerminalCount,
     deleteActiveSessionCount: deleteStopImpact.stoppableSessionCount,
+    deleteActiveSessionCountError: deleteStopImpact.error,
     // Reset and close both use the selected task's own build/QA session cleanup impact.
-    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
+    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact || resetStopImpact.isLoading,
     hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
     resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     resetImpactError: singleTaskCleanupImpactError,
     resetTerminalCount: singleTaskTerminalCount,
     resetActiveSessionCount: resetStopImpact.stoppableSessionCount,
+    resetActiveSessionCountError: resetStopImpact.error,
     isResetDialogOpen,
     isResetPending,
     resetError,
     isCloseDialogOpen,
     isClosePending,
     closeError,
-    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact,
+    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact || closeStopImpact.isLoading,
     hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
     closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
     closeImpactError: singleTaskCleanupImpactError,
     closeTerminalCount: singleTaskTerminalCount,
     closeActiveSessionCount: closeStopImpact.stoppableSessionCount,
+    closeActiveSessionCountError: closeStopImpact.error,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

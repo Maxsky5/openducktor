@@ -1593,6 +1593,48 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
+  kanbanTest(
+    "reset implementation surfaces stop-count preview failures and blocks confirm",
+    async () => {
+      currentTaskFixture = createTaskCardFixture({
+        id: "TASK-123",
+        status: "in_progress",
+        availableActions: ["reset_implementation"],
+      });
+      currentSessionsFixture = [];
+      const originalStopImpactGet = hostClient.taskStopImpactGet;
+      let renderer: KanbanPageHarness | null = null;
+
+      try {
+        hostClient.taskStopImpactGet = async () => {
+          throw new Error("host unavailable");
+        };
+        renderer = await renderPage();
+
+        await act(async () => {
+          (renderer!.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
+            "TASK-123",
+          );
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(renderer.getResetImplementationModalModel()).not.toBeNull();
+        await waitFor(() => {
+          expect(renderer!.getResetImplementationModalModel()?.activeSessionCountError).toContain(
+            "host unavailable",
+          );
+        });
+        expect(renderer!.getResetImplementationModalModel()?.activeSessionCount).toBeNull();
+      } finally {
+        hostClient.taskStopImpactGet = originalStopImpactGet;
+        await act(async () => {
+          unmountPageIfRendered(renderer);
+        });
+      }
+    },
+  );
+
   kanbanTest("reset implementation keeps the modal open when reset fails", async () => {
     currentTaskFixture = createTaskCardFixture({
       id: "TASK-123",

@@ -37,7 +37,8 @@ export function TaskResetImplementationModal({
     return null;
   }
 
-  const isBusy = model.isSubmitting || model.isLoadingImpact;
+  const isBusy =
+    model.isSubmitting || model.isLoadingImpact || model.activeSessionCountError !== null;
   const confirmLabel = model.isSubmitting
     ? "Resetting implementation…"
     : model.isLoadingImpact
@@ -71,6 +72,12 @@ export function TaskResetImplementationModal({
             </p>
             {model.activeSessionCount !== null && model.activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(model.activeSessionCount)}</p>
+            ) : null}
+            {model.activeSessionCountError ? (
+              <p className="text-destructive-muted">
+                Unable to check how many active sessions will be stopped:{" "}
+                {model.activeSessionCountError}
+              </p>
             ) : null}
             {model.hasCanonicalWorktree ? <p>{formatManagedCleanupMessage()}</p> : null}
             {model.legacyWorktreeCount > 0 ? (

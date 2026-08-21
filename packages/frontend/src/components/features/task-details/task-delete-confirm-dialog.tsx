@@ -31,6 +31,7 @@ type TaskDeleteConfirmDialogProps = {
     managedWorktreeCount: number;
     terminalCount: number;
     activeSessionCount: number | null;
+    activeSessionCountError: string | null;
     error: string | null;
   };
   deletion: {
@@ -78,6 +79,12 @@ export function TaskDeleteConfirmDialog({
             {impact.activeSessionCount !== null && impact.activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(impact.activeSessionCount, "delete")}</p>
             ) : null}
+            {impact.activeSessionCountError ? (
+              <p className="text-destructive-muted">
+                Unable to check how many active sessions will be stopped:{" "}
+                {impact.activeSessionCountError}
+              </p>
+            ) : null}
             {impact.isLoading ? (
               <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
             ) : impact.error ? (
@@ -104,7 +111,9 @@ export function TaskDeleteConfirmDialog({
             type="button"
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-rose-400 disabled:text-rose-50 disabled:opacity-100"
-            disabled={deletion.isPending || impact.isLoading}
+            disabled={
+              deletion.isPending || impact.isLoading || impact.activeSessionCountError !== null
+            }
             aria-busy={deletion.isPending || impact.isLoading}
             onClick={onConfirm}
           >

@@ -16,6 +16,7 @@ describe("TaskResetConfirmDialog", () => {
         managedWorktreeCount={2}
         terminalCount={2}
         activeSessionCount={1}
+        activeSessionCountError={null}
         impactError={null}
         isResetPending={false}
         resetError={null}
@@ -47,6 +48,7 @@ describe("TaskResetConfirmDialog", () => {
         managedWorktreeCount={0}
         terminalCount={0}
         activeSessionCount={0}
+        activeSessionCountError={null}
         impactError={null}
         isResetPending={false}
         resetError={null}
@@ -54,6 +56,36 @@ describe("TaskResetConfirmDialog", () => {
     );
 
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+      true,
+    );
+  });
+
+  test("shows the preview failure and keeps confirm disabled while it is unresolved", () => {
+    render(
+      <TaskResetConfirmDialog
+        open
+        onOpenChange={() => {}}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+        taskId="TASK-123"
+        isLoadingImpact={false}
+        hasManagedSessionCleanup={false}
+        managedWorktreeCount={0}
+        terminalCount={0}
+        activeSessionCount={null}
+        activeSessionCountError="host unavailable"
+        impactError={null}
+        isResetPending={false}
+        resetError={null}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /Unable to check how many active sessions will be stopped: host unavailable/,
+      ),
+    ).toBeDefined();
+    expect((screen.getByRole("button", { name: "Reset task" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
   });

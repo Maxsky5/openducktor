@@ -42,7 +42,11 @@ export function useTaskResetFlow({
     [taskId, tasks],
   );
   const open = task !== null;
-  const { stoppableSessionCount: activeSessionCount } = useTaskStopImpact({
+  const {
+    stoppableSessionCount: activeSessionCount,
+    isLoading: isLoadingStopImpact,
+    error: stopImpactError,
+  } = useTaskStopImpact({
     taskIds: taskId ? [taskId] : [],
     operation: "reset_implementation",
     enabled: open,
@@ -126,7 +130,9 @@ export function useTaskResetFlow({
       targetStatusLabel: deriveRollbackLabel(task),
       isSubmitting,
       activeSessionCount,
-      isLoadingImpact,
+      activeSessionCountError: stopImpactError,
+      // Confirm stays disabled until the authoritative stop-count read resolves.
+      isLoadingImpact: isLoadingImpact || isLoadingStopImpact,
       hasCanonicalWorktree,
       hasManagedSessionCleanup,
       managedWorktreeCount,
