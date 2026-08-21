@@ -2434,14 +2434,12 @@ describe("event-stream", () => {
       );
 
       processOpencodeEvent({
-        context: {
-          externalSessionId: sessionRecord.externalSessionId,
-          input: sessionRecord.input,
-        },
+        externalSessionId: sessionRecord.externalSessionId,
+        input: sessionRecord.input,
+        session: sessionRecord,
         event: lifecycleEvent,
         now: () => "2026-02-22T12:00:00.000Z",
         emit: () => undefined,
-        getSession: () => sessionRecord,
       });
 
       expect(
@@ -3211,10 +3209,9 @@ describe("event-stream", () => {
     const sessionRecord = makeSessionRecord(client);
 
     processOpencodeEvent({
-      context: {
-        externalSessionId: "external-child-session",
-        input: makeSessionInput(),
-      },
+      externalSessionId: "external-child-session",
+      input: makeSessionInput(),
+      session: sessionRecord,
       event: {
         type: "permission.asked",
         properties: {
@@ -3226,7 +3223,6 @@ describe("event-stream", () => {
       } as unknown as Event,
       now: () => "2026-02-22T12:00:00.000Z",
       emit: (_sessionId, event) => emitted.push(event),
-      getSession: () => sessionRecord,
       resolveSubagentSessionLink: (childExternalSessionId) =>
         childExternalSessionId === "external-child-session"
           ? {

@@ -752,14 +752,11 @@ export class OpencodeSdkAdapter
       };
       if (systemInvocation.kind !== "manual_session_compaction") {
         projectAdmittedOpencodeUserMessage({
-          context: {
-            externalSessionId: session.externalSessionId,
-            input: session.input,
-          },
+          externalSessionId: session.externalSessionId,
+          input: session.input,
+          session,
           now: this.now,
           emit: this.emit.bind(this),
-          getSession: (sessionId) =>
-            sessionId === session.externalSessionId ? session : this.sessions.get(sessionId),
           message: {
             ...admittedUserMessage,
             timestamp,

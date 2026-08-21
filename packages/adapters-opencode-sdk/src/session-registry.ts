@@ -169,14 +169,12 @@ const ensureRuntimeEventTransport = (input: {
           continue;
         }
         processOpencodeEvent({
-          context: {
-            externalSessionId: subscriber.externalSessionId,
-            input: subscriber.input,
-          },
+          externalSessionId: subscriber.externalSessionId,
+          input: subscriber.input,
+          session: input.sessions.get(subscriber.externalSessionId),
           event,
           now: input.now,
           emit: input.emit,
-          getSession: (sessionId) => input.sessions.get(sessionId),
           resolveSubagentSessionLink: (childExternalSessionId) =>
             resolveSubagentSessionLink(input.sessions, childExternalSessionId),
         });

@@ -16,13 +16,11 @@ import { readMessageUpdatedContextSignal } from "./opencode-session-runtime-sign
 import type { SessionInput, SessionRecord } from "./types";
 
 type OpencodeAgentSessionProjectionContext = {
-  context: {
-    externalSessionId: string;
-    input: SessionInput;
-  };
+  externalSessionId: string;
+  input: SessionInput;
+  session: SessionRecord | undefined;
   now: () => string;
   emit: (sessionId: string, event: AgentEvent) => void;
-  getSession: (sessionId: string) => SessionRecord | undefined;
   resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
 };
 
@@ -325,14 +323,14 @@ export const completeOpencodeUserMessageSend = (session: SessionRecord): void =>
 const createEventStreamRuntime = (
   input: OpencodeAgentSessionProjectionContext,
 ): EventStreamRuntime | null => {
-  const session = input.getSession(input.context.externalSessionId);
+  const { session } = input;
   if (!session) {
     return null;
   }
 
   return {
-    externalSessionId: input.context.externalSessionId,
-    input: input.context.input,
+    externalSessionId: input.externalSessionId,
+    input: input.input,
     now: input.now,
     emit: input.emit,
     session,
@@ -408,7 +406,7 @@ export const projectAdmittedOpencodeUserMessage = ({
   const runtime = createEventStreamRuntime(context);
   if (!runtime) {
     throw new Error(
-      `Cannot project an admitted OpenCode user message for missing session '${context.context.externalSessionId}'.`,
+      `Cannot project an admitted OpenCode user message for missing session '${context.externalSessionId}'.`,
     );
   }
   emitAdmittedUserMessage(runtime, message);
