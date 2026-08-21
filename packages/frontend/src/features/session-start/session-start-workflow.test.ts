@@ -144,7 +144,7 @@ describe("session-start-workflow", () => {
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).toContain("pullRequestBaseBranch: release/2026.04");
+    expect(sentText).toContain("branch: release/2026.04");
     expect(sentText).not.toContain("comparisonRef: origin/main");
   });
 
@@ -181,7 +181,7 @@ describe("session-start-workflow", () => {
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
     expect(sentText).toContain("comparisonRef: origin/main");
-    expect(sentText).toContain("pullRequestBaseBranch: main");
+    expect(sentText).toContain("branch: main");
   });
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {

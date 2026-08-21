@@ -317,7 +317,7 @@ describe("settings-modal-model", () => {
 
     expect(buildPromptOverrideValidationErrors(overrides)).toEqual({
       "kickoff.build_pull_request_generation":
-        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}.",
+        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
     });
   });
 

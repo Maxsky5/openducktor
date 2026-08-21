@@ -46,13 +46,13 @@ describe("prompt placeholder validation", () => {
     expect(result.missingRequiredPlaceholders).toEqual(["humanFeedback"]);
   });
 
-  test("requires comparison and provider base placeholders for pull request kickoff overrides", () => {
+  test("requires one target placeholder for pull request kickoff overrides", () => {
     const result = validatePromptTemplatePlaceholders(
-      "Compare {{git.targetBranch}} before publishing.",
+      "Publish the current branch.",
       "kickoff.build_pull_request_generation",
     );
 
     expect(result.unsupportedPlaceholders).toEqual([]);
-    expect(result.missingRequiredPlaceholders).toEqual(["git.pullRequestBaseBranch"]);
+    expect(result.missingRequiredPlaceholders).toEqual(["git.targetBranch"]);
   });
 });

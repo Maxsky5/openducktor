@@ -462,15 +462,12 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 6,
+    builtinVersion: 5,
     template: joinPromptBlocks(
       "Publish a review-ready pull request for the current Builder session.",
-      lineSection("Pull request context", [
-        "- comparisonRef: {{git.targetBranch}}",
-        "- pullRequestBaseBranch: {{git.pullRequestBaseBranch}}",
-      ]),
+      lineSection("Pull request target", ["{{git.targetBranch}}"]),
       bulletSection("Prepare", [
-        "Use comparisonRef for git comparison and rebasing. Use pullRequestBaseBranch only as the provider pull-request base.",
+        "Use comparisonRef for git comparison and rebasing. Pass branch alone as the provider pull-request base.",
         "Follow the repository's pull request conventions, including its contribution guidance and GitHub pull request template when present.",
         "Inspect the current source branch, remote branch, existing pull-request state, task artifacts, and actual diff against comparisonRef. Use live evidence instead of relying on the session summary.",
         "Run the repository-required checks. Diagnose check failures, fix their root causes, and rerun the affected checks until all required checks pass.",
@@ -480,7 +477,7 @@ const AGENT_PROMPT_DEFINITIONS: Record<AgentPromptTemplateId, AgentPromptTemplat
         "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
         "Start the body with the problem, then explain the goal and the context reviewers need. Include key decisions or tradeoffs when they help review.",
         "Follow any repository pull request template and fill every relevant section. Do not lead with an implementation inventory or add a verification section.",
-        "Push the source branch, then create or update the pull request against the exact pullRequestBaseBranch above with provider-native tooling.",
+        "Push the source branch, then create or update the pull request against the exact branch above with provider-native tooling.",
       ]),
       bulletSection("Finish", [
         "After the pull request exists, call odt_set_pull_request with taskId {{task.id}}, the tool's required providerId, and the pull request number.",
@@ -533,7 +530,7 @@ const compact = (value: string | undefined): string => {
 
 type PullRequestTargetContext = {
   comparisonRef: string;
-  baseBranch: string;
+  branch: string;
 };
 
 const resolvePullRequestTarget = (
@@ -554,7 +551,7 @@ const resolvePullRequestTarget = (
   const remote = targetBranch?.remote?.trim();
   return {
     comparisonRef: remote ? `${remote}/${branch}` : branch,
-    baseBranch: branch,
+    branch,
   };
 };
 
@@ -593,6 +590,12 @@ const buildPlaceholderValues = ({
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
   const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
+  const targetBranchPlaceholder = pullRequestTarget
+    ? [
+        `- comparisonRef: ${pullRequestTarget.comparisonRef}`,
+        `- branch: ${pullRequestTarget.branch}`,
+      ].join("\n")
+    : compact(git?.targetBranch);
 
   if (extraPlaceholders?.humanFeedback !== undefined && !humanFeedback) {
     throw new Error('Prompt placeholder "humanFeedback" must not be empty.');
@@ -616,8 +619,7 @@ const buildPlaceholderValues = ({
       ? {
           "git.operationLabel": compact(git?.operationLabel),
           "git.currentBranch": compact(git?.currentBranch),
-          "git.targetBranch": compact(pullRequestTarget?.comparisonRef ?? git?.targetBranch),
-          "git.pullRequestBaseBranch": compact(pullRequestTarget?.baseBranch),
+          "git.targetBranch": targetBranchPlaceholder,
           "git.conflictedFiles": compactList(git?.conflictedFiles),
           "git.conflictOutput": compact(git?.conflictOutput),
         }

@@ -421,7 +421,7 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("pull request generation kickoff drives repo-aware publication for reused sessions and forks", () => {
-    const prompt = buildAgentKickoffPrompt({
+    const result = buildAgentKickoffPromptBundle({
       role: "build",
       templateId: "kickoff.build_pull_request_generation",
       task: {
@@ -432,21 +432,23 @@ describe("kickoff and permission prompts", () => {
         branch: "release/2026.04",
       },
     });
+    const prompt = result.prompt;
 
     expectPromptToContainAll(prompt, [
       "Publish a review-ready pull request for the current Builder session.",
       "comparisonRef: origin/release/2026.04",
-      "pullRequestBaseBranch: release/2026.04",
-      "Use comparisonRef for git comparison and rebasing. Use pullRequestBaseBranch only as the provider pull-request base.",
+      "branch: release/2026.04",
+      "Use comparisonRef for git comparison and rebasing. Pass branch alone as the provider pull-request base.",
       "Follow the repository's pull request conventions, including its contribution guidance and GitHub pull request template when present.",
       "Diagnose check failures, fix their root causes, and rerun the affected checks until all required checks pass.",
       "If the source branch is behind comparisonRef, rebase it on comparisonRef and resolve conflicts carefully.",
       "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
       "Start the body with the problem, then explain the goal and the context reviewers need.",
       "Do not lead with an implementation inventory or add a verification section.",
-      "Push the source branch, then create or update the pull request against the exact pullRequestBaseBranch above with provider-native tooling.",
+      "Push the source branch, then create or update the pull request against the exact branch above with provider-native tooling.",
       "After the pull request exists, call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
     ]);
+    expect(result.templates[0]?.builtinVersion).toBe(5);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
