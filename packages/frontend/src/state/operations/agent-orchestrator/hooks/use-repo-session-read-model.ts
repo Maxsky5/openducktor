@@ -74,7 +74,12 @@ export type RepoSessionReadModelState = {
 };
 
 type TaskRecordApplyState =
-  | { kind: "ready"; repoPath: string; records: TaskSessionRecords }
+  | {
+      kind: "ready";
+      repoPath: string;
+      taskIdsKey: string;
+      records: TaskSessionRecords;
+    }
   | {
       kind: "failed";
       repoPath: string;
@@ -189,6 +194,7 @@ export const useRepoSessionReadModel = ({
         taskRecordApplyRef.current = {
           kind: "ready",
           repoPath,
+          taskIdsKey: taskIdsScopeKey(records.taskIds),
           records,
         };
         return true;
@@ -462,8 +468,7 @@ export const useRepoSessionReadModel = ({
       }
       // Records applied for a prior task set are stale: the current set stays
       // unloaded until its own read succeeds, so it cannot prove deletion.
-      const appliedTaskIdsKey = taskIdsScopeKey(current.records.taskIds);
-      if (appliedTaskIdsKey !== readCurrentTaskIdsKey()) {
+      if (current.taskIdsKey !== readCurrentTaskIdsKey()) {
         return null;
       }
       return toLoadedWorkflowSessionRecords(current.records);
@@ -471,13 +476,29 @@ export const useRepoSessionReadModel = ({
     // Every stream commit projects the runtime first, then applies loaded
     // workflow session records. An unloaded, failed, or stale record read
     // never proves deletion, so records apply only when loaded.
-    const applyLoadedWorkflowRecords = (
-      projected: AgentSessionCollection,
-    ): AgentSessionCollection => {
+    const applyLoadedRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
       const workflowRecords = readLoadedWorkflowRecords();
       return workflowRecords
         ? applyWorkflowSessionRecords({ projected, records: workflowRecords })
         : projected;
+    };
+    // Every stream write collects the pending-approval policy against the same
+    // commit it belongs to.
+    const commitProjected = (
+      project: (current: AgentSessionCollection) => AgentSessionCollection,
+    ): void => {
+      const policyActions = commitSessionCollection((current) => {
+        const collection = project(current);
+        return {
+          collection,
+          result: collectPendingApprovalPolicyActions({
+            previous: current,
+            next: collection,
+            repoPath,
+          }),
+        };
+      });
+      applyPendingApprovalPolicy(policyActions);
     };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
@@ -517,24 +538,14 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      const policyActions = commitSessionCollection((current) => {
-        // This is the sole live-snapshot-to-session-store write path.
-        const collection = applyLoadedWorkflowRecords(
+      commitProjected((current) =>
+        applyLoadedRecords(
           buildAgentSessionLiveCollection({
             current,
             snapshots: envelope.sessions,
           }),
-        );
-        return {
-          collection,
-          result: collectPendingApprovalPolicyActions({
-            previous: current,
-            next: collection,
-            repoPath,
-          }),
-        };
-      });
-      applyPendingApprovalPolicy(policyActions);
+        ),
+      );
       awaitingInitialSnapshot = false;
       if (isStaleRepoOperation()) {
         return;
@@ -578,23 +589,9 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
-        const policyActions = commitSessionCollection((current) => {
-          const collection = applyLoadedWorkflowRecords(
-            applyAgentSessionLiveDelta({
-              current,
-              envelope,
-            }),
-          );
-          return {
-            collection,
-            result: collectPendingApprovalPolicyActions({
-              previous: current,
-              next: collection,
-              repoPath,
-            }),
-          };
-        });
-        applyPendingApprovalPolicy(policyActions);
+        commitProjected((current) =>
+          applyLoadedRecords(applyAgentSessionLiveDelta({ current, envelope })),
+        );
         return;
       }
       if (envelope.type === "transcript_event") {
