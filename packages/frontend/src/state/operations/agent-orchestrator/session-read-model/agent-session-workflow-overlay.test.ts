@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot, AgentSessionRecord } from "@openducktor/contracts";
 import {
+  type AgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
@@ -11,8 +12,10 @@ import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
-import { applyWorkflowSessionRecordOverlay } from "./agent-session-workflow-overlay";
-import type { DurableWorkflowSessionRecords } from "./agent-session-workflow-overlay";
+import {
+  applyWorkflowSessionRecordOverlay,
+  type DurableWorkflowSessionRecords,
+} from "./agent-session-workflow-overlay";
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
@@ -72,7 +75,7 @@ const projectAndOverlay = ({
   snapshots,
   durableRecords: records,
 }: {
-  current?: ReturnType<typeof emptyAgentSessionCollection>;
+  current?: AgentSessionCollection;
   snapshots: AgentSessionLiveSnapshot[];
   durableRecords: DurableWorkflowSessionRecords;
 }) =>
@@ -85,7 +88,7 @@ const overlayOnly = ({
   projected,
   durableRecords: records,
 }: {
-  projected: ReturnType<typeof emptyAgentSessionCollection>;
+  projected: AgentSessionCollection;
   durableRecords: DurableWorkflowSessionRecords;
 }) =>
   applyWorkflowSessionRecordOverlay({

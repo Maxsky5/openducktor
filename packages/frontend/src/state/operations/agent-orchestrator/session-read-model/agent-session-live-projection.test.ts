@@ -61,8 +61,10 @@ const build = ({
   snapshots: AgentSessionLiveSnapshot[];
 }) => buildAgentSessionLiveCollection({ current, snapshots });
 
-const delta = (current: AgentSessionCollection, envelope: AgentSessionLiveEnvelope) =>
-  applyAgentSessionLiveDelta({ current, envelope: envelope as never });
+const delta = (
+  current: AgentSessionCollection,
+  envelope: Parameters<typeof applyAgentSessionLiveDelta>[0]["envelope"],
+) => applyAgentSessionLiveDelta({ current, envelope });
 
 describe("agent session live projection", () => {
   test("carries workflow, repository, and unbound associations from one mixed snapshot", () => {

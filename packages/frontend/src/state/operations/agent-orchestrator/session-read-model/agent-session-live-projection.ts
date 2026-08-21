@@ -40,10 +40,10 @@ const toSessionIdentity = (ref: AgentSessionLiveRef): AgentSessionIdentity => ({
   workingDirectory: ref.workingDirectory,
 });
 
-export const agentSessionLiveRefIdentityKey = (ref: AgentSessionLiveRef): string =>
+const agentSessionLiveRefIdentityKey = (ref: AgentSessionLiveRef): string =>
   agentSessionIdentityKey(toSessionIdentity(ref));
 
-export const agentSessionLiveSnapshotIdentityKeys = (
+const agentSessionLiveSnapshotIdentityKeys = (
   snapshots: readonly AgentSessionLiveSnapshot[],
 ): ReadonlySet<string> =>
   new Set(snapshots.map((snapshot) => agentSessionLiveRefIdentityKey(snapshot.ref)));

@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import {
@@ -466,6 +467,15 @@ export const useRepoSessionReadModel = ({
       }
       return toDurableWorkflowSessionRecords(current.records);
     };
+    // Every stream commit publishes through the same project-then-overlay
+    // composition; an unloaded, failed, or stale record read never becomes
+    // deletion proof, so the overlay only runs on loaded records.
+    const reconcileDurableRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
+      const durableRecords = readLoadedDurableRecords();
+      return durableRecords
+        ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
+        : projected;
+    };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     const failObservation = (message: string): void => {
@@ -505,17 +515,13 @@ export const useRepoSessionReadModel = ({
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
       const policyActions = commitSessionCollection((current) => {
-        // This is the sole live-snapshot-to-session-store write path:
-        // project the runtime stream first, then reconcile durable workflow
-        // records only when the current task set is loaded.
-        const projected = buildAgentSessionLiveCollection({
-          current,
-          snapshots: envelope.sessions,
-        });
-        const durableRecords = readLoadedDurableRecords();
-        const collection = durableRecords
-          ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
-          : projected;
+        // This is the sole live-snapshot-to-session-store write path.
+        const collection = reconcileDurableRecords(
+          buildAgentSessionLiveCollection({
+            current,
+            snapshots: envelope.sessions,
+          }),
+        );
         return {
           collection,
           result: collectPendingApprovalPolicyActions({
@@ -570,17 +576,12 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
         const policyActions = commitSessionCollection((current) => {
-          // Ordered deltas publish through the same project-then-overlay
-          // composition; an unloaded or failed record read never becomes
-          // deletion proof, so the overlay only runs on loaded records.
-          const projected = applyAgentSessionLiveDelta({
-            current,
-            envelope,
-          });
-          const durableRecords = readLoadedDurableRecords();
-          const collection = durableRecords
-            ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
-            : projected;
+          const collection = reconcileDurableRecords(
+            applyAgentSessionLiveDelta({
+              current,
+              envelope,
+            }),
+          );
           return {
             collection,
             result: collectPendingApprovalPolicyActions({
