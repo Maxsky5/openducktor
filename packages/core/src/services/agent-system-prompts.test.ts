@@ -438,20 +438,24 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(prompt, [
       "Publish a review-ready pull request for the current task.",
-      "Git comparison ref: origin/release/2026.04",
-      "Pull request base branch: release/2026.04",
-      "Use the Git comparison ref for diffs and rebasing. Pass only the pull request base branch to provider tools.",
-      "Follow the repository's pull request conventions, including its contribution guidance and GitHub pull request template when present.",
-      "Diagnose check failures, fix their root causes, and rerun the affected checks until all required checks pass.",
-      "If the source branch is behind the Git comparison ref, rebase it and resolve conflicts carefully.",
+      "Base ref: origin/release/2026.04",
+      "Base branch: release/2026.04",
+      "Use the base ref for Git diffs and rebases. Use the base branch with pull request provider tools.",
+      "Treat the current task artifacts and live repository state as the source of truth.",
+      "If the source branch is behind the base ref, rebase it and resolve conflicts.",
+      "Preparation is complete when the diff matches the current task and every required local check passes.",
       "Use a concise Conventional Commit-style pull request title that explains why the change matters.",
-      "Start the body with the problem, then explain the goal and the context reviewers need.",
-      "Do not lead with an implementation inventory or add a verification section.",
-      "Push the source branch, then create or update the pull request against the pull request base branch shown above with provider-native tooling.",
+      "Start the body with the problem and goal. Add reviewer context and decisions or tradeoffs that affect review.",
+      "Push the source branch, create or update the pull request against the base branch, and confirm the published title and body follow repository conventions.",
       "After the pull request exists, call odt_set_pull_request with taskId task-1, the tool's required providerId, and the pull request number.",
       "If any fail, diagnose and fix the root cause, rerun the affected local checks, commit and push the fix, then check again until all required checks pass.",
+      "Completion criterion: the task references the pull request and every required pull request check passes.",
+      "Report the pull request URL and the passed local and pull request checks.",
     ]);
-    expect(result.templates[0]?.builtinVersion).toBe(6);
+    expect(prompt).not.toContain("Builder session");
+    expect(prompt).not.toContain("comparison");
+    expect(prompt).not.toContain("target");
+    expect(result.templates[0]?.builtinVersion).toBe(5);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
