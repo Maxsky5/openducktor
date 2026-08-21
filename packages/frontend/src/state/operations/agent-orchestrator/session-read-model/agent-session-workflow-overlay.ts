@@ -11,13 +11,7 @@ import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/p
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { rebuildProjectedPendingInput } from "./agent-session-live-projection";
 
-/**
- * Durable session records feeding the workflow overlay.
- *
- * This input is the persistence boundary: today's source is the task
- * session-record queries, but any future durable record source can supply the
- * same shape without touching live projection.
- */
+/** Durable session records feeding the overlay; a future record source can supply the same shape. */
 export type DurableWorkflowSessionRecords = {
   /** Owning ids whose durable lists were read successfully; an unread owner never proves deletion. */
   loadedTaskIds: ReadonlySet<string>;

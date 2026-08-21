@@ -95,6 +95,9 @@ type RecordRetryResult = RecordRetryKey &
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
   `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 
+const taskIdsScopeKey = (taskIds: string[]): string =>
+  JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
+
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
   taskIds,
@@ -117,7 +120,7 @@ export const useRepoSessionReadModel = ({
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
   const retryIdRef = useRef(0);
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
-  const taskIdsKey = JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
+  const taskIdsKey = taskIdsScopeKey(taskIds);
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
   const observeLiveSessions = useEffectEvent(
@@ -459,9 +462,7 @@ export const useRepoSessionReadModel = ({
       }
       // Records applied for a prior task set are stale: the current set stays
       // unloaded until its own read succeeds, so it cannot prove deletion.
-      const appliedTaskIdsKey = JSON.stringify(
-        normalizeAgentSessionTaskIds(current.records.taskIds),
-      );
+      const appliedTaskIdsKey = taskIdsScopeKey(current.records.taskIds);
       if (appliedTaskIdsKey !== readCurrentTaskIdsKey()) {
         return null;
       }
