@@ -7,7 +7,8 @@ import {
   listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
@@ -491,6 +492,34 @@ describe("agent session workflow record overlay", () => {
       durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterRemovalReconcile, identity("live-thread"))).toBeNull();
+  });
+
+  test("protects a locally launched session that has never been live-reported", () => {
+    const launched = {
+      externalSessionId: "launching-thread",
+      title: "Launching",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimeKind: "codex",
+      workingDirectory,
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-07-16T08:00:00.000Z",
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("launching-thread"),
+      contextUsage: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+    } as const satisfies AgentSessionState;
+    const projected = replaceAgentSession(emptyAgentSessionCollection(), launched);
+
+    // Any unrelated delta reconciles records; the launch's durable record has
+    // not landed yet and no runtime report arrived, so nothing proves deletion.
+    const refreshed = overlayOnly({
+      projected,
+      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+    });
+    expect(getAgentSession(refreshed, identity("launching-thread"))).not.toBeNull();
   });
 
   test("keeps a snapshot-backed owner and its mirrors when its durable record moves away", () => {
