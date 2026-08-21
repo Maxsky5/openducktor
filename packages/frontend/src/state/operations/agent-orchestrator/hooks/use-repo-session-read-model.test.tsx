@@ -572,7 +572,7 @@ describe("useRepoSessionReadModel", () => {
       if (latest.kind !== "failed") {
         throw new Error("Expected the observation failure to stay failed.");
       }
-      expect(latest.source).toBe("observation");
+      expect(latest.source).toBe("live-stream");
       expect(latest.message).toContain("The observation stream stopped.");
     } finally {
       await state.harness.unmount();
@@ -626,7 +626,7 @@ describe("useRepoSessionReadModel", () => {
       if (latest.kind !== "failed") {
         throw new Error("Expected the transcript-gap recovery failure to stay failed.");
       }
-      expect(latest.source).toBe("observation");
+      expect(latest.source).toBe("live-stream");
       expect(latest.message).toContain("history reload failed");
     } finally {
       await state.harness.unmount();
@@ -955,7 +955,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to apply initial live-session snapshot for repo '/repo': Cannot apply live snapshot for session 'thread-1' because its registered workflow scope for task 'task-1' and role 'build' does not match the incoming repository scope.",
-        source: "observation",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();
@@ -1460,7 +1460,7 @@ describe("useRepoSessionReadModel", () => {
         workspaceRepoPath: "/repo",
         message:
           "Failed to recover transcript history after a live-stream gap: history reload failed",
-        source: "observation",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();
@@ -1690,7 +1690,7 @@ describe("useRepoSessionReadModel", () => {
         kind: "failed",
         workspaceRepoPath: "/repo",
         message: "Live-session observation failed: The observation stream stopped.",
-        source: "observation",
+        source: "live-stream",
       });
     } finally {
       await state.harness.unmount();

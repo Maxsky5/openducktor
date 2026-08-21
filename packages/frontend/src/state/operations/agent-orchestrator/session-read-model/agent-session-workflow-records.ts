@@ -11,8 +11,8 @@ import { toPersistedSessionIdentity, toPersistedSessionView } from "../support/p
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { rebuildProjectedPendingInput } from "./agent-session-live-projection";
 
-/** Durable session records feeding the overlay; a future record source can supply the same shape. */
-export type DurableWorkflowSessionRecords = {
+/** Workflow session records loaded from the task store; a future record source can supply the same shape. */
+export type LoadedWorkflowSessionRecords = {
   /** Owning ids whose durable lists were read successfully; an unread owner never proves deletion. */
   loadedTaskIds: ReadonlySet<string>;
   records: readonly PersistedTaskSessionRecord[];
@@ -21,15 +21,15 @@ export type DurableWorkflowSessionRecords = {
 const persistedRecordIdentityKeys = (records: readonly PersistedTaskSessionRecord[]): Set<string> =>
   new Set(records.map(({ record }) => agentSessionIdentityKey(toPersistedSessionIdentity(record))));
 
-export const applyWorkflowSessionRecordOverlay = ({
+export const applyWorkflowSessionRecords = ({
   projected,
-  durableRecords,
+  records: workflowRecords,
 }: {
   projected: AgentSessionCollection;
-  durableRecords: DurableWorkflowSessionRecords;
+  records: LoadedWorkflowSessionRecords;
 }): AgentSessionCollection => {
-  const { loadedTaskIds, records } = durableRecords;
-  const persistedKeys = persistedRecordIdentityKeys(records);
+  const { loadedTaskIds } = workflowRecords;
+  const persistedKeys = persistedRecordIdentityKeys(workflowRecords.records);
   let collection = projected;
   for (const session of listAgentSessions(projected)) {
     if (!isWorkflowAgentSession(session)) {
@@ -46,7 +46,7 @@ export const applyWorkflowSessionRecordOverlay = ({
       collection = removeAgentSession(collection, session);
     }
   }
-  for (const persistedRecord of records) {
+  for (const persistedRecord of workflowRecords.records) {
     const identity = toPersistedSessionIdentity(persistedRecord.record);
     const currentSession = getAgentSession(collection, identity);
     collection = replaceAgentSession(

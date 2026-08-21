@@ -14,9 +14,9 @@ import {
   buildAgentSessionLiveCollection,
 } from "./agent-session-live-projection";
 import {
-  applyWorkflowSessionRecordOverlay,
-  type DurableWorkflowSessionRecords,
-} from "./agent-session-workflow-overlay";
+  applyWorkflowSessionRecords,
+  type LoadedWorkflowSessionRecords,
+} from "./agent-session-workflow-records";
 
 const repoPath = "/repo";
 const workingDirectory = "/repo/worktree";
@@ -34,9 +34,9 @@ const record = (
   ...overrides,
 });
 
-const durableRecords = (
+const loadedRecords = (
   ...entries: Array<{ taskId: string; record: AgentSessionRecord }>
-): DurableWorkflowSessionRecords => ({
+): LoadedWorkflowSessionRecords => ({
   loadedTaskIds: new Set(entries.map(({ taskId }) => taskId)),
   records: entries,
 });
@@ -71,37 +71,37 @@ const identity = (
   ...overrides,
 });
 
-const projectAndOverlay = ({
+const projectAndApplyRecords = ({
   current = emptyAgentSessionCollection(),
   snapshots,
-  durableRecords: records,
+  records: loadedRecords,
 }: {
   current?: AgentSessionCollection;
   snapshots: AgentSessionLiveSnapshot[];
-  durableRecords: DurableWorkflowSessionRecords;
+  records: LoadedWorkflowSessionRecords;
 }) =>
-  applyWorkflowSessionRecordOverlay({
+  applyWorkflowSessionRecords({
     projected: buildAgentSessionLiveCollection({ current, snapshots }),
-    durableRecords: records,
+    records: loadedRecords,
   });
 
-const overlayOnly = ({
+const applyRecordsOnly = ({
   projected,
-  durableRecords: records,
+  records: loadedRecords,
 }: {
   projected: AgentSessionCollection;
-  durableRecords: DurableWorkflowSessionRecords;
+  records: LoadedWorkflowSessionRecords;
 }) =>
-  applyWorkflowSessionRecordOverlay({
+  applyWorkflowSessionRecords({
     projected,
-    durableRecords: records,
+    records: loadedRecords,
   });
 
-describe("agent session workflow record overlay", () => {
+describe("agent session workflow records", () => {
   test("restores a historical workflow session when no live runtime session exists", () => {
-    const sessions = overlayOnly({
+    const sessions = applyRecordsOnly({
       projected: emptyAgentSessionCollection(),
-      durableRecords: durableRecords({
+      records: loadedRecords({
         taskId: "task-1",
         record: record("thread-1", { role: "qa" }),
       }),
@@ -114,7 +114,7 @@ describe("agent session workflow record overlay", () => {
     });
   });
 
-  test("overlays durable fields onto the matching live session without replacing live-owned fields", () => {
+  test("applies persisted fields onto the matching live session without replacing live-owned fields", () => {
     const projected = buildAgentSessionLiveCollection({
       current: emptyAgentSessionCollection(),
       snapshots: [
@@ -125,9 +125,9 @@ describe("agent session workflow record overlay", () => {
         }),
       ],
     });
-    const sessions = overlayOnly({
+    const sessions = applyRecordsOnly({
       projected,
-      durableRecords: durableRecords({
+      records: loadedRecords({
         taskId: "task-1",
         record: record("thread-1", {
           startedAt: "2026-07-01T08:00:00.000Z",
@@ -153,9 +153,9 @@ describe("agent session workflow record overlay", () => {
     });
 
     expect(() =>
-      overlayOnly({
+      applyRecordsOnly({
         projected,
-        durableRecords: durableRecords({ taskId: "task-1", record: record("thread-1") }),
+        records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
       }),
     ).toThrow(
       "Cannot reconcile persisted session 'thread-1' because its registered repository scope does not match the incoming workflow scope for task 'task-1' and role 'build'.",
@@ -172,9 +172,9 @@ describe("agent session workflow record overlay", () => {
       ],
     });
 
-    const next = overlayOnly({
+    const next = applyRecordsOnly({
       projected,
-      durableRecords: durableRecords({ taskId: "task-1", record: record("thread-1") }),
+      records: loadedRecords({ taskId: "task-1", record: record("thread-1") }),
     });
 
     expect(getAgentSession(next, identity("thread-1"))?.sessionAssociation).toEqual({
@@ -195,9 +195,9 @@ describe("agent session workflow record overlay", () => {
     });
 
     expect(() =>
-      overlayOnly({
+      applyRecordsOnly({
         projected,
-        durableRecords: durableRecords({ taskId: "task-2", record: record("thread-1") }),
+        records: loadedRecords({ taskId: "task-2", record: record("thread-1") }),
       }),
     ).toThrow(
       "Cannot reconcile persisted session 'thread-1' because its registered workflow scope for task 'task-1' and role 'spec' does not match the incoming workflow scope for task 'task-2' and role 'build'.",
@@ -234,9 +234,9 @@ describe("agent session workflow record overlay", () => {
       ],
     });
 
-    const next = overlayOnly({
+    const next = applyRecordsOnly({
       projected,
-      durableRecords: durableRecords({ taskId: "task-1", record: record("child-thread") }),
+      records: loadedRecords({ taskId: "task-1", record: record("child-thread") }),
     });
     const workflowAssociation = { kind: "workflow", taskId: "task-1", role: "build" } as const;
 
@@ -257,8 +257,8 @@ describe("agent session workflow record overlay", () => {
     ]);
   });
 
-  test("overlays one mixed snapshot with workflow, repository, and unbound sessions", () => {
-    const sessions = projectAndOverlay({
+  test("applies workflow records onto one mixed snapshot with workflow, repository, and unbound sessions", () => {
+    const sessions = projectAndApplyRecords({
       snapshots: [
         snapshot("live-workflow-thread", {
           sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
@@ -266,7 +266,7 @@ describe("agent session workflow record overlay", () => {
         snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
-      durableRecords: durableRecords(
+      records: loadedRecords(
         { taskId: "task-1", record: record("live-workflow-thread") },
         { taskId: "task-2", record: record("historical-thread", { role: "planner" }) },
       ),
@@ -291,17 +291,17 @@ describe("agent session workflow record overlay", () => {
   });
 
   test("a task refresh cannot remove repository or unbound sessions", () => {
-    const composed = projectAndOverlay({
+    const composed = projectAndApplyRecords({
       snapshots: [
         snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
-      durableRecords: durableRecords(),
+      records: loadedRecords(),
     });
 
-    const refreshed = overlayOnly({
+    const refreshed = applyRecordsOnly({
       projected: composed,
-      durableRecords: durableRecords({ taskId: "task-1", record: record("other-thread") }),
+      records: loadedRecords({ taskId: "task-1", record: record("other-thread") }),
     });
 
     expect(getAgentSession(refreshed, identity("repository-thread"))).not.toBeNull();
@@ -309,18 +309,18 @@ describe("agent session workflow record overlay", () => {
   });
 
   test("a loaded workflow record that disappears removes only the matching historical projection", () => {
-    const composed = projectAndOverlay({
+    const composed = projectAndApplyRecords({
       snapshots: [],
-      durableRecords: durableRecords(
+      records: loadedRecords(
         { taskId: "task-1", record: record("gone-thread") },
         { taskId: "task-2", record: record("kept-thread", { role: "qa" }) },
       ),
     });
     expect(getAgentSession(composed, identity("gone-thread"))).not.toBeNull();
 
-    const refreshed = overlayOnly({
+    const refreshed = applyRecordsOnly({
       projected: composed,
-      durableRecords: {
+      records: {
         loadedTaskIds: new Set(["task-1", "task-2"]),
         records: [{ taskId: "task-2", record: record("kept-thread", { role: "qa" }) }],
       },
@@ -335,20 +335,20 @@ describe("agent session workflow record overlay", () => {
   });
 
   test("an unloaded or failed task-record read does not prune state", () => {
-    const composed = projectAndOverlay({
+    const composed = projectAndApplyRecords({
       snapshots: [
         snapshot("repository-thread", { sessionAssociation: { kind: "repository" } }),
         snapshot("unbound-thread"),
       ],
-      durableRecords: durableRecords(
+      records: loadedRecords(
         { taskId: "task-1", record: record("historical-thread") },
         { taskId: "task-2", record: record("another-historical", { role: "qa" }) },
       ),
     });
 
-    const refreshedWithNoLoadedTasks = overlayOnly({
+    const refreshedWithNoLoadedTasks = applyRecordsOnly({
       projected: composed,
-      durableRecords: { loadedTaskIds: new Set(), records: [] },
+      records: { loadedTaskIds: new Set(), records: [] },
     });
 
     expect(listAgentSessions(refreshedWithNoLoadedTasks)).toHaveLength(4);
@@ -371,17 +371,15 @@ describe("agent session workflow record overlay", () => {
     });
     expect(getAgentSession(projected, identity("live-thread"))?.liveReported).toBe(true);
 
-    const afterSnapshotReconcile = applyWorkflowSessionRecordOverlay({
+    const afterSnapshotApply = applyWorkflowSessionRecords({
       projected,
-      durableRecords: durableRecords(),
+      records: loadedRecords(),
     });
-    expect(getAgentSession(afterSnapshotReconcile, identity("live-thread"))?.liveReported).toBe(
-      true,
-    );
+    expect(getAgentSession(afterSnapshotApply, identity("live-thread"))?.liveReported).toBe(true);
 
-    const afterTaskRefresh = overlayOnly({
+    const afterTaskRefresh = applyRecordsOnly({
       projected,
-      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).not.toBeNull();
   });
@@ -402,21 +400,21 @@ describe("agent session workflow record overlay", () => {
     });
     expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
 
-    const afterTaskRefresh = overlayOnly({
+    const afterTaskRefresh = applyRecordsOnly({
       projected: removed,
-      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(afterTaskRefresh, identity("live-thread"))).toBeNull();
   });
 
   test("protects a starting workflow session from record-disappearance pruning", () => {
-    const composed = projectAndOverlay({
+    const composed = projectAndApplyRecords({
       snapshots: [
         snapshot("launching-thread", {
           sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         }),
       ],
-      durableRecords: durableRecords(),
+      records: loadedRecords(),
     });
     const launching = getAgentSession(composed, identity("launching-thread"));
     if (!launching) {
@@ -424,19 +422,19 @@ describe("agent session workflow record overlay", () => {
     }
     const markedStarting = replaceAgentSession(composed, { ...launching, status: "starting" });
 
-    const refreshed = overlayOnly({
+    const refreshed = applyRecordsOnly({
       projected: markedStarting,
-      durableRecords: durableRecords(),
+      records: loadedRecords(),
     });
 
     expect(getAgentSession(refreshed, identity("launching-thread"))?.status).toBe("starting");
   });
 
   test.each(["opencode", "codex", "claude"] as const)(
-    "overlays %s workflow records with the same association rules",
+    "applies %s workflow records with the same association rules",
     (runtimeKind) => {
       const runtimeIdentity = identity(`${runtimeKind}-thread`, { runtimeKind });
-      const sessions = projectAndOverlay({
+      const sessions = projectAndApplyRecords({
         snapshots: [
           snapshot(`${runtimeKind}-thread`, {
             ref: {
@@ -448,7 +446,7 @@ describe("agent session workflow record overlay", () => {
             sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           }),
         ],
-        durableRecords: durableRecords({
+        records: loadedRecords({
           taskId: "task-1",
           record: record(`${runtimeKind}-thread`, { runtimeKind }),
         }),
@@ -463,35 +461,35 @@ describe("agent session workflow record overlay", () => {
   );
 
   test("finishes deletion when a removal follows an already-applied record disappearance", () => {
-    const withRecord = projectAndOverlay({
+    const withRecord = projectAndApplyRecords({
       snapshots: [
         snapshot("live-thread", {
           sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
         }),
       ],
-      durableRecords: durableRecords({ taskId: "task-1", record: record("live-thread") }),
+      records: loadedRecords({ taskId: "task-1", record: record("live-thread") }),
     });
 
     // A loaded task refresh proves the record disappeared while the runtime
     // still reports the session, so it stays.
-    const refreshedWhileLive = overlayOnly({
+    const refreshedWhileLive = applyRecordsOnly({
       projected: withRecord,
-      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.liveReported).toBe(true);
 
-    // The runtime withdraws live evidence; overlaying that delta against
+    // The runtime withdraws live evidence; applying that delta against
     // the already-loaded records must finish the deletion without another query.
     const removed = applyAgentSessionLiveDelta({
       current: refreshedWhileLive,
       envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
     });
     expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
-    const afterRemovalReconcile = overlayOnly({
+    const afterRemovalApply = applyRecordsOnly({
       projected: removed,
-      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
-    expect(getAgentSession(afterRemovalReconcile, identity("live-thread"))).toBeNull();
+    expect(getAgentSession(afterRemovalApply, identity("live-thread"))).toBeNull();
   });
 
   test("protects a locally launched session that has never been live-reported", () => {
@@ -513,18 +511,18 @@ describe("agent session workflow record overlay", () => {
     } as const satisfies AgentSessionState;
     const projected = replaceAgentSession(emptyAgentSessionCollection(), launched);
 
-    // Any unrelated delta overlays loaded records; the launch's durable
-    // record has not landed yet and no runtime report arrived, so nothing
+    // Any unrelated delta applies loaded records; the launch has not
+    // landed a record yet and no runtime report arrived, so nothing
     // proves deletion.
-    const refreshed = overlayOnly({
+    const refreshed = applyRecordsOnly({
       projected,
-      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+      records: { loadedTaskIds: new Set(["task-1"]), records: [] },
     });
     expect(getAgentSession(refreshed, identity("launching-thread"))).not.toBeNull();
   });
 
-  test("keeps a snapshot-backed owner and its mirrors when its durable record moves away", () => {
-    const composed = projectAndOverlay({
+  test("keeps a snapshot-backed owner and its mirrors when its record moves away", () => {
+    const composed = projectAndApplyRecords({
       snapshots: [
         snapshot("root-thread"),
         snapshot("owner-thread", {
@@ -538,13 +536,13 @@ describe("agent session workflow record overlay", () => {
           ],
         }),
       ],
-      durableRecords: durableRecords({ taskId: "task-1", record: record("owner-thread") }),
+      records: loadedRecords({ taskId: "task-1", record: record("owner-thread") }),
     });
     expect(getAgentSession(composed, identity("root-thread"))?.pendingApprovals).toHaveLength(1);
 
-    const refreshed = overlayOnly({
+    const refreshed = applyRecordsOnly({
       projected: composed,
-      durableRecords: durableRecords({ taskId: "task-2", record: record("other-thread") }),
+      records: loadedRecords({ taskId: "task-2", record: record("other-thread") }),
     });
 
     expect(getAgentSession(refreshed, identity("owner-thread"))).not.toBeNull();

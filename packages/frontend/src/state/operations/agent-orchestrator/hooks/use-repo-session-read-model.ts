@@ -31,15 +31,15 @@ import {
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
 import {
-  applyWorkflowSessionRecordOverlay,
-  type DurableWorkflowSessionRecords,
-} from "../session-read-model/agent-session-workflow-overlay";
+  applyWorkflowSessionRecords,
+  type LoadedWorkflowSessionRecords,
+} from "../session-read-model/agent-session-workflow-records";
 import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
 import {
-  toDurableWorkflowSessionRecords,
+  toLoadedWorkflowSessionRecords,
   type TaskSessionRecords,
 } from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
@@ -180,9 +180,9 @@ export const useRepoSessionReadModel = ({
     (repoPath: string, records: TaskSessionRecords): boolean => {
       try {
         commitSessionCollection((current) => ({
-          collection: applyWorkflowSessionRecordOverlay({
+          collection: applyWorkflowSessionRecords({
             projected: current,
-            durableRecords: toDurableWorkflowSessionRecords(records),
+            records: toLoadedWorkflowSessionRecords(records),
           }),
           result: undefined,
         }));
@@ -455,7 +455,7 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let awaitingInitialSnapshot = true;
-    const readLoadedDurableRecords = (): DurableWorkflowSessionRecords | null => {
+    const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
       const current = taskRecordApplyRef.current;
       if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
         return null;
@@ -466,15 +466,17 @@ export const useRepoSessionReadModel = ({
       if (appliedTaskIdsKey !== readCurrentTaskIdsKey()) {
         return null;
       }
-      return toDurableWorkflowSessionRecords(current.records);
+      return toLoadedWorkflowSessionRecords(current.records);
     };
-    // Every stream commit projects the runtime first, then overlays loaded
-    // records. An unloaded, failed, or stale record read never proves
-    // deletion, so the overlay runs only on loaded records.
-    const overlayLoadedRecords = (projected: AgentSessionCollection): AgentSessionCollection => {
-      const durableRecords = readLoadedDurableRecords();
-      return durableRecords
-        ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
+    // Every stream commit projects the runtime first, then applies loaded
+    // workflow session records. An unloaded, failed, or stale record read
+    // never proves deletion, so records apply only when loaded.
+    const applyLoadedWorkflowRecords = (
+      projected: AgentSessionCollection,
+    ): AgentSessionCollection => {
+      const workflowRecords = readLoadedWorkflowRecords();
+      return workflowRecords
+        ? applyWorkflowSessionRecords({ projected, records: workflowRecords })
         : projected;
     };
     const isStaleRepoOperation = (): boolean =>
@@ -517,7 +519,7 @@ export const useRepoSessionReadModel = ({
     ): void => {
       const policyActions = commitSessionCollection((current) => {
         // This is the sole live-snapshot-to-session-store write path.
-        const collection = overlayLoadedRecords(
+        const collection = applyLoadedWorkflowRecords(
           buildAgentSessionLiveCollection({
             current,
             snapshots: envelope.sessions,
@@ -577,7 +579,7 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
         const policyActions = commitSessionCollection((current) => {
-          const collection = overlayLoadedRecords(
+          const collection = applyLoadedWorkflowRecords(
             applyAgentSessionLiveDelta({
               current,
               envelope,

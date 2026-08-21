@@ -1,4 +1,4 @@
-export type AgentSessionReadModelFailureSource = "task-records" | "observation";
+export type AgentSessionReadModelFailureSource = "task-records" | "live-stream";
 
 export type AgentSessionReadModelLoadState =
   | { kind: "unavailable" }
@@ -34,7 +34,7 @@ export const readyAgentSessionReadModelLoadState = (
 export const failedAgentSessionReadModelLoadState = (
   workspaceRepoPath: string,
   message: string,
-  source: AgentSessionReadModelFailureSource = "observation",
+  source: AgentSessionReadModelFailureSource = "live-stream",
 ): AgentSessionReadModelLoadState => ({
   kind: "failed",
   workspaceRepoPath,
