@@ -156,10 +156,7 @@ test("keeps session observation alive across OpenCode server heartbeats", async 
     type: "server.heartbeat",
     properties: {},
   } as unknown as TestGlobalEventPayload;
-  const emitted = await runEventStream([
-    heartbeat,
-    sessionStatusEvent({ type: "busy" }),
-  ]);
+  const emitted = await runEventStream([heartbeat, sessionStatusEvent({ type: "busy" })]);
 
   expect(emitted).toEqual([
     expect.objectContaining({

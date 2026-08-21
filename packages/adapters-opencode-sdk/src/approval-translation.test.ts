@@ -55,5 +55,4 @@ describe("OpenCode approval translation", () => {
       },
     });
   });
-
 });
