@@ -138,7 +138,7 @@ describe("session-launch-executor", () => {
     const result = await harness.execute({ launch });
 
     expect(result.sessionAssociation).toEqual({ kind: "repository" });
-    expect(result.identity).toMatchObject({
+    expect(result.summary).toMatchObject({
       externalSessionId: "started-1",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo",
@@ -202,9 +202,52 @@ describe("session-launch-executor", () => {
       externalSessionId: "existing-session",
       model: launch.selectedModel,
     });
-    expect(result.identity.externalSessionId).toBe("existing-session");
+    expect(result.summary.externalSessionId).toBe("existing-session");
     expect(harness.calls.replaceSession[0]?.externalSessionId).toBe("existing-session");
     expect(harness.calls.loadSessionHistory).toHaveLength(0);
+  });
+
+  test("resumes a workflow-associated session with the exact association forwarded", async () => {
+    const harness = createExecutorHarness();
+    const claudeModel = {
+      runtimeKind: "claude" as const,
+      providerId: "anthropic",
+      modelId: "claude-opus-4",
+      variant: "thinking",
+      profileId: "planner-profile",
+    };
+    const launch: PreparedSessionLaunch = {
+      mode: "resume",
+      repoPath: REPO_PATH,
+      runtimeKind: "claude",
+      workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      externalSessionId: "workflow-resume-target",
+      systemPrompt: "Workflow resume prompt",
+      selectedModel: claudeModel,
+    };
+
+    const result = await harness.execute({ launch });
+
+    expect(harness.calls.resumeSession[0]?.[0]).toMatchObject({
+      repoPath: REPO_PATH,
+      runtimeKind: "claude",
+      workingDirectory: "/tmp/repo/worktree",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
+      externalSessionId: "workflow-resume-target",
+      systemPrompt: "Workflow resume prompt",
+      model: claudeModel,
+    });
+    expect(result.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "planner",
+    });
+    expect(harness.calls.replaceSession[0]?.sessionAssociation).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "planner",
+    });
   });
 
   test("forks with parent identity, prefetches child history, and seeds transcript messages", async () => {
@@ -231,7 +274,42 @@ describe("session-launch-executor", () => {
       parentExternalSessionId: "parent-session",
     });
     expect(harness.calls.loadSessionHistory).toHaveLength(1);
-    expect(result.identity.externalSessionId).toBe("forked-1");
+    expect(result.summary.externalSessionId).toBe("forked-1");
+  });
+
+  test("forks a repository-associated session through the same executor path", async () => {
+    const harness = createExecutorHarness();
+    const launch: PreparedSessionLaunch = {
+      mode: "fork",
+      repoPath: REPO_PATH,
+      runtimeKind: "claude",
+      workingDirectory: "/tmp/repo/worktree",
+      sessionAssociation: { kind: "repository" },
+      systemPrompt: "Repository fork prompt",
+      parentExternalSessionId: "repo-parent",
+      selectedModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "claude-opus-4",
+        variant: "thinking",
+        profileId: "build-profile",
+      },
+    };
+
+    const result = await harness.execute({ launch });
+
+    expect(harness.calls.forkSession[0]?.[0]).toMatchObject({
+      repoPath: REPO_PATH,
+      runtimeKind: "claude",
+      workingDirectory: "/tmp/repo/worktree",
+      sessionScope: { kind: "repository" },
+      systemPrompt: "Repository fork prompt",
+      parentExternalSessionId: "repo-parent",
+      model: launch.selectedModel,
+    });
+    expect(result.sessionAssociation).toEqual({ kind: "repository" });
+    expect(harness.calls.replaceSession[0]?.sessionAssociation).toEqual({ kind: "repository" });
+    expect(harness.calls.loadSessionHistory).toHaveLength(1);
   });
 
   test("preserves Claude model profileId and variant into runtime call and local state", async () => {

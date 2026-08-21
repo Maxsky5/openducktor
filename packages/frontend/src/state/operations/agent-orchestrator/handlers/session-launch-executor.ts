@@ -55,7 +55,6 @@ export type ExecutePreparedSessionLaunchInput = {
 
 export type PreparedSessionLaunchResult = {
   summary: AgentSessionSummary;
-  identity: AgentSessionIdentity;
   sessionAssociation: PreparedSessionLaunch["sessionAssociation"];
 };
 
@@ -315,7 +314,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
           identity,
         });
       }
-      throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
       initialMessages = buildForkInitialMessages(launch, summary, forkHistory);
     }
 
@@ -348,7 +346,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
 
     return {
       summary,
-      identity,
       sessionAssociation: launch.sessionAssociation,
     };
   };

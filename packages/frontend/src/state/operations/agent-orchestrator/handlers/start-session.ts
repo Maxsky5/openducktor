@@ -1,4 +1,4 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireWorkspaceRepoPath } from "../support/session-invariants";
@@ -142,7 +142,7 @@ export const createStartAgentSession = ({
             });
           },
         });
-        return result.identity;
+        return toAgentSessionIdentity(result.summary);
       } catch (cause) {
         if (commitStarted || !prepared.bootstrap) {
           throw cause;
