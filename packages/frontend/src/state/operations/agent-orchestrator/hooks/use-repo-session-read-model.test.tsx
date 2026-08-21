@@ -355,6 +355,48 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("finishes deletion when the runtime removes a session whose record already disappeared", async () => {
+    const historical = { ...record, externalSessionId: "hist-thread", role: "planner" as const };
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [record, historical],
+    );
+    const historicalIdentity = {
+      externalSessionId: historical.externalSessionId,
+      runtimeKind: historical.runtimeKind,
+      workingDirectory: historical.workingDirectory,
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).not.toBeNull();
+
+      // A loaded task refresh empties the durable list: the historical row is
+      // pruned immediately (proof the refresh applied) while the live session stays.
+      await state.harness.run(() => {
+        state.queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), []);
+      });
+      await state.harness.waitFor(() => state.getStoredSession(historicalIdentity) === null);
+      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()?.liveReported).toBe(true);
+
+      // The runtime withdraws live evidence; no further query update is needed.
+      await state.harness.run(() => {
+        state.emit({ type: "session_removed", ref: snapshot().ref });
+      });
+      await state.harness.waitFor(() => state.getSession() === null);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({

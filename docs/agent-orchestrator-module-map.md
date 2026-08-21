@@ -903,7 +903,9 @@ carries live reportage. Live reportage is a field on the projected session
 state, committed atomically by live snapshot and delta projection, so task
 refreshes read the same single source of truth without a presence store.
 `useRepoSessionReadModel` composes live projection, then the overlay, then
-commits one collection without a second frontend cache.
+commits one collection for snapshots, ordered deltas, and task refreshes
+alike; deltas skip the overlay only while the latest task-record read is
+unloaded or failed, because failure is never deletion proof.
 
 ## Startup Flow
 

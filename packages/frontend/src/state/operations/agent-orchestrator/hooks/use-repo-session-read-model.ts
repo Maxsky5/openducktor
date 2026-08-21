@@ -29,7 +29,10 @@ import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
-import { applyWorkflowSessionRecordOverlay } from "../session-read-model/agent-session-workflow-overlay";
+import {
+  applyWorkflowSessionRecordOverlay,
+  type DurableWorkflowSessionRecords,
+} from "../session-read-model/agent-session-workflow-overlay";
 import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
@@ -433,6 +436,13 @@ export const useRepoSessionReadModel = ({
       }
       return current.records;
     };
+    const readLoadedDurableRecords = (): DurableWorkflowSessionRecords | null => {
+      const current = taskRecordApplyRef.current;
+      if (!current || current.repoPath !== repoPath || current.kind !== "ready") {
+        return null;
+      }
+      return toDurableWorkflowSessionRecords(current.records);
+    };
     const isStaleRepoOperation = (): boolean =>
       cancelled || isRepoStale() || readReloadGeneration() !== effectReloadGeneration;
     const failObservation = (message: string): void => {
@@ -474,13 +484,12 @@ export const useRepoSessionReadModel = ({
       const policyActions = commitSessionCollection((current) => {
         // This is the sole live-snapshot-to-session-store write path:
         // project the runtime stream first, then reconcile durable workflow records.
-        const taskSessionRecords = readTaskSessionRecords();
         const collection = applyWorkflowSessionRecordOverlay({
           projected: buildAgentSessionLiveCollection({
             current,
             snapshots: envelope.sessions,
           }),
-          durableRecords: toDurableWorkflowSessionRecords(taskSessionRecords),
+          durableRecords: toDurableWorkflowSessionRecords(readTaskSessionRecords()),
         });
         return {
           collection,
@@ -523,10 +532,17 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
         const policyActions = commitSessionCollection((current) => {
-          const collection = applyAgentSessionLiveDelta({
+          // Ordered deltas publish through the same project-then-overlay
+          // composition; an unloaded or failed record read never becomes
+          // deletion proof, so the overlay only runs on loaded records.
+          const projected = applyAgentSessionLiveDelta({
             current,
             envelope,
           });
+          const durableRecords = readLoadedDurableRecords();
+          const collection = durableRecords
+            ? applyWorkflowSessionRecordOverlay({ projected, durableRecords })
+            : projected;
           return {
             collection,
             result: collectPendingApprovalPolicyActions({

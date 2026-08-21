@@ -458,6 +458,38 @@ describe("agent session workflow record overlay", () => {
     },
   );
 
+  test("finishes deletion when a removal follows an already-applied record disappearance", () => {
+    const withRecord = projectAndOverlay({
+      snapshots: [
+        snapshot("live-thread", {
+          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ],
+      durableRecords: durableRecords({ taskId: "task-1", record: record("live-thread") }),
+    });
+
+    // A loaded task refresh proves the record disappeared while the runtime
+    // still reports the session, so it stays.
+    const refreshedWhileLive = overlayOnly({
+      projected: withRecord,
+      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+    });
+    expect(getAgentSession(refreshedWhileLive, identity("live-thread"))?.liveReported).toBe(true);
+
+    // The runtime withdraws live evidence; reconciling that delta against the
+    // already-loaded records must finish the deletion without another query.
+    const removed = applyAgentSessionLiveDelta({
+      current: refreshedWhileLive,
+      envelope: { type: "session_removed", ref: snapshot("live-thread").ref },
+    });
+    expect(getAgentSession(removed, identity("live-thread"))?.liveReported).toBe(false);
+    const afterRemovalReconcile = overlayOnly({
+      projected: removed,
+      durableRecords: { loadedTaskIds: new Set(["task-1"]), records: [] },
+    });
+    expect(getAgentSession(afterRemovalReconcile, identity("live-thread"))).toBeNull();
+  });
+
   test("keeps a snapshot-backed owner and its mirrors when its durable record moves away", () => {
     const composed = projectAndOverlay({
       snapshots: [
