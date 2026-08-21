@@ -719,6 +719,59 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(abortCalls).toBe(0);
   });
 
+  test("keeps worktree resources un-aborted when registration cleanup cannot stop the runtime", async () => {
+    const sessionsRef = { current: emptyAgentSessionCollection() };
+    const deletedSessionIds: string[] = [];
+    let abortCalls = 0;
+    const adapter = new OpencodeSdkAdapter();
+    adapter.startSession = async (input) => ({
+      runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
+      externalSessionId: "external-registration-stop-fail",
+      sessionAssociation: input.sessionScope,
+      status: "running",
+      startedAt: "2026-02-22T08:00:00.000Z",
+    });
+    adapter.stopSession = async () => {
+      throw new Error("runtime unavailable");
+    };
+
+    const { start } = createStartSessionTestHarness({
+      adapter,
+      sessionsRef,
+      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
+      ensureRuntime: async () => ({
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        bootstrap: {
+          complete: async () => {},
+          abort: async () => {
+            abortCalls += 1;
+          },
+        },
+      }),
+      replaceSession: () => {
+        throw new Error("registration failed");
+      },
+      deleteSessionRecord: async (_taskId, identity) => {
+        deletedSessionIds.push(identity.externalSessionId);
+      },
+    });
+
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "planner",
+        startMode: "fresh",
+        selectedModel: PLANNER_SELECTION,
+      }),
+    ).rejects.toThrow(
+      'Failed to register started session "external-registration-stop-fail": registration failed. Failed to roll back the started session after the registration failure: runtime unavailable',
+    );
+    expect(abortCalls).toBe(0);
+    expect(deletedSessionIds).toEqual([]);
+  });
+
   test("preserves fresh bootstrap resources when stale-session cleanup cannot stop the runtime", async () => {
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };

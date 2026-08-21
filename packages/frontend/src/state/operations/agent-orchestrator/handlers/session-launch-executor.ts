@@ -20,7 +20,16 @@ import type { PreparedSessionLaunch } from "./prepared-session-launch";
 import { SessionLaunchStopError } from "./session-launch-errors";
 import { STALE_START_ERROR } from "./start-session-constants";
 
+// Match the requested-history loading cap so newly forked child sessions load
+// enough history to render immediately without pulling an unbounded transcript.
 const FORK_START_HISTORY_LIMIT = 600;
+
+type LaunchedSessionStopTags = { repoPath: string; externalSessionId: string };
+
+const launchedSessionStopTags = (
+  repoPath: string,
+  identity: AgentSessionIdentity,
+): LaunchedSessionStopTags => ({ repoPath, externalSessionId: identity.externalSessionId });
 
 export type SessionLaunchExecutorDependencies = {
   adapter: AgentEnginePort;
@@ -142,7 +151,11 @@ const stopAfterFailedForkHistoryLoad = async ({
 }): Promise<never> => {
   const messagePrefix = `Failed to initialize started session "${identity.externalSessionId}": ${errorMessage(error)}.`;
   try {
-    await stopLaunchedSession({ adapter, repoPath, identity });
+    await runOrchestratorTask(
+      "start-session-stop-after-fork-history-load-failure",
+      () => stopLaunchedSession({ adapter, repoPath, identity }),
+      { tags: launchedSessionStopTags(repoPath, identity) },
+    );
   } catch (stopError) {
     throw new SessionLaunchStopError(
       `${messagePrefix} Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
@@ -170,8 +183,10 @@ const rollbackFailedRegistration = async ({
 }): Promise<never> => {
   const messagePrefix = `Failed to register started session "${identity.externalSessionId}": ${errorMessage(cause)}.`;
   try {
-    await runOrchestratorTask("session-launch-stop-after-registration-failure", () =>
-      stopLaunchedSession({ adapter, repoPath, identity }),
+    await runOrchestratorTask(
+      "session-launch-stop-after-registration-failure",
+      () => stopLaunchedSession({ adapter, repoPath, identity }),
+      { tags: launchedSessionStopTags(repoPath, identity) },
     );
     removeSession(identity);
   } catch (cleanupError) {
@@ -198,7 +213,9 @@ const stopLaunchedSessionOnStaleAndThrow = async ({
   identity: AgentSessionIdentity;
 }): Promise<never> => {
   try {
-    await runOrchestratorTask(reason, () => stopLaunchedSession({ adapter, repoPath, identity }));
+    await runOrchestratorTask(reason, () => stopLaunchedSession({ adapter, repoPath, identity }), {
+      tags: launchedSessionStopTags(repoPath, identity),
+    });
   } catch (error) {
     throw new SessionLaunchStopError(
       `${STALE_START_ERROR} Failed to stop stale started session '${identity.externalSessionId}': ${errorMessage(error)}`,
@@ -218,7 +235,7 @@ const loadForkInitialMessages = async ({
   summary: AgentSessionSummary;
   identity: AgentSessionIdentity;
   deps: SessionLaunchExecutorDependencies;
-}): ReturnType<AgentEnginePort["loadSessionHistory"]> => {
+}): Promise<AgentSessionHistoryMessage[]> => {
   const runtimePolicy = await resolveAgentSessionRuntimePolicy({
     runtimeKind: summary.runtimeKind,
     sessionScope: launch.sessionAssociation,
@@ -237,7 +254,7 @@ const loadForkInitialMessages = async ({
 const buildForkInitialMessages = (
   launch: Extract<PreparedSessionLaunch, { mode: "fork" }>,
   summary: AgentSessionSummary,
-  forkHistory: Awaited<ReturnType<AgentEnginePort["loadSessionHistory"]>>,
+  forkHistory: AgentSessionHistoryMessage[],
 ): AgentSessionState["messages"] =>
   createSessionMessagesState(summary.externalSessionId, [
     ...buildSessionHeaderMessages({
@@ -316,7 +333,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
       });
     }
     if (isStaleOperation()) {
-      deps.removeSession(sessionState);
+      deps.removeSession(identity);
       await stopLaunchedSessionOnStaleAndThrow({
         reason: "start-session-stop-on-stale-after-local-registration",
         adapter: deps.adapter,

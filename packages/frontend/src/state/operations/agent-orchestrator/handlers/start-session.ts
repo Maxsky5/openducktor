@@ -115,8 +115,7 @@ export const createStartAgentSession = ({
         model,
       };
       if (input.startMode === "reuse") {
-        const reused = await executeReuseStart({ ctx: startCtx, input, deps });
-        return reused.session;
+        return executeReuseStart({ ctx: startCtx, input, deps });
       }
 
       const prepared =

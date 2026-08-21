@@ -98,7 +98,7 @@ export const executeReuseStart = async ({
   ctx,
   input,
   deps,
-}: ReuseStrategyInput): Promise<{ kind: "reused"; session: AgentSessionIdentity }> => {
+}: ReuseStrategyInput): Promise<AgentSessionIdentity> => {
   if (ctx.role === "qa") {
     resolveStartTask({ ctx, task: deps.task });
   }
@@ -109,8 +109,5 @@ export const executeReuseStart = async ({
     sourceSession: input.sourceSession,
   });
 
-  return {
-    kind: "reused",
-    session: toAgentSessionIdentity(loadedSession),
-  };
+  return toAgentSessionIdentity(loadedSession);
 };

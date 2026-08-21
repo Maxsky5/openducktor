@@ -287,7 +287,7 @@ describe("session-launch-executor", () => {
     expect(result.sessionAssociation).toEqual({ kind: "repository" });
   });
 
-  test("throws before any runtime or local side effect when the caller context is stale", async () => {
+  test("throws before any runtime or local side effect when the workspace repo path changed", async () => {
     const harness = createExecutorHarness();
     harness.currentWorkspaceRepoPathRef.current = "/tmp/other";
 
@@ -468,7 +468,7 @@ describe("session-launch-executor", () => {
     expect(listAgentSessions(harness.sessionsRef.current)).toHaveLength(1);
   });
 
-  test("does not read tasks, leases, worktrees, or task queries for any launch mode", async () => {
+  test("dispatches each launch mode through the matching runtime call", async () => {
     const harness = createExecutorHarness();
 
     await harness.execute({ launch: repositoryStartLaunch() });
