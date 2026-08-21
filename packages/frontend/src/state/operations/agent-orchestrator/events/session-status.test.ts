@@ -50,6 +50,47 @@ const safetyBufferingStatus = {
 };
 
 describe("agent-orchestrator session status", () => {
+  test("settles accepted no-output turns after runtime status confirms activity", async () => {
+    const runtimeStatuses = [
+      { type: "busy" as const, message: null },
+      {
+        type: "retry" as const,
+        attempt: 1,
+        message: "Retrying request",
+        nextEpochMs: 1,
+      },
+    ];
+
+    for (const status of runtimeStatuses) {
+      const { handleEvent, sessionsRef } = await observeSession(
+        buildSession({ status: "running", pendingUserMessageStartedAt: 123 }),
+      );
+      handleEvent({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "idle" },
+        timestamp: "2026-07-10T10:00:00.000Z",
+      });
+      expect(getSession(sessionsRef).status).toBe("running");
+
+      handleEvent({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status,
+        timestamp: "2026-07-10T10:00:01.000Z",
+      });
+      expect(getSession(sessionsRef).pendingUserMessageStartedAt).toBeUndefined();
+
+      handleEvent({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "idle" },
+        timestamp: "2026-07-10T10:00:02.000Z",
+      });
+      expect(getSession(sessionsRef).status).toBe("idle");
+    }
+  });
+
   test("treats session_started as status only for every prior interaction status", async () => {
     const statuses = ["starting", "running", "idle", "stopped", "error"] as const;
 

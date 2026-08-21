@@ -53,7 +53,7 @@ const assertUnhandledQueuedSessionEvent = (event: never): never => {
   throw new Error(`Unhandled queued session event '${JSON.stringify(event)}'.`);
 };
 
-const queuedSessionEventKey = (event: QueuedSessionEvent): string => {
+const queuedSessionEventKey = (event: QueuedSessionEvent, eventIndex: number): string => {
   switch (event.type) {
     case "session_started":
       return "session_started";
@@ -64,7 +64,7 @@ const queuedSessionEventKey = (event: QueuedSessionEvent): string => {
     case "assistant_message":
       return `assistant_message:${event.messageId}`;
     case "session_status":
-      return "session_status";
+      return `session_status:${eventIndex}`;
     case "session_todos_updated":
       return "session_todos_updated";
     default:
@@ -169,7 +169,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
 ): QueuedSessionEventEntry<Item>[] => {
   const entries: QueuedSessionEventEntry<Item>[] = [];
 
-  for (const item of events) {
+  for (const [eventIndex, item] of events.entries()) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const candidate = entries[index]?.item;
       if (candidate && shouldDropQueuedCandidate(item, candidate)) {
@@ -177,7 +177,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
       }
     }
 
-    const key = `${item.routeKey}:${queuedSessionEventKey(item.event)}`;
+    const key = `${item.routeKey}:${queuedSessionEventKey(item.event, eventIndex)}`;
     const existingIndex = entries.findIndex((entry) => entry.key === key);
     if (existingIndex === -1) {
       entries.push({ key, item });

@@ -305,6 +305,40 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("keeps the startup snapshot available after an OpenCode heartbeat", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    let resolveObservation: (outcome: "fault" | "status") => void = () => undefined;
+    const observation = new Promise<"fault" | "status">((resolve) => {
+      resolveObservation = resolve;
+    });
+    await prepared.startForwarding((signal) => {
+      if (signal.type === "fault") {
+        resolveObservation("fault");
+      }
+      if (signal.type === "transcript_event" && signal.event.type === "session_status") {
+        resolveObservation("status");
+      }
+    });
+
+    harness.emit({
+      id: "event-heartbeat-1",
+      type: "server.heartbeat",
+      properties: {},
+    } as unknown as Event);
+    harness.emit({
+      type: "session.status",
+      properties: {
+        sessionID: "session-1",
+        status: { type: "busy" },
+      },
+    } as Event);
+
+    expect(await observation).toBe("status");
+    expect(await prepared.connection.readSessionSources()).toHaveLength(1);
+    await prepared.release();
+  });
+
   test("preserves a retained repository association when runtime sources refresh", async () => {
     const harness = createLiveClientHarness();
     const prepared = await createPrepareRuntime(harness)(runtimeInput);
@@ -652,6 +686,87 @@ describe("OpenCode session runtime connection", () => {
         },
       }),
     });
+    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
+    await prepared.release();
+  });
+
+  test("does not invalidate sessions after an authoritative session error", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+
+    await harness.emitAndWait({
+      type: "session.error",
+      properties: {
+        sessionID: "session-1",
+        error: { data: { message: "Provider failed" } },
+      },
+    } as unknown as Event);
+
+    expect(signals).toContainEqual({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: expect.objectContaining({ type: "session_error", message: "Provider failed" }),
+    });
+    expect(signals.some((signal) => signal.type === "sessions_invalidated")).toBe(false);
+    await prepared.release();
+  });
+
+  test("forwards runtime-start evidence before a stop-only turn becomes idle", async () => {
+    const harness = createLiveClientHarness();
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const transcriptEventTypes: string[] = [];
+    const sessionStatuses: string[] = [];
+    await prepared.startForwarding((signal) => {
+      if (signal.type !== "transcript_event") {
+        return;
+      }
+      transcriptEventTypes.push(signal.event.type);
+      if (signal.event.type === "session_status") {
+        sessionStatuses.push(signal.event.status.type);
+      }
+    });
+
+    await prepared.connection.sendUserMessage({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+      sessionScope: { kind: "repository" },
+      parts: [{ kind: "text", text: "Do the work" }],
+    });
+    await harness.emitAndWait({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "assistant-stop-only",
+          sessionID: "session-1",
+          role: "assistant",
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "assistant-stop-only-step",
+            sessionID: "session-1",
+            messageID: "assistant-stop-only",
+            type: "step-finish",
+            reason: "stop",
+          },
+        ],
+      },
+    } as unknown as Event);
+    await harness.emitAndWait({
+      type: "session.idle",
+      properties: { sessionID: "session-1" },
+    } as Event);
+
+    expect(sessionStatuses).toEqual(["busy"]);
+    expect(transcriptEventTypes).toContain("session_idle");
+    expect(transcriptEventTypes).not.toContain("assistant_message");
     await prepared.release();
   });
 

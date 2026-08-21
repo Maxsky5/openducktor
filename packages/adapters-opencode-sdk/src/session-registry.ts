@@ -5,11 +5,14 @@ import {
   assertGlobalEventSupport,
   isRelevantSubscriberEvent,
   logStreamEvent,
+  type OpencodeGlobalEventFailureScope,
   processOpencodeEvent,
   subscribeGlobalEvents,
 } from "./event-stream";
 import {
   readEventParentExternalSessionId,
+  readEventDirectory,
+  readEventSessionId,
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
@@ -20,6 +23,7 @@ import type {
   SessionInput,
   SessionRecord,
 } from "./types";
+import { cancelPendingUserMessageAdmissions } from "./user-message-admission";
 
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
@@ -114,6 +118,54 @@ const abortRuntimeEventTransport = (eventTransport: RuntimeEventTransportRecord)
   eventTransport.controller.abort();
 };
 
+const toRuntimeEventFailure = (error: unknown): Error =>
+  error instanceof Error ? error : new Error("OpenCode runtime event projection failed.");
+
+const reportRuntimeEventFailure = (input: {
+  eventTransport: RuntimeEventTransportRecord;
+  scope: OpencodeGlobalEventFailureScope;
+  error: unknown;
+  now: () => string;
+  emit: (sessionId: string, event: AgentEvent) => void;
+}): void => {
+  const failure = toRuntimeEventFailure(input.error);
+  const externalSessionId = input.scope.externalSessionId;
+  const parentExternalSessionId =
+    input.scope.parentExternalSessionId ??
+    (externalSessionId
+      ? input.eventTransport.parentExternalSessionIdByChildExternalSessionId.get(externalSessionId)
+      : undefined);
+  let subscriberId: string | undefined;
+  if (externalSessionId && input.eventTransport.subscribers.has(externalSessionId)) {
+    subscriberId = externalSessionId;
+  } else if (
+    parentExternalSessionId &&
+    input.eventTransport.subscribers.has(parentExternalSessionId)
+  ) {
+    subscriberId = parentExternalSessionId;
+  }
+
+  if (!subscriberId) {
+    const directory = input.scope.directory.trim();
+    const directoryMatches = [...input.eventTransport.subscribers.values()].filter(
+      (subscriber) => subscriber.input.workingDirectory.trim() === directory,
+    );
+    if (directoryMatches.length === 1 && directoryMatches[0]) {
+      subscriberId = directoryMatches[0].externalSessionId;
+    }
+  }
+
+  if (!subscriberId) {
+    throw failure;
+  }
+  input.emit(subscriberId, {
+    type: "session_error",
+    externalSessionId: subscriberId,
+    timestamp: input.now(),
+    message: failure.message,
+  });
+};
+
 const ensureRuntimeEventTransport = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
@@ -151,36 +203,66 @@ const ensureRuntimeEventTransport = (input: {
     runtimeEndpoint: input.runtimeEndpoint,
     controller,
     dispatch: async (event) => {
-      processRuntimeSessionLineage(streamRecord, event);
-      for (const subscriber of streamRecord.subscribers.values()) {
-        const relevant = isRelevantSubscriberEvent(subscriber, event, {
-          resolveParentExternalSessionId: (childExternalSessionId) =>
-            streamRecord.parentExternalSessionIdByChildExternalSessionId.get(
-              childExternalSessionId,
-            ),
-        });
-        logStreamEvent({
-          subscriber,
-          event,
-          relevant,
-          ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-        });
-        if (!relevant) {
-          continue;
-        }
-        processOpencodeEvent({
-          context: {
-            externalSessionId: subscriber.externalSessionId,
-            input: subscriber.input,
-          },
-          event,
+      const properties = "properties" in event ? event.properties : undefined;
+      const externalSessionId = readEventSessionId(event);
+      const parentExternalSessionId = readEventParentExternalSessionId(properties);
+      const scope: OpencodeGlobalEventFailureScope = {
+        directory: readEventDirectory(event) ?? "",
+        ...(externalSessionId ? { externalSessionId } : {}),
+        ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+      };
+      try {
+        processRuntimeSessionLineage(streamRecord, event);
+      } catch (error) {
+        reportRuntimeEventFailure({
+          eventTransport: streamRecord,
+          scope,
+          error,
           now: input.now,
           emit: input.emit,
-          getSession: (sessionId) => input.sessions.get(sessionId),
-          resolveSubagentSessionLink: (childExternalSessionId) =>
-            resolveSubagentSessionLink(input.sessions, childExternalSessionId),
         });
+        return false;
       }
+      let projectionFailed = false;
+      for (const subscriber of streamRecord.subscribers.values()) {
+        try {
+          const relevant = isRelevantSubscriberEvent(subscriber, event, {
+            resolveParentExternalSessionId: (childExternalSessionId) =>
+              streamRecord.parentExternalSessionIdByChildExternalSessionId.get(
+                childExternalSessionId,
+              ),
+          });
+          logStreamEvent({
+            subscriber,
+            event,
+            relevant,
+            ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+          });
+          if (!relevant) {
+            continue;
+          }
+          processOpencodeEvent({
+            externalSessionId: subscriber.externalSessionId,
+            input: subscriber.input,
+            session: input.sessions.get(subscriber.externalSessionId),
+            event,
+            now: input.now,
+            emit: input.emit,
+            resolveSubagentSessionLink: (childExternalSessionId) =>
+              resolveSubagentSessionLink(input.sessions, childExternalSessionId),
+          });
+        } catch (error) {
+          projectionFailed = true;
+          reportRuntimeEventFailure({
+            eventTransport: streamRecord,
+            scope: { ...scope, externalSessionId: subscriber.externalSessionId },
+            error,
+            now: input.now,
+            emit: input.emit,
+          });
+        }
+      }
+      return !projectionFailed;
     },
     ready,
     streamDone: Promise.resolve(),
@@ -194,10 +276,22 @@ const ensureRuntimeEventTransport = (input: {
     controller,
     onReady: resolveReady,
     onEvent: async (event) => {
-      await streamRecord.dispatch(event);
+      const projected = await streamRecord.dispatch(event);
+      if (!projected) {
+        return;
+      }
       for (const observer of streamRecord.observers) {
         await observer(event);
       }
+    },
+    onEventError: (error, scope) => {
+      reportRuntimeEventFailure({
+        eventTransport: streamRecord,
+        scope,
+        error,
+        now: input.now,
+        emit: input.emit,
+      });
     },
   })
     .then(() => {
@@ -263,7 +357,7 @@ export const observeRuntimeEvents = async (input: {
   terminalObserver: (error: Error) => void | Promise<void>;
   signal?: AbortSignal;
   logEvent?: OpencodeEventLogger;
-}): Promise<{ dispatch: (event: Event) => Promise<void>; release: () => Promise<void> }> => {
+}): Promise<{ dispatch: (event: Event) => Promise<boolean>; release: () => Promise<void> }> => {
   const eventTransport = ensureRuntimeEventTransport(input);
   eventTransport.observers.add(input.observer);
   eventTransport.terminalObservers.add(input.terminalObserver);
@@ -397,11 +491,14 @@ export const registerSession = (
     isAwaitingRuntimeTurnStart: false,
     activeAssistantMessageId: null,
     completedAssistantMessageIds: new Set<string>(),
+    pendingCompletedAssistantMessageIds: new Set<string>(),
     emittedAssistantMessageIds: new Set<string>(),
     emittedUserMessageSignatures: new Map<string, string>(),
     emittedUserMessageStates: new Map(),
+    pendingUserMessageAdmissions: new Map(),
     pendingQueuedUserMessages: [],
     partsById: new Map(),
+    partIdsByMessageId: new Map(),
     messageRoleById: new Map(),
     messageMetadataById: new Map(),
     compactionMessageIds: new Set(),
@@ -455,6 +552,10 @@ export const releaseSessionRuntime = async (
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
+  cancelPendingUserMessageAdmissions(
+    session,
+    new Error(`OpenCode session '${session.externalSessionId}' was released.`),
+  );
   sessions.delete(session.summary.externalSessionId);
   const eventTransport = runtimeEventTransports.get(session.runtimeId);
   if (!eventTransport) {

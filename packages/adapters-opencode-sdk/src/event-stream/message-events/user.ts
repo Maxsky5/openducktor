@@ -6,6 +6,7 @@ import {
   readTextFromMessageInfo,
 } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
+import { admitUserMessage } from "../../user-message-admission";
 import type { EventStreamRuntime } from "../shared";
 import { emitBackgroundTaskResultSubagentParts } from "./background-task-result";
 import { getKnownMessageParts } from "./helpers";
@@ -56,13 +57,10 @@ const resolveUserMessageDisplay = (input: {
 };
 
 export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session) {
-    return;
-  }
+  const { session } = runtime;
 
   for (const [messageId, emittedState] of session.emittedUserMessageStates.entries()) {
-    if (runtime.messageRoleById.get(messageId) !== "user") {
+    if (session.messageRoleById.get(messageId) !== "user") {
       continue;
     }
 
@@ -92,7 +90,8 @@ export const handleUserMessageUpdated = (
     messageModel?: ReturnType<typeof readMessageModelSelection>;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
+  const { session } = runtime;
+  admitUserMessage(session, input.messageId);
   const userParts =
     input.normalizedParts.length > 0
       ? input.normalizedParts
@@ -101,7 +100,7 @@ export const handleUserMessageUpdated = (
     parts: userParts,
     timestamp: input.messageTimestamp,
   });
-  const currentMetadata = session?.messageMetadataById.get(input.messageId);
+  const currentMetadata = session.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
   const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(input.infoRecord);
   const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
@@ -146,8 +145,8 @@ export const handleUserPartUpdated = (
   messageId: string,
   updatedPartTimestamp?: string,
 ): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  const metadata = session?.messageMetadataById.get(messageId);
+  const { session } = runtime;
+  const metadata = session.messageMetadataById.get(messageId);
   const knownParts = getKnownMessageParts(runtime, messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(knownParts);
   if (updatedPartTimestamp) {

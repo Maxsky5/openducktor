@@ -1,18 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  OpencodeNativeApprovalReply,
-  OpencodeNativeQuestionReply,
-  OpencodeRuntimeSnapshotSource,
-  OpencodeSessionRuntimeConnection,
-  OpencodeSessionRuntimeSignal,
-  PrepareOpencodeSessionRuntime,
-} from "@openducktor/adapters-opencode-sdk";
+import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type {
@@ -20,200 +12,15 @@ import type {
   AgentSessionLiveAdapterPort,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
-import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
-
-const runtime: RuntimeInstanceSummary = {
-  kind: "opencode",
-  runtimeId: "runtime-1",
-  repoPath: "/repo",
-  taskId: null,
-  role: "workspace",
-  workingDirectory: "/repo",
-  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
-  startedAt: "2026-07-16T10:00:00.000Z",
-  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-};
-
-const ref = {
-  repoPath: "/repo",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/repo/worktree",
-  externalSessionId: "session-1",
-};
-
-const nativeSource = (
-  overrides: Partial<OpencodeRuntimeSnapshotSource> = {},
-): OpencodeRuntimeSnapshotSource => ({
-  externalSessionId: "session-1",
-  sessionAssociation: { kind: "unbound" },
-  title: "Live OpenCode session",
-  workingDirectory: "/repo/worktree",
-  startedAt: "2026-07-16T10:01:00.000Z",
-  runtimeActivity: "idle",
-  pendingApprovals: [
-    {
-      requestId: "permission-1",
-      requestInstanceId: "native-permission-instance",
-      requestType: "file_change",
-      title: "Edit a file",
-      metadata: { source: "opencode" },
-    },
-  ],
-  pendingQuestions: [
-    {
-      requestId: "question-1",
-      requestInstanceId: "native-question-instance",
-      questions: [
-        {
-          header: "Confirm",
-          question: "Continue?",
-          options: [{ label: "Yes", description: "Continue" }],
-        },
-      ],
-    },
-  ],
-  ...overrides,
-});
-
-const controlSummary = {
-  externalSessionId: "controlled-session",
-  runtimeKind: "opencode" as const,
-  workingDirectory: "/repo/worktree",
-  title: "Controlled session",
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" } as const,
-  startedAt: "2026-07-16T10:02:00.000Z",
-  status: "running" as const,
-};
-
-type RuntimeHarness = {
-  readonly prepareRuntime: PrepareOpencodeSessionRuntime;
-  readonly emit: (signal: OpencodeSessionRuntimeSignal) => Promise<void>;
-  readonly approvalReplies: OpencodeNativeApprovalReply[];
-  readonly questionReplies: OpencodeNativeQuestionReply[];
-  readonly controlCalls: Array<{ operation: string; input: unknown }>;
-  readonly releaseCalls: string[];
-  readonly contextLoadCalls: string[];
-  readonly setSources: (sources: OpencodeRuntimeSnapshotSource[]) => void;
-};
-
-const createRuntimeHarness = (): RuntimeHarness => {
-  let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
-  const sources = [nativeSource()];
-  const approvalReplies: OpencodeNativeApprovalReply[] = [];
-  const questionReplies: OpencodeNativeQuestionReply[] = [];
-  const controlCalls: Array<{ operation: string; input: unknown }> = [];
-  const releaseCalls: string[] = [];
-  const contextLoadCalls: string[] = [];
-
-  const connection: OpencodeSessionRuntimeConnection = {
-    readSessionSources: async () => sources,
-    loadContextUsage: async (input) => {
-      contextLoadCalls.push(input.externalSessionId);
-      return {
-        totalTokens: 999,
-        model: { providerId: "openai", modelId: "gpt-5.1" },
-      };
-    },
-    replyApproval: async (input) => {
-      approvalReplies.push(input);
-    },
-    replyQuestion: async (input) => {
-      questionReplies.push(input);
-    },
-    startSession: async (input) => {
-      controlCalls.push({ operation: "start", input });
-      return controlSummary;
-    },
-    resumeSession: async (input) => {
-      controlCalls.push({ operation: "resume", input });
-      return controlSummary;
-    },
-    forkSession: async (input) => {
-      controlCalls.push({ operation: "fork", input });
-      return controlSummary;
-    },
-    sendUserMessage: async (input) => {
-      controlCalls.push({ operation: "send", input });
-      return {
-        type: "user_message",
-        externalSessionId: input.externalSessionId,
-        timestamp: "2026-07-16T10:03:00.000Z",
-        messageId: "user-1",
-        message: "Hello",
-        parts: [{ kind: "text", text: "Hello" }],
-        state: "queued",
-      };
-    },
-    updateSessionModel: async (input) => {
-      controlCalls.push({ operation: "model", input });
-    },
-    stopSession: async (input) => {
-      controlCalls.push({ operation: "stop", input });
-    },
-    releaseSession: async (input) => {
-      controlCalls.push({ operation: "release", input });
-    },
-  };
-
-  return {
-    prepareRuntime: async (input) => ({
-      connection,
-      initialSources: sources,
-      initialContextUsageBySessionId: new Map([
-        [
-          "session-1",
-          {
-            totalTokens: 321,
-            model: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-            },
-          },
-        ],
-      ]),
-      startForwarding: async (nextListener) => {
-        listener = nextListener;
-      },
-      release: async () => {
-        releaseCalls.push(input.runtimeId);
-        listener = null;
-      },
-    }),
-    emit: async (signal) => {
-      if (!listener) {
-        throw new Error("Forwarding has not started.");
-      }
-      await listener(signal);
-    },
-    approvalReplies,
-    questionReplies,
-    controlCalls,
-    releaseCalls,
-    contextLoadCalls,
-    setSources: (nextSources) => {
-      sources.splice(0, sources.length, ...nextSources);
-    },
-  };
-};
-
-const createLifecycle = (changes: AgentSessionLiveAdapterChange[]) =>
-  ({
-    registerRuntimeAdapter: () => Effect.void,
-    releaseRuntime: () => Effect.succeed([]),
-    runAdapterMutation: (mutation) =>
-      mutation.pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            changes.push(...result.changes);
-          }),
-        ),
-        Effect.map((result) => result.value),
-      ),
-  }) satisfies RuntimeLiveSessionLifecyclePort;
+import {
+  createLifecycle,
+  createRuntimeHarness,
+  nativeSource,
+  ref,
+  runtime,
+} from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
   test("owns strict snapshots, opaque replies, retained context, and normalized signals", async () => {
@@ -333,6 +140,67 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         message: "OpenCode live event observation failed: connection lost",
       },
     ]);
+  });
+
+  test("clears retained pending input when a session errors", async () => {
+    const harness = createRuntimeHarness();
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const before = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
+    if (before.type !== "live") {
+      throw new Error("Expected the OpenCode session to be retained.");
+    }
+    const approvalRequestId = before.session.pendingApprovals[0]?.requestId;
+    if (!approvalRequestId) {
+      throw new Error("Expected a pending OpenCode approval.");
+    }
+
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.emit({
+      type: "transcript_event",
+      externalSessionId: "session-1",
+      event: {
+        type: "session_error",
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:04:00.000Z",
+        message: "Turn failed.",
+      },
+    });
+
+    await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+      type: "live",
+      session: {
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        adapter.replyApproval({
+          ...ref,
+          requestId: approvalRequestId,
+          outcome: "approve_once",
+        }),
+      ),
+    ).rejects.toThrow("Unknown or resolved OpenCode approval occurrence");
+    expect(publishedChanges).toContainEqual({
+      type: "session_upsert",
+      snapshot: expect.objectContaining({
+        ref,
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    });
+
+    await Effect.runPromise(adapter.releaseRuntime());
   });
 
   test("keeps missing-context work demand-driven and shares one in-flight request", async () => {
@@ -525,244 +393,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     expect(firstHarness.approvalReplies[0]?.nativeRequestId).toBe("permission-1");
     expect(secondHarness.approvalReplies).toEqual([]);
-  });
-
-  test("delegates controls while the host projection remains the only session authority", async () => {
-    const harness = createRuntimeHarness();
-    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
-    const prepared = await Effect.runPromise(
-      createOpenCodeLiveSessionAdapterPreparer({
-        liveSessionLifecycle: createLifecycle(publishedChanges),
-        prepareRuntime: harness.prepareRuntime,
-      })(runtime),
-    );
-    await Effect.runPromise(prepared.startForwarding());
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
-    const controlRef = { ...ref, externalSessionId: "controlled-session" };
-    const startInput = {
-      repoPath: "/repo",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/repo/worktree",
-      sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
-      systemPrompt: "Build it",
-    };
-
-    await expect(Effect.runPromise(adapter.startSession(startInput))).resolves.toEqual(
-      controlSummary,
-    );
-    expect(adapter.matches(controlRef)).toBe(true);
-    await Effect.runPromise(
-      adapter.resumeSession({
-        ...controlRef,
-        sessionScope: startInput.sessionScope,
-      }),
-    );
-    await Effect.runPromise(
-      adapter.forkSession({
-        ...startInput,
-        parentExternalSessionId: "parent-1",
-      }),
-    );
-    const accepted = await Effect.runPromise(
-      adapter.sendUserMessage({
-        ...controlRef,
-        sessionScope: startInput.sessionScope,
-        parts: [{ kind: "text", text: "Hello" }],
-      }),
-    );
-    expect(accepted.type).toBe("user_message");
-    expect(publishedChanges.filter((change) => change.type === "transcript_event")).toEqual([
-      {
-        type: "transcript_event",
-        event: {
-          type: "user_message",
-          externalSessionId: "controlled-session",
-          timestamp: "2026-07-16T10:03:00.000Z",
-          messageId: "user-1",
-          message: "Hello",
-          parts: [{ kind: "text", text: "Hello" }],
-          state: "queued",
-          sessionRef: controlRef,
-        },
-      },
-    ]);
-
-    await Effect.runPromise(adapter.updateSessionModel({ ...controlRef, model: null }));
-    await Effect.runPromise(adapter.stopSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
-    await Effect.runPromise(
-      adapter.resumeSession({
-        ...controlRef,
-        sessionScope: startInput.sessionScope,
-      }),
-    );
-    expect(adapter.matches(controlRef)).toBe(true);
-    await Effect.runPromise(adapter.releaseSession(controlRef));
-    expect(adapter.matches(controlRef)).toBe(false);
-
-    expect(harness.controlCalls.map((call) => call.operation)).toEqual([
-      "start",
-      "resume",
-      "fork",
-      "send",
-      "model",
-      "stop",
-      "resume",
-      "release",
-    ]);
-    expect(harness.controlCalls[0]?.input).toMatchObject({
-      runtimeKind: "opencode",
-      runtimePolicy: { kind: "opencode" },
-      sessionScope: startInput.sessionScope,
-    });
-    await expect(Effect.runPromise(adapter.releaseRuntime())).resolves.toEqual([ref]);
-    expect(harness.releaseCalls).toEqual(["runtime-1"]);
-  });
-
-  for (const operation of ["start", "resume", "fork"] as const) {
-    test(`reports the latest runtime association after ${operation} invalidation and refresh`, async () => {
-      const harness = createRuntimeHarness();
-      const publishedChanges: AgentSessionLiveAdapterChange[] = [];
-      const prepared = await Effect.runPromise(
-        createOpenCodeLiveSessionAdapterPreparer({
-          liveSessionLifecycle: createLifecycle(publishedChanges),
-          prepareRuntime: harness.prepareRuntime,
-        })(runtime),
-      );
-      await Effect.runPromise(prepared.startForwarding());
-      const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
-      const controlRef = { ...ref, externalSessionId: "controlled-session" };
-      const sessionScope = {
-        kind: "workflow" as const,
-        taskId: "task-1",
-        role: "build" as const,
-      };
-      const startInput = {
-        repoPath: "/repo",
-        runtimeKind: "opencode" as const,
-        workingDirectory: "/repo/worktree",
-        sessionScope,
-        systemPrompt: "Build it",
-      };
-
-      if (operation === "start") {
-        await Effect.runPromise(adapter.startSession(startInput));
-      } else if (operation === "resume") {
-        await Effect.runPromise(
-          adapter.resumeSession({
-            ...controlRef,
-            sessionScope,
-          }),
-        );
-      } else {
-        await Effect.runPromise(
-          adapter.forkSession({
-            ...startInput,
-            parentExternalSessionId: "parent-1",
-          }),
-        );
-      }
-
-      publishedChanges.length = 0;
-      harness.setSources([
-        nativeSource({
-          externalSessionId: "controlled-session",
-          sessionAssociation: { kind: "unbound" },
-          title: "Refreshed runtime session",
-          runtimeActivity: "idle",
-          pendingApprovals: [],
-          pendingQuestions: [],
-        }),
-      ]);
-      await harness.emit({ type: "sessions_invalidated" });
-
-      await expect(Effect.runPromise(adapter.listRetainedSnapshots("/repo"))).resolves.toEqual([
-        expect.objectContaining({
-          ref: controlRef,
-          sessionAssociation: { kind: "unbound" },
-        }),
-      ]);
-      await expect(
-        Effect.runPromise(adapter.readRetainedSnapshot(controlRef)),
-      ).resolves.toMatchObject({
-        type: "live",
-        session: {
-          ref: controlRef,
-          sessionAssociation: { kind: "unbound" },
-        },
-      });
-      expect(
-        publishedChanges.filter(
-          (change) =>
-            change.type === "session_upsert" &&
-            change.snapshot.ref.externalSessionId === "controlled-session",
-        ),
-      ).toEqual([
-        {
-          type: "session_upsert",
-          snapshot: expect.objectContaining({
-            ref: controlRef,
-            sessionAssociation: { kind: "unbound" },
-          }),
-        },
-      ]);
-    });
-  }
-
-  test("commits an authoritative refresh only inside the host lifecycle mutation", async () => {
-    const harness = createRuntimeHarness();
-    let enterMutation: () => void = () => undefined;
-    let releaseMutation: () => void = () => undefined;
-    const mutationEntered = new Promise<void>((resolve) => {
-      enterMutation = resolve;
-    });
-    const mutationBarrier = new Promise<void>((resolve) => {
-      releaseMutation = resolve;
-    });
-    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
-    const lifecycle: RuntimeLiveSessionLifecyclePort = {
-      registerRuntimeAdapter: () => Effect.void,
-      releaseRuntime: () => Effect.succeed([]),
-      runAdapterMutation: (mutation) =>
-        Effect.gen(function* () {
-          yield* Effect.sync(enterMutation);
-          yield* Effect.promise(() => mutationBarrier);
-          const result = yield* mutation;
-          publishedChanges.push(...result.changes);
-          return result.value;
-        }),
-    };
-    const prepared = await Effect.runPromise(
-      createOpenCodeLiveSessionAdapterPreparer({
-        liveSessionLifecycle: lifecycle,
-        prepareRuntime: harness.prepareRuntime,
-      })(runtime),
-    );
-    await Effect.runPromise(prepared.startForwarding());
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
-    harness.setSources([
-      nativeSource({
-        runtimeActivity: "running",
-        pendingApprovals: [],
-        pendingQuestions: [],
-      }),
-    ]);
-    const forwarding = harness.emit({ type: "sessions_invalidated" });
-    await mutationEntered;
-
-    const beforeCommit = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
-    expect(beforeCommit[0]?.activity).toBe("waiting_for_question");
-    releaseMutation();
-    await forwarding;
-
-    const afterCommit = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
-    expect(afterCommit[0]?.activity).toBe("running");
-    expect(publishedChanges).toEqual([
-      {
-        type: "session_upsert",
-        snapshot: expect.objectContaining({ ref, activity: "running" }),
-      },
-    ]);
   });
 
   test("releases only the owning adapter after an observation fault", async () => {

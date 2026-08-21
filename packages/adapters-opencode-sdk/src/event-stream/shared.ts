@@ -2,9 +2,7 @@ import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
 import {
-  clearAwaitingRuntimeTurnStart,
   isAwaitingRuntimeTurnStart,
-  isStreamTurnIdle,
   markStreamTurnActive,
   markStreamTurnIdle,
 } from "../session-activity";
@@ -49,7 +47,7 @@ export type EventStreamContext = {
   input: SessionInput;
   now: () => string;
   emit: (externalSessionId: string, event: AgentEvent) => void;
-  getSession: (externalSessionId: string) => SessionRecord | undefined;
+  session: SessionRecord;
   resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
 };
 
@@ -59,24 +57,61 @@ export type SubagentSessionLink = {
   subagentCorrelationKey: string;
 };
 
-export type EventStreamState = {
-  partsById: Map<string, Part>;
-  messageRoleById: Map<string, string>;
-  compactionMessageIds: Set<string>;
-  pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
-  subagentCorrelationKeyByPartId: Map<string, string>;
-  subagentCorrelationKeyByExternalSessionId: Map<string, string>;
-  subagentPartIdByCorrelationKey: Map<string, string>;
-  subagentPartIdByExternalSessionId: Map<string, string>;
-  pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
-  pendingSubagentCorrelationKeys: string[];
-  pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
-  pendingSubagentPartEmissionsByExternalSessionId: Map<string, PendingSubagentPartEmission[]>;
-  pendingSubagentInputEventsByExternalSessionId: Map<string, PendingSubagentInputEvent[]>;
-  pendingBackgroundTaskResultsByExternalSessionId: Map<string, PendingBackgroundTaskResult[]>;
+export type EventStreamRuntime = EventStreamContext;
+
+type MessagePartState = Pick<SessionRecord, "partsById" | "partIdsByMessageId">;
+
+const removePartIdFromMessage = (
+  state: MessagePartState,
+  messageId: string,
+  partId: string,
+): void => {
+  const partIds = state.partIdsByMessageId.get(messageId);
+  if (!partIds) {
+    return;
+  }
+  partIds.delete(partId);
+  if (partIds.size === 0) {
+    state.partIdsByMessageId.delete(messageId);
+  }
 };
 
-export type EventStreamRuntime = EventStreamContext & EventStreamState;
+export const setMessagePart = (state: MessagePartState, part: Part): void => {
+  const partId = part.id;
+  const previous = state.partsById.get(partId);
+  if (previous && previous.messageID !== part.messageID) {
+    removePartIdFromMessage(state, previous.messageID, partId);
+  }
+  state.partsById.set(partId, part);
+  const partIds = state.partIdsByMessageId.get(part.messageID) ?? new Set<string>();
+  partIds.add(partId);
+  state.partIdsByMessageId.set(part.messageID, partIds);
+};
+
+export const deleteMessagePart = (state: MessagePartState, partId: string): Part | undefined => {
+  const part = state.partsById.get(partId);
+  if (!part) {
+    return undefined;
+  }
+  state.partsById.delete(partId);
+  removePartIdFromMessage(state, part.messageID, partId);
+  return part;
+};
+
+export const getMessageParts = (state: MessagePartState, messageId: string): Part[] => {
+  const partIds = state.partIdsByMessageId.get(messageId);
+  if (!partIds) {
+    return [];
+  }
+  const parts: Part[] = [];
+  for (const partId of partIds) {
+    const part = state.partsById.get(partId);
+    if (part) {
+      parts.push(part);
+    }
+  }
+  return parts;
+};
 
 const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
 const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;
@@ -123,17 +158,18 @@ export const flushPendingSubagentInputEventsForSession = (
   childExternalSessionId: string,
 ): void => {
   const subagentCorrelationKey =
-    runtime.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
+    runtime.session.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
   if (!subagentCorrelationKey) {
     return;
   }
 
-  const pending = runtime.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
+  const pending =
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
   if (!pending || pending.length === 0) {
     return;
   }
 
-  runtime.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
+  runtime.session.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
   for (const event of pending) {
     runtime.emit(runtime.externalSessionId, {
       ...event,
@@ -144,7 +180,7 @@ export const flushPendingSubagentInputEventsForSession = (
 
 export const removePendingSubagentCorrelationKey = (
   state: Pick<
-    EventStreamState,
+    SessionRecord,
     "pendingSubagentCorrelationKeys" | "pendingSubagentCorrelationKeysBySignature"
   >,
   correlationKey: string,
@@ -170,10 +206,7 @@ export const removePendingSubagentCorrelationKey = (
 };
 
 export const bindSubagentPartCorrelation = (
-  state: Pick<
-    EventStreamState,
-    "subagentCorrelationKeyByPartId" | "subagentPartIdByCorrelationKey"
-  >,
+  state: Pick<SessionRecord, "subagentCorrelationKeyByPartId" | "subagentPartIdByCorrelationKey">,
   partId: string,
   correlationKey: string,
 ): void => {
@@ -183,7 +216,7 @@ export const bindSubagentPartCorrelation = (
 
 export const bindSubagentExternalSession = (
   state: Pick<
-    EventStreamState,
+    SessionRecord,
     | "subagentCorrelationKeyByExternalSessionId"
     | "subagentPartIdByCorrelationKey"
     | "subagentPartIdByExternalSessionId"
@@ -200,69 +233,18 @@ export const bindSubagentExternalSession = (
   state.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
 };
 
-type SessionIdleEmitter = {
-  externalSessionId: string;
-  emit: (externalSessionId: string, event: AgentEvent) => void;
-  now: () => string;
+export const markSessionActive = (context: Pick<EventStreamContext, "session">): void => {
+  markStreamTurnActive(context.session);
 };
 
-const emitIdleForSession = (
-  session: SessionRecord | undefined,
-  emitter: SessionIdleEmitter,
-): boolean => {
-  if (!session) {
-    return false;
-  }
-  if (isStreamTurnIdle(session)) {
-    if (!isAwaitingRuntimeTurnStart(session)) {
-      return false;
-    }
-    // Covers terminal completion after early idle suppression or seeded/local idle state.
-    clearAwaitingRuntimeTurnStart(session);
-    emitter.emit(emitter.externalSessionId, {
-      type: "session_idle",
-      externalSessionId: emitter.externalSessionId,
-      timestamp: emitter.now(),
-    });
-    return true;
-  }
-  markStreamTurnIdle(session);
-  emitter.emit(emitter.externalSessionId, {
-    type: "session_idle",
-    externalSessionId: emitter.externalSessionId,
-    timestamp: emitter.now(),
-  });
-  return true;
-};
-
-const getSessionRecord = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
-): SessionRecord | undefined => {
-  return context.getSession(context.externalSessionId);
-};
-
-export const markSessionActive = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
-): void => {
-  markStreamTurnActive(getSessionRecord(context));
-};
-
-export const markSessionIdle = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
-): void => {
-  markStreamTurnIdle(getSessionRecord(context));
+export const markSessionIdle = (context: Pick<EventStreamContext, "session">): void => {
+  markStreamTurnIdle(context.session);
 };
 
 export const isSessionAwaitingRuntimeTurnStart = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
+  context: Pick<EventStreamContext, "session">,
 ): boolean => {
-  return isAwaitingRuntimeTurnStart(getSessionRecord(context));
-};
-
-export const emitSessionIdle = (
-  context: Pick<EventStreamContext, "externalSessionId" | "getSession" | "emit" | "now">,
-): boolean => {
-  return emitIdleForSession(getSessionRecord(context), context);
+  return isAwaitingRuntimeTurnStart(context.session);
 };
 
 export const isReasoningDeltaField = (field: string): boolean => {

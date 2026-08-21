@@ -226,6 +226,7 @@ export const handleSessionStatus = (
             ...current,
             status: "running",
             runtimeStatusMessage: status.message,
+            pendingUserMessageStartedAt: undefined,
           },
     );
     return;
@@ -239,6 +240,7 @@ export const handleSessionStatus = (
         : {
             ...current,
             status: "running",
+            pendingUserMessageStartedAt: undefined,
             messages: upsertSessionMessage(current, {
               id: `retry:${status.attempt}`,
               role: "system",

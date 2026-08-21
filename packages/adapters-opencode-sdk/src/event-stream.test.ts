@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, EventSessionUpdated } from "@opencode-ai/sdk/v2/client";
+import type {
+  Event,
+  EventSessionUpdated,
+  SyncEventMessageRemoved,
+} from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -12,7 +16,9 @@ import {
   readEventParentExternalSessionId,
   readEventSessionId,
   readSessionLifecycleEvent,
+  setMessagePart,
 } from "./event-stream/shared";
+import { normalizeOpencodeGlobalEventPayload } from "./opencode-agent-session-projection";
 import {
   childSessionCreatedEvent,
   childSessionCreatedEventWithParentAlias,
@@ -23,6 +29,7 @@ import {
   runEventStream,
   runEventStreamWithSession,
   runtimeSourceSyncChildSessionCreatedEvent,
+  type TestGlobalEventPayload,
 } from "./event-stream.test-support";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -118,6 +125,170 @@ test("global event observation drops the raw envelope after normalizing sync eve
       directory: "/repo",
     },
   });
+});
+
+test("classifies OpenCode server heartbeats at the global transport boundary", () => {
+  const heartbeat = {
+    id: "event-heartbeat-1",
+    type: "server.heartbeat",
+    properties: {},
+  } as const;
+
+  expect(normalizeOpencodeGlobalEventPayload(heartbeat)).toEqual({ kind: "heartbeat" });
+});
+
+test("keeps session observation alive across OpenCode server heartbeats", async () => {
+  const heartbeat = {
+    id: "event-heartbeat-1",
+    type: "server.heartbeat",
+    properties: {},
+  } as unknown as TestGlobalEventPayload;
+  const emitted = await runEventStream([
+    heartbeat,
+    {
+      type: "session.status",
+      properties: {
+        sessionID: "external-session-1",
+        status: { type: "busy" },
+      },
+    } as unknown as Event,
+  ]);
+
+  expect(emitted).toEqual([
+    expect.objectContaining({
+      type: "session_status",
+      status: { type: "busy", message: null },
+    }),
+  ]);
+});
+
+test("projects direct and sync message removal events as Transcript retractions", async () => {
+  const directEvent = {
+    id: "event-message-removed",
+    type: "message.removed",
+    properties: {
+      sessionID: "external-session-1",
+      messageID: "assistant-removed",
+    },
+  } as const;
+  const syncEvent = {
+    type: "sync",
+    id: "sync-message-removed",
+    syncEvent: {
+      type: "message.removed.1",
+      id: "sync-event-message-removed",
+      seq: 1,
+      aggregateID: "external-session-1",
+      data: {
+        sessionID: "external-session-1",
+        messageID: "assistant-removed",
+      },
+    },
+  } satisfies SyncEventMessageRemoved;
+
+  for (const event of [directEvent, syncEvent]) {
+    const emitted = await runEventStream([event]);
+    expect(emitted).toEqual([
+      {
+        type: "transcript_retracted",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        messageIds: ["assistant-removed"],
+      },
+    ]);
+  }
+});
+
+test("does not emit removed pending assistant output when the session becomes idle", async () => {
+  const emitted = await runEventStream([
+    {
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "assistant-removed-before-idle",
+          role: "assistant",
+          sessionID: "external-session-1",
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "assistant-removed-before-idle-text",
+            sessionID: "external-session-1",
+            messageID: "assistant-removed-before-idle",
+            type: "text",
+            text: "This output was removed",
+            time: { start: 1, end: 2 },
+          },
+        ],
+      },
+    } as unknown as Event,
+    {
+      id: "event-message-removed-before-idle",
+      type: "message.removed",
+      properties: {
+        sessionID: "external-session-1",
+        messageID: "assistant-removed-before-idle",
+      },
+    },
+    makeSessionIdleEvent(),
+  ]);
+
+  expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+  expect(emitted.filter((event) => event.type === "transcript_retracted")).toHaveLength(1);
+});
+
+test("projects current OpenCode pending-input event families", async () => {
+  const emitted = await runEventStream([
+    {
+      id: "permission-v2-asked",
+      type: "permission.v2.asked",
+      properties: {
+        id: "permission-v2-1",
+        sessionID: "external-session-1",
+        action: "write",
+        resources: ["src/**"],
+      },
+    },
+    {
+      id: "permission-v2-replied",
+      type: "permission.v2.replied",
+      properties: {
+        sessionID: "external-session-1",
+        requestID: "permission-v2-1",
+        reply: "once",
+      },
+    },
+    {
+      id: "question-v2-asked",
+      type: "question.v2.asked",
+      properties: {
+        id: "question-v2-1",
+        sessionID: "external-session-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Continue?",
+            options: [{ label: "Yes", description: "Continue" }],
+          },
+        ],
+      },
+    },
+    {
+      id: "question-v2-rejected",
+      type: "question.v2.rejected",
+      properties: {
+        sessionID: "external-session-1",
+        requestID: "question-v2-1",
+      },
+    },
+  ]);
+
+  expect(emitted.map((event) => event.type)).toEqual([
+    "approval_required",
+    "approval_resolved",
+    "question_required",
+    "question_resolved",
+  ]);
 });
 
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
@@ -261,64 +432,49 @@ test("runEventStreamWithSession emits permission v2 approval events", async () =
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
+  const session = makeSessionRecord(makeClientWithEvents([]));
+  session.subagentCorrelationKeyByExternalSessionId.set(
+    "external-child-session",
+    "part:assistant-1:subtask-1",
+  );
+  session.pendingSubagentInputEventsByExternalSessionId.set("external-child-session", [
+    {
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:00:00.000Z",
+      requestId: "perm-child-1",
+      requestType: "permission_grant",
+      title: "Approve permission: write",
+      summary: "Approval request for write.",
+      affectedPaths: ["src/**"],
+      action: { name: "write" },
+      mutation: "mutating",
+      supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
+      childExternalSessionId: "external-child-session",
+    },
+    {
+      type: "question_required",
+      externalSessionId: "external-session-1",
+      timestamp: "2026-02-22T12:05:00.000Z",
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "A", description: "Option A" }],
+        },
+      ],
+      childExternalSessionId: "external-child-session",
+    },
+  ]);
   const runtime: EventStreamRuntime = {
     externalSessionId: "external-session-1",
     input: makeSessionInput(),
+    session,
     now: () => "2026-02-22T12:30:00.000Z",
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
-    getSession: () => undefined,
-    partsById: new Map(),
-    messageRoleById: new Map(),
-    compactionMessageIds: new Set(),
-    pendingDeltasByPartId: new Map(),
-    subagentCorrelationKeyByPartId: new Map<string, string>(),
-    subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
-      ["external-child-session", "part:assistant-1:subtask-1"],
-    ]),
-    subagentPartIdByCorrelationKey: new Map<string, string>(),
-    subagentPartIdByExternalSessionId: new Map<string, string>(),
-    pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
-    pendingSubagentCorrelationKeys: [],
-    pendingSubagentSessionsByExternalSessionId: new Map(),
-    pendingSubagentPartEmissionsByExternalSessionId: new Map(),
-    pendingSubagentInputEventsByExternalSessionId: new Map([
-      [
-        "external-child-session",
-        [
-          {
-            type: "approval_required",
-            externalSessionId: "external-session-1",
-            timestamp: "2026-02-22T12:00:00.000Z",
-            requestId: "perm-child-1",
-            requestType: "permission_grant",
-            title: "Approve permission: write",
-            summary: "Approval request for write.",
-            affectedPaths: ["src/**"],
-            action: { name: "write" },
-            mutation: "mutating",
-            supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
-            childExternalSessionId: "external-child-session",
-          },
-          {
-            type: "question_required",
-            externalSessionId: "external-session-1",
-            timestamp: "2026-02-22T12:05:00.000Z",
-            requestId: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-            childExternalSessionId: "external-child-session",
-          },
-        ],
-      ],
-    ]),
-    pendingBackgroundTaskResultsByExternalSessionId: new Map(),
   };
 
   flushPendingSubagentInputEventsForSession(runtime, "external-child-session");
@@ -356,7 +512,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     },
   ]);
   expect(
-    runtime.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
   ).toBeUndefined();
 });
 
@@ -563,6 +719,7 @@ describe("event-stream", () => {
         completedAt: 2,
         info: { summary: true },
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -594,6 +751,7 @@ describe("event-stream", () => {
         completedAt: 3,
         info: { summary: true },
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -991,6 +1149,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "message-200",
           signature: buildQueuedSignature("Ship it"),
         });
         nextSessionRecord.activeAssistantMessageId = null;
@@ -1006,6 +1165,28 @@ describe("event-stream", () => {
       state: "read",
     });
     expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+  });
+
+  test("removes a queued send when OpenCode retracts it before the message echo", async () => {
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.removed",
+          properties: {
+            sessionID: "external-session-1",
+            messageID: "message-pending",
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingQueuedUserMessages.push({
+          messageId: "message-pending",
+          signature: buildQueuedSignature("Ship it"),
+        });
+      },
+    );
+
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([]);
   });
 
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
@@ -1074,8 +1255,9 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.activeAssistantMessageId = "msg-100";
         nextSessionRecord.pendingQueuedUserMessages.push(
-          { signature: buildQueuedSignature("Ship it") },
+          { messageId: "msg-unselected", signature: buildQueuedSignature("Ship it") },
           {
+            messageId: "msg-200",
             signature: buildQueuedSignature("Ship it", {
               runtimeKind: "opencode",
               providerId: "openai",
@@ -1096,7 +1278,7 @@ describe("event-stream", () => {
       state: "queued",
     });
     expect(sessionRecord.pendingQueuedUserMessages).toEqual([
-      { signature: buildQueuedSignature("Ship it") },
+      { messageId: "msg-unselected", signature: buildQueuedSignature("Ship it") },
     ]);
   });
 
@@ -1138,6 +1320,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
@@ -1224,6 +1407,7 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-partial-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
@@ -1310,6 +1494,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-pdf-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Summarize this PDF" },
@@ -1443,7 +1628,11 @@ describe("event-stream", () => {
       ],
     });
 
-    const { emitted } = await runEventStreamWithSession([assistantEvent, assistantEvent]);
+    const { emitted } = await runEventStreamWithSession([
+      assistantEvent,
+      assistantEvent,
+      makeSessionStatusIdleEvent(),
+    ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
     expect(assistantMessages).toHaveLength(1);
@@ -1459,6 +1648,48 @@ describe("event-stream", () => {
       variant: "high",
     });
     expect(emitted.some((event) => event.type === "assistant_part")).toBe(true);
+  });
+
+  test("finalizes pending output without scanning transcript parts", async () => {
+    let partScans = 0;
+    const { emitted } = await runEventStreamWithSession(
+      [makeSessionStatusIdleEvent(), makeSessionIdleEvent()],
+      (session) => {
+        for (let index = 0; index < 100; index += 1) {
+          const messageId = `assistant-finalized-${index}`;
+          session.completedAssistantMessageIds.add(messageId);
+          session.emittedAssistantMessageIds.add(messageId);
+          session.messageRoleById.set(messageId, "assistant");
+        }
+        const pendingMessageId = "assistant-pending-final";
+        const pendingPart = makeAssistantTextPart({
+          messageId: pendingMessageId,
+          partId: "text-pending-final",
+          text: "Pending final output",
+          end: 1,
+        });
+        session.completedAssistantMessageIds.add(pendingMessageId);
+        session.pendingCompletedAssistantMessageIds.add(pendingMessageId);
+        session.messageRoleById.set(pendingMessageId, "assistant");
+        session.messageMetadataById.set(pendingMessageId, {
+          timestamp: "2026-02-22T12:00:00.000Z",
+          hasStopSignal: true,
+        });
+        setMessagePart(session, pendingPart);
+        const values = session.partsById.values.bind(session.partsById);
+        Object.defineProperty(session.partsById, "values", {
+          value: () => {
+            partScans += 1;
+            return values();
+          },
+        });
+      },
+    );
+
+    expect(partScans).toBe(0);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Pending final output" }),
+    ]);
   });
 
   test("emits session_idle for stop-finished assistant turns without visible text", async () => {
@@ -1483,6 +1714,7 @@ describe("event-stream", () => {
           ],
         },
       } as unknown as Event,
+      makeSessionIdleEvent(),
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -1499,6 +1731,7 @@ describe("event-stream", () => {
         text: "Error from provider (Console Go): Upstream request failed",
         partId: "text-provider-error-1",
       }),
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1598,6 +1831,7 @@ describe("event-stream", () => {
           },
         },
       } as unknown as Event,
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1692,7 +1926,7 @@ describe("event-stream", () => {
       partId: "text-duplicate-terminal-1",
     });
 
-    const emitted = await runEventStream([terminalEvent, terminalEvent]);
+    const emitted = await runEventStream([terminalEvent, terminalEvent, makeSessionIdleEvent()]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
@@ -1784,6 +2018,7 @@ describe("event-stream", () => {
           text: "Done after pending turn",
           partId: "text-pending-terminal-1",
         }),
+        makeSessionIdleEvent(),
       ],
       (session) => {
         session.streamTurnStatus = "idle";
@@ -1797,7 +2032,7 @@ describe("event-stream", () => {
     expect(sessionRecord.streamTurnStatus).toBe("idle");
   });
 
-  test("keeps late terminal part updates out of assistant_part emission once idle", async () => {
+  test("keeps terminal part updates live until authoritative idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
         messageId: "assistant-message-late-part-update",
@@ -1812,11 +2047,14 @@ describe("event-stream", () => {
         text: "Done later",
         end: 2,
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Done later" }),
+    ]);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
 
     const updatedPart = sessionRecord.partsById.get("text-late-part-update-1");
     if (updatedPart?.type !== "text") {
@@ -1825,7 +2063,7 @@ describe("event-stream", () => {
     expect(updatedPart.text).toBe("Done later");
   });
 
-  test("keeps late terminal part deltas out of assistant events once idle", async () => {
+  test("keeps terminal part deltas live until authoritative idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
         messageId: "assistant-message-late-delta",
@@ -1840,12 +2078,13 @@ describe("event-stream", () => {
         field: "text",
         delta: " later",
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
     expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
 
     const updatedPart = sessionRecord.partsById.get("text-late-delta-1");
     if (updatedPart?.type !== "text") {
@@ -1936,6 +2175,7 @@ describe("event-stream", () => {
         messageId: "assistant-message-late-stop-part",
         partId: "step-finish-late-stop-part-1",
       }),
+      makeSessionIdleEvent(),
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
@@ -1985,12 +2225,13 @@ describe("event-stream", () => {
         field: "text",
         delta: " later",
       }),
+      makeSessionStatusIdleEvent(),
     ]);
 
-    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(2);
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
     expect(emitted.filter((event) => event.type === "assistant_message")).toHaveLength(1);
-    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(0);
     expect(sessionRecord.completedAssistantMessageIds.has("assistant-message-stale-update")).toBe(
       true,
     );
@@ -2257,14 +2498,12 @@ describe("event-stream", () => {
       );
 
       processOpencodeEvent({
-        context: {
-          externalSessionId: sessionRecord.externalSessionId,
-          input: sessionRecord.input,
-        },
+        externalSessionId: sessionRecord.externalSessionId,
+        input: sessionRecord.input,
+        session: sessionRecord,
         event: lifecycleEvent,
         now: () => "2026-02-22T12:00:00.000Z",
         emit: () => undefined,
-        getSession: () => sessionRecord,
       });
 
       expect(
@@ -2562,7 +2801,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("normalizes unknown session.status types as retry payload", async () => {
+  test("reports unsupported session.status types", async () => {
     const emitted = await runEventStream([
       {
         type: "session.status",
@@ -2578,17 +2817,12 @@ describe("event-stream", () => {
       } as unknown as Event,
     ]);
 
-    const statusEvents = emitted.filter((event) => event.type === "session_status");
-    expect(statusEvents).toHaveLength(1);
-    if (statusEvents[0]?.type !== "session_status") {
-      throw new Error("Expected session_status event");
-    }
-    expect(statusEvents[0].status).toEqual({
-      type: "retry",
-      attempt: 3,
-      message: "Reconnecting",
-      nextEpochMs: 500,
-    });
+    expect(emitted).toEqual([
+      expect.objectContaining({
+        type: "session_error",
+        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+      }),
+    ]);
   });
 
   test("forwards permission and question events", async () => {
@@ -2985,6 +3219,38 @@ describe("event-stream", () => {
     });
   });
 
+  test("removes a queued child question when OpenCode resolves it before correlation", async () => {
+    const { sessionRecord } = await runEventStreamWithSession([
+      {
+        type: "question.asked",
+        properties: {
+          sessionID: "external-child-session",
+          parentID: "external-session-1",
+          id: "question-child-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Pick target",
+              options: [{ label: "A", description: "Option A" }],
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "question.replied",
+        properties: {
+          sessionID: "external-child-session",
+          parentID: "external-session-1",
+          requestID: "question-child-1",
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+    ).toBeUndefined();
+  });
+
   test("forwards child permission events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
@@ -3039,10 +3305,9 @@ describe("event-stream", () => {
     const sessionRecord = makeSessionRecord(client);
 
     processOpencodeEvent({
-      context: {
-        externalSessionId: "external-child-session",
-        input: makeSessionInput(),
-      },
+      externalSessionId: "external-child-session",
+      input: makeSessionInput(),
+      session: sessionRecord,
       event: {
         type: "permission.asked",
         properties: {
@@ -3054,7 +3319,6 @@ describe("event-stream", () => {
       } as unknown as Event,
       now: () => "2026-02-22T12:00:00.000Z",
       emit: (_sessionId, event) => emitted.push(event),
-      getSession: () => sessionRecord,
       resolveSubagentSessionLink: (childExternalSessionId) =>
         childExternalSessionId === "external-child-session"
           ? {
@@ -3165,6 +3429,107 @@ describe("event-stream", () => {
     expect(sessionRecord.pendingSubagentPartEmissionsByExternalSessionId.size).toBe(0);
   });
 
+  test("clears child queues when their subagent part is removed", async () => {
+    const childExternalSessionId = "child-session-1";
+    const correlationKey = "part:assistant-message-4:subtask-part-1";
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.part.removed",
+          properties: {
+            sessionID: "external-session-1",
+            partID: "subtask-part-1",
+          },
+        } as unknown as Event,
+      ],
+      (record) => {
+        record.subagentCorrelationKeyByPartId.set("subtask-part-1", correlationKey);
+        record.subagentCorrelationKeyByExternalSessionId.set(
+          childExternalSessionId,
+          correlationKey,
+        );
+        record.subagentPartIdByCorrelationKey.set(correlationKey, "subtask-part-1");
+        record.subagentPartIdByExternalSessionId.set(childExternalSessionId, "subtask-part-1");
+        record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
+          arrivalOrder: 1,
+        });
+        record.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, []);
+        record.pendingBackgroundTaskResultsByExternalSessionId.set(childExternalSessionId, []);
+      },
+    );
+
+    expect(
+      sessionRecord.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+    expect(
+      sessionRecord.pendingBackgroundTaskResultsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+  });
+
+  test("keeps unrelated child work when one pending subagent part is removed", async () => {
+    const childExternalSessionId = "child-session-1";
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.part.removed",
+          properties: {
+            sessionID: "external-session-1",
+            partID: "subtask-part-1",
+          },
+        } as unknown as Event,
+      ],
+      (record) => {
+        record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
+          {
+            part: {
+              id: "subtask-part-1",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-4",
+              type: "tool",
+              tool: "task",
+              callID: "call-1",
+              state: { status: "running", input: {} },
+            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+          },
+          {
+            part: {
+              id: "subtask-part-2",
+              sessionID: "external-session-1",
+              messageID: "assistant-message-4",
+              type: "tool",
+              tool: "task",
+              callID: "call-2",
+              state: { status: "running", input: {} },
+            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+          },
+        ]);
+        record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
+          arrivalOrder: 1,
+        });
+        record.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, []);
+        record.pendingBackgroundTaskResultsByExternalSessionId.set(childExternalSessionId, []);
+      },
+    );
+
+    expect(
+      sessionRecord.pendingSubagentPartEmissionsByExternalSessionId
+        .get(childExternalSessionId)
+        ?.map((emission) => emission.part.id),
+    ).toEqual(["subtask-part-2"]);
+    expect(
+      sessionRecord.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+    expect(
+      sessionRecord.pendingBackgroundTaskResultsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(true);
+  });
+
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
@@ -3189,6 +3554,30 @@ describe("event-stream", () => {
     expect(errors[0].message).toBe("Unknown session error");
     expect(sessionRecord.isAwaitingRuntimeTurnStart).toBe(false);
     expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
+  test("emits pending final output before a session error", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-error",
+        finish: "stop",
+        completedAt: 1,
+        text: "Final output before error",
+        partId: "text-error-1",
+      }),
+      {
+        type: "session.error",
+        properties: {
+          sessionID: "external-session-1",
+          error: { data: { message: "Provider failed" } },
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Final output before error" }),
+    ]);
+    expect(emitted.at(-1)).toMatchObject({ type: "session_error", message: "Provider failed" });
   });
 
   test("does not replay duplicate delta after suppressed known user-part update", async () => {

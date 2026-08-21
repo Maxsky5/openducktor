@@ -20,7 +20,9 @@ import { handleToolPart } from "./session-tool-parts";
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
 const withRunningStatus = (session: AgentSessionState): AgentSessionState =>
-  session.status === "running" ? session : { ...session, status: "running" };
+  session.status === "running" && session.pendingUserMessageStartedAt === undefined
+    ? session
+    : { ...session, status: "running", pendingUserMessageStartedAt: undefined };
 
 const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(context.session.identity, (current) => withRunningStatus(current));
@@ -265,14 +267,21 @@ export const handleAssistantPart = (
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
-  if (part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part)) {
+  const recordsTurnActivity = part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part);
+  if (recordsTurnActivity) {
     const activityTimestamp =
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
     context.turn.recordTurnActivityTimestamp(context.session.key, activityTimestamp);
   }
-  const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
+  const preparePart = createPrePartTodoSettlement(part, event.timestamp);
+  const prepareCurrent = recordsTurnActivity
+    ? (current: AgentSessionState): AgentSessionState => ({
+        ...preparePart(current),
+        pendingUserMessageStartedAt: undefined,
+      })
+    : preparePart;
 
   switch (part.kind) {
     case "text":

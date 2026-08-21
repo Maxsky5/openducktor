@@ -5,13 +5,22 @@ import {
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import { parseOutput, toControlSummary, toSessionRef } from "./opencode-live-session-normalization";
+import {
+  parseOutput,
+  refKey,
+  toControlSummary,
+  toSessionRef,
+} from "./opencode-live-session-normalization";
 import type { OpenCodeLiveSessionState } from "./opencode-live-session-state";
 
 type SerializeRuntime = <Success>(
@@ -38,6 +47,20 @@ export const createOpenCodeSessionControlAdapter = ({
   serializeRuntime,
   commit,
 }: CreateOpenCodeSessionControlAdapterInput): AgentSessionControlAdapterPort => {
+  const serializeSendBySession = new Map<string, SerializeRuntime>();
+
+  const serializeSessionSend = <Success>(
+    sessionKey: string,
+    effect: Effect.Effect<Success, HostError>,
+  ): Effect.Effect<Success, HostError> => {
+    let serializeSend = serializeSendBySession.get(sessionKey);
+    if (!serializeSend) {
+      serializeSend = Effect.unsafeMakeSemaphore(1).withPermits(1);
+      serializeSendBySession.set(sessionKey, serializeSend);
+    }
+    return serializeSend(effect);
+  };
+
   const runControlSummary = (
     operation: string,
     run: () => Promise<unknown>,
@@ -104,12 +127,14 @@ export const createOpenCodeSessionControlAdapter = ({
           }),
         input.parentExternalSessionId,
       ),
-    sendUserMessage: (input) =>
-      serializeRuntime(
+    sendUserMessage: (input) => {
+      const sessionRef = toSessionRef(input);
+      return serializeSessionSend(
+        refKey(sessionRef),
         Effect.tryPromise({
           try: () =>
             connection.sendUserMessage({
-              ...toSessionRef(input),
+              ...sessionRef,
               runtimeKind: "opencode",
               runtimePolicy: { kind: "opencode" },
               sessionScope: input.sessionScope,
@@ -133,19 +158,32 @@ export const createOpenCodeSessionControlAdapter = ({
             ),
           ),
           Effect.flatMap((value) =>
-            commit("opencode-live-session.commit-user-message", () => {
-              const event = agentSessionTranscriptEventSchema.parse({
-                ...value,
-                sessionRef: toSessionRef(input),
-              });
-              return {
-                value,
-                changes: [...state.markRunning(input), { type: "transcript_event", event }],
-              };
-            }),
+            serializeRuntime(
+              commit("opencode-live-session.commit-user-message", () => {
+                if (!state.has(sessionRef)) {
+                  throw new HostValidationError({
+                    field: "externalSessionId",
+                    message: `OpenCode session '${input.externalSessionId}' is no longer retained.`,
+                    details: {
+                      runtimeId: runtime.runtimeId,
+                      externalSessionId: input.externalSessionId,
+                    },
+                  });
+                }
+                const event = agentSessionTranscriptEventSchema.parse({
+                  ...value,
+                  sessionRef,
+                });
+                return {
+                  value,
+                  changes: [{ type: "transcript_event", event }],
+                };
+              }),
+            ),
           ),
         ),
-      ),
+      );
+    },
     updateSessionModel: (input) =>
       serializeRuntime(
         Effect.tryPromise({

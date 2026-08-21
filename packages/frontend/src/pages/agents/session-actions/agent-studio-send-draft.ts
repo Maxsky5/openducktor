@@ -44,15 +44,10 @@ export const resolveAgentStudioSendDraftParts = ({
   supportsAttachments,
   stageAttachment = stageAgentStudioSendAttachment,
 }: ResolveAgentStudioSendDraftPartsInput): AgentStudioSendDraftParts | null => {
-  let reusablePromptMessageParts: AgentUserMessagePart[] | null;
-  try {
-    reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
-      draft,
-      reusablePrompts,
-    );
-  } catch {
-    return null;
-  }
+  const reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
+    draft,
+    reusablePrompts,
+  );
 
   if ((draft.attachments ?? []).length > 0) {
     if (!supportsAttachments) {

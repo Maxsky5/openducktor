@@ -4,22 +4,12 @@ import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
 import type { EventStreamRuntime } from "../shared";
-import { applyDeltaToPart } from "../shared";
+import { applyDeltaToPart, getMessageParts } from "../shared";
+import { removeMessageProjectionState } from "./message-state";
 
 export const suppressCompactionMessage = (runtime: EventStreamRuntime, messageId: string): void => {
-  runtime.compactionMessageIds.add(messageId);
-  for (const [partId, part] of runtime.partsById) {
-    if (part.messageID === messageId) {
-      runtime.partsById.delete(partId);
-      runtime.pendingDeltasByPartId.delete(partId);
-    }
-  }
-  runtime.messageRoleById.delete(messageId);
-  const session = runtime.getSession(runtime.externalSessionId);
-  session?.messageMetadataById.delete(messageId);
-  if (session?.activeAssistantMessageId === messageId) {
-    session.activeAssistantMessageId = null;
-  }
+  removeMessageProjectionState(runtime, messageId);
+  runtime.session.compactionMessageIds.add(messageId);
 };
 
 export type MappedAssistantPart = NonNullable<ReturnType<typeof mapPartToAgentStreamPart>>;
@@ -30,7 +20,7 @@ export const isAssistantMessage = (
   messageId: string,
   roleHint?: string,
 ): boolean => {
-  return (roleHint ?? runtime.messageRoleById.get(messageId)) === "assistant";
+  return (roleHint ?? runtime.session.messageRoleById.get(messageId)) === "assistant";
 };
 
 export const applyPendingDeltas = (
@@ -38,7 +28,7 @@ export const applyPendingDeltas = (
   partId: string,
   basePart: Part,
 ): Part => {
-  const pendingDeltas = runtime.pendingDeltasByPartId.get(partId);
+  const pendingDeltas = runtime.session.pendingDeltasByPartId.get(partId);
   if (!pendingDeltas || pendingDeltas.length === 0) {
     return basePart;
   }
@@ -50,18 +40,12 @@ export const applyPendingDeltas = (
       nextPart = updated;
     }
   }
-  runtime.pendingDeltasByPartId.delete(partId);
+  runtime.session.pendingDeltasByPartId.delete(partId);
   return nextPart;
 };
 
 export const getKnownMessageParts = (runtime: EventStreamRuntime, messageId: string): Part[] => {
-  const parts: Part[] = [];
-  for (const part of runtime.partsById.values()) {
-    if (part.messageID === messageId) {
-      parts.push(part);
-    }
-  }
-  return parts;
+  return getMessageParts(runtime.session, messageId);
 };
 
 const isTerminalAssistantFinish = (value: string | undefined): boolean =>
@@ -127,10 +111,7 @@ export const updateMessageMetadata = (
     displayParts?: SessionMessageMetadata["displayParts"];
   },
 ): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session) {
-    return;
-  }
+  const { session } = runtime;
 
   const previous = session.messageMetadataById.get(messageId);
   const timestamp = updates.timestamp ?? previous?.timestamp ?? runtime.now();

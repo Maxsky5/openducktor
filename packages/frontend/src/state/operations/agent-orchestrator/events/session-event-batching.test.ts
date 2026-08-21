@@ -21,6 +21,36 @@ const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSession
 };
 
 describe("session-event-batching", () => {
+  test("preserves repeated status transitions queued in the same batch", () => {
+    const batcher = createSessionEventBatcher();
+    const prepared = prepareQueuedEvents(batcher, [
+      {
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "busy", message: null },
+        timestamp: "2026-02-22T08:00:01.000Z",
+      },
+      {
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "idle" },
+        timestamp: "2026-02-22T08:00:01.100Z",
+      },
+      {
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "busy", message: null },
+        timestamp: "2026-02-22T08:00:01.200Z",
+      },
+    ] satisfies QueuedSessionEvent[]);
+
+    expect(prepared.readyEvents).toEqual([
+      expect.objectContaining({ type: "session_status", status: { type: "busy", message: null } }),
+      expect.objectContaining({ type: "session_status", status: { type: "idle" } }),
+      expect.objectContaining({ type: "session_status", status: { type: "busy", message: null } }),
+    ]);
+  });
+
   test("concatenates assistant deltas with the same message key before emitting", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = prepareQueuedEvents(batcher, [

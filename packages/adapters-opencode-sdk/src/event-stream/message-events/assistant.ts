@@ -5,14 +5,14 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
-import { isStreamTurnIdle } from "../../session-activity";
+import {
+  isAwaitingRuntimeTurnStart,
+  isStreamTurnIdle,
+  markStreamTurnActive,
+} from "../../session-activity";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
-import {
-  emitSessionIdle,
-  flushPendingSubagentInputEventsForSession,
-  markSessionActive,
-} from "../shared";
+import { flushPendingSubagentInputEventsForSession, markSessionActive } from "../shared";
 import { flushPendingBackgroundTaskResultSubagentParts } from "./background-task-result";
 import {
   getKnownMessageParts,
@@ -32,8 +32,8 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
   messageId: string,
   roleHint?: string,
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session || !isStreamTurnIdle(session)) {
+  const { session } = runtime;
+  if (!isStreamTurnIdle(session)) {
     return false;
   }
   return (
@@ -105,11 +105,12 @@ const flushPendingSubagentPartEmissionsForSession = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
 ): boolean => {
-  const pending = runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
+  const pending =
+    runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
   if (!pending || pending.length === 0) {
     return false;
   }
-  runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
+  runtime.session.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
   let emitted = false;
   for (const emission of pending) {
     emitted =
@@ -124,12 +125,12 @@ const readLinkedSubagentPart = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
 ): Part | null => {
-  const linkedPartId = runtime.subagentPartIdByExternalSessionId.get(externalSessionId);
+  const linkedPartId = runtime.session.subagentPartIdByExternalSessionId.get(externalSessionId);
   if (!linkedPartId) {
     return null;
   }
 
-  return runtime.partsById.get(linkedPartId) ?? null;
+  return runtime.session.partsById.get(linkedPartId) ?? null;
 };
 
 export const emitSubagentPartsForSession = (
@@ -158,10 +159,7 @@ export const emitKnownAssistantPartsForMessage = (
     return;
   }
 
-  for (const part of runtime.partsById.values()) {
-    if (part.messageID !== messageId) {
-      continue;
-    }
+  for (const part of getKnownMessageParts(runtime, messageId)) {
     emitAssistantPart(runtime, part, roleHint, markActive);
   }
 };
@@ -171,21 +169,25 @@ export const updateAssistantMessageCompletionState = (
   messageId: string,
   isCompleted: boolean,
 ): void => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session) {
-    return;
-  }
+  const { session } = runtime;
 
-  if (!isCompleted && session.completedAssistantMessageIds.has(messageId)) {
+  const wasCompleted = session.completedAssistantMessageIds.has(messageId);
+  if (!isCompleted && wasCompleted) {
     return;
   }
 
   const previousActiveAssistantMessageId = session.activeAssistantMessageId;
   if (isCompleted) {
+    if (isAwaitingRuntimeTurnStart(session)) {
+      markStreamTurnActive(session);
+    }
     if (session.activeAssistantMessageId === messageId) {
       session.activeAssistantMessageId = null;
     }
     session.completedAssistantMessageIds.add(messageId);
+    if (!wasCompleted) {
+      session.pendingCompletedAssistantMessageIds.add(messageId);
+    }
   } else {
     session.activeAssistantMessageId = messageId;
   }
@@ -204,8 +206,8 @@ export const maybeEmitCompletedAssistantMessage = (
     hasStopSignal?: boolean;
   },
 ): boolean => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session || !isAssistantMessage(runtime, input.messageId)) {
+  const { session } = runtime;
+  if (!isAssistantMessage(runtime, input.messageId)) {
     return false;
   }
 
@@ -232,19 +234,19 @@ export const maybeEmitCompletedAssistantMessage = (
     ...(totalTokens !== undefined ? { totalTokens } : {}),
   });
 
-  if (!hasStopSignal || assistantParts.length === 0) {
+  if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
     return false;
   }
 
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
-    emitSessionIdle(runtime);
-    publishUserMessageReadStateChanges(runtime);
+    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
   if (session.emittedAssistantMessageIds.has(input.messageId)) {
+    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
@@ -258,8 +260,13 @@ export const maybeEmitCompletedAssistantMessage = (
     ...(assistantModel ? { model: assistantModel } : {}),
   });
   session.emittedAssistantMessageIds.add(input.messageId);
-
-  emitSessionIdle(runtime);
-  publishUserMessageReadStateChanges(runtime);
+  session.pendingCompletedAssistantMessageIds.delete(input.messageId);
   return true;
+};
+
+export const emitCompletedAssistantMessages = (runtime: EventStreamRuntime): void => {
+  const { session } = runtime;
+  for (const messageId of session.pendingCompletedAssistantMessageIds) {
+    maybeEmitCompletedAssistantMessage(runtime, { messageId });
+  }
 };

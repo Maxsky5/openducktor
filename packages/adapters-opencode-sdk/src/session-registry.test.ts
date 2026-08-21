@@ -15,13 +15,15 @@ import {
   childSessionInfo,
   makeClientWithEvents,
   makeSessionInput,
+  makeSessionRecord,
   runtimeSourceSyncChildSessionCreatedEvent,
   runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
   syncChildSessionCreatedEvent,
   type TestGlobalEventPayload,
 } from "./event-stream.test-support";
-import { observeRuntimeEvents, registerSession } from "./session-registry";
-import type { RuntimeEventTransportRecord, SessionRecord } from "./types";
+import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
+import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionRecord } from "./types";
+import { waitForUserMessageAdmission } from "./user-message-admission";
 
 type GlobalEventPayload = TestGlobalEventPayload;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
@@ -282,6 +284,8 @@ const runRuntimeEventTransport = async (
   events: GlobalEventPayload[],
   options?: {
     onTransport?: (transport: RuntimeEventTransportRecord) => void;
+    externalSessionIds?: string[];
+    logEvent?: OpencodeEventLogger;
   },
 ): Promise<AgentEvent[]> => {
   const client = makeClientWithEvents(events);
@@ -289,23 +293,26 @@ const runRuntimeEventTransport = async (
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
   const emitted: AgentEvent[] = [];
 
-  registerSession({
-    sessions,
-    runtimeEventTransports,
-    createClient: () => client,
-    runtimeId: "runtime-opencode-1",
-    runtimeEndpoint: "http://127.0.0.1:12345",
-    externalSessionId: "external-session-1",
-    sessionInput: makeSessionInput(),
-    client,
-    startedAt: "2026-02-22T12:00:00.000Z",
-    startedMessage: "Started",
-    emitStartedEvent: false,
-    now: () => "2026-02-22T12:00:00.000Z",
-    emit: (_externalSessionId, event) => {
-      emitted.push(event);
-    },
-  });
+  for (const externalSessionId of options?.externalSessionIds ?? ["external-session-1"]) {
+    registerSession({
+      sessions,
+      runtimeEventTransports,
+      createClient: () => client,
+      runtimeId: "runtime-opencode-1",
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      externalSessionId,
+      sessionInput: makeSessionInput(),
+      client,
+      startedAt: "2026-02-22T12:00:00.000Z",
+      startedMessage: "Started",
+      emitStartedEvent: false,
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_externalSessionId, event) => {
+        emitted.push(event);
+      },
+      ...(options?.logEvent ? { logEvent: options.logEvent } : {}),
+    });
+  }
 
   const transport = runtimeEventTransports.get("runtime-opencode-1");
   if (!transport) {
@@ -317,6 +324,113 @@ const runRuntimeEventTransport = async (
 };
 
 describe("session registry runtime event transport", () => {
+  test("rejects pending message admission when its session is released", async () => {
+    const session = makeSessionRecord(makeClientWithEvents([]));
+    const sessions = new Map<string, SessionRecord>([[session.externalSessionId, session]]);
+    const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
+    const admission = waitForUserMessageAdmission(session, "message-1");
+    const settledAdmission = admission.promise.then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    await releaseSessionRuntime(session, sessions, runtimeEventTransports);
+
+    await expect(settledAdmission).resolves.toEqual(
+      new Error("OpenCode session 'external-session-1' was released."),
+    );
+  });
+
+  test("keeps other sessions live after one session receives an unsupported status", async () => {
+    const emitted = await runRuntimeEventTransport(
+      [
+        {
+          type: "session.status",
+          properties: {
+            sessionID: "external-session-1",
+            status: { type: "reconnect" },
+          },
+        } as unknown as GlobalEventPayload,
+        {
+          type: "session.status",
+          properties: {
+            sessionID: "external-session-2",
+            status: { type: "busy" },
+          },
+        } as unknown as GlobalEventPayload,
+      ],
+      { externalSessionIds: ["external-session-1", "external-session-2"] },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "external-session-1",
+        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+      }),
+    ]);
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_status",
+        externalSessionId: "external-session-2",
+        status: { type: "busy", message: null },
+      }),
+    );
+  });
+
+  test("attributes a subscriber projection failure to that subscriber", async () => {
+    const emitted = await runRuntimeEventTransport(
+      [
+        {
+          type: "session.status",
+          properties: {
+            sessionID: "external-session-1",
+            status: { type: "busy" },
+          },
+        } as unknown as GlobalEventPayload,
+      ],
+      {
+        externalSessionIds: ["external-session-1", "external-session-2"],
+        logEvent: ({ externalSessionId }) => {
+          if (externalSessionId === "external-session-2") {
+            throw new Error("Subscriber 2 projection failed.");
+          }
+        },
+      },
+    );
+
+    expect(emitted.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        externalSessionId: "external-session-2",
+        message: "Subscriber 2 projection failed.",
+      }),
+    ]);
+  });
+
+  test("terminates runtime observation when an event failure has no safe session owner", async () => {
+    const terminalFailures: Error[] = [];
+
+    await expect(
+      runRuntimeEventTransport(
+        [
+          {
+            type: "session.created",
+            properties: { info: {} },
+          } as unknown as GlobalEventPayload,
+        ],
+        {
+          externalSessionIds: ["external-session-1", "external-session-2"],
+          onTransport: (transport) => {
+            transport.terminalObservers.add((error) => {
+              terminalFailures.push(error);
+            });
+          },
+        },
+      ),
+    ).rejects.toThrow();
+    expect(terminalFailures).toHaveLength(1);
+    expect(terminalFailures[0]?.message).toContain("session.created");
+  });
+
   test("routes direct child session creation to the single pending subagent card", async () => {
     const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-subagent-session-created"),

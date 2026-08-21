@@ -1,7 +1,7 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
 import { readStringProp } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
-import type { QueuedUserMessageSend } from "../../types";
+import type { QueuedUserMessageSend, SessionRecord } from "../../types";
 import {
   buildQueuedDisplayAttachmentIdentitySignature,
   buildQueuedDisplaySignature,
@@ -26,8 +26,8 @@ export const takeQueuedUserSendMatch = (
   parts: AgentUserMessageDisplayPart[],
   model: ReturnType<typeof readMessageModelSelection> | undefined,
 ): QueuedUserMessageSend | null => {
-  const session = runtime.getSession(runtime.externalSessionId);
-  if (!session || session.pendingQueuedUserMessages.length === 0) {
+  const { session } = runtime;
+  if (session.pendingQueuedUserMessages.length === 0) {
     return null;
   }
 
@@ -54,11 +54,11 @@ export const takeQueuedUserSendMatch = (
 };
 
 export const resolveUserMessageStateFromPendingAssistant = (
-  session: ReturnType<EventStreamRuntime["getSession"]>,
+  session: SessionRecord,
   messageId: string,
 ): AgentUserMessageState => {
-  const activeAssistantMessageId = session?.activeAssistantMessageId;
-  if (!session || !activeAssistantMessageId) {
+  const activeAssistantMessageId = session.activeAssistantMessageId;
+  if (!activeAssistantMessageId) {
     return "read";
   }
 
@@ -73,7 +73,7 @@ export const resolveLiveUserMessageState = (
     matchedQueuedSend?: QueuedUserMessageSend | null;
   },
 ): AgentUserMessageState => {
-  const session = runtime.getSession(runtime.externalSessionId);
+  const { session } = runtime;
   const pendingAssistantState = resolveUserMessageStateFromPendingAssistant(
     session,
     input.messageId,

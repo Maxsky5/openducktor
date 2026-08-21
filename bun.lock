@@ -63,6 +63,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "undici": "^7.28.0",
       },
     },
     "packages/build-tools": {
@@ -224,6 +225,7 @@
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.232",
+        "undici": "^7.28.0",
       },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",

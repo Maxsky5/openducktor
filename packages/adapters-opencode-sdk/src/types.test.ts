@@ -16,6 +16,7 @@ describe("types", () => {
     const sessionInput: SessionInput = {
       repoPath: "/repo",
       runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
@@ -24,7 +25,9 @@ describe("types", () => {
     const sessionRecord: SessionRecord = {
       summary: {
         externalSessionId: "external-session-1",
-        role: "spec",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
       },
@@ -40,11 +43,14 @@ describe("types", () => {
       isAwaitingRuntimeTurnStart: false,
       activeAssistantMessageId: null,
       completedAssistantMessageIds: new Set<string>(),
+      pendingCompletedAssistantMessageIds: new Set<string>(),
       emittedAssistantMessageIds: new Set<string>(),
       emittedUserMessageSignatures: new Map<string, string>(),
       emittedUserMessageStates: new Map(),
+      pendingUserMessageAdmissions: new Map(),
       pendingQueuedUserMessages: [],
       partsById: new Map(),
+      partIdsByMessageId: new Map(),
       messageRoleById: new Map(),
       messageMetadataById: new Map(),
       compactionMessageIds: new Set(),

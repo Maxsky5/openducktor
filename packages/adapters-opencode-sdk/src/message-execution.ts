@@ -14,6 +14,7 @@ import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
 import { normalizeModelInput, resolveAssistantResponseMessageId } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { SessionRecord } from "./types";
+import { fetchOpenCodeCommand } from "./opencode-command-fetch";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
@@ -25,7 +26,10 @@ type SlashCommandExecutionRequest = {
 };
 
 type SessionCommandClient = {
-  command?: (input: unknown) => Promise<{ error?: unknown; response?: unknown }>;
+  command?: (
+    input: unknown,
+    options: { fetch: typeof globalThis.fetch },
+  ) => Promise<{ error?: unknown; response?: unknown }>;
 };
 
 type PreparedUserSend = {
@@ -257,16 +261,19 @@ const prepareSlashCommandSend = (
 
       const commandModel = toCommandModelInput(modelInput);
 
-      const response = await commandClient.command({
-        sessionID: session.externalSessionId,
-        directory: session.input.workingDirectory,
-        messageID: messageId,
-        command: slashCommandRequest.command,
-        arguments: slashCommandRequest.arguments,
-        ...(commandModel ? { model: commandModel } : {}),
-        ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-        ...(modelInput.agent ? { agent: modelInput.agent } : {}),
-      });
+      const response = await commandClient.command(
+        {
+          sessionID: session.externalSessionId,
+          directory: session.input.workingDirectory,
+          messageID: messageId,
+          command: slashCommandRequest.command,
+          arguments: slashCommandRequest.arguments,
+          ...(commandModel ? { model: commandModel } : {}),
+          ...(modelInput.variant ? { variant: modelInput.variant } : {}),
+          ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+        },
+        { fetch: fetchOpenCodeCommand as typeof globalThis.fetch },
+      );
       if (response.error) {
         throw toOpenCodeRequestError(
           "run slash command",
@@ -362,6 +369,7 @@ export const sendUserMessage = async (input: {
   request: SendAgentUserMessageInput;
   tools: Record<string, boolean>;
   messageId?: string;
+  admission?: Promise<void>;
 }): Promise<AdmittedUserMessage> => {
   const model = input.request.model ?? input.session.input.model;
   const modelInput = normalizeModelInput(model);
@@ -395,6 +403,7 @@ export const sendUserMessage = async (input: {
     (isQueuedBehindActiveAssistant || queuedAttachmentParts.length > 0);
   const queuedEntry = shouldTrackPendingSend
     ? {
+        messageId,
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
         ...(queuedAttachmentParts.length > 0
           ? {
@@ -413,12 +422,21 @@ export const sendUserMessage = async (input: {
   }
 
   try {
-    const { assistantMessageId } = await preparedSend.execute({
+    const execution = preparedSend.execute({
       session: input.session,
       messageId,
       tools: input.tools,
       modelInput,
     });
+    let assistantMessageId: string | null = null;
+    if (input.admission) {
+      const executionFailure = new Promise<never>((_, reject) => {
+        void execution.then(() => undefined, reject);
+      });
+      await Promise.race([input.admission, executionFailure]);
+    } else {
+      ({ assistantMessageId } = await execution);
+    }
     if (assistantMessageId) {
       input.session.activeAssistantMessageId = assistantMessageId;
     }

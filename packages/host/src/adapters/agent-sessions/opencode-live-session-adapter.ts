@@ -4,9 +4,11 @@ import {
   type PrepareOpencodeSessionRuntime,
 } from "@openducktor/adapters-opencode-sdk";
 import {
+  type AgentSessionActivity,
   type AgentSessionContextUsage,
   type AgentSessionLiveLoadContextInput,
   type AgentSessionLiveRef,
+  type AgentSessionTranscriptEvent,
   agentSessionTranscriptEventSchema,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
@@ -53,6 +55,21 @@ const stateEffect = <Value>(
         ? cause
         : toHostOperationError(cause, operation, details),
   });
+
+const runtimeActivityFromTranscriptEvent = (
+  event: AgentSessionTranscriptEvent,
+): AgentSessionActivity | null => {
+  if (event.type === "session_idle" || event.type === "session_error") {
+    return "idle";
+  }
+  if (event.type !== "session_status") {
+    return null;
+  }
+  if (event.status.type === "busy") {
+    return "running";
+  }
+  return event.status.type === "retry" ? "retrying" : "idle";
+};
 
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
@@ -183,9 +200,18 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                   ...signal.event,
                   sessionRef: ref,
                 });
+                let stateChanges: AgentSessionLiveAdapterMutation<void>["changes"] = [];
+                if (event.type === "session_error") {
+                  stateChanges = state.settleSessionError(ref);
+                } else {
+                  const runtimeActivity = runtimeActivityFromTranscriptEvent(event);
+                  if (runtimeActivity) {
+                    stateChanges = state.setRuntimeActivity(ref, runtimeActivity);
+                  }
+                }
                 return {
                   value: undefined,
-                  changes: [{ type: "transcript_event", event }],
+                  changes: [...stateChanges, { type: "transcript_event", event }],
                 };
               }),
             );

@@ -202,7 +202,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
-  test("does not start a repository session from a stale custom compact prompt", async () => {
+  test("reports a reserved custom compact prompt without starting a repository session", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
@@ -215,7 +215,9 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createCompactReusablePromptDraft())).resolves.toBe(false);
+      await expect(state.onSend(createCompactReusablePromptDraft())).rejects.toThrow(
+        "/compact is reserved for manual session compaction.",
+      );
     });
 
     expect(startSession).not.toHaveBeenCalled();

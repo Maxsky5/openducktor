@@ -58,9 +58,6 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
-import { createEventStreamRuntime } from "./event-stream";
-import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emitter";
-import type { EventStreamRuntime } from "./event-stream/shared";
 import {
   applyOpencodeAwaitingTurnStartToRuntimeSnapshot,
   findOpencodeLocalRuntimeSnapshot,
@@ -69,6 +66,7 @@ import {
 } from "./live-session-snapshots";
 import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
+import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
   adoptPreparedOpencodeSessionPolicy,
   applyRuntimeContextToSession,
@@ -78,19 +76,18 @@ import {
   synchronizeOpencodeSessionPolicy,
 } from "./opencode-session-binding";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
+import {
+  beginOpencodeUserMessageSend,
+  completeOpencodeUserMessageSend,
+  failOpencodeUserMessageSend,
+  projectAdmittedOpencodeUserMessage,
+} from "./opencode-agent-session-projection";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
   type OpencodeRuntimeResolutionInput,
   resolveOpencodeRuntimeClientInput,
 } from "./runtime-connection";
-import {
-  clearAwaitingRuntimeTurnStart,
-  finishUserMessageSend,
-  isStreamTurnIdle,
-  markStreamTurnIdle,
-  startUserMessageSend,
-} from "./session-activity";
 import { opencodeSessionRef } from "./session-ref";
 import {
   registerSession,
@@ -110,6 +107,7 @@ import type {
   SessionRecord,
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
+import { waitForUserMessageAdmission } from "./user-message-admission";
 import {
   ensureTrustedOdtMcpServerConnected,
   resolveRepositoryToolSelection,
@@ -729,22 +727,18 @@ export class OpencodeSdkAdapter
     session: SessionRecord,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
   ): Promise<AcceptedAgentUserMessage> {
-    const preserveActiveTurnOnFailure =
-      systemInvocation.kind === "manual_session_compaction" &&
-      session.streamTurnStatus === "active";
     const expectsPromptTurnStart = usesPromptAsyncTransport(input.parts);
-    if (!expectsPromptTurnStart) {
-      clearAwaitingRuntimeTurnStart(session);
-    }
-    startUserMessageSend(session, {
-      expectRuntimeTurnStart: isStreamTurnIdle(session) && expectsPromptTurnStart,
-    });
-    this.emit(input.externalSessionId, {
-      type: "session_status",
-      externalSessionId: input.externalSessionId,
+    const waitsForRuntimeAdmission =
+      systemInvocation.kind === "not_system" && !expectsPromptTurnStart;
+    const messageId = waitsForRuntimeAdmission ? createOpenCodeMessageId() : undefined;
+    const admission = messageId ? waitForUserMessageAdmission(session, messageId) : undefined;
+    const begunSend = beginOpencodeUserMessageSend({
+      session,
+      expectsPromptTurnStart,
+      isManualSessionCompaction: systemInvocation.kind === "manual_session_compaction",
       timestamp: this.now(),
-      status: { type: "busy", message: null },
     });
+    this.emit(input.externalSessionId, begunSend.runningEvent);
     try {
       const tools =
         systemInvocation.kind === "manual_session_compaction"
@@ -754,6 +748,8 @@ export class OpencodeSdkAdapter
         session,
         request: input,
         tools,
+        ...(messageId ? { messageId } : {}),
+        ...(admission ? { admission: admission.promise } : {}),
       });
       const timestamp = this.now();
       const event: AcceptedAgentUserMessage = {
@@ -763,24 +759,32 @@ export class OpencodeSdkAdapter
         ...admittedUserMessage,
       };
       if (systemInvocation.kind !== "manual_session_compaction") {
-        emitAdmittedUserMessage(this.createRuntimeEventView(session), {
-          ...admittedUserMessage,
-          timestamp,
+        projectAdmittedOpencodeUserMessage({
+          externalSessionId: session.externalSessionId,
+          input: session.input,
+          session,
+          now: this.now,
+          emit: this.emit.bind(this),
+          message: {
+            ...admittedUserMessage,
+            timestamp,
+          },
         });
       }
       return event;
     } catch (error) {
-      if (!preserveActiveTurnOnFailure) {
-        markStreamTurnIdle(session);
-        this.emit(input.externalSessionId, {
-          type: "session_idle",
-          externalSessionId: input.externalSessionId,
-          timestamp: this.now(),
-        });
+      const idleEvent = failOpencodeUserMessageSend(
+        session,
+        begunSend.preserveActiveTurnOnFailure,
+        this.now(),
+      );
+      if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
+        this.emit(input.externalSessionId, idleEvent);
       }
       throw error;
     } finally {
-      finishUserMessageSend(session);
+      admission?.dispose();
+      completeOpencodeUserMessageSend(session);
     }
   }
 
@@ -883,25 +887,6 @@ export class OpencodeSdkAdapter
     }
     const sessionRef = opencodeSessionRef(session);
     emitSessionEvent(this.listeners, sessionRef, withAgentSessionRef(sessionRef, event));
-  }
-
-  private createRuntimeEventView(session: SessionRecord): EventStreamRuntime {
-    const runtime = createEventStreamRuntime({
-      context: {
-        externalSessionId: session.externalSessionId,
-        input: session.input,
-      },
-      now: this.now,
-      emit: this.emit.bind(this),
-      getSession: (sessionId) =>
-        sessionId === session.externalSessionId ? session : this.sessions.get(sessionId),
-    });
-    if (!runtime) {
-      throw new Error(
-        `Cannot create OpenCode runtime event view for session ${session.externalSessionId}.`,
-      );
-    }
-    return runtime;
   }
 
   private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {

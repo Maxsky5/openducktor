@@ -259,9 +259,12 @@ export const createOpenCodeLiveSessionState = ({
       : [{ type: "session_upsert", snapshot }];
   };
 
-  const markRunning = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
+  const setRuntimeActivity = (
+    ref: AgentSessionLiveRef,
+    runtimeActivity: AgentSessionActivity,
+  ): AgentSessionLiveAdapterChange[] => {
     const retained = requireSession(ref);
-    retained.runtimeActivity = "running";
+    retained.runtimeActivity = runtimeActivity;
     const activity = classifyActivity({
       runtimeActivity: retained.runtimeActivity,
       pendingApprovals: retained.snapshot.pendingApprovals,
@@ -272,9 +275,29 @@ export const createOpenCodeLiveSessionState = ({
     }
     retained.snapshot = parseSnapshot(
       { ...retained.snapshot, activity },
-      "opencode-live-session.mark-running",
+      "opencode-live-session.set-runtime-activity",
     );
     return [{ type: "session_upsert", snapshot: retained.snapshot }];
+  };
+
+  const settleSessionError = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
+    const retained = requireSession(ref);
+    pendingRequests.removeSession(ref);
+    retained.runtimeActivity = "idle";
+    const snapshot = parseSnapshot(
+      {
+        ...retained.snapshot,
+        activity: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      },
+      "opencode-live-session.settle-session-error",
+    );
+    if (snapshotsEqual(retained.snapshot, snapshot)) {
+      return [];
+    }
+    retained.snapshot = snapshot;
+    return [{ type: "session_upsert", snapshot }];
   };
 
   const requirePendingRoute = (
@@ -359,7 +382,8 @@ export const createOpenCodeLiveSessionState = ({
     retainContext,
     applyLoadedContext,
     retainControlSummary,
-    markRunning,
+    setRuntimeActivity,
+    settleSessionError,
     requirePendingRoute,
     completePendingReply,
     removeSession,

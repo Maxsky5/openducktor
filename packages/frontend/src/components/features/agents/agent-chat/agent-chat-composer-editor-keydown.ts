@@ -557,7 +557,7 @@ export const handleComposerEditorKeyDown = ({
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
-    if (!disabled && draftHasMeaningfulContent(sourceDraft)) {
+    if (!disabled) {
       onSend();
     }
     return true;

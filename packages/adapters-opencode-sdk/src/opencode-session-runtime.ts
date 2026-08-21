@@ -24,11 +24,13 @@ import {
   replyToOpencodeQuestion,
 } from "./opencode-session-native-operations";
 import {
+  opencodeEventInvalidatesSessions,
+  readOpencodeSessionContextSignal,
+} from "./opencode-agent-session-projection";
+import {
   isOpencodeSessionTranscriptEvent,
   type OpencodeSessionContextUsage,
   type OpencodeSessionRuntimeSignal,
-  opencodeEventInvalidatesSessions,
-  readOpencodeSessionContextSignal,
   toOpencodeObservationFailureMessage,
 } from "./opencode-session-runtime-signals";
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
