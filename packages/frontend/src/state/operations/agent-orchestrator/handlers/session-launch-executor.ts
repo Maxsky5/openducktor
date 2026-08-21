@@ -129,16 +129,60 @@ const stopLaunchedSession = async ({
   await adapter.stopSession({ ...identity, repoPath });
 };
 
-const throwStopFailure = ({
+const stopAfterFailedForkHistoryLoad = async ({
+  error,
+  adapter,
+  repoPath,
+  identity,
+}: {
+  error: unknown;
+  adapter: AgentEnginePort;
+  repoPath: string;
+  identity: AgentSessionIdentity;
+}): Promise<never> => {
+  const messagePrefix = `Failed to initialize started session "${identity.externalSessionId}": ${errorMessage(error)}.`;
+  try {
+    await stopLaunchedSession({ adapter, repoPath, identity });
+  } catch (stopError) {
+    throw new SessionLaunchStopError(
+      `${messagePrefix} Failed to stop the started session during rollback: ${errorMessage(stopError)}`,
+      { cause: stopError },
+    );
+  }
+  throw new Error(
+    `${messagePrefix} The started session was stopped before local registration.`,
+    error instanceof Error ? { cause: error } : undefined,
+  );
+};
+
+const rollbackFailedRegistration = async ({
   cause,
-  messagePrefix,
+  adapter,
+  repoPath,
+  identity,
+  removeSession,
 }: {
   cause: unknown;
-  messagePrefix: string;
-}): never => {
-  throw new SessionLaunchStopError(
-    `${messagePrefix} Failed to stop the started session during rollback: ${errorMessage(cause)}`,
-    { cause },
+  adapter: AgentEnginePort;
+  repoPath: string;
+  identity: AgentSessionIdentity;
+  removeSession: (identity: AgentSessionIdentity) => void;
+}): Promise<never> => {
+  const messagePrefix = `Failed to register started session "${identity.externalSessionId}": ${errorMessage(cause)}.`;
+  try {
+    await runOrchestratorTask("session-launch-stop-after-registration-failure", () =>
+      stopLaunchedSession({ adapter, repoPath, identity }),
+    );
+    removeSession(identity);
+  } catch (cleanupError) {
+    throw new SessionLaunchStopError(
+      `${messagePrefix} Failed to roll back the started session after the registration failure: ${errorMessage(cleanupError)}`,
+      { cause },
+    );
+  }
+  throw new Error(
+    `${messagePrefix} The started session was stopped and removed locally.`,
+    cause instanceof Error ? { cause } : undefined,
   );
 };
 
@@ -206,43 +250,6 @@ const buildForkInitialMessages = (
     }),
   ]);
 
-const rollbackFailedRegistration = async ({
-  cause,
-  adapter,
-  repoPath,
-  identity,
-  removeSession,
-}: {
-  cause: unknown;
-  adapter: AgentEnginePort;
-  repoPath: string;
-  identity: AgentSessionIdentity;
-  removeSession: (identity: AgentSessionIdentity) => void;
-}): Promise<never> => {
-  const messagePrefix = `Failed to register started session "${identity.externalSessionId}": ${errorMessage(cause)}.`;
-  let cleanupFailed = false;
-  let cleanupError: unknown;
-  try {
-    await runOrchestratorTask("session-launch-stop-after-registration-failure", () =>
-      stopLaunchedSession({ adapter, repoPath, identity }),
-    );
-    removeSession(identity);
-  } catch (error) {
-    cleanupFailed = true;
-    cleanupError = error;
-  }
-  if (cleanupFailed) {
-    throw new SessionLaunchStopError(
-      `${messagePrefix} Failed to roll back the started session after the registration failure: ${errorMessage(cleanupError)}`,
-      { cause },
-    );
-  }
-  throw new Error(
-    `${messagePrefix} The started session was stopped and removed locally.`,
-    cause instanceof Error ? { cause } : undefined,
-  );
-};
-
 export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDependencies) => {
   return async (input: ExecutePreparedSessionLaunchInput): Promise<PreparedSessionLaunchResult> => {
     const { launch } = input;
@@ -251,10 +258,8 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
       repoEpochRef: deps.repoEpochRef,
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
     });
-    const isStaleOperation =
-      input.isCallerContextStale === undefined
-        ? repositoryStaleGuard
-        : (): boolean => repositoryStaleGuard() || input.isCallerContextStale?.() === true;
+    const isStaleOperation = (): boolean =>
+      repositoryStaleGuard() || (input.isCallerContextStale?.() ?? false);
     throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
 
     const summary = await callPreparedRuntimeLaunch(deps.adapter, launch);
@@ -276,22 +281,14 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         summary,
         identity,
         deps,
-      }).catch(async (error) => {
-        const messagePrefix = `Failed to initialize started session "${identity.externalSessionId}": ${errorMessage(error)}.`;
-        try {
-          await stopLaunchedSession({
-            adapter: deps.adapter,
-            repoPath: launch.repoPath,
-            identity,
-          });
-        } catch (stopError) {
-          throwStopFailure({ cause: stopError, messagePrefix });
-        }
-        throw new Error(
-          `${messagePrefix} The started session was stopped before local registration.`,
-          error instanceof Error ? { cause: error } : undefined,
-        );
-      });
+      }).catch((error) =>
+        stopAfterFailedForkHistoryLoad({
+          error,
+          adapter: deps.adapter,
+          repoPath: launch.repoPath,
+          identity,
+        }),
+      );
 
       if (isStaleOperation()) {
         await stopLaunchedSessionOnStaleAndThrow({
