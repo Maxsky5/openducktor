@@ -137,15 +137,15 @@ describe("session-start-workflow", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
       expect.objectContaining({
         kind: "text",
-        text: expect.stringContaining("comparisonRef: upstream/release/2026.04"),
+        text: expect.stringContaining("Base ref: upstream/release/2026.04"),
       }),
     ]);
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).toContain("branch: release/2026.04");
-    expect(sentText).not.toContain("comparisonRef: origin/main");
+    expect(sentText).toContain("Base branch: release/2026.04");
+    expect(sentText).not.toContain("Base ref: origin/main");
   });
 
   test("uses the explicit branch name as the provider base for origin targets", async () => {
@@ -180,8 +180,8 @@ describe("session-start-workflow", () => {
       [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
-    expect(sentText).toContain("comparisonRef: origin/main");
-    expect(sentText).toContain("branch: main");
+    expect(sentText).toContain("Base ref: origin/main");
+    expect(sentText).toContain("Base branch: main");
   });
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {
