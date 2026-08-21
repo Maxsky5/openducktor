@@ -465,7 +465,7 @@ describe("use-checks", () => {
 
   test("shows cli and task-store toasts for unhealthy successful payloads", async () => {
     let runtimeCallCount = 0;
-    let beadsCallCount = 0;
+    let taskStoreCallCount = 0;
     const runtimeCheck = mock(async (): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1
@@ -483,8 +483,8 @@ describe("use-checks", () => {
           });
     });
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
-      beadsCallCount += 1;
-      return beadsCallCount === 1
+      taskStoreCallCount += 1;
+      return taskStoreCallCount === 1
         ? makeTaskStoreCheck()
         : makeTaskStoreCheck({
             taskStoreOk: false,
@@ -537,17 +537,17 @@ describe("use-checks", () => {
 
   test("refreshChecks starts independent probes in parallel", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<TaskStoreCheck>();
+    const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     let runtimeCallCount = 0;
-    let beadsCallCount = 0;
+    let taskStoreCallCount = 0;
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
     });
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
-      beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
+      taskStoreCallCount += 1;
+      return taskStoreCallCount === 1 ? makeTaskStoreCheck() : taskStoreDeferred.promise;
     });
     const refreshRepoRuntimeHealth = mock(async () => runtimeHealthDeferred.promise);
 
@@ -578,7 +578,7 @@ describe("use-checks", () => {
       expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
 
       runtimeDeferred.resolve(makeRuntimeCheck());
-      beadsDeferred.resolve(makeTaskStoreCheck());
+      taskStoreDeferred.resolve(makeTaskStoreCheck());
       runtimeHealthDeferred.resolve({ opencode: makeRepoHealth() });
       await harness.run(async () => {
         await refreshPromise;
@@ -640,17 +640,17 @@ describe("use-checks", () => {
 
   test("refreshChecks waits for all failed probes before surfacing unavailable diagnostics", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<TaskStoreCheck>();
+    const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthMap>();
     let runtimeCallCount = 0;
-    let beadsCallCount = 0;
+    let taskStoreCallCount = 0;
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
     });
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
-      beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
+      taskStoreCallCount += 1;
+      return taskStoreCallCount === 1 ? makeTaskStoreCheck() : taskStoreDeferred.promise;
     });
     const refreshRepoRuntimeHealth = mock(async () => runtimeHealthDeferred.promise);
 
@@ -679,7 +679,7 @@ describe("use-checks", () => {
       await Promise.resolve();
       expect(toastError).not.toHaveBeenCalled();
 
-      beadsDeferred.reject(new Error("task store down"));
+      taskStoreDeferred.reject(new Error("task store down"));
       runtimeHealthDeferred.resolve({ opencode: makeRepoHealth() });
       await harness.run(async () => {
         return expect(refreshPromise).rejects.toThrow("runtime down");
@@ -701,18 +701,18 @@ describe("use-checks", () => {
     } finally {
       await harness.unmount();
       void runtimeDeferred.promise.catch(() => {});
-      void beadsDeferred.promise.catch(() => {});
+      void taskStoreDeferred.promise.catch(() => {});
       void runtimeHealthDeferred.promise.catch(() => {});
       runtimeDeferred.reject(new Error("cleanup"));
-      beadsDeferred.reject(new Error("cleanup"));
+      taskStoreDeferred.reject(new Error("cleanup"));
       runtimeHealthDeferred.reject(new Error("cleanup"));
     }
   }, 5000);
 
   test("refreshChecks times out hung probes and clears loading state", async () => {
     let runtimeCallCount = 0;
-    let beadsCallCount = 0;
-    const beadsDeferred = createDeferred<TaskStoreCheck>();
+    let taskStoreCallCount = 0;
+    const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       if (runtimeCallCount === 1) {
@@ -721,8 +721,8 @@ describe("use-checks", () => {
       throw new Error("runtime down");
     });
     const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
-      beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
+      taskStoreCallCount += 1;
+      return taskStoreCallCount === 1 ? makeTaskStoreCheck() : taskStoreDeferred.promise;
     });
 
     const originalSetTimeout = globalThis.setTimeout;
@@ -803,19 +803,19 @@ describe("use-checks", () => {
       await harness.unmount();
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
-      void beadsDeferred.promise.catch(() => {});
-      beadsDeferred.reject(new Error("cleanup"));
+      void taskStoreDeferred.promise.catch(() => {});
+      taskStoreDeferred.reject(new Error("cleanup"));
     }
   }, 5000);
 
   test("projects runtime and task-store query timeouts into concrete states instead of leaving checks pending", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<TaskStoreCheck>();
+    const taskStoreDeferred = createDeferred<TaskStoreCheck>();
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
 
     runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
-    taskStoreCheckHandler = mock(async () => beadsDeferred.promise);
+    taskStoreCheckHandler = mock(async () => taskStoreDeferred.promise);
 
     globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
       if (typeof handler !== "function") {
@@ -862,9 +862,9 @@ describe("use-checks", () => {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;
       void runtimeDeferred.promise.catch(() => {});
-      void beadsDeferred.promise.catch(() => {});
+      void taskStoreDeferred.promise.catch(() => {});
       runtimeDeferred.reject(new Error("cleanup"));
-      beadsDeferred.reject(new Error("cleanup"));
+      taskStoreDeferred.reject(new Error("cleanup"));
     }
   }, 5000);
 });
