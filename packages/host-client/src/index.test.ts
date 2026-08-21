@@ -304,6 +304,7 @@ describe("HostClient", () => {
       "qaRejected",
       "agentSessionsList",
       "agentSessionUpsert",
+      "taskStopImpactGet",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
       "agentSessionLiveLoadDiff",

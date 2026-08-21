@@ -406,6 +406,7 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
       stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
@@ -491,6 +492,7 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
       stopActiveTaskResetActivity: () => Effect.succeed({ stoppedSessionCount: 0 }),
     };
@@ -554,6 +556,7 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
       stopActiveTaskResetActivity: (input) => {
         calls.push(`${input.operationLabel}:${input.repoPath}:${input.sessionRoles.join(",")}`);
@@ -711,6 +714,7 @@ describe("TaskService.closeTask", () => {
       selectedModel: null,
     };
     const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns: () => Effect.succeed({ stoppedSessionCount: 0 }),
       stopActiveTaskResetActivity: (input) => {
         calls.push(`${input.operationLabel}:${input.sessionRoles.join(",")}`);

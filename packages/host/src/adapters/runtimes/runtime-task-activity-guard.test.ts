@@ -115,6 +115,43 @@ const session = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecor
   ...overrides,
 });
 describe("createRuntimeTaskActivityGuard", () => {
+  test("counts live sessions without stopping them", async () => {
+    const probeCalls: unknown[] = [];
+    const stopCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({
+        liveSessions: new Set(["external-build-session"]),
+        probeCalls,
+        stopCalls,
+      }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.countLiveSessions({
+          repoPath: "/repo",
+          sessions: [session()],
+          sessionRoles: ["build", "qa"],
+        }),
+      ),
+    ).resolves.toEqual({ liveSessionCount: 1 });
+    expect(stopCalls).toEqual([]);
+  });
+  test("count ignores unsupported probes and out-of-role sessions", async () => {
+    const stopCalls: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({ probeSupported: false, stopCalls }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.countLiveSessions({
+          repoPath: "/repo",
+          sessions: [session()],
+          sessionRoles: ["build"],
+        }),
+      ),
+    ).resolves.toEqual({ liveSessionCount: 0 });
+    expect(stopCalls).toEqual([]);
+  });
   test("stops a live session before implementation reset and reports the stopped count", async () => {
     const stopCalls: string[] = [];
     const guard = createRuntimeTaskActivityGuard({

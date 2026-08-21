@@ -27,7 +27,7 @@ type TaskResetConfirmDialogProps = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
-  activeSessionCount: number;
+  activeSessionCount: number | null;
   impactError: string | null;
   isResetPending: boolean;
   resetError: string | null;
@@ -72,7 +72,7 @@ export function TaskResetConfirmDialog({
                 terminated before the task resets.
               </p>
             )}
-            {activeSessionCount > 0 ? (
+            {activeSessionCount !== null && activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(activeSessionCount, "reset")}</p>
             ) : null}
             {isLoadingImpact ? (

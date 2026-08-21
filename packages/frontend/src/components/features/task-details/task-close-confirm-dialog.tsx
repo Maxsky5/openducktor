@@ -27,7 +27,7 @@ type TaskCloseConfirmDialogProps = {
   hasManagedSessionCleanup: boolean;
   managedWorktreeCount: number;
   terminalCount: number;
-  activeSessionCount: number;
+  activeSessionCount: number | null;
   impactError: string | null;
   isClosePending: boolean;
   closeError: string | null;
@@ -68,7 +68,7 @@ export function TaskCloseConfirmDialog({
                 ? "No running task terminals will be stopped."
                 : `${terminalCount} associated terminal${terminalCount === 1 ? "" : "s"} will be terminated before the task closes.`}
             </p>
-            {activeSessionCount > 0 ? (
+            {activeSessionCount !== null && activeSessionCount > 0 ? (
               <p>{formatActiveSessionStopMessage(activeSessionCount, "close")}</p>
             ) : null}
             {isLoadingImpact ? (

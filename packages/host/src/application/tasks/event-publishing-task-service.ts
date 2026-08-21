@@ -106,6 +106,7 @@ export const createEventPublishingTaskService = ({
 
   return {
     listTasks: (input) => taskService.listTasks(input),
+    getTaskStopImpact: (input) => taskService.getTaskStopImpact(input),
     getTaskMetadata: (input) => taskService.getTaskMetadata(input),
     agentSessionsList: (input) => taskService.agentSessionsList(input),
     agentSessionsListForTasks: (input) => taskService.agentSessionsListForTasks(input),

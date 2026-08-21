@@ -779,6 +779,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -963,6 +964,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -1066,6 +1068,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
@@ -1441,6 +1444,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns() {
         return Effect.tryPromise({
           try: async () => {
@@ -1753,6 +1757,7 @@ describe("createTaskService task mutations and reset", () => {
       },
     };
     const taskActivityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
       stopActiveTaskDeleteRuns() {
         return Effect.tryPromise({
           try: async () => {

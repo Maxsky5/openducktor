@@ -1492,7 +1492,7 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
-    "reset implementation opens the modal and reports active sessions instead of blocking",
+    "reset implementation opens the modal and previews the host stop count instead of blocking",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1523,30 +1523,39 @@ describe("KanbanPage session start modal flow", () => {
           ],
         }),
       ];
-      const renderer = await renderPage();
+      const originalStopImpactGet = hostClient.taskStopImpactGet;
+      let renderer: KanbanPageHarness | null = null;
 
-      await act(async () => {
-        requireCallback(
-          renderer.getKanbanColumnProps().onResetImplementation,
-          "reset implementation",
-        )("TASK-123");
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      try {
+        hostClient.taskStopImpactGet = async () => ({ stoppableSessionCount: 0 });
+        renderer = await renderPage();
 
-      const resetModal = renderer.getResetImplementationModalModel();
-      expect(resetModal).not.toBeNull();
-      expect(resetModal?.activeSessionCount).toBe(1);
-      expect(toastErrorMock).not.toHaveBeenCalled();
+        await act(async () => {
+          requireCallback(
+            renderer!.getKanbanColumnProps().onResetImplementation,
+            "reset implementation",
+          )("TASK-123");
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      await act(async () => {
-        renderer.unmount();
-      });
+        const resetModal = renderer.getResetImplementationModalModel();
+        expect(resetModal).not.toBeNull();
+        await waitFor(() => {
+          expect(renderer!.getResetImplementationModalModel()?.activeSessionCount).toBe(0);
+        });
+        expect(toastErrorMock).not.toHaveBeenCalled();
+      } finally {
+        hostClient.taskStopImpactGet = originalStopImpactGet;
+        await act(async () => {
+          unmountPageIfRendered(renderer);
+        });
+      }
     },
   );
 
   kanbanTest(
-    "reset implementation reports zero active sessions when no task sessions are active",
+    "reset implementation previews the number of sessions the host will stop",
     async () => {
       currentTaskFixture = createTaskCardFixture({
         id: "TASK-123",
@@ -1554,24 +1563,33 @@ describe("KanbanPage session start modal flow", () => {
         availableActions: ["reset_implementation"],
       });
       currentSessionsFixture = [];
-      const renderer = await renderPage();
+      const originalStopImpactGet = hostClient.taskStopImpactGet;
+      let renderer: KanbanPageHarness | null = null;
 
-      await act(async () => {
-        requireCallback(
-          renderer.getKanbanColumnProps().onResetImplementation,
-          "reset implementation",
-        )("TASK-123");
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      try {
+        hostClient.taskStopImpactGet = async () => ({ stoppableSessionCount: 2 });
+        renderer = await renderPage();
 
-      const resetModal = renderer.getResetImplementationModalModel();
-      expect(resetModal).not.toBeNull();
-      expect(resetModal?.activeSessionCount).toBe(0);
+        await act(async () => {
+          requireCallback(
+            renderer!.getKanbanColumnProps().onResetImplementation,
+            "reset implementation",
+          )("TASK-123");
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      await act(async () => {
-        renderer.unmount();
-      });
+        const resetModal = renderer.getResetImplementationModalModel();
+        expect(resetModal).not.toBeNull();
+        await waitFor(() => {
+          expect(renderer!.getResetImplementationModalModel()?.activeSessionCount).toBe(2);
+        });
+      } finally {
+        hostClient.taskStopImpactGet = originalStopImpactGet;
+        await act(async () => {
+          unmountPageIfRendered(renderer);
+        });
+      }
     },
   );
 

@@ -74,6 +74,12 @@ describe("TaskResetImplementationModal", () => {
     expect(screen.queryByText(/active agent session/i)).toBeNull();
   });
 
+  test("hides session-stop copy while the host preview is unavailable", () => {
+    render(<TaskResetImplementationModal model={{ ...makeModel(0), activeSessionCount: null }} />);
+
+    expect(screen.queryByText(/active agent session/i)).toBeNull();
+  });
+
   test("does not claim retention when only legacy worktrees exist", () => {
     render(
       <TaskResetImplementationModal model={{ ...makeModel(1), hasCanonicalWorktree: false }} />,

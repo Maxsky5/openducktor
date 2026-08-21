@@ -62,6 +62,8 @@ import {
   requireParsedRecord,
 } from "./command-inputs";
 
+export { parseTaskStopImpactInput } from "./task-command-parsing";
+
 const optionalNonNegativeIntegerSchema = z.union([
   z.number().int().nonnegative(),
   z.null(),

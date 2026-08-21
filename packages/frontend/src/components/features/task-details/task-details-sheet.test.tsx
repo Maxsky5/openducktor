@@ -79,6 +79,12 @@ const createTaskCleanupImpactHookMock = () =>
     terminalCount: 0,
   }));
 
+const createTaskStopImpactHookMock = () =>
+  mock((_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
+    stoppableSessionCount: null,
+    isLoading: false,
+  }));
+
 describe("TaskDetailsSheet", () => {
   test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
@@ -131,6 +137,7 @@ describe("TaskDetailsSheet", () => {
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
+      taskStopImpactHook: createTaskStopImpactHookMock(),
     });
 
     try {
@@ -177,6 +184,7 @@ describe("TaskDetailsSheet", () => {
       onDelete: mock(async () => {}),
       taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: taskCleanupImpactHookMock,
+      taskStopImpactHook: createTaskStopImpactHookMock(),
     });
     const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-2);
 
@@ -244,6 +252,7 @@ describe("TaskDetailsSheet", () => {
       onDelete,
       taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
+      taskStopImpactHook: createTaskStopImpactHookMock(),
     });
 
     try {
@@ -298,6 +307,7 @@ describe("TaskDetailsSheet", () => {
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
+      taskStopImpactHook: createTaskStopImpactHookMock(),
     });
 
     try {
@@ -349,6 +359,7 @@ describe("TaskDetailsSheet", () => {
       onDelete: undefined,
       taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
+      taskStopImpactHook: createTaskStopImpactHookMock(),
     });
 
     try {

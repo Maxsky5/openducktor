@@ -12,7 +12,6 @@ export type TaskDetailsSheetProps = {
   historicalSessions?: AgentSessionRecord[];
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
-  activeSessionCountsByTaskId?: Map<string, number>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workflowActionsEnabled?: boolean;

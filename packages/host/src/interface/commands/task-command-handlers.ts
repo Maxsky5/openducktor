@@ -24,6 +24,7 @@ import {
   parseTaskSessionBootstrapPrepareInput,
   parseTaskSessionStartupLeaseFinalizeInput,
   parseTaskSessionStartupLeasePrepareInput,
+  parseTaskStopImpactInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
 } from "./task-command-inputs";
@@ -99,6 +100,7 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_reset: (args) => taskService.resetTask(parseTaskIdInput(args, "task_reset input")),
     task_reset_implementation: (args) =>
       taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),
+    task_stop_impact_get: (args) => taskService.getTaskStopImpact(parseTaskStopImpactInput(args)),
     task_transition: (args) => taskService.transitionTask(parseTransitionTaskInput(args)),
     task_update: (args) => taskService.updateTask(parseUpdateTaskInput(args)),
     set_plan: (args) =>

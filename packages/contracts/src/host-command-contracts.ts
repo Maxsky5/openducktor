@@ -103,6 +103,7 @@ export const HOST_COMMAND_NAMES = [
   "task_session_startup_lease_abort",
   "task_session_startup_lease_complete",
   "task_session_startup_lease_prepare",
+  "task_stop_impact_get",
   "task_store_check",
   "task_transition",
   "task_update",

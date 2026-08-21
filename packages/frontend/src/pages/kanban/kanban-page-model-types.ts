@@ -160,7 +160,7 @@ export type KanbanPageModels = {
     taskTitle: string;
     targetStatusLabel: string;
     isSubmitting: boolean;
-    activeSessionCount: number;
+    activeSessionCount: number | null;
     isLoadingImpact: boolean;
     hasCanonicalWorktree: boolean;
     hasManagedSessionCleanup: boolean;

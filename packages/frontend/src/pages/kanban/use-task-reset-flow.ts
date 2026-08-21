@@ -3,8 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { errorMessage } from "@/lib/errors";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 
 type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
@@ -14,7 +13,6 @@ type ResetImplementationOptions = {
 
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
-  sessions: AgentSessionSummary[];
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: () => void;
 };
@@ -31,7 +29,6 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 
 export function useTaskResetFlow({
   tasks,
-  sessions,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
@@ -45,18 +42,11 @@ export function useTaskResetFlow({
     [taskId, tasks],
   );
   const open = task !== null;
-  // The host stops live sessions authoritatively during reset; this count is
-  // advisory UX so the confirm dialog can say how many sessions will be stopped.
-  const activeSessionCount = useMemo(
-    () =>
-      taskId
-        ? sessions.filter(
-            (session) =>
-              session.taskId === taskId && isAgentSessionActivityActive(session.activityState),
-          ).length
-        : 0,
-    [taskId, sessions],
-  );
+  const { stoppableSessionCount: activeSessionCount } = useTaskStopImpact({
+    taskIds: taskId ? [taskId] : [],
+    operation: "reset_implementation",
+    enabled: open,
+  });
   const {
     hasCanonicalWorktree,
     hasManagedSessionCleanup,

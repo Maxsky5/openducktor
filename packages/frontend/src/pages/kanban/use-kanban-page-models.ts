@@ -280,7 +280,6 @@ export function useKanbanPageModels({
   );
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks: kanbanTasks,
-    sessions,
     resetTaskImplementation,
     closeTaskDetails: onCloseDetails,
   });

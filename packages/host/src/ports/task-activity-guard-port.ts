@@ -12,6 +12,11 @@ export type TaskActivityGuardStopResult = {
 };
 
 export type TaskActivityGuardPort = {
+  countLiveSessions(input: {
+    repoPath: string;
+    sessions: AgentSessionRecord[];
+    sessionRoles: string[];
+  }): Effect.Effect<{ liveSessionCount: number }, TaskActivityGuardError>;
   stopActiveTaskDeleteRuns(input: {
     repoPath: string;
     taskSessions: Array<{

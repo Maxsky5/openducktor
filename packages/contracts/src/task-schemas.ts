@@ -236,3 +236,23 @@ export const taskUpdatePatchSchema = z.object({
   ),
 });
 export type TaskUpdatePatch = z.infer<typeof taskUpdatePatchSchema>;
+
+export const taskStopImpactOperationSchema = z.enum([
+  "close",
+  "delete",
+  "reset_implementation",
+  "reset_task",
+]);
+export type TaskStopImpactOperation = z.infer<typeof taskStopImpactOperationSchema>;
+
+export const taskStopImpactRequestSchema = z.object({
+  repoPath: z.string().min(1),
+  taskIds: z.array(z.string().min(1)),
+  operation: taskStopImpactOperationSchema,
+});
+export type TaskStopImpactRequest = z.infer<typeof taskStopImpactRequestSchema>;
+
+export const taskStopImpactSchema = z.object({
+  stoppableSessionCount: z.number().int().nonnegative(),
+});
+export type TaskStopImpact = z.infer<typeof taskStopImpactSchema>;

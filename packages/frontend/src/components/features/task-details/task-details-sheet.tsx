@@ -65,7 +65,6 @@ export function TaskDetailsSheet({
   historicalSessions = EMPTY_HISTORICAL_SESSIONS,
   hasActiveSession = false,
   activeSessionRole,
-  activeSessionCountsByTaskId,
   open,
   onOpenChange,
   workflowActionsEnabled = true,
@@ -105,7 +104,6 @@ export function TaskDetailsSheet({
     onResetTask,
     onCloseTask,
     onDelete,
-    ...(activeSessionCountsByTaskId ? { activeSessionCountsByTaskId } : {}),
   };
   if (task) {
     viewModelInput.resolveSessionOptionsByRole = (role: AgentRole) =>

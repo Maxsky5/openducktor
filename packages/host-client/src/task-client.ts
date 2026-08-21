@@ -12,6 +12,8 @@ import {
   type TaskCard,
   type TaskCreateInput,
   type TaskStatus,
+  type TaskStopImpact,
+  type TaskStopImpactOperation,
   type TaskUpdatePatch,
   taskAgentSessionsSchema,
   taskAssetDescriptionMutationSchema,
@@ -22,6 +24,7 @@ import {
   taskCreateInputSchema,
   taskMetadataDocumentSchema,
   taskStatusSchema,
+  taskStopImpactSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
 import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
@@ -396,6 +399,19 @@ export class HostTaskClient {
       { repoPath, taskId },
       arrayResultSchema(agentSessionRecordSchema, "agent_sessions_list"),
     );
+  }
+
+  async taskStopImpactGet(
+    repoPath: string,
+    taskIds: string[],
+    operation: TaskStopImpactOperation,
+  ): Promise<TaskStopImpact> {
+    const payload = await this.invokeFn("task_stop_impact_get", {
+      repoPath,
+      taskIds,
+      operation,
+    });
+    return taskStopImpactSchema.parse(payload);
   }
 
   async agentSessionsListForTasks(
