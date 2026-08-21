@@ -1,4 +1,4 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { GitTargetBranch, RepoPromptOverrides } from "@openducktor/contracts";
 import {
   type AgentKickoffTemplateId,
   type AgentPromptGitContext,
@@ -27,6 +27,7 @@ type TaskPromptContext = {
 type SessionStartPromptOptions = {
   overrides?: RepoPromptOverrides;
   task?: TaskPromptContext;
+  targetBranch?: GitTargetBranch;
   git?: AgentPromptGitContext;
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
 };
@@ -69,6 +70,7 @@ export const kickoffPromptForTemplate = (
       ...options?.task,
     },
     ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
+    ...(options?.targetBranch ? { targetBranch: options.targetBranch } : {}),
     ...(options?.git ? { git: options.git } : {}),
     overrides: options?.overrides ?? {},
   });

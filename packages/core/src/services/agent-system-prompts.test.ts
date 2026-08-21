@@ -427,9 +427,9 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-1",
       },
-      git: {
-        targetBranch: "origin/release/2026.04",
-        pullRequestBaseBranch: "release/2026.04",
+      targetBranch: {
+        remote: "origin",
+        branch: "release/2026.04",
       },
     });
 
@@ -463,7 +463,7 @@ describe("kickoff and permission prompts", () => {
     );
   });
 
-  test("rejects pull request generation kickoff when provider base context is missing", () => {
+  test("rejects an upstream-relative pull request target", () => {
     expect(() =>
       buildAgentKickoffPrompt({
         role: "build",
@@ -471,12 +471,12 @@ describe("kickoff and permission prompts", () => {
         task: {
           taskId: "task-1",
         },
-        git: {
-          targetBranch: "origin/main",
+        targetBranch: {
+          branch: "@{upstream}",
         },
       }),
     ).toThrow(
-      'Missing required git context for "kickoff.build_pull_request_generation": pullRequestBaseBranch.',
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
     );
   });
 

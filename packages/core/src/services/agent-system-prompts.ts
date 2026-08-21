@@ -1,5 +1,6 @@
 import {
   type AgentPromptTemplateId,
+  type GitTargetBranch,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
@@ -38,6 +39,7 @@ export type BuildAgentKickoffPromptInput = {
     description?: string;
   };
   extraPlaceholders?: Partial<Record<"humanFeedback", string>>;
+  targetBranch?: GitTargetBranch;
   git?: AgentPromptGitContext;
   overrides?: RepoPromptOverrides;
 };
@@ -46,7 +48,6 @@ export type AgentPromptGitContext = {
   operationLabel?: string;
   currentBranch?: string;
   targetBranch?: string;
-  pullRequestBaseBranch?: string;
   conflictedFiles?: string[];
   conflictOutput?: string;
 };
@@ -530,6 +531,33 @@ const compact = (value: string | undefined): string => {
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
+type PullRequestTargetContext = {
+  comparisonRef: string;
+  baseBranch: string;
+};
+
+const resolvePullRequestTarget = (
+  targetBranch: GitTargetBranch | undefined,
+): PullRequestTargetContext => {
+  const branch = targetBranch?.branch.trim();
+  if (!branch) {
+    throw new Error(
+      'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
+    );
+  }
+  if (branch === "@{upstream}") {
+    throw new Error(
+      "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a provider base branch.",
+    );
+  }
+
+  const remote = targetBranch?.remote?.trim();
+  return {
+    comparisonRef: remote ? `${remote}/${branch}` : branch,
+    baseBranch: branch,
+  };
+};
+
 const compactList = (values: string[] | undefined): string => {
   const normalized = (values ?? [])
     .map((value) => value.trim())
@@ -555,11 +583,13 @@ const buildPlaceholderValues = ({
   role,
   task,
   extraPlaceholders,
+  pullRequestTarget,
   git,
 }: {
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
+  pullRequestTarget?: PullRequestTargetContext;
   git?: AgentPromptGitContext;
 }): Record<string, string> => {
   const humanFeedback = extraPlaceholders?.humanFeedback?.trim();
@@ -582,14 +612,14 @@ const buildPlaceholderValues = ({
           humanFeedback,
         }
       : {}),
-    ...(git
+    ...(git || pullRequestTarget
       ? {
-          "git.operationLabel": compact(git.operationLabel),
-          "git.currentBranch": compact(git.currentBranch),
-          "git.targetBranch": compact(git.targetBranch),
-          "git.pullRequestBaseBranch": compact(git.pullRequestBaseBranch),
-          "git.conflictedFiles": compactList(git.conflictedFiles),
-          "git.conflictOutput": compact(git.conflictOutput),
+          "git.operationLabel": compact(git?.operationLabel),
+          "git.currentBranch": compact(git?.currentBranch),
+          "git.targetBranch": compact(pullRequestTarget?.comparisonRef ?? git?.targetBranch),
+          "git.pullRequestBaseBranch": compact(pullRequestTarget?.baseBranch),
+          "git.conflictedFiles": compactList(git?.conflictedFiles),
+          "git.conflictOutput": compact(git?.conflictOutput),
         }
       : {}),
   };
@@ -672,6 +702,7 @@ const buildPromptFromTemplates = ({
   role,
   task,
   extraPlaceholders,
+  pullRequestTarget,
   git,
   overrides,
 }: {
@@ -679,6 +710,7 @@ const buildPromptFromTemplates = ({
   role: AgentRole;
   task: BuildAgentKickoffPromptInput["task"];
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
+  pullRequestTarget?: PullRequestTargetContext;
   git?: AgentPromptGitContext;
   overrides: RepoPromptOverrides | undefined;
 }): BuiltAgentPrompt => {
@@ -686,6 +718,7 @@ const buildPromptFromTemplates = ({
     role,
     task,
     ...(extraPlaceholders ? { extraPlaceholders } : {}),
+    ...(pullRequestTarget ? { pullRequestTarget } : {}),
     ...(git ? { git } : {}),
   });
   const templates = templateIds.map((templateId) =>
@@ -731,26 +764,17 @@ export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
 export const buildAgentKickoffPromptBundle = (
   input: BuildAgentKickoffPromptInput,
 ): BuiltAgentPrompt => {
-  if (input.templateId === "kickoff.build_pull_request_generation") {
-    const targetBranch = input.git?.targetBranch?.trim();
-    if (!targetBranch) {
-      throw new Error(
-        'Missing required git context for "kickoff.build_pull_request_generation": targetBranch.',
-      );
-    }
-    const pullRequestBaseBranch = input.git?.pullRequestBaseBranch?.trim();
-    if (!pullRequestBaseBranch) {
-      throw new Error(
-        'Missing required git context for "kickoff.build_pull_request_generation": pullRequestBaseBranch.',
-      );
-    }
-  }
+  const pullRequestTarget =
+    input.templateId === "kickoff.build_pull_request_generation"
+      ? resolvePullRequestTarget(input.targetBranch)
+      : undefined;
 
   return buildPromptFromTemplates({
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
     ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : {}),
+    ...(pullRequestTarget ? { pullRequestTarget } : {}),
     ...(input.git ? { git: input.git } : {}),
     overrides: input.overrides,
   });
