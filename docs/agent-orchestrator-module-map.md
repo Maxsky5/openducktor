@@ -891,10 +891,16 @@ It must not select a runtime adapter or load transcript history. Task reset page
 must not call a session refresh command after reset. Reset
 operations invalidate the exact task-session-record query, and the repo read
 model reacts to that owned query data.
-Live projection during repo reads is owned by
-`agent-session-live-projection.ts`. It merges durable shells with normalized host
-snapshots, resets missing live-only fields on every new initial snapshot, and
-applies ordered deltas without a second frontend cache.
+Live projection during repo reads is split by ownership.
+`agent-session-live-projection.ts` is a task-neutral layer: it applies normalized
+host snapshots and ordered deltas, carries the exact runtime association into
+session state, and resets missing live-only fields on every new initial
+snapshot. `agent-session-workflow-overlay.ts` is the workflow persistence layer:
+it materializes historical sessions from durable records, overlays durable
+fields onto matching live sessions, and prunes a workflow projection only when a
+loaded task proves its record disappeared and no snapshot still reports it.
+`useRepoSessionReadModel` composes live projection, then the overlay, then
+commits one collection without a second frontend cache.
 
 ## Startup Flow
 
@@ -904,8 +910,8 @@ applies ordered deltas without a second frontend cache.
 3. The renderer observes the existing generic host-event channel, then requests
    one live-state refresh for the active repository.
 4. The refresh publishes the complete normalized host snapshot before later deltas.
-   `buildAgentSessionLiveCollection` merges it with durable shells and commits the
-   session collection once.
+   `buildAgentSessionLiveCollection` projects it, the workflow record overlay
+   reconciles durable records, and the session collection commits once.
 5. Session rows, activity, pending input, retained context usage, and sidebar
    counters all derive from that same committed collection.
 6. Subsequent ordered upserts, removals, transcript events, faults, and catalog

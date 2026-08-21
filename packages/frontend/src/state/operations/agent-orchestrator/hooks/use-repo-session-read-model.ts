@@ -26,15 +26,19 @@ import type { AgentSessionTransientFault } from "@/types/agent-session-transient
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
+  agentSessionLiveSnapshotIdentityKeys,
   applyAgentSessionLiveDelta,
-  applyTaskSessionRecords,
   buildAgentSessionLiveCollection,
 } from "../session-read-model/agent-session-live-projection";
+import { applyWorkflowSessionRecordOverlay } from "../session-read-model/agent-session-workflow-overlay";
 import {
   collectPendingApprovalPolicyActions,
   type PendingApprovalPolicyAction,
 } from "../session-read-model/pending-approval-policy";
-import type { TaskSessionRecords } from "../session-read-model/task-session-records";
+import {
+  toDurableWorkflowSessionRecords,
+  type TaskSessionRecords,
+} from "../session-read-model/task-session-records";
 import { useTaskSessionRecords } from "../session-read-model/use-task-session-records";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { createRepoStaleGuard } from "../support/core";
@@ -87,6 +91,8 @@ type RecordRetryResult = RecordRetryKey &
 
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string =>
   `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
+
+const noSnapshotRetainedIdentityKeys: ReadonlySet<string> = new Set();
 
 export const useRepoSessionReadModel = ({
   workspaceRepoPath,
@@ -169,9 +175,10 @@ export const useRepoSessionReadModel = ({
     (repoPath: string, records: TaskSessionRecords): boolean => {
       try {
         commitSessionCollection((current) => ({
-          collection: applyTaskSessionRecords({
-            current,
-            taskSessionRecords: records,
+          collection: applyWorkflowSessionRecordOverlay({
+            projected: current,
+            durableRecords: toDurableWorkflowSessionRecords(records),
+            snapshotRetainedIdentityKeys: noSnapshotRetainedIdentityKeys,
           }),
           result: undefined,
         }));
@@ -469,10 +476,17 @@ export const useRepoSessionReadModel = ({
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
       const policyActions = commitSessionCollection((current) => {
-        const collection = buildAgentSessionLiveCollection({
+        // This is the sole live-snapshot-to-session-store write path:
+        // project the runtime stream first, then reconcile durable workflow records.
+        const taskSessionRecords = readTaskSessionRecords();
+        const projected = buildAgentSessionLiveCollection({
           current,
-          taskSessionRecords: readTaskSessionRecords(),
           snapshots: envelope.sessions,
+        });
+        const collection = applyWorkflowSessionRecordOverlay({
+          projected,
+          durableRecords: toDurableWorkflowSessionRecords(taskSessionRecords),
+          snapshotRetainedIdentityKeys: agentSessionLiveSnapshotIdentityKeys(envelope.sessions),
         });
         return {
           collection,
@@ -517,7 +531,6 @@ export const useRepoSessionReadModel = ({
         const policyActions = commitSessionCollection((current) => {
           const collection = applyAgentSessionLiveDelta({
             current,
-            taskSessionRecords: readTaskSessionRecords(),
             envelope,
           });
           return {
