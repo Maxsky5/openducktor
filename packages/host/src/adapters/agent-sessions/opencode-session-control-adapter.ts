@@ -105,34 +105,34 @@ export const createOpenCodeSessionControlAdapter = ({
         input.parentExternalSessionId,
       ),
     sendUserMessage: (input) =>
-      serializeRuntime(
-        Effect.tryPromise({
-          try: () =>
-            connection.sendUserMessage({
-              ...toSessionRef(input),
-              runtimeKind: "opencode",
-              runtimePolicy: { kind: "opencode" },
-              sessionScope: input.sessionScope,
-              parts: input.parts as Parameters<
-                OpencodeSessionRuntimeConnection["sendUserMessage"]
-              >[0]["parts"],
-              ...(input.model ? { model: input.model } : {}),
-              ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
-            }),
-          catch: (cause) =>
-            toHostOperationError(cause, "opencode-live-session.send-user-message", {
-              runtimeId: runtime.runtimeId,
-              externalSessionId: input.externalSessionId,
-            }),
-        }).pipe(
-          Effect.flatMap((event) =>
-            parseOutput(
-              acceptedAgentUserMessageSchema,
-              event,
-              "opencode-live-session.normalize-user-message",
-            ),
+      Effect.tryPromise({
+        try: () =>
+          connection.sendUserMessage({
+            ...toSessionRef(input),
+            runtimeKind: "opencode",
+            runtimePolicy: { kind: "opencode" },
+            sessionScope: input.sessionScope,
+            parts: input.parts as Parameters<
+              OpencodeSessionRuntimeConnection["sendUserMessage"]
+            >[0]["parts"],
+            ...(input.model ? { model: input.model } : {}),
+            ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
+          }),
+        catch: (cause) =>
+          toHostOperationError(cause, "opencode-live-session.send-user-message", {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+          }),
+      }).pipe(
+        Effect.flatMap((event) =>
+          parseOutput(
+            acceptedAgentUserMessageSchema,
+            event,
+            "opencode-live-session.normalize-user-message",
           ),
-          Effect.flatMap((value) =>
+        ),
+        Effect.flatMap((value) =>
+          serializeRuntime(
             commit("opencode-live-session.commit-user-message", () => {
               const event = agentSessionTranscriptEventSchema.parse({
                 ...value,
@@ -140,7 +140,7 @@ export const createOpenCodeSessionControlAdapter = ({
               });
               return {
                 value,
-                changes: [...state.markRunning(input), { type: "transcript_event", event }],
+                changes: [{ type: "transcript_event", event }],
               };
             }),
           ),

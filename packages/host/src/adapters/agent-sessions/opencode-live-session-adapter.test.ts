@@ -98,7 +98,12 @@ type RuntimeHarness = {
   readonly setSources: (sources: OpencodeRuntimeSnapshotSource[]) => void;
 };
 
-const createRuntimeHarness = (): RuntimeHarness => {
+const createRuntimeHarness = (
+  options: {
+    readonly sendUserMessageBarrier?: Promise<void>;
+    readonly onSendUserMessage?: () => void;
+  } = {},
+): RuntimeHarness => {
   let listener: ((signal: OpencodeSessionRuntimeSignal) => void | Promise<void>) | null = null;
   const sources = [nativeSource()];
   const approvalReplies: OpencodeNativeApprovalReply[] = [];
@@ -136,6 +141,8 @@ const createRuntimeHarness = (): RuntimeHarness => {
     },
     sendUserMessage: async (input) => {
       controlCalls.push({ operation: "send", input });
+      options.onSendUserMessage?.();
+      await options.sendUserMessageBarrier;
       return {
         type: "user_message",
         externalSessionId: input.externalSessionId,
@@ -617,6 +624,120 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     await expect(Effect.runPromise(adapter.releaseRuntime())).resolves.toEqual([ref]);
     expect(harness.releaseCalls).toEqual(["runtime-1"]);
+  });
+
+  test("keeps concurrent session events current while a slash command send is pending", async () => {
+    let resolveSendStarted: () => void = () => undefined;
+    let releaseSend: () => void = () => undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      resolveSendStarted = resolve;
+    });
+    const sendBarrier = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const harness = createRuntimeHarness({
+      sendUserMessageBarrier: sendBarrier,
+      onSendUserMessage: resolveSendStarted,
+    });
+    harness.setSources([
+      nativeSource({ pendingApprovals: [], pendingQuestions: [] }),
+      nativeSource({
+        externalSessionId: "session-2",
+        title: "Other OpenCode session",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    ]);
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const sending = Effect.runPromise(
+      adapter.sendUserMessage({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        parts: [
+          {
+            kind: "slash_command",
+            command: { id: "review", trigger: "review", title: "review", hints: [] },
+          },
+        ],
+      }),
+    );
+    await sendStarted;
+
+    const forwarding = harness.emit({
+      type: "transcript_event",
+      externalSessionId: "session-2",
+      event: {
+        type: "session_status",
+        externalSessionId: "session-2",
+        timestamp: "2026-07-16T10:04:00.000Z",
+        status: { type: "busy", message: null },
+      },
+    });
+
+    try {
+      try {
+        const result = await Promise.race([
+          forwarding.then(() => "forwarded" as const),
+          new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
+        ]);
+        expect(result).toBe("forwarded");
+        await expect(
+          Effect.runPromise(
+            adapter.readRetainedSnapshot({ ...ref, externalSessionId: "session-2" }),
+          ),
+        ).resolves.toMatchObject({ type: "live", session: { activity: "running" } });
+
+        await harness.emit({
+          type: "transcript_event",
+          externalSessionId: "session-1",
+          event: {
+            type: "user_message",
+            externalSessionId: "session-1",
+            timestamp: "2026-07-16T10:04:01.000Z",
+            messageId: "user-live",
+            message: "/review",
+            parts: [{ kind: "text", text: "/review" }],
+            state: "queued",
+          },
+        });
+        expect(publishedChanges).toContainEqual({
+          type: "transcript_event",
+          event: expect.objectContaining({
+            type: "user_message",
+            externalSessionId: "session-1",
+            messageId: "user-live",
+          }),
+        });
+        await harness.emit({
+          type: "transcript_event",
+          externalSessionId: "session-1",
+          event: {
+            type: "session_idle",
+            externalSessionId: "session-1",
+            timestamp: "2026-07-16T10:05:00.000Z",
+          },
+        });
+      } finally {
+        releaseSend();
+        await sending;
+        await forwarding;
+      }
+
+      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+        type: "live",
+        session: { activity: "idle" },
+      });
+    } finally {
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
   });
 
   for (const operation of ["start", "resume", "fork"] as const) {

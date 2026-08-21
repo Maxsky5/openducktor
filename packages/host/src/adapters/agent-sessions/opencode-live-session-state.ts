@@ -280,9 +280,6 @@ export const createOpenCodeLiveSessionState = ({
     return [{ type: "session_upsert", snapshot: retained.snapshot }];
   };
 
-  const markRunning = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] =>
-    setRuntimeActivity(ref, "running");
-
   const requirePendingRoute = (
     ref: AgentSessionLiveRef,
     occurrenceId: string,
@@ -366,7 +363,6 @@ export const createOpenCodeLiveSessionState = ({
     applyLoadedContext,
     retainControlSummary,
     setRuntimeActivity,
-    markRunning,
     requirePendingRoute,
     completePendingReply,
     removeSession,
