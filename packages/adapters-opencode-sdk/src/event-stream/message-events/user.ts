@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import {
@@ -84,8 +85,8 @@ export const handleUserMessageUpdated = (
   input: {
     messageId: string;
     messageTimestamp: string;
-    infoRecord: unknown;
-    properties: unknown;
+    infoRecord: JsonValue | undefined;
+    properties: JsonValue | undefined;
     normalizedParts: Part[];
     messageModel?: ReturnType<typeof readMessageModelSelection>;
   },

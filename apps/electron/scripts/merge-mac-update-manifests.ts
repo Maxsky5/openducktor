@@ -1,51 +1,53 @@
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse, stringify } from "yaml";
+import { z } from "zod";
 import {
   createMacUpdateManifestPattern,
   defaultElectronUpdateChannel,
   detectMacUpdateArtifactArchFromUrl,
   getCanonicalMacUpdateManifestName,
 } from "./electron-release-artifacts";
-import type { JsonValue } from "@openducktor/contracts";
 
-type MacUpdateManifestFile = {
-  url?: string;
-  sha512?: string;
-  [key: string]: JsonValue;
-};
+const nonBlankString = z.string().refine((value) => value.trim().length > 0, {
+  message: "must not be blank",
+});
 
-type MacUpdateManifest = {
-  files?: MacUpdateManifestFile[];
-  path?: string;
-  releaseDate?: string;
-  sha512?: string;
-  version?: string;
-  [key: string]: JsonValue;
-};
+const macUpdateManifestFileSchema = z.looseObject({
+  url: nonBlankString,
+  sha512: z.string().optional(),
+  size: z.number().finite().nonnegative().optional(),
+  blockMapSize: z.number().finite().nonnegative().optional(),
+});
 
-const assertManifest = (value: unknown, fileName: string): MacUpdateManifest => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${fileName} is not a YAML object.`);
-  }
-  const manifest = value as MacUpdateManifest;
-  if (!Array.isArray(manifest.files)) {
-    throw new Error(`${fileName} does not contain a files list.`);
-  }
-  if (typeof manifest.version !== "string" || !manifest.version.trim()) {
-    throw new Error(`${fileName} does not contain a release version.`);
-  }
-  return manifest;
-};
+const macUpdateManifestSchema = z.looseObject({
+  version: nonBlankString,
+  files: z.array(macUpdateManifestFileSchema),
+  path: z.string().optional(),
+  sha512: z.string().optional(),
+  releaseDate: z.string().optional(),
+  stagingPercentage: z.number().finite().min(0).max(100).optional(),
+});
+
+type MacUpdateManifest = z.infer<typeof macUpdateManifestSchema>;
+type MacUpdateManifestFile = z.infer<typeof macUpdateManifestFileSchema>;
 
 const readManifest = async (
   assetsDirectory: string,
   fileName: string,
-): Promise<MacUpdateManifest> =>
-  assertManifest(parse(await readFile(join(assetsDirectory, fileName), "utf8")), fileName);
+): Promise<MacUpdateManifest> => {
+  const parsedManifest = macUpdateManifestSchema.safeParse(
+    parse(await readFile(join(assetsDirectory, fileName), "utf8")),
+  );
+  if (parsedManifest.success) {
+    return parsedManifest.data;
+  }
 
-const fileUrl = (file: MacUpdateManifestFile): string | null =>
-  typeof file.url === "string" && file.url.trim() ? file.url : null;
+  const issues = parsedManifest.error.issues
+    .map((issue) => `${issue.path.join(".") || "manifest"}: ${issue.message}`)
+    .join("; ");
+  throw new Error(`${fileName} is not a valid macOS update manifest: ${issues}.`);
+};
 
 export const mergeMacUpdateManifests = async (
   assetsDirectory: string,
@@ -77,12 +79,8 @@ export const mergeMacUpdateManifests = async (
         `Cannot merge macOS update manifests with different versions: ${canonical.version} and ${manifest.version}.`,
       );
     }
-    for (const file of manifest.files as MacUpdateManifestFile[]) {
-      const url = fileUrl(file);
-      if (!url) {
-        throw new Error(`${manifestName} contains an update file without a url.`);
-      }
-      filesByUrl.set(url, file);
+    for (const file of manifest.files) {
+      filesByUrl.set(file.url, file);
     }
   }
 
@@ -90,9 +88,7 @@ export const mergeMacUpdateManifests = async (
     String(left.url).localeCompare(String(right.url)),
   );
   const presentArchitectures = new Set(
-    mergedFiles
-      .map((file) => fileUrl(file))
-      .map((url) => (url ? detectMacUpdateArtifactArchFromUrl(url) : null)),
+    mergedFiles.map((file) => detectMacUpdateArtifactArchFromUrl(file.url)),
   );
   const hasArm64Artifact = entries.some(
     (entry) => entry.isFile() && entry.name.includes("mac-arm64"),
@@ -141,8 +137,8 @@ if (import.meta.main) {
         console.log("No macOS update manifests found to merge.");
       }
     })
-    .catch((error: unknown) => {
-      console.error(error);
+    .catch((cause: unknown) => {
+      console.error(cause);
       process.exit(1);
     });
 }

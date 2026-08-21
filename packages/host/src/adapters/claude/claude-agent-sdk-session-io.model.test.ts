@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
@@ -87,7 +88,7 @@ describe("Claude session I/O model changes", () => {
 
   test("applies supported per-message effort changes through Claude flag settings", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
     const pushed: SDKUserMessage[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {

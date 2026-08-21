@@ -28,9 +28,9 @@ export type FilesystemService = {
     input?: FilesystemListDirectoryInput,
   ): Effect.Effect<DirectoryListing, FilesystemListDirectoryError>;
 };
-const hasNodeErrorCode = (error: unknown, code: string): boolean => {
+const hasNodeErrorCode = (cause: unknown, code: string): boolean => {
   const visited = new Set<object>();
-  let current: unknown = error;
+  let current: unknown = cause;
   while (typeof current === "object" && current !== null) {
     if (visited.has(current)) {
       return false;

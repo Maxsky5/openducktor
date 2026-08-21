@@ -1,6 +1,8 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
+import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
+import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   markStreamTurnActive,
@@ -117,7 +119,9 @@ const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as
 const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;
 const NESTED_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id"] as const;
 
-const readParentExternalSessionIdFromRecord = (source: unknown): string | undefined => {
+const readParentExternalSessionIdFromRecord = (
+  source: JsonValue | undefined,
+): string | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
@@ -133,14 +137,16 @@ const readParentExternalSessionIdFromRecord = (source: unknown): string | undefi
   return undefined;
 };
 
-export const readEventParentExternalSessionId = (properties: unknown): string | undefined => {
+export const readEventParentExternalSessionId = (
+  properties: JsonValue | undefined,
+): string | undefined => {
   return (
     readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
     readParentExternalSessionIdFromRecord(properties)
   );
 };
 
-const readLifecycleParentExternalSessionId = (info: unknown): string | undefined => {
+const readLifecycleParentExternalSessionId = (info: JsonValue | undefined): string | undefined => {
   const parentExternalSessionId = readStringProp(info, ["parentID"]);
   if (parentExternalSessionId?.trim()) {
     return parentExternalSessionId;
@@ -262,8 +268,7 @@ const normalizePartDeltaField = (field: string): string => {
 
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
-  const partRecord = asUnknownRecord(part);
-  const existing = partRecord?.[normalizedField];
+  const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
   if (existing !== undefined && typeof existing !== "string") {
     return null;
   }

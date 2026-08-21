@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
 
 describe("createMarkdownSyntaxLanguageRegistry", () => {
   test("normalizes aliases and registers default languages at initialization", () => {
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const registerLanguage = mock((_language: string, _grammar: JsonValue) => {});
 
     const registry = createMarkdownSyntaxLanguageRegistry({
       languageAliases: { js: "javascript" },
@@ -22,7 +23,7 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
   });
 
   test("loads and registers a lazy language once even with concurrent requests", async () => {
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const registerLanguage = mock((_language: string, _grammar: JsonValue) => {});
     const loadYamlLanguage = mock(async () => ({ default: { name: "yaml" } }));
 
     const registry = createMarkdownSyntaxLanguageRegistry({
@@ -52,8 +53,8 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
 
   test("distinguishes unsupported languages from failed lazy loaders", async () => {
     const originalConsoleError = console.error;
-    const consoleError = mock((_message: string, _error?: unknown) => {});
-    const registerLanguage = mock((_language: string, _grammar: unknown) => {});
+    const consoleError = mock((_message: string, _cause?: unknown) => {});
+    const registerLanguage = mock((_language: string, _grammar: JsonValue) => {});
     const loadYamlLanguage = mock(async () => {
       throw new Error("bad grammar module");
     });

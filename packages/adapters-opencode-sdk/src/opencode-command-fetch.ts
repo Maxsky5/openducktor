@@ -1,11 +1,17 @@
-type CommandFetch = (
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+
+type CommandFetch = NonNullable<
+  NonNullable<Parameters<OpencodeClient["session"]["command"]>[1]>["fetch"]
+>;
+
+type CommandFetchRequest = (
   input: Parameters<typeof globalThis.fetch>[0],
   init?: Parameters<typeof globalThis.fetch>[1],
 ) => Promise<Response>;
 
-let nodeFetchPromise: Promise<CommandFetch> | undefined;
+let nodeFetchPromise: Promise<CommandFetchRequest> | undefined;
 
-const loadNodeFetch = async (): Promise<CommandFetch> => {
+const loadNodeFetch = async (): Promise<CommandFetchRequest> => {
   const { Agent, Request: UndiciRequest, fetch } = await import(/* @vite-ignore */ "undici");
   const dispatcher = new Agent({
     headersTimeout: 0,
@@ -29,10 +35,16 @@ const loadNodeFetch = async (): Promise<CommandFetch> => {
   };
 };
 
-export const fetchOpenCodeCommand: CommandFetch = async (input, init) => {
+const fetchOpenCodeCommandRequest: CommandFetchRequest = async (input, init) => {
   if (typeof window !== "undefined") {
     return globalThis.fetch(input, init);
   }
   nodeFetchPromise ??= loadNodeFetch();
   return (await nodeFetchPromise)(input, init);
 };
+
+export const fetchOpenCodeCommand = Object.assign(fetchOpenCodeCommandRequest, {
+  preconnect: () => {
+    throw new Error("OpenCode command fetch does not support preconnect requests.");
+  },
+}) satisfies CommandFetch;

@@ -1,10 +1,12 @@
 import {
+  type JsonValue,
   type TaskEventCursor,
   type TaskEventStreamFrame,
   type TaskEventStreamSubscribe,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
+import type { IpcRendererEvent } from "electron";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -20,9 +22,15 @@ import {
 } from "../shared/electron-bridge-contract";
 
 type ElectronIpcRendererLike = {
-  invoke(channel: string, value: unknown): Promise<unknown>;
-  off(channel: string, listener: (event: unknown, value: unknown) => void): void;
-  on(channel: string, listener: (event: unknown, value: unknown) => void): void;
+  invoke(channel: string, value: JsonValue | undefined): Promise<unknown>;
+  off(
+    channel: string,
+    listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+  ): void;
+  on(
+    channel: string,
+    listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+  ): void;
 };
 
 export const createElectronTaskStreamApi = (
@@ -31,14 +39,14 @@ export const createElectronTaskStreamApi = (
   async subscribe(
     input: TaskEventStreamSubscribe,
     listener: (frame: TaskEventStreamFrame) => void,
-    onTerminalFailure?: (error: unknown) => void,
+    onTerminalFailure?: (cause: unknown) => void,
   ) {
     const parsedInput = taskEventStreamSubscribeSchema.parse(input);
     let established: { subscriptionId: string } | null = null;
     let closed = false;
     const bufferedFrames: ElectronTaskStreamFrameEnvelope[] = [];
     const bufferedTerminalFailures: ElectronTaskStreamTerminalFailureEnvelope[] = [];
-    const handleFrame = (_event: unknown, value: unknown): void => {
+    const handleFrame = (_event: IpcRendererEvent, value: JsonValue | undefined): void => {
       const envelope = electronTaskStreamFrameEnvelopeSchema.parse(value);
       if (closed) return;
       if (!established) {
@@ -58,7 +66,10 @@ export const createElectronTaskStreamApi = (
         });
       }
     };
-    const handleTerminalFailure = (_event: unknown, value: unknown): void => {
+    const handleTerminalFailure = (
+      _event: IpcRendererEvent,
+      value: JsonValue | undefined,
+    ): void => {
       const envelope = electronTaskStreamTerminalFailureEnvelopeSchema.parse(value);
       if (closed) return;
       if (!established) {

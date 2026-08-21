@@ -55,12 +55,12 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const getGlobalWindow = (): unknown => {
-  return (globalThis as { window?: unknown }).window;
+const getGlobalWindow = (): Window | undefined => {
+  return (globalThis as { window?: Window }).window;
 };
 
-const setGlobalWindow = (value: unknown): void => {
-  const target = globalThis as { window?: unknown };
+const setGlobalWindow = (value: Window | undefined): void => {
+  const target = globalThis as { window?: Window };
   if (typeof value === "undefined") {
     delete target.window;
     return;
@@ -1289,7 +1289,7 @@ describe("AgentChatThread", () => {
   });
 
   test("renders native scroll controls for top and bottom navigation", async () => {
-    setGlobalWindow(globalThis);
+    setGlobalWindow(window);
     const rendered = render(
       createElement(AgentChatThread, {
         model: {

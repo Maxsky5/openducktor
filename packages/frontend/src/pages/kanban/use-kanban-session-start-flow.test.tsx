@@ -860,9 +860,8 @@ describe("useKanbanSessionStartFlow", () => {
         }),
       );
 
-      await harness.run(async () => {
+      await harness.run(() => {
         startSessionDeferred.resolve(sessionIdentity("session-new"));
-        await startPromise;
       });
       await expect(startPromise).resolves.toBe("session-new");
     } finally {

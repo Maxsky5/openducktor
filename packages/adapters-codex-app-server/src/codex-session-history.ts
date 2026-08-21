@@ -3,6 +3,7 @@ import {
   type AgentSessionHistoryMessage,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
@@ -84,7 +85,7 @@ const projectCodexThreadReadToHistory = ({
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
-  response: unknown;
+  response: JsonValue | undefined;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
@@ -189,11 +190,11 @@ export const loadCodexSessionHistory = async ({
   }
   const forkedFromThreadId = codexForkedFromThreadId(response);
   const parentTurnIdsPromise: Promise<ReadonlySet<string> | null> = forkedFromThreadId
-    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((error: unknown) => {
-        if (isCodexThreadNotLoadedError(error) && codexForkHistoryIsChildOwned(response)) {
+    ? threadInventory.readThreadTurnIds(client, forkedFromThreadId).catch((cause: unknown) => {
+        if (isCodexThreadNotLoadedError(cause) && codexForkHistoryIsChildOwned(response)) {
           return null;
         }
-        throw error;
+        throw cause;
       })
     : Promise.resolve(null);
   const parentTurnIds = await parentTurnIdsPromise;

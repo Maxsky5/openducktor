@@ -65,23 +65,24 @@ export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const requireRecord = (value: unknown, label: string): Record<string, JsonValue> => {
+const requireRecord = (value: JsonValue | undefined, label: string): Record<string, JsonValue> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new HostValidationError({ message: `${label} must be an object.` });
   }
   return value as Record<string, JsonValue>;
 };
-const requireString = (value: unknown, label: string): string => {
+const requireString = (value: JsonValue | undefined, label: string): string => {
   if (typeof value !== "string") {
     throw new HostValidationError({ message: `${label} must be a string.` });
   }
   return value;
 };
-const requireStringArray = (value: unknown, label: string): string[] => {
+const requireStringArray = (value: JsonValue | undefined, label: string): string[] => {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
     throw new HostValidationError({ message: `${label} must be an array of strings.` });
   }
-  return value;
+  // SAFETY: the check above guarantees every entry is a string.
+  return value as string[];
 };
 const hasOwn = (record: Record<string, JsonValue>, key: string): boolean =>
   Object.hasOwn(record, key);
@@ -96,21 +97,21 @@ const optionalUpdateValue = (
   const value = record[key];
   return value === null || value === undefined ? current : value;
 };
-const normalizeOptionalNonEmptyString = (value: unknown): string | undefined => {
+const normalizeOptionalNonEmptyString = (value: JsonValue | undefined): string | undefined => {
   if (value === null || value === undefined) {
     return undefined;
   }
   const text = requireString(value, "Optional string value").trim();
   return text.length > 0 ? text : undefined;
 };
-const normalizeHooks = (value: unknown): RepoHooks => {
+const normalizeHooks = (value: JsonValue | undefined): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
     preStart: hooks.preStart.map((command) => command.trim()).filter(Boolean),
     postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
   };
 };
-const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
+const normalizeDevServers = (value: JsonValue | undefined): RepoDevServerScript[] => {
   if (!Array.isArray(value)) {
     throw new HostValidationError({ message: "devServers must be an array." });
   }
@@ -123,7 +124,7 @@ const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
     }))
     .filter((entry) => entry.command.length > 0);
 };
-const normalizeWorktreeCopyPaths = (value: unknown): string[] =>
+const normalizeWorktreeCopyPaths = (value: JsonValue | undefined): string[] =>
   requireStringArray(value, "worktreeCopyPaths")
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -358,7 +359,7 @@ export const requireConfiguredWorkspace = (
 export const findRepoConfigByRepoPath = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
-  rawRepoPath: unknown,
+  rawRepoPath: JsonValue | undefined,
 ) =>
   Effect.gen(function* () {
     const repoPath = yield* Effect.try({

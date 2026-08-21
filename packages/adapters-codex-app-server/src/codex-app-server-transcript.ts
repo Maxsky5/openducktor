@@ -47,7 +47,7 @@ import {
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
-import type { JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -77,7 +77,7 @@ export type CodexHistoryTokenUsageFields = {
 export type { AgentToolStatus } from "./codex-tool-normalizer";
 export { type CodexTodoUpdate, codexTodosFromThreadRead };
 
-export const timestampFromCodexParams = (params: unknown): string | null => {
+export const timestampFromCodexParams = (params: JsonValue | undefined): string | null => {
   const millis = extractNumberField(params, [
     "occurredAtMs",
     "occurred_at_ms",
@@ -114,7 +114,10 @@ const codexTurnTimestampSeconds = (
   return typeof snakeValue === "number" ? snakeValue : null;
 };
 
-export const timestampFromCodexTurn = (turn: unknown, keys: [string, string]): string | null =>
+export const timestampFromCodexTurn = (
+  turn: JsonValue | undefined,
+  keys: [string, string],
+): string | null =>
   isPlainObject(turn)
     ? (codexTimestampFromSeconds(codexTurnTimestampSeconds(turn, keys)) ?? null)
     : null;
@@ -195,7 +198,9 @@ export const shouldReplaceCodexBufferedFinalAgentMessage = (
   return selectCodexFinalAgentMessage([current, next]) === next;
 };
 
-export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadItem[] => {
+export const codexTurnItemsFromThreadRead = (
+  value: JsonValue | undefined,
+): CodexThreadReadItem[] => {
   if (!isPlainObject(value) || !isPlainObject(value.thread)) {
     throw new Error("Codex thread/read response is missing thread data.");
   }
@@ -266,7 +271,7 @@ export const codexTurnItemsFromThreadRead = (value: unknown): CodexThreadReadIte
 };
 
 export const toHistoryMessage = (
-  item: unknown,
+  item: JsonValue | undefined,
   fallbackId: string,
   model?: AgentModelSelection,
   timestamp?: string,
@@ -398,17 +403,17 @@ export const terminalHistoryPart = (
   ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
 });
 
-const firstPlainObject = (value: unknown): Record<string, JsonValue> | null => {
+const firstPlainObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
   return arrayFromUnknown(value).find(isPlainObject) ?? null;
 };
 
-const parseObjectString = (value: unknown): Record<string, JsonValue> | null => {
+const parseObjectString = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
   if (typeof value !== "string") {
     return null;
   }
   try {
-    const parsed = JSON.parse(value) as unknown;
-    return isPlainObject(parsed) ? parsed : null;
+    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
   } catch {
     return null;
   }
@@ -469,7 +474,7 @@ const commandActionInput = (
   };
 };
 
-const codexCommandText = (value: unknown): string | null => {
+const codexCommandText = (value: JsonValue | undefined): string | null => {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
@@ -485,7 +490,7 @@ const codexCommandText = (value: unknown): string | null => {
   return parts.length > 0 ? parts.join(" ") : null;
 };
 
-const codexObjectInput = (value: unknown): Record<string, JsonValue> | undefined => {
+const codexObjectInput = (value: JsonValue | undefined): Record<string, JsonValue> | undefined => {
   if (isPlainObject(value)) {
     return value;
   }
@@ -493,14 +498,14 @@ const codexObjectInput = (value: unknown): Record<string, JsonValue> | undefined
     return undefined;
   }
   try {
-    const parsed = JSON.parse(value) as unknown;
-    return isPlainObject(parsed) ? parsed : undefined;
+    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : undefined;
   } catch {
     return undefined;
   }
 };
 
-const codexToolResultText = (value: unknown): string | null => {
+const codexToolResultText = (value: JsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -531,7 +536,9 @@ const codexToolResultText = (value: unknown): string | null => {
   return text.length > 0 ? text : stringifyJsonValue(value);
 };
 
-const webSearchActionInput = (action: unknown): Record<string, JsonValue> | undefined => {
+const webSearchActionInput = (
+  action: JsonValue | undefined,
+): Record<string, JsonValue> | undefined => {
   if (!isPlainObject(action)) {
     return undefined;
   }
@@ -576,7 +583,9 @@ const webSearchInput = (
   return webSearchActionInput(value.action);
 };
 
-export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTotals | null => {
+export const extractCodexTokenUsageTotals = (
+  params: JsonValue | undefined,
+): CodexTokenUsageTotals | null => {
   if (!isPlainObject(params)) {
     return null;
   }
@@ -585,7 +594,11 @@ export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTo
   if (!usage) {
     return null;
   }
-  const last = firstPlainObject([usage.last, usage.lastTokenUsage, usage.last_token_usage]);
+  const last = firstPlainObject(
+    [usage.last, usage.lastTokenUsage, usage.last_token_usage].filter(
+      (value): value is JsonValue => value !== undefined,
+    ),
+  );
   const totalTokens =
     extractNumberField(last, ["totalTokens", "total_tokens"]) ??
     extractNumberField(usage, ["totalTokens", "total_tokens"]);

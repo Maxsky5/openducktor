@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState } from "@openducktor/contracts";
+import type { DevServerGroupState, JsonValue } from "@openducktor/contracts";
 import { act, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
@@ -32,10 +32,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: unknown) => void) | null = null;
+let devServerEventListener: ((payload: JsonValue | undefined) => void) | null = null;
 let subscriptionTransportEpoch = "test:0";
 let subscribeDevServerEventsMock = async (
-  listener: (payload: unknown) => void,
+  listener: (payload: JsonValue | undefined) => void,
 ): Promise<TestDevServerEventSubscription> => {
   devServerEventListener = listener;
   return {
@@ -54,7 +54,7 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
+    subscribeDevServerEvents: (listener: (payload: JsonValue | undefined) => void) =>
       subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -67,7 +67,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   subscriptionTransportEpoch = "test:0";
-  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+  subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
     devServerEventListener = listener;
     return {
       transportEpoch: subscriptionTransportEpoch,
@@ -220,7 +220,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       return refreshedState;
     };
     const subscriptionReady = createDeferred<TestDevServerEventSubscription>();
-    subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+    subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
       devServerEventListener = listener;
       return subscriptionReady.promise;
     };

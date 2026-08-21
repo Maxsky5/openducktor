@@ -4,6 +4,8 @@ import {
   type AppUpdateCommandResult,
   type AppUpdateOperation,
   type AppUpdateState,
+  HOST_EVENT_CHANNELS,
+  type JsonValue,
   appPlatformSchema,
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
@@ -14,7 +16,6 @@ import {
   createHostEventBus,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
-  HOST_EVENT_CHANNELS,
   type HostRuntimeDistribution,
 } from "@openducktor/host";
 import { Effect, Either } from "effect";
@@ -42,10 +43,7 @@ import {
   ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
-  ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
-  ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
-  type ElectronHostEventEnvelope,
 } from "../shared/electron-bridge-contract";
 import { ELECTRON_TASK_ASSET_PROTOCOL } from "../shared/electron-task-asset-url";
 import {
@@ -85,10 +83,7 @@ import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protoco
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
-import {
-  createElectronTerminalIpcController,
-  shouldDetachTerminalSenderForNavigation,
-} from "./terminals/electron-terminal-ipc";
+import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
 const { app, BrowserWindow, clipboard, ipcMain, nativeImage, net, protocol, session, shell } =
@@ -118,13 +113,11 @@ const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMa
 const electronAppUpdateLogger = electronMainRuntimeBindings.appUpdateLogger;
 const electronLifecycleLogger = electronMainRuntimeBindings.lifecycleLogger;
 const reportElectronNonFatalDeliveryFailure = (message: string, cause: unknown): void => {
-  void runElectronEffect(electronMainLogger.error(message, cause)).catch(
-    (loggingCause: unknown) => {
-      process.stderr.write(
-        `OpenDucktor Electron non-fatal event delivery reporting failed: ${errorMessage(loggingCause)}\n`,
-      );
-    },
-  );
+  void runElectronEffect(electronMainLogger.error(message, cause)).catch((cause: unknown) => {
+    process.stderr.write(
+      `OpenDucktor Electron non-fatal event delivery reporting failed: ${errorMessage(cause)}\n`,
+    );
+  });
 };
 const hostEventBus = createHostEventBus({
   report: ({ channel, cause }) =>
@@ -175,8 +168,8 @@ const reportElectronMainFatalFailure = (cause: unknown): void => {
   }
   void shutdownController
     .shutdownHostAndQuit({ exitAfterShutdown: true, reason: "fatal-boundary" })
-    .catch((shutdownCause: unknown) => {
-      reportElectronMainFailure(shutdownCause);
+    .catch((cause: unknown) => {
+      reportElectronMainFailure(cause);
       process.exit(1);
     });
 };
@@ -500,11 +493,7 @@ const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBro
 
 const registerHostEventForwarding = (): void => {
   for (const channel of HOST_EVENT_CHANNELS) {
-    hostEventBus.subscribe(channel, (payload) => {
-      const envelope: ElectronHostEventEnvelope & { channel: typeof channel } = {
-        channel,
-        payload,
-      };
+    hostEventBus.subscribe(channel, (envelope) => {
       forwardElectronHostEvent(
         BrowserWindow.getAllWindows(),
         ELECTRON_HOST_EVENT_CHANNEL,
@@ -611,7 +600,9 @@ const resolveLocalAttachmentPathForPreview = (
 ): Promise<string> =>
   runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
-const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheckInput => {
+const readElectronAppUpdateCheckInput = (
+  input: JsonValue | undefined,
+): ElectronAppUpdateCheckInput => {
   const parsed = appUpdateCheckInputSchema.safeParse(input);
   if (parsed.success) {
     return parsed.data;
@@ -684,19 +675,7 @@ const registerIpcHandlers = (
       ),
     taskEventStream: hostCommandRouter.taskEventStream,
   });
-  const terminalIpc = createElectronTerminalIpcController(hostCommandRouter.terminalService);
-  const boundTerminalSenders = new WeakSet<Electron.WebContents>();
-  const bindTerminalSenderCleanup = (sender: Electron.WebContents): void => {
-    if (boundTerminalSenders.has(sender)) return;
-    boundTerminalSenders.add(sender);
-    const detach = () => {
-      void runElectronEffect(terminalIpc.detachSender(sender.id));
-    };
-    sender.once("destroyed", detach);
-    sender.on("did-start-navigation", (details) => {
-      if (shouldDetachTerminalSenderForNavigation(details)) detach();
-    });
-  };
+  registerElectronTerminalIpc({ ipcMain, terminalService: hostCommandRouter.terminalService });
   registerElectronHostInvokeHandler(ipcMain, {
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
     invoke: (command, args) => {
@@ -707,55 +686,43 @@ const registerIpcHandlers = (
     },
   });
 
-  ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request: unknown) => {
-    bindTerminalSenderCleanup(event.sender);
-    const clientId =
-      typeof request === "object" && request !== null && "clientId" in request
-        ? request.clientId
-        : undefined;
-    const frame =
-      typeof request === "object" && request !== null && "frame" in request
-        ? request.frame
-        : undefined;
-    await runElectronEffect(terminalIpc.handleFrame(event.sender, clientId, frame));
-  });
-
-  ipcMain.handle(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, async (event, clientId: unknown) => {
-    bindTerminalSenderCleanup(event.sender);
-    await runElectronEffect(terminalIpc.detachClient(event.sender.id, clientId));
-  });
-
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url: string) => {
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: unknown) => {
-    const resolvedPath = await resolveLocalAttachmentPathForPreview(
-      hostCommandRouter,
-      readLocalAttachmentPreviewPath(filePath),
-    );
-    return createElectronLocalAttachmentPreviewUrl(resolvedPath);
-  });
+  ipcMain.handle(
+    ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
+    async (_event, filePath: JsonValue | undefined) => {
+      const resolvedPath = await resolveLocalAttachmentPathForPreview(
+        hostCommandRouter,
+        readLocalAttachmentPreviewPath(filePath),
+      );
+      return createElectronLocalAttachmentPreviewUrl(resolvedPath);
+    },
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),
   );
 
-  ipcMain.handle(ELECTRON_APP_UPDATE_CHECK_CHANNEL, async (_event, input: unknown) => {
-    let checkInput: ElectronAppUpdateCheckInput;
-    try {
-      checkInput = readElectronAppUpdateCheckInput(input);
-    } catch (cause) {
+  ipcMain.handle(
+    ELECTRON_APP_UPDATE_CHECK_CHANNEL,
+    async (_event, input: JsonValue | undefined) => {
+      let checkInput: ElectronAppUpdateCheckInput;
+      try {
+        checkInput = readElectronAppUpdateCheckInput(input);
+      } catch (cause) {
+        return readAppUpdateCommandResultForIpc(
+          createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
+          "check",
+        );
+      }
       return readAppUpdateCommandResultForIpc(
-        createRejectedAppUpdateCommandResult(appUpdateService, "check", cause),
+        await runElectronMainOperation(appUpdateService.check(checkInput)),
         "check",
       );
-    }
-    return readAppUpdateCommandResultForIpc(
-      await runElectronMainOperation(appUpdateService.check(checkInput)),
-      "check",
-    );
-  });
+    },
+  );
 
   ipcMain.handle(ELECTRON_APP_UPDATE_DOWNLOAD_CHANNEL, async () =>
     readAppUpdateCommandResultForIpc(

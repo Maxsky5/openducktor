@@ -1,3 +1,4 @@
+import type { CodexAppServerStreamEvent } from "../../ports/codex-app-server-port";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -437,7 +438,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await waitForRuntimeExit();
       await expect(
         Effect.runPromise(
-          promiseCodexAppServer.request({ runtimeId: "runtime-1", method: "thread/loaded/list" }),
+          promiseCodexAppServer.request({
+            runtimeId: "runtime-1",
+            method: "thread/loaded/list",
+            params: {},
+          }),
         ),
       ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
     } finally {
@@ -583,6 +588,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           codexAppServer.request({
             runtimeId: "runtime-cleanup-failure",
             method: "thread/loaded/list",
+            params: {},
           }),
         ),
       ).rejects.toThrow("Codex app-server transport not found");
@@ -661,6 +667,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         codexAppServer.request({
           runtimeId,
           method: "thread/loaded/list",
+          params: {},
         }),
       ).catch((error) => {
         pendingRequestSettled = true;
@@ -787,7 +794,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
                   repoPath: runtime.repoPath,
                 },
               } as never,
-              emitRuntimeEvent: (event: unknown) => {
+              emitRuntimeEvent: (event: CodexAppServerStreamEvent) => {
                 order.push("event");
                 events.push(event);
               },

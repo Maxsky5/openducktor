@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { searchCodexFiles } from "./file-search";
 import type { CodexAppServerClient } from "./types";
 
 const createClient = (
-  response: unknown,
+  response: JsonValue | undefined,
   calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }>,
 ): CodexAppServerClient =>
   ({

@@ -4,14 +4,15 @@ import type {
   CodexPolicyLogEntry,
 } from "@openducktor/adapters-codex-app-server";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
+import type { LoadAgentSessionDiffInput } from "@openducktor/core";
 import { host } from "../operations/shared/host";
 import type { AgentRuntimeAdapter } from "./agent-runtime-adapter";
 import { hostRepoRuntimeResolver } from "./host-repo-runtime-resolver";
 
 const createCodexHostTransportFactory = (): CodexJsonRpcTransportFactory => {
   return (runtimeId) => ({
-    request: async <Response = unknown>(request: CodexJsonRpcRequest) =>
-      host.codexAppServerRequest(runtimeId, request.method, request.params) as Promise<Response>,
+    request: (request: CodexJsonRpcRequest) =>
+      host.codexAppServerRequest(runtimeId, request.method, request.params),
   });
 };
 
@@ -19,8 +20,14 @@ const logCodexSessionPolicy = (entry: CodexPolicyLogEntry): void => {
   console.info("[OpenDucktor] Codex session policy", entry);
 };
 
+class CodexHostRuntimeAdapter extends CodexAppServerAdapter {
+  override loadSessionDiff(input: LoadAgentSessionDiffInput) {
+    return host.agentSessionLiveLoadDiff(input);
+  }
+}
+
 export const createCodexAppServerRuntimeAdapter = (): AgentRuntimeAdapter =>
-  new CodexAppServerAdapter({
+  new CodexHostRuntimeAdapter({
     repoRuntimeResolver: hostRepoRuntimeResolver,
     transportFactory: createCodexHostTransportFactory(),
     logSessionPolicy: logCodexSessionPolicy,

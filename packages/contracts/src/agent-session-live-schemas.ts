@@ -13,6 +13,7 @@ import {
 } from "./agent-session-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { jsonValueSchema } from "./json-types";
+import { fileDiffSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const isoTimestampSchema = z.string().datetime({ offset: true });
@@ -216,6 +217,14 @@ export const agentSessionLiveLoadContextResultSchema = agentSessionContextUsageS
 export type AgentSessionLiveLoadContextResult = z.infer<
   typeof agentSessionLiveLoadContextResultSchema
 >;
+
+export const agentSessionLiveLoadDiffInputSchema = agentSessionLiveRefSchema
+  .extend({ runtimeHistoryAnchor: nonEmptyStringSchema.optional() })
+  .strict();
+export type AgentSessionLiveLoadDiffInput = z.infer<typeof agentSessionLiveLoadDiffInputSchema>;
+
+export const agentSessionLiveLoadDiffResultSchema = z.array(fileDiffSchema);
+export type AgentSessionLiveLoadDiffResult = z.infer<typeof agentSessionLiveLoadDiffResultSchema>;
 
 export const agentSessionLiveReplyApprovalInputSchema = agentSessionLiveRefSchema.extend({
   requestId: agentPendingRequestIdSchema,

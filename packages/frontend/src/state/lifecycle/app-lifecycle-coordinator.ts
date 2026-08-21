@@ -20,22 +20,22 @@ export type LifecycleNotificationPort = {
   dismiss: (id: ToastId) => void;
 };
 
-export type LifecycleTimerPort = {
-  setTimeout: (callback: () => void, delayMs: number) => unknown;
-  clearTimeout: (timer: unknown) => void;
+export type LifecycleTimerPort<TimerHandle> = {
+  setTimeout: (callback: () => void, delayMs: number) => TimerHandle;
+  clearTimeout: (timer: TimerHandle) => void;
 };
 
-type RuntimeStartupInput = {
+type RuntimeStartupInput<TimerHandle> = {
   repoPath: string;
   runtimeKinds: RuntimeKind[];
   isCurrent: () => boolean;
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
   refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   notifications: LifecycleNotificationPort;
-  timers: LifecycleTimerPort;
+  timers: LifecycleTimerPort<TimerHandle>;
 };
 
-export const startRepositoryRuntimes = ({
+export const startRepositoryRuntimes = <TimerHandle>({
   repoPath,
   runtimeKinds,
   isCurrent,
@@ -43,26 +43,26 @@ export const startRepositoryRuntimes = ({
   refreshRepoRuntimeHealth,
   notifications,
   timers,
-}: RuntimeStartupInput): (() => void) => {
+}: RuntimeStartupInput<TimerHandle>): (() => void) => {
   let disposed = false;
-  let startupStatusRefreshTimer: unknown = null;
+  let startupStatusRefreshTimer: TimerHandle | null = null;
   const isActive = (): boolean => !disposed && isCurrent();
   const refreshHealth = (): void => {
-    void refreshRepoRuntimeHealth().catch((error: unknown) => {
-      if (!isActive() || isCancelledError(error)) {
+    void refreshRepoRuntimeHealth().catch((cause: unknown) => {
+      if (!isActive() || isCancelledError(cause)) {
         return;
       }
-      notifications.error("Runtime diagnostics unavailable", errorMessage(error));
+      notifications.error("Runtime diagnostics unavailable", errorMessage(cause));
     });
   };
 
   for (const runtimeKind of runtimeKinds) {
     void startRepoRuntime(repoPath, runtimeKind)
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!isActive()) {
           return;
         }
-        notifications.error(`Runtime startup failed for ${runtimeKind}`, errorMessage(error));
+        notifications.error(`Runtime startup failed for ${runtimeKind}`, errorMessage(cause));
       })
       .finally(() => {
         if (isActive()) {
@@ -86,18 +86,18 @@ export const startRepositoryRuntimes = ({
   };
 };
 
-type RepositoryLoadInput = {
+type RepositoryLoadInput<TimerHandle> = {
   repoPath: string;
   isCurrent: () => boolean;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   loadWorkspaceTasks: (repoPath: string) => Promise<void>;
   notifications: LifecycleNotificationPort;
-  timers: LifecycleTimerPort;
+  timers: LifecycleTimerPort<TimerHandle>;
   taskStorePreparationToastDelayMs?: number;
 };
 
-export const startRepositoryLoad = ({
+export const startRepositoryLoad = <TimerHandle>({
   repoPath,
   isCurrent,
   refreshBranches,
@@ -106,11 +106,11 @@ export const startRepositoryLoad = ({
   notifications,
   timers,
   taskStorePreparationToastDelayMs = TASK_STORE_PREPARATION_TOAST_DELAY_MS,
-}: RepositoryLoadInput): (() => void) => {
+}: RepositoryLoadInput<TimerHandle>): (() => void) => {
   let disposed = false;
   let taskStorePreparationToastId: ToastId | null = null;
   let hadTaskStorePreparationToast = false;
-  let taskStorePreparationTimer: unknown = null;
+  let taskStorePreparationTimer: TimerHandle | null = null;
   let repoStoreHealth: RepoStoreHealth | null = null;
   const isActive = (): boolean => !disposed && isCurrent();
 
@@ -178,16 +178,16 @@ export const startRepositoryLoad = ({
     }
   })();
 
-  void refreshBranches(false).catch((error: unknown) => {
+  void refreshBranches(false).catch((cause: unknown) => {
     if (isActive()) {
-      notifications.error("Repository branches unavailable", errorMessage(error));
+      notifications.error("Repository branches unavailable", errorMessage(cause));
     }
   });
-  void taskLoadPromise.catch((error: unknown) => {
-    if (isActive() && !isCancelledError(error)) {
+  void taskLoadPromise.catch((cause: unknown) => {
+    if (isActive() && !isCancelledError(cause)) {
       notifications.error(
         "Repository tasks unavailable",
-        summarizeTaskLoadError({ error, repoStoreHealth }),
+        summarizeTaskLoadError({ error: cause, repoStoreHealth }),
       );
     }
   });

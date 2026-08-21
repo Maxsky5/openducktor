@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS, type JsonValue } from "@openducktor/contracts";
 import { resolveStoreContext } from "./store-context";
 
 const originalFetch = globalThis.fetch;
@@ -21,7 +21,7 @@ type StoreContextEnvKey = (typeof STORE_CONTEXT_ENV_KEYS)[number];
 type StoreContextEnvSnapshot = Record<StoreContextEnvKey, string | undefined>;
 let previousStoreContextEnv: StoreContextEnvSnapshot;
 
-const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: JsonValue | undefined, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,
@@ -93,7 +93,7 @@ afterEach(async () => {
 
 describe("resolveStoreContext", () => {
   test("validates readiness and the configured workspace concurrently", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     let releaseResponses = (): void => {
       throw new Error("Response barrier was not initialized.");
     };
@@ -104,7 +104,8 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as unknown,
+        // SAFETY: request bodies are JSON serialized by the bridge client.
+        body: JSON.parse(String(init?.body ?? "{}")) as JsonValue,
       });
       await responseBarrier;
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -157,12 +158,13 @@ describe("resolveStoreContext", () => {
   });
 
   test("starts without a workspace default after one authenticated readiness request", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+    const requests: Array<{ url: string; body: JsonValue }> = [];
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as unknown,
+        // SAFETY: request bodies are JSON serialized by the bridge client.
+        body: JSON.parse(String(init?.body ?? "{}")) as JsonValue,
       });
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({
@@ -499,7 +501,7 @@ describe("resolveStoreContext", () => {
 
     const contextOutcome = resolveStoreContext({}).then(
       () => ({ status: "fulfilled" as const }),
-      (error: unknown) => ({ status: "rejected" as const, error }),
+      (cause: unknown) => ({ status: "rejected" as const, error: cause }),
     );
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     releaseReadiness();

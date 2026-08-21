@@ -8,10 +8,13 @@ import type {
   CodexAppServerThreadListResponse,
   CodexSessionStatus,
 } from "../../ports/codex-app-server-port";
-import type { JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 
 export const isJsonRecord = (value: unknown): value is Record<string, JsonValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  jsonValueSchema.safeParse(value).success;
 
 const requireRecord = (value: unknown, context: string): Record<string, JsonValue> => {
   if (!isJsonRecord(value)) {

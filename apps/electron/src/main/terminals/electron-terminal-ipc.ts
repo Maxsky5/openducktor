@@ -1,7 +1,9 @@
 import {
+  type JsonValue,
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   isTerminalClientMessage,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import {
   createTerminalClientSession,
@@ -10,13 +12,31 @@ import {
   type TerminalServiceError,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import { ElectronValidationError } from "../../effect/electron-errors";
+import { runElectronEffect } from "../../effect/electron-boundary";
+import { ElectronValidationError, jsonIssues } from "../../effect/electron-errors";
 import {
+  ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
+  ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronTerminalEventEnvelope,
 } from "../../shared/electron-bridge-contract";
+import { z } from "zod";
 
 const MAX_CLIENT_ID_LENGTH = 128;
+type ElectronTerminalIpcValue = JsonValue | Uint8Array | undefined;
+
+const electronTerminalClientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH);
+const electronTerminalSendRequestSchema = z.object({
+  clientId: jsonValueSchema.optional(),
+  frame: z.union([jsonValueSchema, z.instanceof(Uint8Array)]).optional(),
+});
+type ElectronTerminalSendRequest = z.infer<typeof electronTerminalSendRequestSchema>;
+type ElectronTerminalSendRequestWire = JsonValue | ElectronTerminalSendRequest | undefined;
+
+type ElectronTerminalNavigationDetails = {
+  isMainFrame: boolean;
+  isSameDocument: boolean;
+};
 
 export type ElectronTerminalSender = {
   readonly id: number;
@@ -24,9 +44,59 @@ export type ElectronTerminalSender = {
   send(channel: string, envelope: ElectronTerminalEventEnvelope): void;
 };
 
-const readClientId = (clientId: unknown): Effect.Effect<string, ElectronValidationError> =>
-  typeof clientId === "string" && clientId.length > 0 && clientId.length <= MAX_CLIENT_ID_LENGTH
-    ? Effect.succeed(clientId)
+type ElectronTerminalLifecycleSender = ElectronTerminalSender & {
+  on(
+    event: "did-start-navigation",
+    listener: (details: ElectronTerminalNavigationDetails) => void,
+  ): void;
+  once(event: "destroyed", listener: () => void): void;
+};
+
+type ElectronTerminalInvokeEvent = {
+  readonly sender: ElectronTerminalLifecycleSender;
+};
+
+type ElectronTerminalIpcMain = {
+  handle(
+    channel: typeof ELECTRON_TERMINAL_SEND_CHANNEL,
+    listener: (
+      event: ElectronTerminalInvokeEvent,
+      request: ElectronTerminalSendRequestWire,
+    ) => Promise<void>,
+  ): void;
+  handle(
+    channel: typeof ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
+    listener: (
+      event: ElectronTerminalInvokeEvent,
+      clientId: JsonValue | undefined,
+    ) => Promise<void>,
+  ): void;
+};
+
+type RegisterElectronTerminalIpcInput = {
+  ipcMain: ElectronTerminalIpcMain;
+  terminalService: TerminalService;
+};
+
+const readElectronTerminalSendRequest = (
+  request: ElectronTerminalSendRequestWire,
+): ElectronTerminalSendRequest => {
+  const parsedRequest = electronTerminalSendRequestSchema.safeParse(request);
+  if (parsedRequest.success) return parsedRequest.data;
+  throw new ElectronValidationError({
+    operation: "electron.terminal.request",
+    field: "request",
+    message: "Electron terminal send requests must contain a client ID and protocol frame.",
+    details: { issues: jsonIssues(parsedRequest.error.issues) },
+  });
+};
+
+const readClientId = (
+  clientId: JsonValue | undefined,
+): Effect.Effect<string, ElectronValidationError> => {
+  const parsedClientId = electronTerminalClientIdSchema.safeParse(clientId);
+  return parsedClientId.success
+    ? Effect.succeed(parsedClientId.data)
     : Effect.fail(
         new ElectronValidationError({
           operation: "electron.terminal.client",
@@ -34,6 +104,7 @@ const readClientId = (clientId: unknown): Effect.Effect<string, ElectronValidati
           message: "Electron terminal client IDs must contain between 1 and 128 characters.",
         }),
       );
+};
 
 export const shouldDetachTerminalSenderForNavigation = (details: {
   isMainFrame: boolean;
@@ -64,8 +135,8 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
   };
   const handleFrame = (
     sender: ElectronTerminalSender,
-    rawClientId: unknown,
-    rawFrame: unknown,
+    rawClientId: JsonValue | undefined,
+    rawFrame: ElectronTerminalIpcValue,
   ): Effect.Effect<void, ElectronValidationError> =>
     Effect.gen(function* () {
       const clientId = yield* readClientId(rawClientId);
@@ -101,7 +172,7 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
     });
   const detachClient = (
     senderId: number,
-    rawClientId: unknown,
+    rawClientId: JsonValue | undefined,
   ): Effect.Effect<void, TerminalServiceError | ElectronValidationError> =>
     Effect.gen(function* () {
       const clientId = yield* readClientId(rawClientId);
@@ -121,4 +192,36 @@ export const createElectronTerminalIpcController = (terminalService: TerminalSer
     });
 
   return { detachClient, detachSender, handleFrame };
+};
+
+export const registerElectronTerminalIpc = ({
+  ipcMain,
+  terminalService,
+}: RegisterElectronTerminalIpcInput): void => {
+  const terminalIpc = createElectronTerminalIpcController(terminalService);
+  const boundTerminalSenders = new WeakSet<ElectronTerminalLifecycleSender>();
+  const bindTerminalSenderCleanup = (sender: ElectronTerminalLifecycleSender): void => {
+    if (boundTerminalSenders.has(sender)) return;
+    boundTerminalSenders.add(sender);
+    const detach = () => {
+      void runElectronEffect(terminalIpc.detachSender(sender.id));
+    };
+    sender.once("destroyed", detach);
+    sender.on("did-start-navigation", (details) => {
+      if (shouldDetachTerminalSenderForNavigation(details)) detach();
+    });
+  };
+
+  ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request) => {
+    bindTerminalSenderCleanup(event.sender);
+    const parsedRequest = readElectronTerminalSendRequest(request);
+    await runElectronEffect(
+      terminalIpc.handleFrame(event.sender, parsedRequest.clientId, parsedRequest.frame),
+    );
+  });
+
+  ipcMain.handle(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, async (event, clientId) => {
+    bindTerminalSenderCleanup(event.sender);
+    await runElectronEffect(terminalIpc.detachClient(event.sender.id, clientId));
+  });
 };

@@ -23,9 +23,9 @@ export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): s
   return entry.fileName.slice(uuidPrefixMatch[0].length);
 };
 
-const hasNestedNodeErrorCode = (error: unknown, code: string): boolean => {
+const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean => {
   const visited = new Set<object>();
-  let current: unknown = error;
+  let current: unknown = cause;
   while (typeof current === "object" && current !== null) {
     if (visited.has(current)) {
       return false;

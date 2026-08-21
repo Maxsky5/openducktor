@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, JsonValue, TaskEventCursor } from "@openducktor/contracts";
 import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
@@ -26,7 +26,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void;
-  let reject!: (error: unknown) => void;
+  let reject!: (cause: unknown) => void;
   const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -148,7 +148,7 @@ describe("electron shell bridge", () => {
 
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
-    const onTerminalFailure = mock((_error: unknown) => {});
+    const onTerminalFailure = mock((_cause: unknown) => {});
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
@@ -292,7 +292,7 @@ describe("electron shell bridge", () => {
     await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
     const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
-    )?.[1] as ((payload: unknown) => void) | undefined;
+    )?.[1] as ((payload: JsonValue | undefined) => void) | undefined;
     if (!subscription) {
       throw new Error("Expected live-session subscription.");
     }
@@ -393,7 +393,7 @@ describe("electron shell bridge", () => {
     const bridge = createElectronShellBridge();
     const result = await bridge.client.terminalCreate({ workingDir: "/repo", context: {} }).then(
       () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
+      (cause: unknown) => ({ ok: false as const, error: cause }),
     );
 
     expect(result.ok).toBe(false);
@@ -433,7 +433,7 @@ describe("electron shell bridge", () => {
       })
       .then(
         () => ({ ok: true as const }),
-        (error: unknown) => ({ ok: false as const, error }),
+        (cause: unknown) => ({ ok: false as const, error: cause }),
       );
 
     expect(result.ok).toBe(false);

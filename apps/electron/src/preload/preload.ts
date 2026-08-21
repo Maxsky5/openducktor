@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   appPlatformSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
@@ -11,20 +12,20 @@ import {
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
-  ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
   ELECTRON_TERMINAL_SEND_CHANNEL,
   type ElectronAppUpdateCheckInput,
-  type ElectronHostEventEnvelope,
+  electronTerminalEventEnvelopeSchema,
   type ElectronTerminalEventEnvelope,
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
 } from "../shared/electron-bridge-contract";
 import { createElectronHostInvoke } from "./electron-host-invoke";
+import { subscribeElectronHostEvent } from "./electron-host-events";
 import { createElectronTaskStreamApi } from "./electron-task-stream-ipc";
 
 const { contextBridge, ipcRenderer } = electron;
@@ -53,7 +54,7 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
     );
   },
   subscribe(listener) {
-    const handleEvent = (_event: Electron.IpcRendererEvent, state: unknown) => {
+    const handleEvent = (_event: Electron.IpcRendererEvent, state: JsonValue | undefined) => {
       const parsedState = appUpdateStateSchema.safeParse(state);
       if (!parsedState.success) {
         console.error("Received invalid app update state from Electron main process.", {
@@ -80,10 +81,13 @@ const terminals: OpenDucktorElectronTerminalApi = {
     await ipcRenderer.invoke(ELECTRON_TERMINAL_DISCONNECT_CHANNEL, clientId);
   },
   subscribe(clientId, listener) {
-    const handleEvent = (_event: Electron.IpcRendererEvent, value: unknown) => {
-      const envelope = value as Partial<ElectronTerminalEventEnvelope>;
-      if (envelope.clientId === clientId && envelope.frame instanceof Uint8Array) {
-        listener(envelope.frame);
+    const handleEvent = (
+      _event: Electron.IpcRendererEvent,
+      value: ElectronTerminalEventEnvelope | JsonValue | undefined,
+    ) => {
+      const parsedEnvelope = electronTerminalEventEnvelopeSchema.safeParse(value);
+      if (parsedEnvelope.success && parsedEnvelope.data.clientId === clientId) {
+        listener(parsedEnvelope.data.frame);
       }
     };
     ipcRenderer.on(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
@@ -95,20 +99,7 @@ const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
   invoke: invokeHost,
   subscribe(channel, listener) {
-    const handleEvent = (
-      _event: Electron.IpcRendererEvent,
-      envelope: ElectronHostEventEnvelope,
-    ) => {
-      if (envelope.channel === channel) {
-        listener(envelope.payload);
-      }
-    };
-
-    ipcRenderer.on(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
-
-    return () => {
-      ipcRenderer.off(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
-    };
+    return subscribeElectronHostEvent(ipcRenderer, channel, listener);
   },
   appUpdates,
   openExternalUrl(url) {

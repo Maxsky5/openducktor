@@ -7,7 +7,7 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
-import { canDownloadAppUpdate, canInstallAppUpdate } from "@openducktor/contracts";
+import { canDownloadAppUpdate, canInstallAppUpdate, jsonValueSchema } from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
@@ -36,9 +36,9 @@ import type {
 } from "./electron-app-updater-adapter";
 
 type ElectronAppUpdateLogger = {
-  error(message: string, error?: unknown): void | Promise<void>;
+  error(message: string, cause?: unknown): void | Promise<void>;
   info(message: string): void | Promise<void>;
-  warn(message: string, details?: unknown): void | Promise<void>;
+  warn(message: string, cause?: unknown): void | Promise<void>;
 };
 
 export type ElectronAppUpdateService = {
@@ -52,10 +52,10 @@ export type ElectronAppUpdateService = {
 };
 
 export type ElectronAppUpdateScheduler = {
-  clearInterval(handle: unknown): void;
-  clearTimeout(handle: unknown): void;
-  setInterval(callback: () => void, intervalMs: number): unknown;
-  setTimeout(callback: () => void, timeoutMs: number): unknown;
+  clearInterval(handle: object): void;
+  clearTimeout(handle: object): void;
+  setInterval(callback: () => void, intervalMs: number): object;
+  setTimeout(callback: () => void, timeoutMs: number): object;
 };
 
 export type ElectronAppUpdateServiceOptions = {
@@ -129,12 +129,24 @@ const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknow
   );
 };
 
-const readStringProperty = (value: unknown, property: string): string | undefined => {
-  if (typeof value !== "object" || value === null) {
+const readErrorCode = (cause: unknown): string | undefined => {
+  if (cause instanceof Error) {
+    const code = Reflect.get(cause, "code");
+    return typeof code === "string" ? code : undefined;
+  }
+
+  const parsedDetails = jsonValueSchema.safeParse(cause);
+  if (
+    !parsedDetails.success ||
+    typeof parsedDetails.data !== "object" ||
+    parsedDetails.data === null ||
+    Array.isArray(parsedDetails.data)
+  ) {
     return undefined;
   }
-  const propertyValue = Reflect.get(value, property);
-  return typeof propertyValue === "string" ? propertyValue : undefined;
+
+  const code = parsedDetails.data.code;
+  return typeof code === "string" ? code : undefined;
 };
 
 const missingManifestPattern = /Cannot find (?:channel ")?(latest(?:-[a-z0-9]+)*\.ya?ml)/i;
@@ -164,7 +176,7 @@ const truncateMessage = (message: string): string =>
 
 const appUpdateErrorMessage = (operation: AppUpdateOperation, cause: unknown): string => {
   const message = errorMessage(cause);
-  const code = readStringProperty(cause, "code");
+  const code = readErrorCode(cause);
   const manifestMessage = missingManifestMessage(message);
   if (manifestMessage) {
     return manifestMessage;
@@ -238,9 +250,9 @@ export const createElectronAppUpdateService = ({
   const resolvedAppUpdateConfigPath =
     appUpdateConfigPath ?? join(resourcesPath, DEFAULT_APP_UPDATE_CONFIG_FILE);
   let activeOperation: AppUpdateOperation | null = null;
-  let backgroundCheckIntervalHandle: unknown = null;
-  let downloadProgressThrottleHandle: unknown = null;
-  let initialBackgroundCheckHandle: unknown = null;
+  let backgroundCheckIntervalHandle: object | null = null;
+  let downloadProgressThrottleHandle: object | null = null;
+  let initialBackgroundCheckHandle: object | null = null;
   let installHandoffStarted = false;
   let pendingDownloadProgress: number | null = null;
   let disposed = false;

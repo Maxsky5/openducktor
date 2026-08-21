@@ -33,7 +33,10 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 
 enableReactActEnvironment();
 
-const stageLocalAttachmentFileMock = mock(async (_args: unknown) => "/tmp/staged-brief.pdf");
+const stageLocalAttachmentFileMock = mock(
+  async (_args: Parameters<typeof hostClient.workspaceStageLocalAttachment>[0]) =>
+    "/tmp/staged-brief.pdf",
+);
 const originalWorkspaceStageLocalAttachment = hostClient.workspaceStageLocalAttachment;
 
 beforeEach(async () => {

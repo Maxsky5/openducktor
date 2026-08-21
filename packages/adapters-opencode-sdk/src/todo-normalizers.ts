@@ -1,8 +1,6 @@
-import { parseAgentSessionTodoPayloadList } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
-import { normalizeAgentSessionTodoList } from "@openducktor/core";
+import { agentSessionTodoPayloadListSchema } from "@openducktor/contracts";
+import { normalizeAgentSessionTodoList, type AgentSessionTodoItem } from "@openducktor/core";
 
 export const normalizeTodoList = (payload: unknown): AgentSessionTodoItem[] => {
-  const parsed = parseAgentSessionTodoPayloadList(payload);
-  return normalizeAgentSessionTodoList(parsed);
+  return normalizeAgentSessionTodoList(agentSessionTodoPayloadListSchema().parse(payload));
 };

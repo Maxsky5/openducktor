@@ -40,7 +40,7 @@ export class HostTerminalClient {
   private async invoke<TResponse>(
     command: "terminal_create" | "terminal_list" | "terminal_prepare_path_input" | "terminal_close",
     request: Record<string, JsonValue>,
-    parse: (value: unknown) => TResponse,
+    parse: (value: JsonValue) => TResponse,
   ): Promise<TResponse> {
     try {
       return parse(await this.invokeFn(command, request));

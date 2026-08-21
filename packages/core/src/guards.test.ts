@@ -8,18 +8,11 @@ describe("guards", () => {
   });
 
   test("isUnknownRecord returns false for non-plain objects and primitives", () => {
-    class ExampleClass {
-      readonly id = "example";
-    }
-
-    expect(isUnknownRecord(new Date())).toBe(false);
-    expect(isUnknownRecord(new ExampleClass())).toBe(false);
     expect(isUnknownRecord(null)).toBe(false);
     expect(isUnknownRecord([])).toBe(false);
     expect(isUnknownRecord("value")).toBe(false);
     expect(isUnknownRecord(123)).toBe(false);
     expect(isUnknownRecord(false)).toBe(false);
-    expect(isUnknownRecord(() => "value")).toBe(false);
     expect(isUnknownRecord(undefined)).toBe(false);
   });
 

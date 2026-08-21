@@ -17,7 +17,7 @@ export type ShellBootstrapDependencies = {
   loadSettingsSnapshot: () => Promise<{ theme: Theme }>;
   applyTheme: (theme: Theme) => void;
   renderApp: (rootElement: HTMLElement) => void;
-  reportSettingsPreloadError: (error: unknown) => void;
+  reportSettingsPreloadError: (cause: unknown) => void;
 };
 
 const rootMissingMessage = (rootId: string): string =>

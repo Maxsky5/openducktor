@@ -7,6 +7,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -142,7 +143,7 @@ const readClaudeHistoryTextDisplayParts = (text: string): AgentUserMessageDispla
 
 export const readClaudeHistoryDisplayParts = (
   messageId: string,
-  message: unknown,
+  message: JsonValue | undefined,
 ): AgentUserMessageDisplayPart[] => {
   if (!isRecord(message)) {
     return [];
@@ -258,7 +259,10 @@ export const createLiveUserMessageResolver = (
 };
 
 export const readHistoryToolResults = (message: SessionMessage) => {
-  const messageRecord = message as unknown as Record<string, JsonValue>;
+  const messageRecord = parseClaudeJsonValue(message, "claudeHistoryMessage");
+  if (!isRecord(messageRecord)) {
+    return [];
+  }
   type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
   const readTopLevelToolUseResult = (): Record<string, JsonValue> | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
@@ -290,7 +294,7 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   if (direct) {
     return [mergeTopLevelToolUseResult(direct)];
   }
-  const content = isRecord(message.message) ? message.message.content : undefined;
+  const content = isRecord(messageRecord.message) ? messageRecord.message.content : undefined;
   if (Array.isArray(content)) {
     const results: ClaudeDecodedToolResult[] = [];
     for (const block of content) {
@@ -311,7 +315,7 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   return camelCaseResult ? [camelCaseResult] : [];
 };
 
-const readStringArrayProp = (value: unknown, key: string): string[] => {
+const readStringArrayProp = (value: JsonValue | undefined, key: string): string[] => {
   if (!isRecord(value)) {
     return [];
   }
@@ -322,7 +326,7 @@ const readStringArrayProp = (value: unknown, key: string): string[] => {
   return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
 };
 
-export const retractedHistoryMessageIds = (entry: unknown): string[] => [
+export const retractedHistoryMessageIds = (entry: JsonValue | undefined): string[] => [
   ...readStringArrayProp(entry, "supersedes"),
   ...readStringArrayProp(entry, "retracted_message_uuids"),
 ];

@@ -88,7 +88,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "build");
     Object.assign(mock.client.session, {
-      summarize: async (input: unknown) => {
+      summarize: async (input: JsonValue | undefined) => {
         summarizeCalls.push(input);
         return { data: true, error: undefined };
       },
@@ -219,7 +219,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "build");
     Object.assign(mock.client.session, {
-      summarize: async (input: unknown) => {
+      summarize: async (input: JsonValue | undefined) => {
         summarizeCalls.push(input);
         return { data: true, error: undefined };
       },

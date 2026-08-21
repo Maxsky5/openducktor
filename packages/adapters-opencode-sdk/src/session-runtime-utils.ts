@@ -1,10 +1,11 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, StartAgentSessionInput } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
 type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
-export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
+export const toIsoFromEpoch = (value: JsonValue | undefined, fallback: () => string): string => {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return fallback();
   }

@@ -6,6 +6,7 @@ import {
   codexSessionRuntimeRef,
   codexUserMessageInput,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
   flushCodexAdapterWork,
@@ -124,7 +125,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         developerInstructions: "Use the repo rules.",
         historyMode: "paginated",
         model: "gpt-5",
-        effort: "medium",
       },
     });
     expect(transports.get("runtime-live")?.calls[2]).toEqual({
@@ -216,7 +216,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
       developerInstructions: "Carry forward the plan.",
       excludeTurns: true,
       model: "gpt-5",
-      effort: "medium",
     });
     expect(transports.get("runtime-live")?.calls[2]?.params).toEqual({
       ...expectedThreadPolicy,
@@ -226,7 +225,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
       developerInstructions: "Review the fork.",
       excludeTurns: true,
       model: "gpt-5",
-      effort: "medium",
     });
     expect(transports.get("runtime-live")?.calls[3]).toEqual({
       method: "thread/name/set",
@@ -321,7 +319,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       params: {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Hello Codex" }],
+        input: [{ type: "text", text: "Hello Codex", text_elements: [] }],
         model: "gpt-5",
         effort: "medium",
       },
@@ -366,14 +364,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
       developerInstructions: "Use the repo rules.",
       historyMode: "paginated",
       model: "gpt-5",
-      effort: "medium",
     });
     expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
       threadId: "thread/start-runtime-live",
-      input: [{ type: "text", text: "Build it" }],
+      input: [{ type: "text", text: "Build it", text_elements: [] }],
       model: "gpt-5",
       effort: "medium",
     });
@@ -573,7 +570,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       params: {
         ...expectedTurnPolicy("/repo"),
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Use deeper reasoning" }],
+        input: [{ type: "text", text: "Use deeper reasoning", text_elements: [] }],
         model: "gpt-5",
         effort: "high",
       },
@@ -608,18 +605,61 @@ describe("CodexAppServerAdapter lifecycle", () => {
         workingDirectory: "/repo",
         externalSessionId: "thread-saved",
       }),
+    ).rejects.toThrow("has not streamed a turn/diff/updated notification");
+
+    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
+    expect(transports.has("runtime-live")).toBe(true);
+    expect(transports.get("runtime-live")?.calls.some(({ method }) => method === "turn/diff")).toBe(
+      false,
+    );
+  });
+
+  test("loads the latest turn diff from the supported runtime notification flow", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    runtimeStream.emitNotification({
+      method: "turn/diff/updated",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-1",
+        diff: "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
+      },
+    });
+    await flushCodexAdapterWork();
+
+    await expect(
+      adapter.loadSessionDiff({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-live",
+        runtimeHistoryAnchor: "turn-1",
+      }),
     ).resolves.toEqual([
       {
         file: "src/app.ts",
         type: "modified",
         additions: 1,
-        deletions: 0,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n",
+        deletions: 1,
+        diff: "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
       },
     ]);
 
-    expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
-    expect(transports.has("runtime-live")).toBe(true);
+    expect(transports.get("runtime-live")?.calls.some(({ method }) => method === "turn/diff")).toBe(
+      false,
+    );
   });
 
   test("allows event subscription for a known session", async () => {
@@ -824,7 +864,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
         developerInstructions: "Use the repo rules.",
         historyMode: "paginated",
         model: "gpt-5",
-        effort: "medium",
       },
     });
     expect(transport.calls[2]).toEqual({

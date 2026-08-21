@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { ElectronUpdaterConfigureOptions } from "./electron-app-updater-adapter";
+import type {
+  ElectronUpdaterConfigureOptions,
+  ElectronUpdaterEventMap,
+} from "./electron-app-updater-adapter";
 import { createElectronUpdaterAdapter } from "./electron-updater-adapter";
 import type { GitHubReleaseSource } from "./github-release-source";
+
+type NativeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEventMap];
 
 class FakeNativeUpdater {
   allowPrerelease = false;
@@ -30,7 +35,7 @@ class FakeNativeUpdater {
     return this;
   });
 
-  emit(eventName: string, payload: unknown): void {
+  emit(eventName: string, payload: NativeUpdaterEventPayload): void {
     for (const listener of this.listeners.get(eventName) ?? []) {
       listener(payload as never);
     }
@@ -179,7 +184,7 @@ describe("electron updater adapter", () => {
     const downloadResult = adapter.downloadUpdate();
     const settledDownload = downloadResult.then(
       () => ({ error: null }),
-      (error: unknown) => ({ error }),
+      (cause: unknown) => ({ error: cause }),
     );
     await adapter.dispose();
     finishLoading(nativeUpdater);

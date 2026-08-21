@@ -2,8 +2,9 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
 import { toOpenCodePermissionReply } from "./approval-translation";
 import { unwrapData } from "./data-utils";
-import { asUnknownRecord, readStringProp } from "./guards";
+import { readStringProp } from "./guards";
 import { extractMessageTotalTokens, readMessageModelSelection } from "./message-normalizers";
+import { opencodeSessionMessagesPayloadSchema } from "./opencode-ingress";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { ClientFactory } from "./types";
@@ -39,12 +40,12 @@ export const readLatestOpencodeContextUsage = async (
     sessionID: ref.externalSessionId,
     limit: 1,
   });
-  const messages = unwrapData(response, "load latest session context usage");
+  const messages = opencodeSessionMessagesPayloadSchema.parse(
+    unwrapData(response, "load latest session context usage"),
+  );
   const latestAssistant = [...messages]
     .reverse()
-    .find(
-      (message) => readStringProp(asUnknownRecord(message.info) ?? {}, ["role"]) === "assistant",
-    );
+    .find((message) => readStringProp(message.info, ["role"]) === "assistant");
   if (!latestAssistant) {
     return null;
   }

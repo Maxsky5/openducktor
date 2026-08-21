@@ -1,4 +1,3 @@
-import type { JsonValue } from "@openducktor/contracts";
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -15,24 +14,24 @@ export interface FatalErrorReport {
  * Duck-type check for PromiseRejectionEvent since the constructor is not
  * available in every JS runtime (e.g. Bun).
  */
-function isPromiseRejectionLike(value: unknown): value is Event & { reason: unknown } {
+function isPromiseRejectionLike(cause: unknown): cause is Event & { reason: unknown } {
   return (
     typeof Event !== "undefined" &&
-    value instanceof Event &&
-    value.type === "unhandledrejection" &&
-    "reason" in value
+    cause instanceof Event &&
+    cause.type === "unhandledrejection" &&
+    "reason" in cause
   );
 }
 
 export function buildFatalErrorReport(
-  value: unknown,
+  cause: unknown,
   source: FatalErrorReport["source"],
 ): FatalErrorReport {
   const timestamp = new Date().toISOString();
 
-  if (value instanceof ErrorEvent) {
-    const inner = value.error;
-    const location = formatErrorLocation(value);
+  if (cause instanceof ErrorEvent) {
+    const inner = cause.error;
+    const location = formatErrorLocation(cause);
     if (inner instanceof Error) {
       return {
         title: inner.name || "Error",
@@ -45,7 +44,7 @@ export function buildFatalErrorReport(
     }
     return {
       title: "Uncaught error",
-      message: value.message || String(inner ?? value),
+      message: cause.message || String(inner ?? cause),
       stack: undefined,
       ...(location ? { location } : {}),
       source,
@@ -53,8 +52,8 @@ export function buildFatalErrorReport(
     };
   }
 
-  if (isPromiseRejectionLike(value)) {
-    const reason = value.reason;
+  if (isPromiseRejectionLike(cause)) {
+    const reason = cause.reason;
     if (reason instanceof Error) {
       return {
         title: reason.name || "Unhandled rejection",
@@ -73,23 +72,23 @@ export function buildFatalErrorReport(
     };
   }
 
-  if (value instanceof Error) {
+  if (cause instanceof Error) {
     return {
-      title: value.name || "Error",
-      message: value.message,
-      stack: value.stack,
+      title: cause.name || "Error",
+      message: cause.message,
+      stack: cause.stack,
       source,
       timestamp,
     };
   }
 
-  if (typeof value === "string") {
-    return { title: "Error", message: value, stack: undefined, source, timestamp };
+  if (typeof cause === "string") {
+    return { title: "Error", message: cause, stack: undefined, source, timestamp };
   }
 
   return {
     title: "Unknown error",
-    message: safeStringify(value),
+    message: safeStringify(cause),
     stack: undefined,
     source,
     timestamp,
@@ -105,13 +104,13 @@ export function buildFatalErrorReport(
  */
 export function logFatalError(
   report: FatalErrorReport,
-  rawValue: unknown,
+  cause: unknown,
   componentStack?: string,
 ): void {
   const context = {
     source: report.source,
     timestamp: report.timestamp,
-    rawValue,
+    rawValue: cause,
     ...(report.location ? { location: report.location } : {}),
     ...(componentStack ? { componentStack } : {}),
   };
@@ -150,11 +149,11 @@ function formatErrorLocation(event: ErrorEvent): string | undefined {
   return `line ${line}, column ${column}`;
 }
 
-function safeStringify(value: unknown): string {
+function safeStringify(cause: unknown): string {
   try {
-    const json = JSON.stringify(value);
-    return typeof json === "string" ? json : String(value);
+    const json = JSON.stringify(cause);
+    return typeof json === "string" ? json : String(cause);
   } catch {
-    return String(value);
+    return String(cause);
   }
 }

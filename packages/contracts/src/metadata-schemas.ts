@@ -1,4 +1,4 @@
-import type { JsonObject } from "./json-types";
+import type { JsonObject, JsonValue } from "./json-types";
 import { z } from "zod";
 import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } from "./git-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
@@ -27,10 +27,10 @@ export const taskMetadataQaReportSchema = z.object({
 });
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
-const isPlainObject = (value: unknown): value is JsonObject =>
+const isPlainObject = (value: JsonValue | undefined): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const normalizeLegacyTaskMetadataPayload = (value: unknown): unknown => {
+const normalizeLegacyTaskMetadataPayload = (value: JsonValue | undefined): unknown => {
   if (!isPlainObject(value)) {
     return value;
   }

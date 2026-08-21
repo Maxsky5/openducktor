@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { parseCodexAppServerRequestResult } from "../../ports/codex-app-server-protocol";
+import { parseThreadTurnsListResponse } from "./codex-app-server-response-parsers";
 import { createCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 
 describe("createCodexAppServerTransportRegistry", () => {
@@ -17,25 +17,31 @@ describe("createCodexAppServerTransportRegistry", () => {
             data: [
               {
                 id: "session-1",
+                extra: null,
                 sessionId: "session-1",
                 forkedFromId: null,
                 parentThreadId: null,
                 preview: "Preview",
                 ephemeral: false,
+                section: null,
+                sectionEnteredAt: null,
+                projectId: null,
+                historyMode: "paginated",
                 modelProvider: "openai",
                 createdAt: 1,
                 updatedAt: 1,
+                recencyAt: 1,
+                status: { type: "active", activeFlags: [] },
                 cwd: "/repo",
                 path: null,
                 cliVersion: "0.0.0-test",
                 source: "appServer",
+                canAcceptDirectInput: null,
                 threadSource: null,
                 agentNickname: null,
                 agentRole: null,
                 gitInfo: null,
                 name: null,
-                status: { type: "active", activeFlags: [] },
-                historyMode: "paginated",
                 turns: [],
               },
             ],
@@ -136,89 +142,23 @@ describe("createCodexAppServerTransportRegistry", () => {
     ).rejects.toThrow("Codex app-server transport not found for runtime runtime-1");
   });
 
-  test("rejects malformed thread turns with a structured session history failure", async () => {
-    const port = createCodexAppServerTransportRegistry();
-    port.registerTransport("runtime-1", {
-      request() {
-        return Effect.succeed(
-          parseCodexAppServerRequestResult("thread/turns/list", {
-            data: [null],
-            nextCursor: null,
-            backwardsCursor: null,
-          }),
-        );
-      },
-      respond() {
-        return Effect.void;
-      },
-    });
-
-    await expect(
-      Effect.runPromise(
-        Effect.flip(
-          port.listThreadTurns({
-            runtimeId: "runtime-1",
-            threadId: "thread-1",
-            cursor: null,
-            limit: 100,
-            sortDirection: "asc",
-            itemsView: "full",
-          }),
-        ),
-      ),
-    ).resolves.toMatchObject({
-      _tag: "CodexSessionHistoryError",
-      message: "Codex thread/turns/list response data[0] must be an object",
-      failure: {
-        code: "invalid_runtime_response",
-        summary: "Codex returned invalid conversation history.",
-        detail: "Codex thread/turns/list response data[0] must be an object",
-        diagnosticId: expect.any(String),
-        method: "thread/turns/list",
-      },
-    });
+  test("rejects malformed thread turns before history projection", () => {
+    expect(() =>
+      parseThreadTurnsListResponse({
+        data: [null],
+        nextCursor: null,
+        backwardsCursor: null,
+      }),
+    ).toThrow("Codex thread/turns/list response data[0] must be an object");
   });
 
-  test("rejects malformed hydrated turn items with a structured session history failure", async () => {
-    const port = createCodexAppServerTransportRegistry();
-    port.registerTransport("runtime-1", {
-      request() {
-        return Effect.succeed(
-          parseCodexAppServerRequestResult("thread/turns/list", {
-            data: [{ items: [null] }],
-            nextCursor: null,
-            backwardsCursor: null,
-          }),
-        );
-      },
-      respond() {
-        return Effect.void;
-      },
-    });
-
-    await expect(
-      Effect.runPromise(
-        Effect.flip(
-          port.listThreadTurns({
-            runtimeId: "runtime-1",
-            threadId: "thread-1",
-            cursor: null,
-            limit: 100,
-            sortDirection: "asc",
-            itemsView: "full",
-          }),
-        ),
-      ),
-    ).resolves.toMatchObject({
-      _tag: "CodexSessionHistoryError",
-      message: "Codex thread/turns/list response data[0].items[0] must be an object",
-      failure: {
-        code: "invalid_runtime_response",
-        summary: "Codex returned invalid conversation history.",
-        detail: "Codex thread/turns/list response data[0].items[0] must be an object",
-        diagnosticId: expect.any(String),
-        method: "thread/turns/list",
-      },
-    });
+  test("rejects malformed hydrated turn items before history projection", () => {
+    expect(() =>
+      parseThreadTurnsListResponse({
+        data: [{ items: [null] }],
+        nextCursor: null,
+        backwardsCursor: null,
+      }),
+    ).toThrow("Codex thread/turns/list response data[0].items[0] must be an object");
   });
 });

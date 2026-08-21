@@ -1,5 +1,6 @@
 import {
   ODT_TOOL_SCHEMAS,
+  type JsonValue,
   type OdtPersistedDocument,
   type OdtToolName,
   type PublicTask,
@@ -236,7 +237,10 @@ export const createdSubtaskIds = (
     .map((task) => task.id)
     .filter((taskId) => !before.has(taskId));
 
-export const parseToolInput = <Name extends OdtToolName>(toolName: Name, input: unknown) =>
+export const parseToolInput = <Name extends OdtToolName>(
+  toolName: Name,
+  input: JsonValue | undefined,
+) =>
   Effect.try({
     try: () => ODT_TOOL_SCHEMAS[toolName].parse(input) as OdtToolInput<Name>,
     catch: (cause) =>
@@ -249,10 +253,10 @@ export const parseToolInput = <Name extends OdtToolName>(toolName: Name, input: 
       }),
   });
 
-export const parseResponse = <A>(
+export const parseResponse = <A, O>(
   toolName: OdtToolName,
   parser: ResponseParser<A>,
-  output: unknown,
+  output: O,
 ): Effect.Effect<A, HostValidationError> =>
   Effect.try({
     try: () => parser.parse(output),

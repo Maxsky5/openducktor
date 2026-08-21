@@ -35,7 +35,9 @@ export function browserLiveControlEvent(
   };
 }
 
-export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
+export const isBrowserLiveControlEvent = (
+  payload: JsonValue | undefined,
+): payload is BrowserLiveControlEvent => {
   if (!payload || typeof payload !== "object") {
     return false;
   }

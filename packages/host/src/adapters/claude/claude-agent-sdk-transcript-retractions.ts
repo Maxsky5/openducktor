@@ -6,9 +6,11 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { retractClaudeTodoToolResults } from "./claude-agent-sdk-todos";
 import { retractClaudeTranscriptCorrelations } from "./claude-agent-sdk-transcript-correlation";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { isRecord } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
-const readStringArrayProp = (value: unknown, key: string): string[] => {
+const readStringArrayProp = (value: JsonValue | undefined, key: string): string[] => {
   if (!isRecord(value)) {
     return [];
   }
@@ -92,7 +94,10 @@ export const emitSupersededTranscriptMessage = ({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "supersedes"),
+    messageIds: readStringArrayProp(
+      parseClaudeJsonValue(message, "claudeAssistantMessage"),
+      "supersedes",
+    ),
   });
 };
 
@@ -114,6 +119,9 @@ export const emitRetractedTranscriptMessages = ({
     emit,
     session,
     timestamp,
-    messageIds: readStringArrayProp(message, "retracted_message_uuids"),
+    messageIds: readStringArrayProp(
+      parseClaudeJsonValue(message, "claudeResultMessage"),
+      "retracted_message_uuids",
+    ),
   });
 };

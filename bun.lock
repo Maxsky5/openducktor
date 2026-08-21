@@ -54,6 +54,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "zod": "^4.4.3",
       },
     },
     "packages/adapters-opencode-sdk": {
@@ -65,6 +66,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "undici": "^7.28.0",
+        "zod": "^4.4.3",
       },
     },
     "packages/build-tools": {
@@ -184,6 +186,7 @@
         "remark-parse": "^11.0.0",
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
+        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@types/node": "^26.1.2",

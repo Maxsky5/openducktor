@@ -58,7 +58,7 @@ import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import type { CodexThreadInventory } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
-import { toFileDiffs } from "./codex-file-diffs";
+import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
@@ -341,7 +341,6 @@ export class CodexAppServerAdapter
       developerInstructions: input.systemPrompt,
       historyMode: "paginated",
       model: transportModel.model,
-      effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
@@ -397,7 +396,6 @@ export class CodexAppServerAdapter
       ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
@@ -446,7 +444,6 @@ export class CodexAppServerAdapter
       developerInstructions: input.systemPrompt,
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
     const title = sessionPolicy.title;
@@ -526,12 +523,11 @@ export class CodexAppServerAdapter
 
   async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
     const { client } = await this.runtimeClients.resolve(input, "list available skills");
-    return toCodexSkillCatalog(
-      await client.skillsList({
-        cwd: input.workingDirectory,
-        forceReload: false,
-      }),
-    );
+    const response = await client.skillsList({
+      cwds: [input.workingDirectory],
+      forceReload: false,
+    });
+    return toCodexSkillCatalog(response);
   }
 
   async listAvailableSubagents(_: ListAgentSubagentsInput) {
@@ -722,7 +718,6 @@ export class CodexAppServerAdapter
         : {}),
       excludeTurns: true,
       ...(model ? { model: toTransportModelSelection(model).model } : {}),
-      ...(model ? { effort: toTransportModelSelection(model).effort } : {}),
     });
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -1151,14 +1146,15 @@ export class CodexAppServerAdapter
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
     const session = this.localSessions.get(input.externalSessionId);
-    const { client } = session
-      ? { client: this.runtimeClients.clientForRuntime(session.runtimeId) }
-      : await this.runtimeClients.resolve(input, "load Codex session diff");
-    const diff = await client.turnDiff({
-      threadId: input.externalSessionId,
-      ...(input.runtimeHistoryAnchor ? { turnId: input.runtimeHistoryAnchor } : {}),
-    });
-    return toFileDiffs(diff);
+    const runtimeId = session
+      ? session.runtimeId
+      : (await this.runtimeClients.resolve(input, "load Codex session diff")).runtimeId;
+    const diff = this.runtimeEvents.sessionDiff(
+      runtimeId,
+      input.externalSessionId,
+      input.runtimeHistoryAnchor,
+    );
+    return fileDiffsFromUnifiedDiff(diff);
   }
 
   async loadFileStatus(

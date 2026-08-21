@@ -1,5 +1,9 @@
 import type { FileDiff } from "@openducktor/contracts";
-import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
+import {
+  countRenderableFileDiffLines,
+  selectRenderableFileDiff,
+  splitFileDiffCandidates,
+} from "@openducktor/core";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -10,13 +14,13 @@ export class CodexFileDiffParseError extends Error {
   }
 }
 
-export const codexFileChangeEntries = (value: Record<string, JsonValue>): unknown[] => {
+export const codexFileChangeEntries = (value: Record<string, JsonValue>): JsonValue[] => {
   const changes = arrayFromUnknown(value.changes);
   const diffs = arrayFromUnknown(value.diffs);
   return changes.length > 0 ? changes : diffs;
 };
 
-const normalizeExplicitDiffType = (value: unknown): string | null => {
+const normalizeExplicitDiffType = (value: JsonValue | undefined): string | null => {
   if (typeof value === "string" && value.trim().length > 0) {
     const normalized = value.trim();
     if (normalized === "add") {
@@ -56,7 +60,7 @@ const inferDiffType = (entry: Record<string, JsonValue>, diff: string): string =
   return "modified";
 };
 
-const movePathFromKind = (value: unknown): string | null => {
+const movePathFromKind = (value: JsonValue | undefined): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -92,7 +96,7 @@ const selectCodexRenderableDiff = (
   return "";
 };
 
-const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
+const parseFileDiffEntry = (entry: JsonValue | undefined, location: string): FileDiff => {
   if (!isPlainObject(entry)) {
     throw new CodexFileDiffParseError(`entry ${location} must be an object.`);
   }
@@ -136,7 +140,7 @@ const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
   };
 };
 
-export const toFileDiffs = (value: unknown): FileDiff[] => {
+export const toFileDiffs = (value: JsonValue | undefined): FileDiff[] => {
   return arrayFromUnknown(value).flatMap((entry, entryIndex): FileDiff[] => {
     if (!isPlainObject(entry)) {
       throw new CodexFileDiffParseError(`entry ${entryIndex} must be an object.`);
@@ -152,6 +156,45 @@ export const toFileDiffs = (value: unknown): FileDiff[] => {
     return [parseFileDiffEntry(entry, String(entryIndex))];
   });
 };
+
+const unifiedDiffHeaderPath = (candidate: string, prefix: "--- " | "+++ "): string | null => {
+  const line = candidate.split("\n").find((candidateLine) => candidateLine.startsWith(prefix));
+  if (!line) {
+    return null;
+  }
+  const path = line.slice(prefix.length).split("\t", 1)[0]?.trim();
+  if (!path || path === "/dev/null") {
+    return null;
+  }
+  return path.replace(/^"|"$/g, "").replace(/^(?:a|b)\//, "");
+};
+
+export const fileDiffsFromUnifiedDiff = (unifiedDiff: string): FileDiff[] =>
+  splitFileDiffCandidates(unifiedDiff).map((candidate, index) => {
+    const previousPath = unifiedDiffHeaderPath(candidate, "--- ");
+    const nextPath = unifiedDiffHeaderPath(candidate, "+++ ");
+    const file = nextPath ?? previousPath;
+    if (!file) {
+      throw new CodexFileDiffParseError(
+        `unified diff entry ${index} is missing a non-null file header.`,
+      );
+    }
+    const type = previousPath === null ? "added" : nextPath === null ? "deleted" : "modified";
+    const diff = selectRenderableFileDiff(candidate, file, { changeType: type });
+    if (!diff) {
+      throw new CodexFileDiffParseError(
+        `unified diff entry ${index} for '${file}' is not renderable.`,
+      );
+    }
+    const counts = countRenderableFileDiffLines(diff);
+    return {
+      file,
+      type,
+      additions: counts.additions,
+      deletions: counts.deletions,
+      diff,
+    };
+  });
 
 export const fileDiffsPatchOutput = (fileDiffs: ReadonlyArray<{ diff: string }>): string | null => {
   const diffs = fileDiffs.map((fileDiff) => fileDiff.diff.trim()).filter((diff) => diff.length > 0);

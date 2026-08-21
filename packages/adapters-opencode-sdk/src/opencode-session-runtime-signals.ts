@@ -1,12 +1,12 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
 import {
   type AgentSessionTranscriptEventType,
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import { readEventSessionId } from "./event-stream/shared";
-import { asUnknownRecord, readRecordProp } from "./guards";
+import { readRecordProp } from "./guards";
 import { extractMessageTotalTokens, readMessageModelSelection } from "./message-normalizers";
+import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
 
 export type OpencodeSessionContextUsage = {
   readonly totalTokens: number;
@@ -37,10 +37,13 @@ export const isOpencodeSessionTranscriptEvent = (
 ): event is OpencodeSessionTranscriptEvent => isAgentSessionTranscriptEventType(event.type);
 
 export const readMessageUpdatedContextSignal = (
-  event: Extract<Event, { type: "message.updated" }>,
+  event: Event,
 ): Extract<OpencodeSessionRuntimeSignal, { type: "context_updated" }> | null => {
-  const properties = "properties" in event ? asUnknownRecord(event.properties) : null;
-  const info = properties ? readRecordProp(properties, "info") : undefined;
+  if (event.type !== "message.updated") {
+    return null;
+  }
+  const properties = event.properties;
+  const info = readRecordProp(properties, "info");
   const externalSessionId = readEventSessionId(event);
   if (!info || !externalSessionId) {
     return null;

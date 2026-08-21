@@ -24,6 +24,7 @@ import {
   extractErrorMessage,
   isJsonRecord,
   parseStreamMessage,
+  respondToAutomaticServerRequest,
 } from "./codex-app-server-transport-messages";
 import type {
   CodexAppServerChildTransport,
@@ -189,7 +190,8 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    if (!("result" in message)) {
+    const result = message.result;
+    if (!("result" in message) || result === undefined) {
       request.reject(
         new HostValidationError({
           message: `Codex app-server response ${id} for runtime ${runtimeId} is missing result or error`,
@@ -199,8 +201,8 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    const result = Effect.try({
-      try: () => parseCodexAppServerRequestResult(request.method, message.result),
+    const parsedResultEffect = Effect.try({
+      try: () => parseCodexAppServerRequestResult(request.method, result),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -209,7 +211,7 @@ export const createCodexAppServerTransport = (
           details: { runtimeId, id, method: request.method },
         }),
     });
-    const parsedResult = Effect.runSync(Effect.either(result));
+    const parsedResult = Effect.runSync(Effect.either(parsedResultEffect));
     if (parsedResult._tag === "Left") {
       request.reject(parsedResult.left);
       return;
@@ -250,7 +252,7 @@ export const createCodexAppServerTransport = (
     pending.clear();
   };
 
-  const handleMessage = (message: unknown): void => {
+  const handleMessage = (message: JsonValue | undefined): void => {
     if (!isJsonRecord(message)) {
       failFast(
         new HostValidationError({
@@ -302,10 +304,14 @@ export const createCodexAppServerTransport = (
 
     if (hasMethod && serverRequestId !== null) {
       try {
+        const request = parseStreamMessage(runtimeId, message, "server_request");
+        if (respondToAutomaticServerRequest(request, sendMessage, failFast)) {
+          return;
+        }
         emitEvent({
           runtimeId,
           kind: "server_request",
-          message: parseStreamMessage(runtimeId, message, "server_request"),
+          message: request,
         });
       } catch (error) {
         failFast(
@@ -389,14 +395,14 @@ export const createCodexAppServerTransport = (
   });
 
   return {
-    request({ method, params }: CodexAppServerClientRequest) {
+    request(input: CodexAppServerClientRequest) {
       return Effect.gen(function* () {
         yield* ensureOpenEffect();
         const id = nextRequestId++;
         return yield* Effect.acquireUseRelease(
           acquirePendingResponse({
             id,
-            method,
+            method: input.method,
             pending,
             rememberCancelledSentRequest,
             requestTimeoutMs,
@@ -408,8 +414,7 @@ export const createCodexAppServerTransport = (
                 {
                   jsonrpc: "2.0",
                   id,
-                  method,
-                  ...(params !== undefined ? { params } : {}),
+                  ...input,
                 },
                 markWriteStarted,
               );

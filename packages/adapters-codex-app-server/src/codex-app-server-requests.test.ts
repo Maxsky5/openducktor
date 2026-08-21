@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD, type JsonValue } from "@openducktor/contracts";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -11,7 +11,7 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 
-const codexMcpToolApprovalRequest = (persist: unknown, includeToolTitle = true) => ({
+const codexMcpToolApprovalRequest = (persist: JsonValue | undefined, includeToolTitle = true) => ({
   id: 7,
   method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
   params: {
@@ -362,7 +362,7 @@ describe("Codex App Server notification parsing", () => {
         method: "thread/tokenUsage/updated",
         params: { threadId: "thread-1" },
       }),
-    ).toThrow("Codex app-server notification is missing receivedAt.");
+    ).toThrow("receivedAt");
   });
 
   test("rejects empty explicit receivedAt arguments", () => {
@@ -374,7 +374,7 @@ describe("Codex App Server notification parsing", () => {
         },
         "",
       ),
-    ).toThrow("Codex app-server notification is missing receivedAt.");
+    ).toThrow("Expected a parseable timestamp");
   });
 
   test("rejects unparsable receivedAt timestamps", () => {
@@ -384,6 +384,6 @@ describe("Codex App Server notification parsing", () => {
         params: { threadId: "thread-1" },
         receivedAt: "not-a-date",
       }),
-    ).toThrow("Codex app-server notification has an unparsable receivedAt timestamp 'not-a-date'.");
+    ).toThrow("Expected a parseable timestamp");
   });
 });

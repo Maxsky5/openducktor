@@ -1,4 +1,5 @@
-import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { jsonValueSchema } from "@openducktor/contracts";
 import {
   isRelevantEvent,
   readEventDirectory,
@@ -13,8 +14,9 @@ import {
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
-import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 import { asUnknownRecord } from "./guards";
+import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
 
@@ -83,26 +85,28 @@ const resolveGlobalEventStream = async (
 };
 
 const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
-  const properties = "properties" in event ? event.properties : undefined;
   return {
     ...event,
     properties: {
-      ...properties,
+      ...event.properties,
       directory,
     },
-  } as Event;
+  };
 };
 
 const readGlobalEventFailureScope = (
   event: OpencodeGlobalEvent,
 ): OpencodeGlobalEventFailureScope => {
-  const payload = asUnknownRecord(event.payload);
+  const parsedPayload = jsonValueSchema.safeParse(event.payload);
+  const payload = parsedPayload.success ? asUnknownRecord(parsedPayload.data) : undefined;
   const syncEvent = payload?.type === "sync" ? asUnknownRecord(payload.syncEvent) : undefined;
-  const properties = syncEvent ? asUnknownRecord(syncEvent.data) : payload?.properties;
-  const scopedEvent = {
+  const properties = syncEvent
+    ? asUnknownRecord(syncEvent.data)
+    : asUnknownRecord(payload?.properties);
+  const scopedEvent: Event = {
     type: String(payload?.type ?? "unknown"),
-    properties,
-  } as Event;
+    properties: properties ?? {},
+  };
   const externalSessionId =
     readEventSessionId(scopedEvent) ??
     (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
@@ -189,7 +193,7 @@ export const isRelevantSubscriberEvent = (
     ? lifecycleEvent.externalSessionId
     : readEventSessionId(event);
   if (eventExternalSessionId) {
-    const properties = "properties" in event ? event.properties : undefined;
+    const properties = event.properties;
     const parentExternalSessionId = lifecycleEvent
       ? lifecycleEvent.parentExternalSessionId
       : readEventParentExternalSessionId(properties);

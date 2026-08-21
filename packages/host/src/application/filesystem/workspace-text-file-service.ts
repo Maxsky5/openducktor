@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   type WorkspaceTextFileReadResult,
   type WorkspaceTextFileWriteFailure,
   type WorkspaceTextFileWriteFailureCode,
@@ -41,7 +42,7 @@ export type WorkspaceTextFileService = {
     relativePath: string;
   }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
   writeTextFile(
-    input: unknown,
+    input: JsonValue | undefined,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
@@ -105,7 +106,10 @@ const writeFailure = (
     cause,
   });
 
-const invalidWriteInput = (input: unknown, cause: unknown): WorkspaceTextFileWriteError => {
+const invalidWriteInput = (
+  input: JsonValue | undefined,
+  cause: unknown,
+): WorkspaceTextFileWriteError => {
   const record = typeof input === "object" && input !== null ? input : {};
   const rootPath =
     "rootPath" in record && typeof record.rootPath === "string" ? record.rootPath : ".";

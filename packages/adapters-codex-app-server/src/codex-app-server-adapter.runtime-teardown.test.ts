@@ -4,6 +4,7 @@ import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
   codexThreadInventoryForTest,
+  codexTurnFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createDeferred,
@@ -50,7 +51,7 @@ class DeferredSteerTransport extends RecordingTransport {
 
   completeTurnStart(): void {
     this.turnStartResponse.resolve({
-      turn: { id: "turn-active", status: "inProgress" },
+      turn: codexTurnFixture({ id: "turn-active", items: [], status: "inProgress" }),
     });
   }
 
@@ -247,7 +248,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       throw new Error("Expected the runtime transport to retain the deferred turn.");
     }
     transport.turnStartDeferred.resolve({
-      turn: { id: "turn-late", status: "completed" },
+      turn: codexTurnFixture({ id: "turn-late", items: [], status: "completed" }),
     });
     await flushCodexAdapterWork();
 
@@ -392,7 +393,11 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       id: "late-dynamic-tool",
       method: "item/tool/call",
       params: {
+        arguments: {},
+        callId: "late-dynamic-tool-call",
+        namespace: null,
         threadId: "thread/start-runtime-live",
+        tool: "test_tool",
         turnId: "old-turn",
       },
     });
@@ -437,7 +442,11 @@ describe("CodexAppServerAdapter runtime teardown", () => {
       id: "failed-dynamic-tool",
       method: "item/tool/call",
       params: {
+        arguments: {},
+        callId: "failed-dynamic-tool-call",
+        namespace: null,
         threadId: "thread/start-runtime-live",
+        tool: "test_tool",
         turnId: "old-turn",
       },
     });

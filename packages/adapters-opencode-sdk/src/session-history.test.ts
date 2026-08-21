@@ -338,7 +338,7 @@ describe("OpencodeSdkAdapter session history", () => {
     }
   });
 
-  test("loadSessionHistory ignores malformed patch parts without dropping history", async () => {
+  test("loadSessionHistory rejects malformed patch parts at ingress", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
       throw new Error("Diff endpoint should not be called without a patch message id.");
@@ -382,21 +382,13 @@ describe("OpencodeSdkAdapter session history", () => {
         now: () => "2026-02-17T12:00:00Z",
       });
 
-      const history = await adapter.loadSessionHistory({
-        ...defaultRepoRuntimeInput,
-        externalSessionId: "session-opencode-1",
-        limit: 100,
-      });
-
-      expect(history).toHaveLength(1);
-      const editPart = history[0]?.parts.find((part) => part.kind === "tool");
-      expect(editPart).toMatchObject({
-        kind: "tool",
-        tool: "edit",
-        toolType: "file_edit",
-        output: "Edited src/main.ts",
-      });
-      expect(editPart).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
+      await expect(
+        adapter.loadSessionHistory({
+          ...defaultRepoRuntimeInput,
+          externalSessionId: "session-opencode-1",
+          limit: 100,
+        }),
+      ).rejects.toThrow("messageID");
     } finally {
       globalThis.fetch = originalFetch;
     }

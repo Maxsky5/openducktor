@@ -1,6 +1,7 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
+import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
 import { normalizeTodoList } from "../todo-normalizers";
 import {
   emitCompletedAssistantMessages,
@@ -9,10 +10,8 @@ import {
 } from "./message-events";
 import { flushPendingBackgroundTaskResultSubagentParts } from "./message-events/background-task-result";
 import {
-  parsePendingInputReplied,
-  parsePermissionAsked,
-  parseQuestionAsked,
-  parseSessionStatus,
+  type ParsedSessionControlEvent,
+  parseSessionControlEvent,
   readEventProperties,
   readSessionErrorMessage,
   readTodoPayload,
@@ -217,7 +216,7 @@ const resolveLocalSubagentInputLink = (
 
 const resolveSubagentInputRouting = (
   event: Event,
-  properties: unknown,
+  properties: JsonValue | undefined,
   runtime: EventStreamRuntime,
 ): SubagentInputRouting => {
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
@@ -230,6 +229,7 @@ const resolveSubagentInputRouting = (
       childExternalSessionId,
       isEventScopedToRuntimeWorkingDirectory,
     );
+  // SAFETY: opencode SDK event properties are JSON-serialized wire data.
   const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
@@ -249,20 +249,16 @@ const resolveSubagentInputRouting = (
   };
 };
 
-const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "session.status") {
-    return false;
-  }
-
-  const properties = readEventProperties(event);
-  const status = parseSessionStatus(properties);
-
+const handleSessionStatus = (
+  status: Extract<ParsedSessionControlEvent, { type: "session_status" }>["status"],
+  runtime: EventStreamRuntime,
+): void => {
   if (status.type === "busy" || status.type === "idle") {
     if (status.type === "busy") {
       markSessionActive(runtime);
     } else {
       if (isSessionAwaitingRuntimeTurnStart(runtime)) {
-        return true;
+        return;
       }
       markSessionIdle(runtime);
       emitCompletedAssistantMessages(runtime);
@@ -274,7 +270,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
       timestamp: runtime.now(),
       status: status.type === "busy" ? { type: "busy", message: null } : { type: "idle" },
     });
-    return true;
+    return;
   }
 
   markSessionActive(runtime);
@@ -289,54 +285,40 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
       nextEpochMs: status.nextEpochMs,
     },
   });
-  return true;
 };
 
-const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  const eventType = String(event.type);
-  if (eventType !== "permission.asked" && eventType !== "permission.v2.asked") {
-    return false;
-  }
-
-  const properties = readEventProperties(event);
-  const parsed = properties ? parsePermissionAsked(properties) : undefined;
-  if (!parsed) {
-    return true;
-  }
+const handlePermissionAsked = (
+  event: Event,
+  request: Extract<ParsedSessionControlEvent, { type: "permission_asked" }>["request"],
+  runtime: EventStreamRuntime,
+): void => {
   markSessionActive(runtime);
-  const subagentRouting = resolveSubagentInputRouting(event, properties, runtime);
+  const subagentRouting = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
   const permissionEvent: Extract<AgentEvent, { type: "approval_required" }> = {
     type: "approval_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
-    ...toAgentApprovalRequestFromOpenCodePermission(parsed),
+    ...toAgentApprovalRequestFromOpenCodePermission(request),
     ...subagentRouting,
   };
   runtime.emit(runtime.externalSessionId, permissionEvent);
   queueSubagentInputEvent(runtime, permissionEvent);
-  return true;
 };
 
-const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "question.asked" && event.type !== "question.v2.asked") {
-    return false;
-  }
-
-  const properties = readEventProperties(event);
-  const parsed = properties ? parseQuestionAsked(properties) : undefined;
-  if (!parsed) {
-    return true;
-  }
-
+const handleQuestionAsked = (
+  event: Event,
+  request: Extract<ParsedSessionControlEvent, { type: "question_asked" }>["request"],
+  runtime: EventStreamRuntime,
+): void => {
   markSessionActive(runtime);
-  const subagentRouting = resolveSubagentInputRouting(event, properties, runtime);
+  const subagentRouting = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
   const questionEvent: Extract<AgentEvent, { type: "question_required" }> = {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
-    requestId: parsed.requestId,
+    requestId: request.requestId,
     ...subagentRouting,
-    questions: parsed.questions.map((question) => ({
+    questions: request.questions.map((question) => ({
       header: question.header,
       question: question.question,
       options: question.options,
@@ -346,48 +328,44 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   };
   runtime.emit(runtime.externalSessionId, questionEvent);
   queueSubagentInputEvent(runtime, questionEvent);
-  return true;
 };
 
-const readPendingInputResolvedEventType = (
+const handlePendingInputResolved = (
   event: Event,
-): PendingInputResolvedEvent["type"] | undefined => {
-  switch (event.type) {
-    case "permission.replied":
-    case "permission.v2.replied":
-      return "approval_resolved";
-    case "question.replied":
-    case "question.v2.replied":
-    case "question.rejected":
-    case "question.v2.rejected":
-      return "question_resolved";
-    default:
-      return undefined;
-  }
-};
-
-const handlePendingInputRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  const resolvedEventType = readPendingInputResolvedEventType(event);
-  if (!resolvedEventType) {
-    return false;
-  }
-
-  const properties = readEventProperties(event);
-  const parsed = properties ? parsePendingInputReplied(properties) : undefined;
-  if (!parsed) {
-    return true;
-  }
-
-  const routing = resolveSubagentInputRouting(event, properties, runtime);
-  removeQueuedSubagentInputEvent(runtime, routing.childExternalSessionId, parsed.requestId);
+  controlEvent: Extract<ParsedSessionControlEvent, { type: "pending_input_resolved" }>,
+  runtime: EventStreamRuntime,
+): void => {
+  const routing = resolveSubagentInputRouting(event, readEventProperties(event), runtime);
+  removeQueuedSubagentInputEvent(runtime, routing.childExternalSessionId, controlEvent.requestId);
   const resolvedEvent: PendingInputResolvedEvent = {
-    type: resolvedEventType,
+    type: controlEvent.resolvedType,
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
-    requestId: parsed.requestId,
+    requestId: controlEvent.requestId,
     ...routing,
   };
   runtime.emit(runtime.externalSessionId, resolvedEvent);
+};
+
+const handleSessionControlEvent = (
+  event: Event,
+  controlEvent: ParsedSessionControlEvent,
+  runtime: EventStreamRuntime,
+): boolean => {
+  switch (controlEvent.type) {
+    case "session_status":
+      handleSessionStatus(controlEvent.status, runtime);
+      break;
+    case "permission_asked":
+      handlePermissionAsked(event, controlEvent.request, runtime);
+      break;
+    case "question_asked":
+      handleQuestionAsked(event, controlEvent.request, runtime);
+      break;
+    case "pending_input_resolved":
+      handlePendingInputResolved(event, controlEvent, runtime);
+      break;
+  }
   return true;
 };
 
@@ -559,14 +537,12 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
 };
 
 export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
+  const controlEvent = parseSessionControlEvent(event);
   return (
     bindChildSessionCorrelation(event, runtime) ||
     // OpenCode owns compaction presentation; only its ordinary session status is shared.
     event.type === "session.compacted" ||
-    handleSessionStatusEvent(event, runtime) ||
-    handlePermissionAskedEvent(event, runtime) ||
-    handleQuestionAskedEvent(event, runtime) ||
-    handlePendingInputRepliedEvent(event, runtime) ||
+    (controlEvent ? handleSessionControlEvent(event, controlEvent, runtime) : false) ||
     handleSessionErrorEvent(event, runtime) ||
     handleSessionIdleEvent(event, runtime) ||
     handleTodoUpdatedEvent(event, runtime)

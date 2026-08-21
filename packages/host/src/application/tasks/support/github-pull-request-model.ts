@@ -1,4 +1,4 @@
-import type { GitProviderRepository, PullRequest } from "@openducktor/contracts";
+import type { GitProviderRepository, JsonValue, PullRequest } from "@openducktor/contracts";
 import { pullRequestSchema } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 
@@ -20,18 +20,18 @@ export const combinedCommandOutput = (stdout: string, stderr: string): string =>
 };
 
 export type GithubPullBranchRef = {
-  ref?: unknown;
+  ref?: JsonValue;
 };
 
 export type GithubPullResponse = {
-  number?: unknown;
-  html_url?: unknown;
-  draft?: unknown;
-  state?: unknown;
-  created_at?: unknown;
-  updated_at?: unknown;
-  merged_at?: unknown;
-  closed_at?: unknown;
+  number?: JsonValue;
+  html_url?: JsonValue;
+  draft?: JsonValue;
+  state?: JsonValue;
+  created_at?: JsonValue;
+  updated_at?: JsonValue;
+  merged_at?: JsonValue;
+  closed_at?: JsonValue;
   head?: GithubPullBranchRef;
   base?: GithubPullBranchRef;
 };
@@ -53,7 +53,7 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-const requireGithubString = (value: unknown, label: string): string => {
+const requireGithubString = (value: JsonValue | undefined, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new HostValidationError({
       field: label,
@@ -63,7 +63,7 @@ const requireGithubString = (value: unknown, label: string): string => {
   return value;
 };
 
-const requireGithubNumber = (value: unknown, label: string): number => {
+const requireGithubNumber = (value: JsonValue | undefined, label: string): number => {
   if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
     throw new HostValidationError({
       field: label,
@@ -103,14 +103,16 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
 };
 
 export const parseGithubPullListResponse = (payload: string): ResolvedPullRequest[] => {
-  let parsed: unknown;
+  // SAFETY: JSON.parse returns wire JSON; the shape is validated below and by
+  // pullRequestSchema.parse in normalizeGithubPullRequest.
+  let parsed: JsonValue | undefined;
   try {
-    parsed = JSON.parse(payload);
-  } catch (error) {
+    parsed = JSON.parse(payload) as JsonValue | undefined;
+  } catch (cause) {
     throw new HostValidationError({
       field: "payload",
-      message: `Failed to parse GitHub pull request list response: ${errorMessage(error)}`,
-      cause: error,
+      message: `Failed to parse GitHub pull request list response: ${errorMessage(cause)}`,
+      cause,
     });
   }
   const responses = Array.isArray(parsed) ? parsed : undefined;
@@ -133,14 +135,16 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
 };
 
 export const parseGithubPullResponse = (payload: string): ResolvedPullRequest => {
-  let parsed: unknown;
+  // SAFETY: JSON.parse returns wire JSON; the shape is validated below and by
+  // pullRequestSchema.parse in normalizeGithubPullRequest.
+  let parsed: JsonValue | undefined;
   try {
-    parsed = JSON.parse(payload);
-  } catch (error) {
+    parsed = JSON.parse(payload) as JsonValue | undefined;
+  } catch (cause) {
     throw new HostValidationError({
       field: "payload",
-      message: `Failed to parse GitHub pull request response: ${errorMessage(error)}`,
-      cause: error,
+      message: `Failed to parse GitHub pull request response: ${errorMessage(cause)}`,
+      cause,
     });
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {

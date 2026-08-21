@@ -29,10 +29,12 @@ export type {
 } from "@openducktor/contracts";
 export {
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
-  isCodexAppServerCommandAction,
-  isCodexAppServerJsonValue,
-  isCodexAppServerLegacyParsedCommand,
-  isCodexAppServerMcpServerElicitationRequestParams,
-  isCodexAppServerRequestPermissionProfile,
+  codexAppServerCommandExecutionRequestApprovalParamsSchema,
+  codexAppServerExecCommandApprovalParamsSchema,
+  codexAppServerMcpServerElicitationRequestParamsSchema,
+  codexAppServerPermissionsRequestApprovalParamsSchema,
+  codexAppServerServerRequestSchema,
+  codexAppServerServerNotificationSchema,
+  parseCodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
 } from "@openducktor/contracts";

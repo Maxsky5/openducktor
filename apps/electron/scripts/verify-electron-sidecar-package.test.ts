@@ -162,7 +162,7 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "windows",
       releaseDirectory,
-    }).catch((caught: unknown) => caught);
+    }).catch((cause: unknown) => cause);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",
@@ -209,7 +209,7 @@ describe("verifyPackagedElectronSidecars", () => {
       arch: "x64",
       platform: "linux",
       releaseDirectory,
-    }).catch((caught: unknown) => caught);
+    }).catch((cause: unknown) => cause);
 
     expect(error).toMatchObject({
       _tag: "ElectronOperationError",

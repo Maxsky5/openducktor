@@ -12,19 +12,19 @@ export type CodexForkBoundary = {
   timestamp: string;
 };
 
-const threadFromReadResponse = (response: unknown): Record<string, JsonValue> => {
+const threadFromReadResponse = (response: JsonValue | undefined): Record<string, JsonValue> => {
   if (!isPlainObject(response) || !isPlainObject(response.thread)) {
     throw new Error("Codex thread/read response is missing thread data for fork projection.");
   }
   return response.thread;
 };
 
-export const codexForkedFromThreadId = (response: unknown): string | null => {
+export const codexForkedFromThreadId = (response: JsonValue | undefined): string | null => {
   const thread = threadFromReadResponse(response);
   return extractStringField(thread, ["forkedFromId", "forked_from_id"]);
 };
 
-export const codexForkHistoryIsChildOwned = (response: unknown): boolean => {
+export const codexForkHistoryIsChildOwned = (response: JsonValue | undefined): boolean => {
   const thread = threadFromReadResponse(response);
   const turns = arrayFromUnknown(thread.turns);
   if (turns.length === 0) {
@@ -43,7 +43,7 @@ export const codexForkHistoryIsChildOwned = (response: unknown): boolean => {
   });
 };
 
-const timestampFromSeconds = (value: unknown, context: string): string => {
+const timestampFromSeconds = (value: JsonValue | undefined, context: string): string => {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`Codex ${context} is missing a valid timestamp.`);
   }
@@ -51,7 +51,7 @@ const timestampFromSeconds = (value: unknown, context: string): string => {
 };
 
 export const resolveCodexForkBoundary = (
-  response: unknown,
+  response: JsonValue | undefined,
   parentTurnIds: ReadonlySet<string>,
 ): CodexForkBoundary | null => {
   const thread = threadFromReadResponse(response);

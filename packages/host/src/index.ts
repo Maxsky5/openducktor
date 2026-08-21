@@ -64,13 +64,9 @@ export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {
   createHostEventBus,
-  HOST_EVENT_CHANNELS,
   type HostEventBusPort,
-  type HostEventChannel,
   type HostEventListener,
   type HostEventUnsubscribe,
-  isHostEventChannel,
-  parseHostEventChannel,
 } from "./events/host-event-bus";
 export {
   createOpenDucktorDailyLogWriter,
@@ -90,9 +86,11 @@ export {
 } from "./infrastructure/process/process-tree";
 export {
   HOST_COMMAND_NAMES,
+  HOST_COMMAND_RESPONSE_SCHEMAS,
   type HostCommandName,
   isHostCommandName,
   parseHostCommandName,
+  parseHostCommandResponse,
 } from "./interface/commands/host-command-registry";
 export type {
   EffectHostCommandRouter,

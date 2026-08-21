@@ -1,4 +1,4 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { formatAgentSessionTitle } from "@openducktor/core";
 import {
@@ -16,6 +16,7 @@ import {
   readSessionLifecycleEvent,
   type SubagentSessionLink,
 } from "./event-stream/shared";
+import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
 import type {
   ClientFactory,
   OpencodeEventLogger,
@@ -192,7 +193,7 @@ const ensureRuntimeEventTransport = (input: {
   assertGlobalEventSupport(streamClient);
   const controller = new AbortController();
   let resolveReady: () => void = () => undefined;
-  let rejectReady: (error: unknown) => void = () => undefined;
+  let rejectReady: (cause: unknown) => void = () => undefined;
   const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
@@ -299,9 +300,9 @@ const ensureRuntimeEventTransport = (input: {
         throw new Error("OpenCode live event observation ended unexpectedly.");
       }
     })
-    .catch(async (error: unknown) => {
+    .catch(async (cause: unknown) => {
       const failure =
-        error instanceof Error ? error : new Error("OpenCode live event observation failed.");
+        cause instanceof Error ? cause : new Error("OpenCode live event observation failed.");
       rejectReady(failure);
       const message = failure.message;
       for (const subscriber of streamRecord.subscribers.values()) {

@@ -21,6 +21,7 @@ import {
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 import type { JsonValue } from "@openducktor/contracts";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   acceptedUserMessages?: readonly unknown[];
@@ -69,7 +70,8 @@ export const handleClaudeResultMessage = ({
   timestamp,
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
-  const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
+  const messageValue = parseClaudeJsonValue(message, "claudeResultMessage");
+  const originKind = readClaudeTurnOriginKind(messageValue) ?? session.assistantTurnOriginKind;
   const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
   delete session.assistantTurnOriginKind;

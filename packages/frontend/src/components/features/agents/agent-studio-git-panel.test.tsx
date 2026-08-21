@@ -162,8 +162,11 @@ const wrapElement = (element: Element): DomTestNode => ({
     const reactPropsKey = Object.keys(htmlElement).find((key) => key.startsWith("__reactProps$"));
     const reactProps = reactPropsKey
       ? ((htmlElement as unknown as Record<string, JsonValue>)[reactPropsKey] as {
-          onClick?: (event?: unknown) => void;
-          onChange?: (event?: unknown) => void;
+          onClick?: (event?: { stopPropagation?: () => void }) => void;
+          onChange?: (event?: {
+            currentTarget?: { value?: string };
+            target?: { value?: string };
+          }) => void;
         })
       : null;
     return {

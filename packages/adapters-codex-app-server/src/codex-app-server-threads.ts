@@ -21,8 +21,9 @@ export const extractThreadId = (
     throw new Error(`Codex ${action} response is missing a thread identifier.`);
   }
 
-  return response.startedAt
-    ? { externalSessionId, startedAt: response.startedAt }
+  const createdAt = response.thread?.createdAt;
+  return typeof createdAt === "number" && Number.isFinite(createdAt)
+    ? { externalSessionId, startedAt: new Date(createdAt * 1000).toISOString() }
     : { externalSessionId };
 };
 
@@ -68,10 +69,10 @@ export type CodexSubAgentSourceMetadata = {
   agentRole: string | null;
 };
 
-const codexTimestampFromUnknownSeconds = (value: unknown): string =>
+const codexTimestampFromUnknownSeconds = (value: JsonValue | undefined): string =>
   typeof value === "number" ? new Date(value * 1000).toISOString() : new Date().toISOString();
 
-const codexTimestampMsFromUnknownSeconds = (value: unknown): number | null => {
+const codexTimestampMsFromUnknownSeconds = (value: JsonValue | undefined): number | null => {
   if (value === null || value === undefined) {
     return null;
   }
@@ -85,7 +86,9 @@ const codexTimestampMsFromUnknownSeconds = (value: unknown): number | null => {
   return timestampMs;
 };
 
-export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSnapshot => {
+export const codexThreadStatusSnapshot = (
+  status: JsonValue | undefined,
+): CodexThreadStatusSnapshot => {
   const type = isPlainObject(status)
     ? extractStringField(status, ["type"])
     : typeof status === "string"
@@ -110,7 +113,7 @@ export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSna
   return { classification: "idle" };
 };
 
-const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
+const codexThreadSnapshot = (thread: JsonValue | undefined): CodexThreadSnapshot | null => {
   if (!isPlainObject(thread)) {
     return null;
   }
@@ -137,7 +140,9 @@ const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
   };
 };
 
-const codexSubAgentSourceMetadata = (source: unknown): CodexSubAgentSourceMetadata | null => {
+const codexSubAgentSourceMetadata = (
+  source: JsonValue | undefined,
+): CodexSubAgentSourceMetadata | null => {
   if (!isPlainObject(source)) {
     return null;
   }
@@ -163,14 +168,14 @@ const codexSubAgentSourceMetadata = (source: unknown): CodexSubAgentSourceMetada
   };
 };
 
-export const codexThreadList = (response: unknown): CodexThreadSnapshot[] =>
+export const codexThreadList = (response: JsonValue | undefined): CodexThreadSnapshot[] =>
   isPlainObject(response)
     ? arrayFromUnknown(response.data)
         .map(codexThreadSnapshot)
         .filter((thread): thread is CodexThreadSnapshot => Boolean(thread))
     : [];
 
-export const codexLoadedThreadIds = (response: unknown): Set<string> =>
+export const codexLoadedThreadIds = (response: JsonValue | undefined): Set<string> =>
   isPlainObject(response)
     ? new Set(
         arrayFromUnknown(response.data)
@@ -184,11 +189,13 @@ export const codexLoadedThreadIds = (response: unknown): Set<string> =>
       )
     : new Set();
 
-export const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
+export const threadSnapshotFromReadResponse = (
+  response: JsonValue | undefined,
+): CodexThreadSnapshot | null =>
   isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
 
 export const requireThreadSnapshotFromReadResponse = (
-  response: unknown,
+  response: JsonValue | undefined,
   action: string,
   externalSessionId: string,
 ): CodexThreadSnapshot => {

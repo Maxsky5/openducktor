@@ -98,7 +98,7 @@ const installManualTimers = () => {
 
 const createDeferred = <T>() => {
   let resolveValue: (value: T) => void = () => {};
-  let rejectValue: (error: unknown) => void = () => {};
+  let rejectValue: (cause: unknown) => void = () => {};
   const promise = new Promise<T>((resolve, reject) => {
     resolveValue = resolve;
     rejectValue = reject;

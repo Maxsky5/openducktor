@@ -1,5 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { taskEventCursorSchema, taskEventStreamSubscribeSchema } from "@openducktor/contracts";
+import {
+  taskEventCursorSchema,
+  taskEventStreamSubscribeSchema,
+  type TaskEventStreamFrame,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, WebHostRequestError } from "./effect/web-errors";
 import type { TaskEventLeaseManager } from "./task-event-leases";
@@ -36,7 +40,11 @@ type TaskEventHttpServerContext = {
 const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(new WebHostRequestError({ message, status }));
 
-const jsonResponse = (payload: unknown, init: ResponseInit, corsHeaders: HeadersInit): Response =>
+const jsonResponse = (
+  payload: JsonValue | undefined,
+  init: ResponseInit,
+  corsHeaders: HeadersInit,
+): Response =>
   new Response(JSON.stringify(payload), {
     ...init,
     headers: {
@@ -66,8 +74,8 @@ const isValidTaskEventStreamCapability = (
 const isPublicSubscriptionId = (subscriptionId: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(subscriptionId);
 
-export const writeTaskFrameSseEvent = (frame: unknown): Uint8Array => {
-  const cursor = (frame as { cursor: { epoch: string; sequence: number } }).cursor;
+export const writeTaskFrameSseEvent = (frame: TaskEventStreamFrame): Uint8Array => {
+  const { cursor } = frame;
   return new TextEncoder().encode(
     [
       `id: ${cursor.epoch}:${cursor.sequence}`,

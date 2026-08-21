@@ -149,12 +149,12 @@ export const useSettingsModalSnapshotState = ({
 
         dispatch({ type: "loaded", snapshot, workspaceSelectionPolicy });
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (cancelled) {
           return;
         }
 
-        dispatch({ type: "loadFailed", error: errorMessage(error) });
+        dispatch({ type: "loadFailed", error: errorMessage(cause) });
       })
       .finally(() => {
         if (!cancelled) {

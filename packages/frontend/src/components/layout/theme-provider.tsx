@@ -74,8 +74,8 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
       confirmation.isRefreshing = true;
       void queryClient
         .fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 })
-        .catch((error: unknown) => {
-          console.error("Failed to refresh settings after persisting the theme.", error);
+        .catch((cause: unknown) => {
+          console.error("Failed to refresh settings after persisting the theme.", cause);
         })
         .finally(() => {
           if (confirmedThemeRef.current?.theme === confirmedTheme) {

@@ -40,10 +40,10 @@ const sessionRuntimeRef = (
 const createDeferred = <T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
-  reject: (error: unknown) => void;
+  reject: (cause: unknown) => void;
 } => {
   let resolve: (value: T) => void = () => undefined;
-  let reject: (error: unknown) => void = () => undefined;
+  let reject: (cause: unknown) => void = () => undefined;
   const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
     reject = promiseReject;
@@ -245,6 +245,7 @@ const makeMockClient = (
       error?: unknown;
       response?: unknown;
     };
+    permissionListData?: unknown[];
   } = {},
 ): {
   client: OpencodeClient;
@@ -282,15 +283,15 @@ const makeMockClient = (
 
   const client = {
     session: {
-      create: async (input: unknown) => {
+      create: async (input?: JsonValue | undefined) => {
         createCalls.push(input);
         return { data: { id: "external-session-1" }, error: undefined };
       },
-      abort: async (input: unknown) => {
+      abort: async (input?: JsonValue | undefined) => {
         abortCalls.push(input);
         return { data: true, error: undefined };
       },
-      get: async (input: unknown) => {
+      get: async (input?: JsonValue | undefined) => {
         getCalls.push(input);
         return {
           data: {
@@ -302,7 +303,7 @@ const makeMockClient = (
           error: undefined,
         };
       },
-      update: async (input: unknown) => {
+      update: async (input?: JsonValue | undefined) => {
         updateCalls.push(input);
         return (
           options.sessionUpdateResult ?? {
@@ -311,17 +312,17 @@ const makeMockClient = (
           }
         );
       },
-      fork: async (input: unknown) => {
+      fork: async (input?: JsonValue | undefined) => {
         forkCalls.push(input);
         return { data: { id: "external-session-fork" }, error: undefined };
       },
-      promptAsync: async (input: unknown) => {
+      promptAsync: async (input?: JsonValue | undefined) => {
         promptAsyncCalls.push(input);
         return { data: undefined, error: undefined };
       },
       messages: async () => ({ data: [], error: undefined }),
       children: async () => ({ data: [], error: undefined }),
-      list: async (input?: unknown) => {
+      list: async (input?: JsonValue | undefined) => {
         listCalls.push(input);
         return {
           data: [
@@ -349,7 +350,7 @@ const makeMockClient = (
           error: undefined,
         };
       },
-      status: async (input?: unknown) => {
+      status: async (input?: JsonValue | undefined) => {
         statusCalls.push(input);
         const directory =
           typeof input === "object" && input !== null && "directory" in input
@@ -378,7 +379,7 @@ const makeMockClient = (
       },
     },
     permission: {
-      list: async (input?: unknown) => {
+      list: async (input?: JsonValue | undefined) => {
         permissionListCalls.push(input);
         const directory =
           typeof input === "object" && input !== null && "directory" in input
@@ -387,7 +388,7 @@ const makeMockClient = (
         return {
           data:
             directory === "/repo"
-              ? [
+              ? (options.permissionListData ?? [
                   {
                     id: "perm-1",
                     sessionID: "external-session-1",
@@ -396,18 +397,18 @@ const makeMockClient = (
                     metadata: { source: "history" },
                     always: [],
                   },
-                ]
+                ])
               : [],
           error: undefined,
         };
       },
-      reply: async (input: unknown) => {
+      reply: async (input?: JsonValue | undefined) => {
         permissionReplyCalls.push(input);
         return options.permissionReplyResult ?? { data: true, error: undefined };
       },
     },
     question: {
-      list: async (input?: unknown) => {
+      list: async (input?: JsonValue | undefined) => {
         questionListCalls.push(input);
         const directory =
           typeof input === "object" && input !== null && "directory" in input
@@ -434,23 +435,23 @@ const makeMockClient = (
           error: undefined,
         };
       },
-      reply: async (input: unknown) => {
+      reply: async (input?: JsonValue | undefined) => {
         questionReplyCalls.push(input);
         return options.questionReplyResult ?? { data: true, error: undefined };
       },
     },
     mcp: {
-      status: async (input: unknown) => {
+      status: async (input?: JsonValue | undefined) => {
         mcpStatusCalls.push(input);
         return { data: { openducktor: { status: "connected" } }, error: undefined };
       },
-      connect: async (input: unknown) => {
+      connect: async (input?: JsonValue | undefined) => {
         mcpConnectCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     tool: {
-      ids: async (input: unknown) => {
+      ids: async (input?: JsonValue | undefined) => {
         toolIdCalls.push(input);
         return { data: ["odt_read_task", "task"], error: undefined };
       },
@@ -1193,7 +1194,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return {
             data: [
@@ -1220,7 +1221,7 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1233,7 +1234,7 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return {
             data: [
@@ -1291,7 +1292,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return {
             data: [
@@ -1309,7 +1310,7 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1321,14 +1322,14 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1372,7 +1373,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1381,34 +1382,34 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: JsonValue | undefined) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       mcp: {
-        status: async (input: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mcpStatusCalls.push(input);
           return mcpStatusDeferred.promise;
         },
         connect: async () => ({ data: true, error: undefined }),
       },
       tool: {
-        ids: async (input: unknown) => {
+        ids: async (input?: JsonValue | undefined) => {
           toolIdCalls.push(input);
           return { data: ["odt_read_task"], error: undefined };
         },
@@ -1468,7 +1469,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1477,21 +1478,21 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: JsonValue | undefined) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1564,7 +1565,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return {
             data: [
@@ -1579,25 +1580,25 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: JsonValue | undefined) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1645,7 +1646,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1661,14 +1662,14 @@ describe("opencode-sdk-adapter", () => {
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1736,7 +1737,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return {
             data: {
@@ -1745,21 +1746,21 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        promptAsync: async (input: unknown) => {
+        promptAsync: async (input?: JsonValue | undefined) => {
           promptAsyncCalls.push(input);
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1824,26 +1825,33 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
-        command: async (input: { messageID: string }) => {
+        command: async (input?: JsonValue | undefined) => {
           commandCalls.push(input);
-          commandStarted.resolve(input);
+          const messageID =
+            typeof input === "object" && input !== null && !Array.isArray(input)
+              ? input.messageID
+              : undefined;
+          if (typeof messageID !== "string") {
+            throw new Error("Expected slash command input to include messageID.");
+          }
+          commandStarted.resolve({ messageID });
           return { data: undefined, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1956,7 +1964,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -1999,7 +2007,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -2045,7 +2053,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -2093,7 +2101,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return {
             data: [
@@ -2108,21 +2116,21 @@ describe("opencode-sdk-adapter", () => {
             error: undefined,
           };
         },
-        status: async (input?: unknown) => {
+        status: async (input?: JsonValue | undefined) => {
           mock.statusCalls.push(input);
           return { data: { "external-session-1": { type: "idle" } }, error: undefined };
         },
       },
       permission: {
         ...mock.client.permission,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.permissionListCalls.push(input);
           return { data: [], error: undefined };
         },
       },
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -2163,7 +2171,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.listCalls.push(input);
           return { data: [], error: undefined };
         },
@@ -2216,6 +2224,8 @@ describe("opencode-sdk-adapter", () => {
               id: "perm-1",
               sessionID: "external-session-1",
               patterns: ["**/.env"],
+              metadata: { source: "history" },
+              always: [],
             },
           ],
           error: undefined,
@@ -2232,7 +2242,7 @@ describe("opencode-sdk-adapter", () => {
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
-    ).rejects.toThrow("Malformed Opencode pending approval payload: missing permission.");
+    ).rejects.toThrow("Malformed Opencode pending approval payload: permission:");
   });
 
   test("listSessionRuntimeSnapshots rejects malformed pending question payloads", async () => {
@@ -2246,7 +2256,13 @@ describe("opencode-sdk-adapter", () => {
             {
               id: "question-1",
               sessionID: "external-session-2",
-              questions: [],
+              questions: [
+                {
+                  header: "Confirm",
+                  question: "Ship it?",
+                  options: [{ label: "Yes" }],
+                },
+              ],
             },
           ],
           error: undefined,
@@ -2264,8 +2280,34 @@ describe("opencode-sdk-adapter", () => {
         runtimeKind: "opencode",
       }),
     ).rejects.toThrow(
-      "Malformed Opencode pending question payload 'question-1': missing questions.",
+      "Malformed Opencode pending question payload: questions.0.options.0.description:",
     );
+  });
+
+  test("listSessionRuntimeSnapshots rejects malformed pending approval metadata", async () => {
+    const mock = makeMockClient({
+      permissionListData: [
+        {
+          id: "perm-1",
+          sessionID: "external-session-1",
+          permission: "read",
+          patterns: ["**/.env"],
+          metadata: ["history"],
+          always: [],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await expect(
+      adapter.listSessionRuntimeSnapshots({
+        repoPath: defaultRepoPath,
+        runtimeKind: "opencode",
+      }),
+    ).rejects.toThrow("Malformed Opencode pending approval payload: metadata:");
   });
 
   test("listSessionRuntimeSnapshots normalizes trailing separators in directory filters", async () => {
@@ -2505,7 +2547,7 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       question: {
         ...mock.client.question,
-        list: async (input?: unknown) => {
+        list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
           const directory =
             typeof input === "object" && input !== null && "directory" in input

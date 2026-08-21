@@ -1,3 +1,4 @@
+import type { JsonValue } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
@@ -10,13 +11,16 @@ import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readNumberProp, readRecordProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
+import { opencodeTokenCarrierPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
 
-export const readTextFromParts = (parts: Part[]): string => {
+type NormalizablePart = Part | ParsedOpencodePart;
+
+export const readTextFromParts = (parts: NormalizablePart[]): string => {
   return parts
-    .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
+    .filter((part): part is Extract<NormalizablePart, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n")
     .trim();
@@ -46,7 +50,9 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
-const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
+const normalizeSourceText = (
+  value: JsonValue | undefined,
+): AgentUserMessageSourceText | undefined => {
   const record = asUnknownRecord(value);
   if (!record) {
     return undefined;
@@ -66,7 +72,7 @@ const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undef
 };
 
 const normalizeAttachmentPart = (
-  part: Extract<Part, { type: "file" }>,
+  part: Extract<NormalizablePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
   const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
@@ -128,7 +134,7 @@ const normalizeAttachmentPart = (
 };
 
 const normalizeFileReferencePart = (
-  part: Extract<Part, { type: "file" }>,
+  part: Extract<NormalizablePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const source = part.source;
   const sourceTextValue = source?.type === "file" ? (source.text?.value?.trim() ?? "") : "";
@@ -163,7 +169,7 @@ type OpenCodeAgentPart = {
   id?: string;
   type: "agent";
   name?: string;
-  source?: unknown;
+  source?: JsonValue;
 };
 
 const normalizeSubagentReferencePart = (
@@ -190,7 +196,9 @@ const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
   return text.startsWith(AUTO_SLASH_COMMAND_OPEN) && text.includes(AUTO_SLASH_COMMAND_CLOSE);
 };
 
-export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessageDisplayPart[] => {
+export const normalizeUserMessageDisplayParts = (
+  parts: NormalizablePart[],
+): AgentUserMessageDisplayPart[] => {
   const normalizedParts: AgentUserMessageDisplayPart[] = [];
   let hasAutoSlashCommandEnvelope = false;
 
@@ -326,7 +334,7 @@ export const readVisibleUserTextFromDisplayParts = (
   return buildOpenCodeVisibleText(userMessageParts);
 };
 
-export const readTextFromMessageInfo = (info: unknown): string => {
+export const readTextFromMessageInfo = (info: JsonValue | undefined): string => {
   const record = asUnknownRecord(info);
   if (!record) {
     return "";
@@ -341,7 +349,9 @@ export const readTextFromMessageInfo = (info: unknown): string => {
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
-export const readMessageModelSelection = (info: unknown): AgentModelSelection | undefined => {
+export const readMessageModelSelection = (
+  info: JsonValue | undefined,
+): AgentModelSelection | undefined => {
   const record = asUnknownRecord(info);
   if (!record) {
     return undefined;
@@ -375,14 +385,14 @@ type TokenBreakdown = {
   };
 };
 
-const toFiniteNumber = (value: unknown): number | null => {
+const toFiniteNumber = (value: JsonValue | undefined): number | null => {
   if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
   return value;
 };
 
-const readTokenBreakdown = (value: unknown): TokenBreakdown | undefined => {
+const readTokenBreakdown = (value: JsonValue | undefined): TokenBreakdown | undefined => {
   const record = asUnknownRecord(value);
   if (!record) {
     return undefined;
@@ -422,7 +432,7 @@ const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number
   return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
 };
 
-export const toTokenTotal = (value: unknown): number | undefined => {
+export const toTokenTotal = (value: JsonValue | undefined): number | undefined => {
   const direct = toFiniteNumber(value);
   if (direct !== null) {
     return Math.max(0, direct);
@@ -440,8 +450,8 @@ export const toTokenTotal = (value: unknown): number | undefined => {
 };
 
 export const extractMessageTotalTokens = (
-  info: unknown,
-  parts: Part[] | unknown[],
+  info: JsonValue | undefined,
+  parts: NormalizablePart[] | JsonValue[],
 ): number | undefined => {
   const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
   if (typeof infoTokens === "number" && infoTokens > 0) {
@@ -450,7 +460,11 @@ export const extractMessageTotalTokens = (
 
   let maxPartTokens = 0;
   for (const part of parts) {
-    const partTokens = toTokenTotal(readUnknownProp(part, "tokens"));
+    const parsedPart = opencodeTokenCarrierPayloadSchema.safeParse(part);
+    if (!parsedPart.success) {
+      continue;
+    }
+    const partTokens = toTokenTotal(readUnknownProp(parsedPart.data, "tokens"));
     if (typeof partTokens === "number" && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }

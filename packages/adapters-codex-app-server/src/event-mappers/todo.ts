@@ -1,5 +1,5 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -20,12 +20,12 @@ import { codexDynamicToolErrorFromItem } from "../codex-tool-error-extractor";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
 import { type CodexToolTimingFields, codexToolTimingFields } from "../codex-tool-timing";
 
-const parseJsonObject = (value: unknown): Record<string, JsonValue> | null => {
+const parseJsonObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
   if (isPlainObject(value)) return value;
   if (typeof value !== "string") return null;
   try {
-    const parsed = JSON.parse(value) as unknown;
-    return isPlainObject(parsed) ? parsed : null;
+    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
   } catch {
     return null;
   }
@@ -86,7 +86,7 @@ const codexTodoItemsFromPlanText = (text: string): Record<string, JsonValue>[] =
   return todos;
 };
 
-const codexTodoItemsFromPayload = (payload: Record<string, JsonValue>): unknown[] => {
+const codexTodoItemsFromPayload = (payload: Record<string, JsonValue>): JsonValue[] => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
     return todo;
@@ -129,8 +129,8 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
     rawTodos.filter(isPlainObject).map((item, index) => ({
       id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
       content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
-      status: item.status,
-      priority: item.priority,
+      ...(typeof item.status === "string" ? { status: item.status } : {}),
+      ...(typeof item.priority === "string" ? { priority: item.priority } : {}),
     })),
   );
   if (todos.length === 0) {
@@ -164,7 +164,7 @@ const todoToolCanonicalEvents = (
     callId: string;
     rawToolName: string;
   } & CodexToolTimingFields,
-  raw: unknown,
+  raw: JsonValue | undefined,
 ): CodexCanonicalEvent[] => [
   {
     kind: "tool",
@@ -359,7 +359,7 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
 };
 
 export const codexTodosFromThreadRead = (
-  value: unknown,
+  value: JsonValue | undefined,
   threadId = "codex-thread",
 ): AgentSessionTodoItem[] => {
   if (!isPlainObject(value) || !isPlainObject(value.thread) || !Array.isArray(value.thread.turns)) {

@@ -1,4 +1,3 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import {
   type FileContent,
   type FileDiff,
@@ -21,8 +20,9 @@ import {
 import { toTokenTotal } from "./message-normalizers";
 import { deriveToolPreview, deriveToolType } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
+import { opencodePartPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 
-const toDisplayText = (value: unknown): string | undefined => {
+const toDisplayText = (value: JsonValue | undefined): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -47,7 +47,9 @@ const toDisplayText = (value: unknown): string | undefined => {
   }
 };
 
-const parseStructuredTextObject = (value: unknown): Record<string, JsonValue> | undefined => {
+const parseStructuredTextObject = (
+  value: JsonValue | undefined,
+): Record<string, JsonValue> | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -65,7 +67,7 @@ const parseStructuredTextObject = (value: unknown): Record<string, JsonValue> | 
   }
 };
 
-const outputTextFromMcpPayload = (value: unknown): string | undefined => {
+const outputTextFromMcpPayload = (value: JsonValue | undefined): string | undefined => {
   const content = readUnknownProp(value, "content");
   if (!Array.isArray(content)) {
     return undefined;
@@ -87,13 +89,13 @@ const outputTextFromMcpPayload = (value: unknown): string | undefined => {
   return textChunks.join("\n");
 };
 
-const readToolOutputText = (value: unknown): string | undefined => {
+const readToolOutputText = (value: JsonValue | undefined): string | undefined => {
   return outputTextFromMcpPayload(value) ?? toDisplayText(value);
 };
 
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
-const readErrorValueMessage = (value: unknown): string | undefined => {
+const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -107,7 +109,7 @@ const readErrorValueMessage = (value: unknown): string | undefined => {
   return readTrimmedString(record, ["message"]);
 };
 
-const readEnvelopeErrorMessage = (value: unknown): string | undefined => {
+const readEnvelopeErrorMessage = (value: JsonValue | undefined): string | undefined => {
   const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
   if (!record) {
     return undefined;
@@ -126,7 +128,7 @@ const readEnvelopeErrorMessage = (value: unknown): string | undefined => {
   return readErrorValueMessage(readUnknownProp(record, "error")) ?? "Tool failed";
 };
 
-const readMcpTransportError = (value: unknown): string | undefined => {
+const readMcpTransportError = (value: JsonValue | undefined): string | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -135,7 +137,7 @@ const readMcpTransportError = (value: unknown): string | undefined => {
   return MCP_TRANSPORT_ERROR_PREFIX.test(trimmed) ? trimmed : undefined;
 };
 
-const readMcpContentTextError = (value: unknown): string | undefined => {
+const readMcpContentTextError = (value: JsonValue | undefined): string | undefined => {
   const text = outputTextFromMcpPayload(value);
   if (!text) {
     return undefined;
@@ -144,7 +146,7 @@ const readMcpContentTextError = (value: unknown): string | undefined => {
   return readEnvelopeErrorMessage(text) ?? readMcpTransportError(text);
 };
 
-const readStructuredToolError = (value: unknown): string | undefined => {
+const readStructuredToolError = (value: JsonValue | undefined): string | undefined => {
   const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
   const contentTextError = readMcpContentTextError(record ?? value);
   const transportError = readMcpTransportError(value);
@@ -184,7 +186,7 @@ const readStructuredToolError = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const normalizeMetadata = (value: unknown): Record<string, JsonValue> | undefined => {
+const normalizeMetadata = (value: JsonValue | undefined): Record<string, JsonValue> | undefined => {
   const normalized = asUnknownRecord(value);
   if (!normalized) {
     return undefined;
@@ -192,7 +194,7 @@ const normalizeMetadata = (value: unknown): Record<string, JsonValue> | undefine
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
-const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
+const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] => {
   if (typeof value !== "string") {
     return "modified";
   }
@@ -249,7 +251,7 @@ const normalizeToolMetadataFileDiff = (input: {
   };
 };
 
-const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
+const fileDiffFromToolFileMetadata = (value: JsonValue | undefined): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -265,7 +267,10 @@ const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
   });
 };
 
-const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileDiff | null => {
+const fileDiffFromToolFileDiffMetadata = (
+  value: JsonValue | undefined,
+  input: JsonValue | undefined,
+): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -289,7 +294,7 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
 
 const fileDiffFromWriteMetadata = (
   metadata: Record<string, JsonValue>,
-  input: unknown,
+  input: JsonValue | undefined,
 ): FileDiff | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
@@ -324,7 +329,7 @@ const fileDiffFromWriteMetadata = (
 
 const fileContentFromWriteMetadata = (
   metadata: Record<string, JsonValue>,
-  input: unknown,
+  input: JsonValue | undefined,
 ): FileContent | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
@@ -400,7 +405,8 @@ const readToolMetadataFileEditPayload = (
 };
 
 const extractPartTiming = (
-  part: Part,
+  part: ParsedOpencodePart,
+  toolState: Record<string, JsonValue>,
 ): {
   startedAtMs?: number;
   endedAtMs?: number;
@@ -409,7 +415,7 @@ const extractPartTiming = (
   const fromDirectStart = readNumberProp(directTime, ["start"]);
   const fromDirectEnd = readNumberProp(directTime, ["end"]);
 
-  const stateTime = readRecordProp(readRecordProp(part, "state"), "time");
+  const stateTime = readRecordProp(toolState, "time");
   const fromStateStart = readNumberProp(stateTime, ["start"]);
   const fromStateEnd = readNumberProp(stateTime, ["end"]);
 
@@ -422,12 +428,12 @@ const extractPartTiming = (
   };
 };
 
-type ToolPart = Extract<Part, { type: "tool" }>;
+type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ToolStatus = ToolStreamPart["status"];
 
-const readTrimmedString = (source: unknown, keys: string[]): string | undefined => {
+const readTrimmedString = (source: JsonValue | undefined, keys: string[]): string | undefined => {
   const value = readStringProp(source, keys);
   if (!value) {
     return undefined;
@@ -440,7 +446,9 @@ const isCancelledStatus = (value: string): boolean => {
   return value === "cancelled" || value === "canceled";
 };
 
-const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["executionMode"] => {
+const normalizeSubagentExecutionMode = (
+  value: JsonValue | undefined,
+): SubagentStreamPart["executionMode"] => {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
@@ -456,7 +464,7 @@ const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["exe
 };
 
 const resolveSubagentExecutionMode = (
-  ...sources: unknown[]
+  ...sources: (JsonValue | undefined)[]
 ): SubagentStreamPart["executionMode"] => {
   for (const source of sources) {
     const direct = normalizeSubagentExecutionMode(source);
@@ -506,7 +514,9 @@ const omitEndedTiming = (
 ): ReturnType<typeof extractPartTiming> =>
   typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {};
 
-const resolveSubagentExternalSessionId = (...sources: unknown[]): string | undefined => {
+const resolveSubagentExternalSessionId = (
+  ...sources: (JsonValue | undefined)[]
+): string | undefined => {
   for (const source of sources) {
     const externalSessionId = readTrimmedString(source, [
       "externalSessionId",
@@ -583,7 +593,7 @@ const buildSubagentStreamPart = (input: {
   };
 };
 
-const resolveSubagentAgent = (...sources: unknown[]): string | undefined => {
+const resolveSubagentAgent = (...sources: (JsonValue | undefined)[]): string | undefined => {
   for (const source of sources) {
     const agent = readTrimmedString(source, ["agent", "name", "subagent_type", "subagentType"]);
     if (agent) {
@@ -594,7 +604,7 @@ const resolveSubagentAgent = (...sources: unknown[]): string | undefined => {
   return undefined;
 };
 
-const resolveSubagentPrompt = (...sources: unknown[]): string | undefined => {
+const resolveSubagentPrompt = (...sources: (JsonValue | undefined)[]): string | undefined => {
   for (const source of sources) {
     const prompt = readTrimmedString(source, ["prompt", "message"]);
     if (prompt) {
@@ -605,7 +615,7 @@ const resolveSubagentPrompt = (...sources: unknown[]): string | undefined => {
   return undefined;
 };
 
-const resolveSubagentDescription = (...sources: unknown[]): string | undefined => {
+const resolveSubagentDescription = (...sources: (JsonValue | undefined)[]): string | undefined => {
   for (const source of sources) {
     const description = readTrimmedString(source, ["description", "result", "message"]);
     if (description) {
@@ -724,6 +734,7 @@ const buildToolStreamPart = (
   metadata: Record<string, JsonValue> | undefined,
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
+  const input = asUnknownRecord(readUnknownProp(toolState, "input"));
   const fileEditPayload =
     toolType === "file_edit" ? readToolMetadataFileEditPayload(metadata, toolState, part.tool) : {};
   const preview = deriveToolPreview({
@@ -740,7 +751,7 @@ const buildToolStreamPart = (
     tool: part.tool,
     toolType,
     status: normalizedStatus,
-    input: asUnknownRecord(part.state.input) ?? {},
+    ...(input ? { input } : {}),
     ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
     ...fileEditPayload,
@@ -789,7 +800,9 @@ const buildToolStreamPart = (
   };
 };
 
-export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
+export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | null => {
+  const part = opencodePartPayloadSchema.parse(payload);
+
   switch (part.type) {
     case "text":
       return {
@@ -809,8 +822,8 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         completed: Boolean(part.time?.end),
       };
     case "tool": {
-      const toolState = asUnknownRecord(part.state) ?? {};
-      const timing = extractPartTiming(part);
+      const toolState = part.state;
+      const timing = extractPartTiming(part, toolState);
       const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
       if (resolveOpencodeToolStrategy(part.tool).streamPartKind === "subagent") {
         const rawOutput = readUnknownProp(toolState, "output");
@@ -872,7 +885,12 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         ...(subtaskMetadata ? { metadata: subtaskMetadata } : {}),
       });
     }
-    default:
+    case "file":
+    case "snapshot":
+    case "patch":
+    case "agent":
+    case "retry":
+    case "compaction":
       return null;
   }
 };

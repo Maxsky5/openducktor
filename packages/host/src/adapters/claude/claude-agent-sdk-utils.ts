@@ -72,13 +72,13 @@ export const withTimeout = async <A>(
   }
 };
 
-export const readText = (value: unknown): string | undefined =>
+export const readText = (value: JsonValue | undefined): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
-export const isRecord = (value: unknown): value is Record<string, JsonValue> =>
+export const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const readStringProp = (value: unknown, key: string): string | undefined =>
+export const readStringProp = (value: JsonValue | undefined, key: string): string | undefined =>
   isRecord(value) ? readText(value[key]) : undefined;
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
@@ -227,7 +227,7 @@ export const toolPartPresentation = (
   };
 };
 
-export const textFromContentBlocks = (content: unknown): string => {
+export const textFromContentBlocks = (content: JsonValue | undefined): string => {
   if (typeof content === "string") {
     return content;
   }
@@ -249,7 +249,7 @@ export const textFromContentBlocks = (content: unknown): string => {
     .join("\n");
 };
 
-export const historyMessageText = (message: unknown): string => {
+export const historyMessageText = (message: JsonValue | undefined): string => {
   if (!isRecord(message)) {
     return "";
   }

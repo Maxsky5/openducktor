@@ -1,4 +1,4 @@
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, type JsonValue } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -38,7 +38,7 @@ const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
 
 const decideTrustedOdtTool = (
   session: CodexSessionState,
-  serverName: unknown,
+  serverName: JsonValue | undefined,
   toolName: string | undefined,
 ): TrustedOdtToolDecision => {
   if (serverName !== "openducktor") {
@@ -289,11 +289,7 @@ export const handleCodexServerRequest = async (
         const registration = context.pendingInput.addApproval({
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: requestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: mcpElicitationApproval,
           ...(routeContext.route ? { route: routeContext.route } : {}),
         });
@@ -341,11 +337,7 @@ export const handleCodexServerRequest = async (
         const registration = context.pendingInput.addQuestion({
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: parsed.serverRequestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: parsed.request,
           questionIds: parsed.questionIds,
           input: questionInput,
@@ -433,11 +425,7 @@ export const handleCodexServerRequest = async (
         const registration = context.pendingInput.addApproval({
           runtimeId: routeContext.runtimeId,
           threadId: routeContext.ownerThreadId,
-          nativeRequest: {
-            id: requestId,
-            method: rawRequest.method,
-            ...(rawRequest.params !== undefined ? { params: rawRequest.params } : {}),
-          },
+          nativeRequest: rawRequest,
           request: parsedApproval,
           ...(routeContext.route ? { route: routeContext.route } : {}),
         });

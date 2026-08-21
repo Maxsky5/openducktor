@@ -200,9 +200,9 @@ export const runWebDevEffect = (
               await runWebBoundary(keepWebDevProcessAliveDuringEffect(stopWebCliEffect(webCli)));
               cleanupCompleted = true;
               resolveExit(exitCode);
-            } catch (error) {
+            } catch (cause) {
               cleanupCompleted = true;
-              rejectExit(error);
+              rejectExit(cause);
             }
           };
 
@@ -213,11 +213,11 @@ export const runWebDevEffect = (
                 void shutdown(exitCode);
               }
             },
-            (error: unknown) => {
+            (cause: unknown) => {
               webCliExited = true;
               if (!shutdownStarted) {
                 shutdownStarted = true;
-                rejectExit(error);
+                rejectExit(cause);
               }
             },
           );
@@ -232,8 +232,8 @@ export const runWebDevEffect = (
             if (!webCliExited) {
               try {
                 webCli.kill();
-              } catch (error) {
-                console.error(errorMessage(error));
+              } catch (cause) {
+                console.error(errorMessage(cause));
               }
             }
           };
@@ -284,8 +284,8 @@ export const runWebDev = (args: readonly string[] = process.argv.slice(2)): Prom
   runWebBoundary(runWebDevEffect(args));
 
 if (import.meta.main) {
-  const exitCode = await runWebDev().catch((error: unknown) => {
-    console.error(errorMessage(error));
+  const exitCode = await runWebDev().catch((cause: unknown) => {
+    console.error(errorMessage(cause));
     return 1;
   });
   process.exit(exitCode);

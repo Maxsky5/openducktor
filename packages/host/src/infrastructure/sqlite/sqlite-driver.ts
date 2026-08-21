@@ -62,24 +62,29 @@ type NodeSqliteModule = {
   DatabaseSync: new (path: string) => NodeSqliteDatabase;
 };
 
+type SqliteRuntimeModule = BunSqliteModule | NodeSqliteModule;
+
 const bunSqliteModuleSpecifier = "bun:sqlite";
 const nodeSqliteModuleSpecifier = "node:sqlite";
 
 export const currentSqliteDriverRuntime = (): SqliteDriverRuntime =>
   "Bun" in globalThis ? "bun" : "node";
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
-  Boolean(value) && typeof value === "object";
+const isBunSqliteModule = (value: SqliteRuntimeModule): value is BunSqliteModule =>
+  typeof value === "object" &&
+  value !== null &&
+  "Database" in value &&
+  typeof value.Database === "function";
 
-const isBunSqliteModule = (value: unknown): value is BunSqliteModule =>
-  isRecord(value) && typeof value.Database === "function";
+const isNodeSqliteModule = (value: SqliteRuntimeModule): value is NodeSqliteModule =>
+  typeof value === "object" &&
+  value !== null &&
+  "DatabaseSync" in value &&
+  typeof value.DatabaseSync === "function";
 
-const isNodeSqliteModule = (value: unknown): value is NodeSqliteModule =>
-  isRecord(value) && typeof value.DatabaseSync === "function";
+const importRuntimeModule = (specifier: string): Promise<SqliteRuntimeModule> => import(specifier);
 
-const importRuntimeModule = (specifier: string): Promise<unknown> => import(specifier);
-
-const isSqliteValue = (value: unknown): value is SqliteValue =>
+const isSqliteValue = (value: SqliteValue): boolean =>
   value === null ||
   typeof value === "bigint" ||
   typeof value === "number" ||
@@ -98,7 +103,7 @@ const unsupportedSqliteDriverShape = (
   });
 
 const rowValues = (row: SqliteRow): Effect.Effect<SqliteValueRow, HostOperationError> => {
-  const values: unknown[] = Object.values(row);
+  const values: SqliteValue[] = Object.values(row);
   if (values.every(isSqliteValue)) {
     return Effect.succeed(values);
   }
@@ -116,7 +121,9 @@ const rowValues = (row: SqliteRow): Effect.Effect<SqliteValueRow, HostOperationE
   );
 };
 
-const importSqliteModule = (specifier: string): Effect.Effect<unknown, HostOperationError> =>
+const importSqliteModule = (
+  specifier: string,
+): Effect.Effect<SqliteRuntimeModule, HostOperationError> =>
   Effect.tryPromise({
     try: () => importRuntimeModule(specifier),
     catch: (cause) =>

@@ -6,12 +6,12 @@ import {
   type OdtToolName,
   odtHostBridgeReadySchema,
   odtToolErrorPayloadSchema,
+  type JsonValue,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
 import { OdtToolError } from "./tool-results";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
 type ToolOutput<Name extends OdtToolName> = z.infer<
@@ -41,15 +41,15 @@ export type OdtHostBridgeClientDeps = {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const READY_TOOL_NAME = "odt_mcp_ready";
 
-const toCauseMessage = (error: unknown): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
+const toCauseMessage = (cause: unknown): string => {
+  if (cause instanceof Error && cause.message.trim().length > 0) {
+    return cause.message;
   }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error.trim();
+  if (typeof cause === "string" && cause.trim().length > 0) {
+    return cause.trim();
   }
-  if (typeof error === "number" || typeof error === "boolean") {
-    return String(error);
+  if (typeof cause === "number" || typeof cause === "boolean") {
+    return String(cause);
   }
   return "Unknown bridge error";
 };
@@ -72,7 +72,7 @@ const toIssueDetails = (
 
 const parseHostResponse = <Schema extends z.ZodType>(
   schema: Schema,
-  payload: unknown,
+  payload: JsonValue | undefined,
   command: string,
 ): z.infer<Schema> => {
   const parsed = schema.safeParse(payload);
@@ -111,24 +111,24 @@ const createBridgeHttpError = async (response: Response, action: string): Promis
   });
 };
 
-const createBridgeTransportError = (action: string, error: unknown): OdtToolError => {
+const createBridgeTransportError = (action: string, cause: unknown): OdtToolError => {
   return new OdtToolError({
     code: "ODT_HOST_BRIDGE_ERROR",
-    message: `${action} failed: ${toCauseMessage(error)}`,
+    message: `${action} failed: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: error instanceof Error ? error.name : typeof error,
+      causeName: cause instanceof Error ? cause.name : typeof cause,
     },
   });
 };
 
-const createBridgeJsonError = (action: string, error: unknown): OdtToolError => {
+const createBridgeJsonError = (action: string, cause: unknown): OdtToolError => {
   return new OdtToolError({
     code: "ODT_HOST_RESPONSE_INVALID",
-    message: `Invalid JSON response from ${action}: ${toCauseMessage(error)}`,
+    message: `Invalid JSON response from ${action}: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: error instanceof Error ? error.name : typeof error,
+      causeName: cause instanceof Error ? cause.name : typeof cause,
     },
   });
 };
@@ -192,7 +192,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private async invokeJson(
     command: string,
     input: Record<string, JsonValue | undefined>,
-  ): Promise<unknown> {
+  ): Promise<JsonValue | undefined> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
     const response = await this.fetchBridge(
@@ -225,9 +225,13 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     }
   }
 
-  private async readJsonResponse(response: Response, action: string): Promise<unknown> {
+  private async readJsonResponse(
+    response: Response,
+    action: string,
+  ): Promise<JsonValue | undefined> {
     try {
-      return await response.json();
+      // SAFETY: Response.json() parses JSON-compatible response bodies.
+      return (await response.json()) as JsonValue | undefined;
     } catch (error) {
       throw createBridgeJsonError(action, error);
     }

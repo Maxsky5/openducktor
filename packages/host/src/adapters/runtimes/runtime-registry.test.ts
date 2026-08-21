@@ -2,11 +2,13 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  parseCodexAppServerRequestResult,
+  type CodexAppServerRequestMethod,
+  type JsonValue,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import {
   type CreateRuntimeRegistryInput,
@@ -34,7 +36,44 @@ const createRuntimeRegistry = ({
     sessionOperations: sessionOperations ?? createRuntimeSessionOperations(sessionOperationInput),
   });
 };
-const codexResult = (value: unknown) => Effect.succeed(value as CodexAppServerRequestResult);
+const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
+  Effect.succeed(parseCodexAppServerRequestResult(method, value));
+const codexThreadReadResult = (
+  threadId: string,
+  cwd: string,
+  status: { type: "active"; activeFlags: [] } | { type: "idle" | "notLoaded" | "systemError" },
+) =>
+  codexResult("thread/read", {
+    thread: {
+      id: threadId,
+      extra: null,
+      sessionId: threadId,
+      forkedFromId: null,
+      parentThreadId: null,
+      preview: "Test thread",
+      ephemeral: false,
+      section: null,
+      sectionEnteredAt: null,
+      projectId: null,
+      historyMode: "paginated",
+      modelProvider: "openai",
+      createdAt: 1,
+      updatedAt: 1,
+      recencyAt: 1,
+      status,
+      path: null,
+      cwd,
+      cliVersion: "0.149.0-test",
+      source: "appServer",
+      canAcceptDirectInput: true,
+      threadSource: null,
+      agentNickname: null,
+      agentRole: null,
+      gitInfo: null,
+      name: null,
+      turns: [],
+    },
+  });
 const requireMethod = <T>(method: T | undefined, methodName: string): T => {
   if (!method) {
     throw new Error(`Expected registry to support ${methodName}`);
@@ -613,7 +652,7 @@ describe("createRuntimeRegistry", () => {
     };
     const ensure = Effect.runPromise(registry.ensureWorkspaceRuntime(input)).then(
       (runtime) => ({ type: "started" as const, runtime }),
-      (error: unknown) => ({ type: "cancelled" as const, error }),
+      (cause: unknown) => ({ type: "cancelled" as const, error: cause }),
     );
     await startEntered;
     const stopAllRuntimes = requireMethod(registry.stopAllRuntimes, "stopAllRuntimes");
@@ -777,7 +816,7 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });
@@ -955,14 +994,12 @@ describe("createRuntimeRegistry", () => {
             "session-3": { type: "systemError" },
             "session-4": { type: "notLoaded" },
             "session-5": { type: "active", activeFlags: [] },
-          } as const;
-          return codexResult({
-            thread: {
-              id: params.threadId,
-              cwd: params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
-              status: statusByThreadId[params.threadId],
-            },
-          });
+          } satisfies Record<typeof params.threadId, Parameters<typeof codexThreadReadResult>[2]>;
+          return codexThreadReadResult(
+            params.threadId,
+            params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
+            statusByThreadId[params.threadId],
+          );
         },
       },
     });
@@ -1077,7 +1114,7 @@ describe("createRuntimeRegistry", () => {
       runtimes: [createCodexRuntime()],
       codexAppServer: {
         request() {
-          return codexResult({});
+          return codexResult("thread/read", {});
         },
       },
     });
@@ -1091,7 +1128,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex thread/read response thread must be an object");
+    ).rejects.toThrow('"thread"');
   });
   test("interrupts an active Codex session through the app-server port", async () => {
     const calls: unknown[] = [];
@@ -1101,16 +1138,13 @@ describe("createRuntimeRegistry", () => {
         request(input) {
           calls.push(input);
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
           if (input.method === "thread/turns/list") {
-            return codexResult({
+            return codexResult("thread/turns/list", {
               data: [
                 {
                   id: "turn-1",
@@ -1127,7 +1161,7 @@ describe("createRuntimeRegistry", () => {
               backwardsCursor: null,
             });
           }
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });
@@ -1171,13 +1205,7 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          return codexResult({
-            thread: {
-              id: "session-1",
-              cwd: "/repo/worktree",
-              status: { type: "idle" },
-            },
-          });
+          return codexThreadReadResult("session-1", "/repo/worktree", { type: "idle" });
         },
       },
     });
@@ -1205,15 +1233,12 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
-          return codexResult({
+          return codexResult("thread/turns/list", {
             data: [
               {
                 id: "turn-1",
@@ -1249,15 +1274,12 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           if (input.method === "thread/read") {
-            return codexResult({
-              thread: {
-                id: "session-1",
-                cwd: "/repo/worktree",
-                status: { type: "active", activeFlags: [] },
-              },
+            return codexThreadReadResult("session-1", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
             });
           }
-          return codexResult({});
+          return codexResult("thread/turns/list", {});
         },
       },
     });
@@ -1270,7 +1292,7 @@ describe("createRuntimeRegistry", () => {
           workingDirectory: "/repo/worktree",
         }),
       ),
-    ).rejects.toThrow("Codex thread/turns/list response data must be an array");
+    ).rejects.toThrow('"data"');
   });
   test("fails Codex stop without the app-server port or a Codex runtime route", async () => {
     const registry = createRuntimeRegistry({
@@ -1297,7 +1319,7 @@ describe("createRuntimeRegistry", () => {
       ],
       codexAppServer: {
         request() {
-          return codexResult({});
+          return codexResult("turn/interrupt", {});
         },
       },
     });

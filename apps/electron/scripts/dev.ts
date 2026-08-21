@@ -844,8 +844,8 @@ export const mainEffect = (): Effect.Effect<
   });
 
 if (import.meta.main) {
-  const exitCode = await runElectronEffect(mainEffect()).catch((error: unknown) => {
-    console.error(error);
+  const exitCode = await runElectronEffect(mainEffect()).catch((cause: unknown) => {
+    console.error(cause);
     return 1;
   });
   process.exit(exitCode);

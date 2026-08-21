@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   TASK_ASSET_MAX_DESCRIPTION_ASSETS,
   TASK_ASSET_MAX_FILE_BYTES,
@@ -36,8 +37,8 @@ export type TaskAssetBatchReadResult =
     };
 
 export type TaskAssetReadService = {
-  read(input: unknown): Effect.Effect<TaskAssetReadResult | null, TaskAssetError>;
-  readBatch(input: unknown): Effect.Effect<TaskAssetBatchReadResult, TaskAssetError>;
+  read(input: JsonValue | undefined): Effect.Effect<TaskAssetReadResult | null, TaskAssetError>;
+  readBatch(input: JsonValue | undefined): Effect.Effect<TaskAssetBatchReadResult, TaskAssetError>;
 };
 
 const taskAssetReadBatchContextSchema = taskAssetRenderContextSchema

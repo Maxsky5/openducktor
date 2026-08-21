@@ -110,10 +110,18 @@ const installMockWindow = ({
   const previousWindow = globalWithWindow.window;
 
   const addEventListener = mock(
-    (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    (
+      _type: string,
+      _listener: EventListenerOrEventListenerObject,
+      _options?: boolean | AddEventListenerOptions,
+    ) => {},
   );
   const removeEventListener = mock(
-    (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+    (
+      _type: string,
+      _listener: EventListenerOrEventListenerObject,
+      _options?: boolean | EventListenerOptions,
+    ) => {},
   );
   const requestAnimationFrame = mock((callback: FrameRequestCallback): number => {
     if (runAnimationFrameCallbacks) {
@@ -385,10 +393,18 @@ describe("useKanbanVirtualization", () => {
   test("shares global viewport listeners across multiple virtualized lanes", async () => {
     const mockWindow = installMockWindow();
     const scrollContainerAddEventListener = mock(
-      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+      (
+        _type: string,
+        _listener: EventListenerOrEventListenerObject,
+        _options?: boolean | AddEventListenerOptions,
+      ) => {},
     );
     const scrollContainerRemoveEventListener = mock(
-      (_type: string, _listener: EventListenerOrEventListenerObject, _options?: unknown) => {},
+      (
+        _type: string,
+        _listener: EventListenerOrEventListenerObject,
+        _options?: boolean | EventListenerOptions,
+      ) => {},
     );
     const scrollContainer = {
       addEventListener: scrollContainerAddEventListener,

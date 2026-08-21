@@ -8,6 +8,8 @@ import type {
   ElectronUpdaterUpdateInfo,
 } from "./electron-app-updater-adapter";
 
+type FakeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEventMap];
+
 export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
   configureError: unknown = null;
@@ -26,7 +28,7 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   };
   nextDownloadResult: Promise<ElectronUpdaterUpdateInfo> = Promise.resolve({ version: "0.4.3" });
 
-  private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+  private readonly listeners = new Map<string, Set<(payload: FakeUpdaterEventPayload) => void>>();
 
   async checkForUpdates() {
     this.checkCalls += 1;
@@ -63,11 +65,12 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     eventName: EventName,
     listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
   ): () => void {
-    const listeners = this.listeners.get(eventName) ?? new Set<(payload: unknown) => void>();
-    listeners.add(listener as (payload: unknown) => void);
+    const listeners =
+      this.listeners.get(eventName) ?? new Set<(payload: FakeUpdaterEventPayload) => void>();
+    listeners.add(listener as (payload: FakeUpdaterEventPayload) => void);
     this.listeners.set(eventName, listeners);
     return () => {
-      listeners.delete(listener as (payload: unknown) => void);
+      listeners.delete(listener as (payload: FakeUpdaterEventPayload) => void);
     };
   }
 
@@ -113,7 +116,7 @@ export const createFakeScheduler = () => {
       intervals.push(interval);
       return interval;
     },
-    clearInterval(handle: unknown): void {
+    clearInterval(handle: object): void {
       (handle as FakeScheduledInterval).cleared = true;
     },
     setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
@@ -121,7 +124,7 @@ export const createFakeScheduler = () => {
       timeouts.push(timeout);
       return timeout;
     },
-    clearTimeout(handle: unknown): void {
+    clearTimeout(handle: object): void {
       (handle as FakeScheduledTimeout).cleared = true;
     },
   };

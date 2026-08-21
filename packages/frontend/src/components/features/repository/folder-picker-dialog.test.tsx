@@ -5,7 +5,6 @@ import { ComponentProps, createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { JsonValue } from "@openducktor/contracts";
 
 const actualHostOperationsModule = await import("@/state/operations/host");
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");

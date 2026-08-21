@@ -10,9 +10,14 @@ import {
   type ClaudeTodoState,
   rememberClaudeTodoToolResult,
 } from "./claude-agent-sdk-todos";
+import {
+  type ClaudeToolResultIngress,
+  type ClaudeUserToolResultIngress,
+  parseClaudeUserToolResultIngress,
+} from "./claude-agent-sdk-ingress-schemas";
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
-import { isRecord } from "./claude-agent-sdk-utils";
+import { HostValidationError } from "../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeToolResultSession = {
@@ -36,11 +41,9 @@ type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolRes
 
 const mergeTopLevelToolUseResult = (
   result: ClaudeDecodedToolResult,
-  message: Extract<SDKMessage, { type: "user" }>,
+  toolUseResult: ClaudeToolResultIngress["structuredOutput"],
 ): ClaudeDecodedToolResult => {
-  const rawMessage = message as unknown as Record<string, JsonValue>;
-  const toolUseResult = rawMessage.tool_use_result;
-  if (!isRecord(toolUseResult)) {
+  if (!toolUseResult) {
     return result;
   }
   return {
@@ -53,28 +56,17 @@ const mergeTopLevelToolUseResult = (
   };
 };
 
-const readToolUseResults = (
-  message: Extract<SDKMessage, { type: "user" }>,
-): ClaudeDecodedToolResult[] => {
-  const direct = decodeClaudeToolResultValue(message.tool_use_result, message.parent_tool_use_id, {
-    allowNonToolResultType: true,
-  });
-  if (direct) {
-    return [mergeTopLevelToolUseResult(direct, message)];
-  }
-
-  const content = (message.message as { content?: unknown }).content;
-  if (Array.isArray(content)) {
-    const results: ClaudeDecodedToolResult[] = [];
-    for (const block of content) {
-      const result = decodeClaudeToolResultValue(block, message.parent_tool_use_id);
-      if (result) {
-        results.push(mergeTopLevelToolUseResult(result, message));
-      }
+const readToolUseResults = (message: ClaudeUserToolResultIngress): ClaudeDecodedToolResult[] => {
+  return message.toolResults.map(({ raw, structuredOutput }) => {
+    const result = decodeClaudeToolResultValue(raw, null);
+    if (!result) {
+      throw new HostValidationError({
+        field: "claudeToolResult",
+        message: "Claude SDK sent a tool result that could not be decoded.",
+      });
     }
-    return results;
-  }
-  return [];
+    return mergeTopLevelToolUseResult(result, structuredOutput);
+  });
 };
 
 export const handleClaudeUserToolResultMessage = ({
@@ -88,7 +80,8 @@ export const handleClaudeUserToolResultMessage = ({
   session: ClaudeToolResultSession;
   timestamp: string;
 }): void => {
-  for (const result of readToolUseResults(message)) {
+  const toolResultMessage = parseClaudeUserToolResultIngress(message);
+  for (const result of readToolUseResults(toolResultMessage)) {
     if (isClaudeToolUseRetracted(session, result.toolUseId)) {
       continue;
     }

@@ -1,40 +1,56 @@
-import { isUnknownRecord as isCoreUnknownRecord, type UnknownRecord } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 
-export type { UnknownRecord };
+export type UnknownRecord = Record<string, JsonValue>;
 
-const isUnknownRecord = isCoreUnknownRecord;
+const isJsonRecord = (value: JsonValue | undefined): value is UnknownRecord =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
-  return isUnknownRecord(value) ? value : undefined;
+export const asUnknownRecord = (value: JsonValue | undefined): UnknownRecord | undefined => {
+  return isJsonRecord(value) ? value : undefined;
 };
 
-const safeProp = <T>(
-  source: unknown,
+const safeProp = <T extends JsonValue>(
+  source: JsonValue | undefined,
   key: string,
-  guard: (value: unknown) => value is T,
+  guard: (value: JsonValue) => value is T,
 ): T | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
   const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
   return guard(value) ? value : undefined;
 };
 
-export const readUnknownProp = (source: unknown, key: string): unknown => {
+export const readUnknownProp = (
+  source: JsonValue | undefined,
+  key: string,
+): JsonValue | undefined => {
   const record = asUnknownRecord(source);
   return record?.[key];
 };
 
-export const readRecordProp = (source: unknown, key: string): UnknownRecord | undefined => {
-  return safeProp(source, key, isUnknownRecord);
+export const readRecordProp = (
+  source: JsonValue | undefined,
+  key: string,
+): UnknownRecord | undefined => {
+  return safeProp(source, key, isJsonRecord);
 };
 
-export const readArrayProp = (source: unknown, key: string): unknown[] | undefined => {
+export const readArrayProp = (
+  source: JsonValue | undefined,
+  key: string,
+): JsonValue[] | undefined => {
   return safeProp(source, key, Array.isArray);
 };
 
-export const readStringProp = (source: unknown, keys: readonly string[]): string | undefined => {
+export const readStringProp = (
+  source: JsonValue | undefined,
+  keys: readonly string[],
+): string | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
@@ -49,7 +65,10 @@ export const readStringProp = (source: unknown, keys: readonly string[]): string
   return undefined;
 };
 
-export const readNumberProp = (source: unknown, keys: string[]): number | undefined => {
+export const readNumberProp = (
+  source: JsonValue | undefined,
+  keys: string[],
+): number | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
@@ -64,7 +83,10 @@ export const readNumberProp = (source: unknown, keys: string[]): number | undefi
   return undefined;
 };
 
-export const readBooleanProp = (source: unknown, keys: string[]): boolean | undefined => {
+export const readBooleanProp = (
+  source: JsonValue | undefined,
+  keys: string[],
+): boolean | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
@@ -79,7 +101,10 @@ export const readBooleanProp = (source: unknown, keys: string[]): boolean | unde
   return undefined;
 };
 
-export const readStringArrayProp = (source: unknown, key: string): string[] | undefined => {
+export const readStringArrayProp = (
+  source: JsonValue | undefined,
+  key: string,
+): string[] | undefined => {
   const values = readArrayProp(source, key);
   if (!values) {
     return undefined;

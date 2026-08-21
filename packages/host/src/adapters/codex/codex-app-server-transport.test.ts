@@ -4,6 +4,7 @@ import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
 import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
+import { HostValidationError } from "../../effect/host-errors";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -19,7 +20,7 @@ const createChild = (
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-const notificationEvent = (message: unknown) =>
+const notificationEvent = (message: JsonValue | undefined) =>
   expect.objectContaining({
     runtimeId: "runtime-1",
     kind: "notification" as const,
@@ -27,7 +28,7 @@ const notificationEvent = (message: unknown) =>
     message,
   });
 
-const serverRequestEvent = (message: unknown) =>
+const serverRequestEvent = (message: JsonValue | undefined) =>
   expect.objectContaining({
     runtimeId: "runtime-1",
     kind: "server_request" as const,
@@ -53,6 +54,29 @@ const recordClearTimeouts = () => {
 };
 
 describe("createCodexAppServerTransport", () => {
+  test("rejects malformed JSON-valid model list results with HostValidationError", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
+
+    try {
+      const failure = Effect.runPromise(
+        Effect.flip(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      );
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: 1 } })}\n`,
+      );
+
+      await expect(failure).resolves.toBeInstanceOf(HostValidationError);
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
   test("delivers notifications to the prepared event sink after a request response", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
@@ -175,6 +199,91 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
+  test("responds to current time requests in whole Unix seconds and stays usable", async () => {
+    const stdin = new PassThrough();
+    let written = "";
+    stdin.on("data", (chunk) => {
+      written += String(chunk);
+    });
+    const child = createChild(stdin);
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const before = Math.floor(Date.now() / 1_000);
+
+    try {
+      child.stdout.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "current-time-1",
+          method: "currentTime/read",
+          params: { threadId: "thread-1" },
+        })}\n`,
+      );
+      await waitForStreamEvents();
+      const after = Math.floor(Date.now() / 1_000);
+      const responseMatch = written.match(
+        /^\{"jsonrpc":"2\.0","id":"current-time-1","result":\{"currentTimeAt":(\d+)}}\n$/,
+      );
+
+      expect(responseMatch).not.toBeNull();
+      if (!responseMatch) {
+        throw new Error("Codex current time response did not match the protocol shape.");
+      }
+      const currentTimeAt = Number(responseMatch[1]);
+      expect(Number.isInteger(currentTimeAt)).toBe(true);
+      expect(currentTimeAt).toBeGreaterThanOrEqual(before);
+      expect(currentTimeAt).toBeLessThanOrEqual(after);
+      expect(emitted).toEqual([]);
+
+      const nextResponse = Effect.runPromise(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      await waitForStreamEvents();
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: null } })}\n`,
+      );
+
+      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("fails actionably when current time request params omit the thread id", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
+
+    try {
+      child.stdout.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: "current-time-1",
+          method: "currentTime/read",
+          params: {},
+        })}\n`,
+      );
+      await waitForStreamEvents();
+
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      ).rejects.toThrow(
+        "Codex app-server currentTime/read request for runtime-1 has invalid params",
+      );
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
   test("still fails fast for unknown server requests", async () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
@@ -212,6 +321,7 @@ describe("createCodexAppServerTransport", () => {
             threadId: "thread-1",
             turnId: "turn-1",
             itemId: "item-1",
+            environmentId: null,
             startedAtMs: 1,
             cwd: "/repo",
             reason: null,
@@ -282,6 +392,7 @@ describe("createCodexAppServerTransport", () => {
         threadId: "thread-1",
         turnId: "turn-1",
         itemId: "item-1",
+        environmentId: null,
         startedAtMs: 1,
         cwd: "/repo",
         reason: "Need permission for test",
@@ -322,6 +433,7 @@ describe("createCodexAppServerTransport", () => {
         threadId: "thread-1",
         turnId: "turn-1",
         itemId: "item-string",
+        environmentId: null,
         startedAtMs: 1,
         cwd: "/repo",
         reason: null,
@@ -362,7 +474,7 @@ describe("createCodexAppServerTransport", () => {
     await Effect.runPromise(transport.close());
   });
 
-  test("accepts permissions approval requests without an optional reason", async () => {
+  test("delivers permissions approval requests with the complete v2 payload", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
@@ -375,8 +487,10 @@ describe("createCodexAppServerTransport", () => {
         threadId: "thread-1",
         turnId: "turn-1",
         itemId: "item-1",
+        environmentId: null,
         startedAtMs: 1,
         cwd: "/repo",
+        reason: null,
         permissions: {
           network: null,
           fileSystem: null,

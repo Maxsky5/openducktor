@@ -1,6 +1,7 @@
 import { extractThreadIdFromParams } from "./codex-app-server-requests";
 import { isPlainObject } from "./codex-app-server-shared";
 import { extractCodexTokenUsageTotals } from "./codex-app-server-transcript";
+import type { JsonValue } from "@openducktor/contracts";
 import type { CodexNotificationRecord, CodexSessionContextUsage } from "./types";
 
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
@@ -8,7 +9,7 @@ const contextUsageKey = (runtimeId: string, threadId: string): string =>
 
 const parseContextUsageKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
 
-const canonicalZeroUsage = (params: unknown): CodexSessionContextUsage | null => {
+const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextUsage | null => {
   if (!isPlainObject(params) || !isPlainObject(params.tokenUsage)) {
     return null;
   }

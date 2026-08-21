@@ -1,23 +1,22 @@
-import type { JsonValue } from "@openducktor/contracts";
-type PrismLanguageLoader = () => Promise<{ default: unknown }>;
+type PrismLanguageLoader<Grammar> = () => Promise<{ default: Grammar }>;
 type LanguageRegistrationResult =
   | { status: "registered" }
   | { status: "unsupported" }
   | { status: "failed"; error: Error };
 
-type CreateMarkdownSyntaxLanguageRegistryArgs = {
+type CreateMarkdownSyntaxLanguageRegistryArgs<Grammar> = {
   languageAliases: Record<string, string>;
-  defaultLanguages: Record<string, JsonValue>;
-  lazyLanguageLoaders: Record<string, PrismLanguageLoader>;
-  registerLanguage: (language: string, grammar: unknown) => void;
+  defaultLanguages: Record<string, Grammar>;
+  lazyLanguageLoaders: Record<string, PrismLanguageLoader<Grammar>>;
+  registerLanguage: (language: string, grammar: Grammar) => void;
 };
 
-export function createMarkdownSyntaxLanguageRegistry({
+export function createMarkdownSyntaxLanguageRegistry<Grammar>({
   languageAliases,
   defaultLanguages,
   lazyLanguageLoaders,
   registerLanguage,
-}: CreateMarkdownSyntaxLanguageRegistryArgs) {
+}: CreateMarkdownSyntaxLanguageRegistryArgs<Grammar>) {
   const registeredLanguages = new Set<string>();
   const pendingLanguageRegistrations = new Map<string, Promise<LanguageRegistrationResult>>();
   const supportedLanguages = new Set([
@@ -30,7 +29,7 @@ export function createMarkdownSyntaxLanguageRegistry({
     return languageAliases[normalized] ?? normalized;
   };
 
-  const registerNormalizedLanguage = (language: string, grammar: unknown): void => {
+  const registerNormalizedLanguage = (language: string, grammar: Grammar): void => {
     if (registeredLanguages.has(language)) {
       return;
     }

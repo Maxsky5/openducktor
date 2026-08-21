@@ -91,7 +91,7 @@ describe("HostTerminalClient", () => {
       })
       .then(
         () => ({ ok: true as const }),
-        (error: unknown) => ({ ok: false as const, error }),
+        (cause: unknown) => ({ ok: false as const, error: cause }),
       );
 
     expect(result.ok).toBe(false);

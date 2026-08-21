@@ -12,6 +12,7 @@ import type {
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
+import { jsonValueSchema, parseCodexAppServerClientRequest } from "@openducktor/contracts";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
@@ -54,20 +55,15 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
       }
       return transport;
     });
-  const requestJson = ({
-    runtimeId,
-    method,
-    params,
-  }: CodexAppServerRequestInput): Effect.Effect<
-    CodexAppServerRequestResult,
-    CodexAppServerTransportRegistryError
-  > =>
+  const requestJson = (
+    input: CodexAppServerRequestInput,
+  ): Effect.Effect<CodexAppServerRequestResult, CodexAppServerTransportRegistryError> =>
     Effect.gen(function* () {
-      const transport = yield* requireTransport(runtimeId);
-      return yield* transport.request({
-        method,
-        ...(params !== undefined ? { params } : {}),
-      });
+      const transport = yield* requireTransport(input.runtimeId);
+      const request = parseCodexAppServerClientRequest(
+        jsonValueSchema.parse({ method: input.method, params: input.params }),
+      );
+      return yield* transport.request(request);
     });
 
   return {
@@ -84,8 +80,8 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
     unregisterTransport(runtimeId) {
       transports.delete(runtimeId);
     },
-    request({ runtimeId, method, params }) {
-      return requestJson({ runtimeId, method, ...(params !== undefined ? { params } : {}) });
+    request(input) {
+      return requestJson(input);
     },
     listLoadedThreads({ runtimeId, cursor, limit }) {
       return Effect.gen(function* () {

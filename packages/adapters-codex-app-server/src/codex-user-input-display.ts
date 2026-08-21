@@ -69,6 +69,9 @@ const userInputText = (input: CodexUserInput): string => {
   if (input.type === "skill") {
     return `$${input.name}`;
   }
+  if (input.type === "image" || input.type === "audio") {
+    return input.url;
+  }
   return input.path;
 };
 

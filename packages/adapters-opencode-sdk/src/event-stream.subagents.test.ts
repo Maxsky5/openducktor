@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
-import { runEventStreamWithSession } from "./event-stream.test-support";
+import {
+  permissionAskedEvent,
+  questionAskedEvent,
+  runEventStreamWithSession,
+} from "./event-stream.test-support";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
@@ -94,49 +98,35 @@ const makeChildPermissionAskedEvent = (input: {
   parentExternalSessionId?: string;
   requestId?: string;
 }): Event =>
-  ({
-    type: "permission.asked",
-    properties: {
-      sessionID: input.childSessionId,
-      ...(input.parentExternalSessionId
-        ? {
-            info: {
-              parentID: input.parentExternalSessionId,
-            },
-          }
-        : {}),
-      id: input.requestId ?? "permission-child-1",
-      permission: "read",
-      patterns: ["omp.json"],
-    },
-  }) as unknown as Event;
+  permissionAskedEvent({
+    requestId: input.requestId ?? "permission-child-1",
+    sessionId: input.childSessionId,
+    permission: "read",
+    patterns: ["omp.json"],
+    ...(input.parentExternalSessionId
+      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
+      : {}),
+  });
 
 const makeChildQuestionAskedEvent = (input: {
   childSessionId: string;
   parentExternalSessionId?: string;
   requestId?: string;
 }): Event =>
-  ({
-    type: "question.asked",
-    properties: {
-      sessionID: input.childSessionId,
-      ...(input.parentExternalSessionId
-        ? {
-            info: {
-              parentID: input.parentExternalSessionId,
-            },
-          }
-        : {}),
-      id: input.requestId ?? "question-child-1",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "Current file", description: "Inspect only the requested file" }],
-        },
-      ],
-    },
-  }) as unknown as Event;
+  questionAskedEvent({
+    requestId: input.requestId ?? "question-child-1",
+    sessionId: input.childSessionId,
+    questions: [
+      {
+        header: "Scope",
+        question: "Pick target",
+        options: [{ label: "Current file", description: "Inspect only the requested file" }],
+      },
+    ],
+    ...(input.parentExternalSessionId
+      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
+      : {}),
+  });
 
 const makeSubagentToolPartUpdatedEvent = (input: {
   messageId: string;

@@ -69,7 +69,7 @@ describe("host-client", () => {
   test("forwards task stream subscriptions and terminal failures to the active shell bridge", async () => {
     const listener = mock(() => {});
     const terminalFailure = new Error("stream terminated");
-    const onTerminalFailure = mock((_error: unknown) => {});
+    const onTerminalFailure = mock((_cause: unknown) => {});
     const unsubscribe = mock(() => {});
     const acknowledge = mock(async () => {});
     const subscribeTaskStream = mock(async (_input, receivedFrame, receivedTerminalFailure) => {

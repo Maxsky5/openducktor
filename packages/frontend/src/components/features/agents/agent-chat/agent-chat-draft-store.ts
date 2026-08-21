@@ -65,8 +65,8 @@ const getDraftStorage = (): DraftStorage => {
   return globalThis.localStorage;
 };
 
-const reportPersistenceError = (error: unknown): void => {
-  persistenceErrorReporter(error instanceof Error ? error : new Error(String(error)));
+const reportPersistenceError = (cause: unknown): void => {
+  persistenceErrorReporter(cause instanceof Error ? cause : new Error(String(cause)));
 };
 
 const createEntry = (

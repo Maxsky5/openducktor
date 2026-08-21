@@ -1,9 +1,13 @@
-import { isCodexAppServerRequestPermissionProfile } from "@openducktor/contracts";
+import {
+  codexAppServerRequestPermissionProfileSchema,
+  type JsonValue,
+} from "@openducktor/contracts";
 import type { AgentApprovalMutation } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
 
-const hasArrayEntries = (value: unknown): boolean => Array.isArray(value) && value.length > 0;
+const hasArrayEntries = (value: JsonValue | undefined): boolean =>
+  Array.isArray(value) && value.length > 0;
 
 export const classifyCodexPermissionRequestMutation = (
   request: CodexServerRequestRecord,
@@ -12,10 +16,11 @@ export const classifyCodexPermissionRequestMutation = (
     return "unknown";
   }
 
-  const permissions = request.params.permissions;
-  if (!isCodexAppServerRequestPermissionProfile(permissions)) {
+  const parsed = codexAppServerRequestPermissionProfileSchema.safeParse(request.params.permissions);
+  if (!parsed.success) {
     return "unknown";
   }
+  const permissions = parsed.data;
 
   const fileSystem = permissions.fileSystem;
   if (fileSystem === null) {

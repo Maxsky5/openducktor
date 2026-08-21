@@ -44,8 +44,8 @@ const createTaskDocumentState = (input?: {
   loaded: input?.loaded ?? false,
 });
 
-const toErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : "Unable to load document.";
+const toErrorMessage = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : "Unable to load document.";
 
 const createHostDocumentLoader = <
   TResult extends { markdown: string; updatedAt: string | null; error?: string | null },

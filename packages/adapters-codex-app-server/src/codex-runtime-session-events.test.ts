@@ -420,7 +420,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
     const mutations: unknown[] = [];
     let attempts = 0;
-    let rejectFirstDelivery: ((error: unknown) => void) | undefined;
+    let rejectFirstDelivery: ((cause: unknown) => void) | undefined;
     const firstDelivery = new Promise<void>((_resolve, reject) => {
       rejectFirstDelivery = reject;
     });
@@ -467,7 +467,7 @@ describe("CodexRuntimeSessionEvents", () => {
     const deliveryFailure = new Error("catalog delivery failed");
     const deliveries: string[] = [];
     const failures: Array<{ runtimeId: string; error: unknown }> = [];
-    let rejectCatalog: ((error: unknown) => void) | undefined;
+    let rejectCatalog: ((cause: unknown) => void) | undefined;
     let resolveMutation: (() => void) | undefined;
     const catalogDelivery = new Promise<void>((_resolve, reject) => {
       rejectCatalog = reject;
@@ -880,6 +880,8 @@ describe("CodexRuntimeSessionEvents", () => {
         threadId: "shared-child-thread",
         turnId: "child-turn",
         itemId: "child-command",
+        startedAtMs: 1,
+        environmentId: "local",
         command: "pwd",
         cwd: "/repo",
       },
@@ -1164,7 +1166,7 @@ describe("CodexRuntimeSessionEvents", () => {
     await flushRuntimeEvents();
 
     expect(runtimeEvents.latestContextUsage("runtime-1", "thread-target")).toBeNull();
-    expect(mutations.at(-1)?.fault).toContain("missing threadId");
+    expect(mutations.at(-1)?.fault).toContain("threadId");
     expect(mutations.at(-1)?.faultRef).toBeUndefined();
   });
 
@@ -1212,7 +1214,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    expect(mutations.at(-1)?.fault).toBe("Codex app-server server request is missing method.");
+    expect(mutations.at(-1)?.fault).toContain("method");
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
     const sessionErrors =
       mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
@@ -1340,6 +1342,9 @@ describe("CodexRuntimeSessionEvents", () => {
         id: "nested-question",
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "grandchild-question-item",
           threadId: grandchildSession.threadId,
           turnId: "grandchild-turn",
           questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
@@ -1604,6 +1609,9 @@ describe("CodexRuntimeSessionEvents", () => {
         id: "retained-child-question",
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "retained-child-question-item",
           threadId: childSession.threadId,
           turnId: "child-turn",
           questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
@@ -1986,6 +1994,9 @@ describe("CodexRuntimeSessionEvents", () => {
         id: 50,
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "child-question-item",
           threadId: "child-thread",
           turnId: "turn-child",
           questions: [
@@ -2049,6 +2060,7 @@ describe("CodexRuntimeSessionEvents", () => {
             "Do you want to allow a shell `curl` check so I can verify terminal network access directly?",
           networkApprovalContext: {
             host: "example.com",
+            protocol: "https",
           },
         },
       },
@@ -2276,7 +2288,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "parent-thread",
-        message: expect.stringContaining("missing a thread identifier"),
+        message: expect.stringContaining("threadId"),
       }),
     );
   });
@@ -2335,7 +2347,7 @@ describe("CodexRuntimeSessionEvents", () => {
       expect.objectContaining({
         type: "session_error",
         externalSessionId: "child-thread",
-        message: "Codex app-server server request is missing method.",
+        message: expect.stringContaining("method"),
       }),
     );
     expect(parentEvents).not.toContainEqual(expect.objectContaining({ type: "session_error" }));

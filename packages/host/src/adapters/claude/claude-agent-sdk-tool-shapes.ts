@@ -126,7 +126,7 @@ export const timestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringifyToolResultContent = (value: unknown): string => {
+const stringifyToolResultContent = (value: JsonValue): string => {
   if (value === undefined || value === null) {
     return "";
   }
@@ -140,7 +140,7 @@ const stringifyToolResultContent = (value: unknown): string => {
   }
 };
 
-const toolResultBlockText = (block: unknown): string => {
+const toolResultBlockText = (block: JsonValue): string => {
   if (typeof block === "string") {
     return block;
   }
@@ -177,7 +177,7 @@ const claudeToolResultContentText = (value: Record<string, JsonValue>): string =
 };
 
 export const decodeClaudeToolResultValue = (
-  value: unknown,
+  value: JsonValue | undefined,
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {

@@ -10,7 +10,7 @@ import {
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<T>((nextResolve, nextReject) => {
     resolve = nextResolve;
     reject = nextReject;
@@ -24,21 +24,27 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const createTimers = (): LifecycleTimerPort & { runAll: () => void; pending: () => number } => {
-  const callbacks = new Set<() => void>();
+type TestTimerHandle = { callback: () => void };
+
+const createTimers = (): LifecycleTimerPort<TestTimerHandle> & {
+  runAll: () => void;
+  pending: () => number;
+} => {
+  const timers = new Set<TestTimerHandle>();
   return {
     setTimeout: (callback) => {
-      callbacks.add(callback);
-      return callback;
+      const timer = { callback };
+      timers.add(timer);
+      return timer;
     },
-    clearTimeout: (timer) => callbacks.delete(timer as () => void),
+    clearTimeout: (timer) => timers.delete(timer),
     runAll: () => {
-      for (const callback of callbacks) {
-        callbacks.delete(callback);
-        callback();
+      for (const timer of timers) {
+        timers.delete(timer);
+        timer.callback();
       }
     },
-    pending: () => callbacks.size,
+    pending: () => timers.size,
   };
 };
 

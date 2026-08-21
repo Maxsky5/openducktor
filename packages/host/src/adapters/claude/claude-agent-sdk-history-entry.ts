@@ -1,13 +1,20 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import type {
   ClaudeHistoryEntryMetadata,
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
+
+const claudeHistoryValue = (entry: ClaudeHistoryMessage): JsonValue | undefined => {
+  return parseClaudeJsonValue(entry, "claudeHistoryMessage");
+};
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
-  const timestamp = isRecord(entry) ? (entry as ClaudeHistoryEntryMetadata).timestamp : undefined;
+  const value = claudeHistoryValue(entry);
+  const timestamp = isRecord(value) ? (entry as ClaudeHistoryEntryMetadata).timestamp : undefined;
   if (typeof timestamp !== "string") {
     return now();
   }
@@ -15,15 +22,18 @@ export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => str
 };
 
 export const readHistorySessionId = (entry: ClaudeHistoryMessage): string =>
-  readStringProp(entry, "session_id") ?? readStringProp(entry, "sessionId") ?? "claude-history";
+  readStringProp(claudeHistoryValue(entry), "session_id") ??
+  readStringProp(claudeHistoryValue(entry), "sessionId") ??
+  "claude-history";
 
 export const readHistoryAssistantModel = (
   entry: ClaudeHistoryMessage,
 ): AgentModelSelection | undefined => {
-  if (isClaudeSyntheticAssistantMessage(entry)) {
+  const value = claudeHistoryValue(entry);
+  if (isClaudeSyntheticAssistantMessage(value)) {
     return undefined;
   }
-  const model = isRecord(entry) ? readStringProp(entry.message, "model") : undefined;
+  const model = isRecord(value) ? readStringProp(value.message, "model") : undefined;
   return model
     ? {
         providerId: "claude",
@@ -34,11 +44,12 @@ export const readHistoryAssistantModel = (
 };
 
 export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {
-  if (entry.type === "result" || !isRecord(entry)) {
+  const value = claudeHistoryValue(entry);
+  if (entry.type === "result" || !isRecord(value)) {
     return false;
   }
   if (entry.type === "system") {
-    const subtype = readStringProp(entry, "subtype");
+    const subtype = readStringProp(value, "subtype");
     if (
       subtype === "task_started" ||
       subtype === "task_progress" ||

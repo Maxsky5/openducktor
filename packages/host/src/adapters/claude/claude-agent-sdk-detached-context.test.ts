@@ -1,3 +1,4 @@
+import type { ClaudeContextUsageQueryFactory } from "./claude-agent-sdk-detached-context";
 import { describe, expect, mock, test } from "bun:test";
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
@@ -14,7 +15,7 @@ describe("loadClaudeDetachedSessionContextUsage", () => {
       async () => ({}) as Awaited<ReturnType<Query["initializationResult"]>>,
     );
     const getContextUsage = mock(async () => contextUsageResponse);
-    const createQuery = mock((_input: unknown) => ({
+    const createQuery = mock((_input: Parameters<ClaudeContextUsageQueryFactory>[0]) => ({
       close,
       getContextUsage,
       initializationResult,
@@ -52,7 +53,7 @@ describe("loadClaudeDetachedSessionContextUsage", () => {
 
   test("closes the resumed query when the context read fails", async () => {
     const close = mock(() => {});
-    const createQuery = mock((_input: unknown) => ({
+    const createQuery = mock((_input: Parameters<ClaudeContextUsageQueryFactory>[0]) => ({
       close,
       getContextUsage: async () => {
         throw new Error("context unavailable");

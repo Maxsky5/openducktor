@@ -1,8 +1,10 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
+import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { JsonValue } from "@openducktor/contracts";
 import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
 import type { EventStreamRuntime } from "../shared";
 import { applyDeltaToPart, getMessageParts } from "../shared";
 import { removeMessageProjectionState } from "./message-state";
@@ -69,7 +71,7 @@ export const hasTerminalStopSignalInParts = (
   );
 };
 
-const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
+const hasTerminalStopSignalInRawParts = (parts: JsonValue[]): boolean => {
   return parts.some((part) => {
     const record = asUnknownRecord(part);
     return (
@@ -82,7 +84,7 @@ const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
 
 export const hasMessageStopSignal = (input: {
   finish: string | undefined;
-  rawParts: unknown[];
+  rawParts: JsonValue[];
   parts: Part[];
 }): boolean => {
   return (
@@ -133,7 +135,10 @@ export const updateMessageMetadata = (
   });
 };
 
-export const readRawMessageParts = (properties: unknown, info: unknown): unknown[] => {
+export const readRawMessageParts = (
+  properties: JsonValue | undefined,
+  info: JsonValue | undefined,
+): JsonValue[] => {
   const directParts = readArrayProp(properties, "parts");
   if (directParts) {
     return directParts;

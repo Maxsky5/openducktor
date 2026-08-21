@@ -66,6 +66,37 @@ const createSyntheticTextPart = ({
   }) as unknown as Part;
 
 describe("stream-part-mapper", () => {
+  test("rejects tool parts with non-JSON state metadata at ingress", () => {
+    const part = {
+      id: "tool-malformed-state-1",
+      sessionID: "session-1",
+      messageID: "assistant-tool-malformed-state-1",
+      callID: "call-tool-malformed-state-1",
+      type: "tool",
+      tool: "todowrite",
+      state: {
+        input: { todos: [] },
+        metadata: { receivedAt: new Date() },
+      },
+    };
+
+    expect(() => mapPartToAgentStreamPart(part)).toThrow();
+  });
+
+  test("rejects tool parts whose JSON state is not an object at ingress", () => {
+    const part = {
+      id: "tool-array-state-1",
+      sessionID: "session-1",
+      messageID: "assistant-tool-array-state-1",
+      callID: "call-tool-array-state-1",
+      type: "tool",
+      tool: "todowrite",
+      state: [],
+    };
+
+    expect(() => mapPartToAgentStreamPart(part)).toThrow();
+  });
+
   test("uses normalized task strategies for subagent mapping", () => {
     for (const tool of ["task", "delegate", "functions.task", " Functions.Delegate "]) {
       const mapped = mapPartToAgentStreamPart(
@@ -1470,14 +1501,14 @@ describe("stream-part-mapper", () => {
     }
   });
 
-  test("returns null for unsupported part type", () => {
+  test("rejects unsupported part types at ingress", () => {
     const part = {
       id: "unknown-1",
       sessionID: "session-1",
       messageID: "assistant-1",
       type: "unknown",
-    } as unknown as Part;
+    };
 
-    expect(mapPartToAgentStreamPart(part)).toBeNull();
+    expect(() => mapPartToAgentStreamPart(part)).toThrow();
   });
 });

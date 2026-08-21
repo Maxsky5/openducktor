@@ -1,42 +1,34 @@
 import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   ELECTRON_HOST_SHUTDOWN_MESSAGE,
+  electronHostInvokeResponseSchema,
   type ElectronHostInvokeRequest,
   type ElectronHostInvokeResult,
+  type ElectronHostInvokeWireResponse,
   type OpenDucktorElectronApi,
 } from "../shared/electron-bridge-contract";
-import type { JsonValue } from "@openducktor/contracts";
 
 const ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE =
   "Received an invalid host invoke response from the Electron main process.";
 
 type ElectronIpcRendererLike = {
-  invoke(channel: string, request: ElectronHostInvokeRequest): Promise<unknown>;
+  invoke(
+    channel: string,
+    request: ElectronHostInvokeRequest,
+  ): Promise<ElectronHostInvokeWireResponse>;
 };
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
-  typeof value === "object" && value !== null;
-
-const isElectronHostInvokeResult = (value: unknown): value is ElectronHostInvokeResult => {
-  if (!isRecord(value) || typeof value.ok !== "boolean") return false;
-  if (value.ok) return Object.hasOwn(value, "value");
-  return isRecord(value.error) && typeof value.error.message === "string";
-};
-
-const unwrapResponse = (response: unknown): ElectronHostInvokeResult => {
-  if (!isRecord(response) || !Object.hasOwn(response, "status")) {
+const unwrapResponse = (response: ElectronHostInvokeWireResponse): ElectronHostInvokeResult => {
+  const parsedResponse = electronHostInvokeResponseSchema.safeParse(response);
+  if (!parsedResponse.success) {
     throw new Error(ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE);
   }
 
-  if (response.status === "success" && isElectronHostInvokeResult(response.payload)) {
-    return response.payload;
+  if (parsedResponse.data.status === "success") {
+    return parsedResponse.data.payload;
   }
 
-  if (response.status === "shutdown" && !Object.hasOwn(response, "payload")) {
-    throw new Error(ELECTRON_HOST_SHUTDOWN_MESSAGE);
-  }
-
-  throw new Error(ELECTRON_HOST_INVOKE_PROTOCOL_ERROR_MESSAGE);
+  throw new Error(ELECTRON_HOST_SHUTDOWN_MESSAGE);
 };
 
 export const createElectronHostInvoke =

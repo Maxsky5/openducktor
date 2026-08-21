@@ -374,7 +374,10 @@ export const createOpenCodeLiveSessionState = ({
     readSnapshot: (ref: AgentSessionLiveRef): AgentSessionLiveReadResult => {
       const snapshot = sessionsByRef.get(refKey(ref))?.snapshot;
       return snapshot
-        ? { type: "live", session: parseSnapshot(snapshot, "opencode-live-session.read-snapshot") }
+        ? {
+            type: "live",
+            session: parseSnapshot(snapshot, "opencode-live-session.read-snapshot"),
+          }
         : { type: "missing", ref: toSessionRef(ref) };
     },
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>

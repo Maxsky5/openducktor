@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { JsonValue, RuntimeInstanceSummary } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   makeRuntimeSummary,
@@ -7,14 +7,14 @@ import {
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
 const createTransport = (
-  response: unknown,
+  response: JsonValue | undefined,
 ): { calls: CodexJsonRpcRequest[]; transport: CodexJsonRpcTransport } => {
   const calls: CodexJsonRpcRequest[] = [];
   const transport: CodexJsonRpcTransport = {
     async request(request) {
       calls.push(request);
       if (request.method === "fuzzyFileSearch") {
-        return response;
+        return response as Response;
       }
       throw new Error(`Unexpected method '${request.method}'.`);
     },
@@ -128,7 +128,7 @@ describe("CodexAppServerAdapter file search", () => {
         workingDirectory: "/repo/worktree",
         query: "link",
       }),
-    ).rejects.toThrow("Codex fuzzyFileSearch result 0 has unsupported match_type 'symlink'.");
+    ).rejects.toThrow("Invalid option");
   });
 
   test("propagates Codex app-server failures", async () => {

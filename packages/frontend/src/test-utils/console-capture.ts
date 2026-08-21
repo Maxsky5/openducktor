@@ -1,13 +1,14 @@
 type ConsoleMethod = "debug" | "error" | "info" | "log" | "warn";
+type ConsoleArguments = Parameters<Console["log"]>;
 
-export type CapturedConsoleCalls = unknown[][];
+export type CapturedConsoleCalls = ConsoleArguments[];
 
-type ConsoleMethodMap = Record<ConsoleMethod, (...args: unknown[]) => void>;
+type ConsoleMethodMap = Record<ConsoleMethod, (...args: ConsoleArguments) => void>;
 
 type WritableStreamName = "stderr" | "stdout";
 
 type WritableStreamLike = {
-  write: (chunk: unknown, ...args: unknown[]) => boolean;
+  write: (chunk: string | Uint8Array, ...args: Array<string | (() => void)>) => boolean;
 };
 
 export const withCapturedConsole = async <Result>(
@@ -18,7 +19,7 @@ export const withCapturedConsole = async <Result>(
   const original = consoleMethods[method];
   const calls: CapturedConsoleCalls = [];
 
-  consoleMethods[method] = (...args: unknown[]): void => {
+  consoleMethods[method] = (...args: ConsoleArguments): void => {
     calls.push(args);
   };
 
@@ -34,7 +35,7 @@ export const withCapturedConsoleMethods = async <Result>(
   run: (callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls>) => Promise<Result> | Result,
 ): Promise<Result> => {
   const consoleMethods = console as unknown as ConsoleMethodMap;
-  const originals = new Map<ConsoleMethod, (...args: unknown[]) => void>();
+  const originals = new Map<ConsoleMethod, (...args: ConsoleArguments) => void>();
   const callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls> = {
     debug: [],
     error: [],
@@ -45,7 +46,7 @@ export const withCapturedConsoleMethods = async <Result>(
 
   for (const method of methods) {
     originals.set(method, consoleMethods[method]);
-    consoleMethods[method] = (...args: unknown[]): void => {
+    consoleMethods[method] = (...args: ConsoleArguments): void => {
       callsByMethod[method].push(args);
     };
   }
@@ -73,7 +74,7 @@ export const withCapturedOutputStreams = async <Result>(
   for (const streamName of streamNames) {
     const stream = streams[streamName];
     originals.set(streamName, stream.write.bind(stream));
-    stream.write = (chunk: unknown, ...args: unknown[]): boolean => {
+    stream.write = (chunk: string | Uint8Array, ...args: Array<string | (() => void)>): boolean => {
       chunksByStream[streamName].push(String(chunk));
       let callback: (() => void) | null = null;
       for (const arg of args) {

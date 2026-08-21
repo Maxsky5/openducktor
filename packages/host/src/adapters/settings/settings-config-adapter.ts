@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
+import type { GlobalConfig, JsonValue, PersistedGlobalConfigV2 } from "@openducktor/contracts";
 import { Clock, Deferred, Effect, FiberId } from "effect";
 import {
   type LoadedGlobalConfig,
@@ -224,8 +224,10 @@ export const createSettingsConfigAdapter = ({
                 }),
           ),
         );
+        // SAFETY: JSON.parse only produces JSON-compatible values.
+        const parsedJsonPayload = parsedPayload as JsonValue;
         const version = yield* Effect.try({
-          try: () => readPersistedGlobalConfigVersion(parsedPayload),
+          try: () => readPersistedGlobalConfigVersion(parsedJsonPayload),
           catch: (cause) =>
             cause instanceof HostValidationError
               ? new HostValidationError({
@@ -239,7 +241,7 @@ export const createSettingsConfigAdapter = ({
         });
         if (version === 3) {
           return yield* Effect.try({
-            try: () => parsePersistedGlobalConfig(parsedPayload),
+            try: () => parsePersistedGlobalConfig(parsedJsonPayload),
             catch: (cause) =>
               cause instanceof HostValidationError
                 ? new HostValidationError({
@@ -254,7 +256,7 @@ export const createSettingsConfigAdapter = ({
         }
 
         const legacyConfig = yield* Effect.try({
-          try: () => parsePersistedGlobalConfigV2(parsedPayload),
+          try: () => parsePersistedGlobalConfigV2(parsedJsonPayload),
           catch: (cause) =>
             cause instanceof HostValidationError
               ? new HostValidationError({

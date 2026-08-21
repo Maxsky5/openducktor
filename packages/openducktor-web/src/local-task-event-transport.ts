@@ -33,7 +33,7 @@ type LocalTaskEventTransportContext = {
 };
 
 const parseTaskEventSubscription = (
-  value: unknown,
+  value: JsonValue | undefined,
 ): { subscriptionId: string; streamToken: string } => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Task event stream subscription response must be an object.");
@@ -55,7 +55,7 @@ const parseTaskEventSubscription = (
 export const subscribeLocalTaskEventStreamEffect = (
   input: { cursor: TaskEventCursor | null },
   onFrame: (frame: TaskStreamFrame) => void,
-  onTerminalFailure: ((error: unknown) => void) | undefined,
+  onTerminalFailure: ((cause: unknown) => void) | undefined,
   { ensureSession, localHostRequestErrorEffect }: LocalTaskEventTransportContext,
 ): Effect.Effect<TaskStreamSubscription, WebError> =>
   Effect.gen(function* () {
@@ -92,7 +92,10 @@ export const subscribeLocalTaskEventStreamEffect = (
       return yield* localHostRequestErrorEffect(createResponse);
     }
     const created = yield* Effect.tryPromise({
-      try: async () => parseTaskEventSubscription(await createResponse.json()),
+      try: async () => {
+        // SAFETY: Response.json() parses a JSON-compatible response body.
+        return parseTaskEventSubscription((await createResponse.json()) as JsonValue);
+      },
       catch: (cause) =>
         new WebDependencyError({
           dependency: "local-web-host",
@@ -160,12 +163,12 @@ export const subscribeLocalTaskEventStreamEffect = (
     const handleOpen = (): void => {
       markInitialReadiness();
     };
-    const reportTerminalFailure = (failure: unknown): void => {
+    const reportTerminalFailure = (cause: unknown): void => {
       if (unsubscribed || terminalFailureReported) {
         return;
       }
       terminalFailureReported = true;
-      onTerminalFailure?.(failure);
+      onTerminalFailure?.(cause);
     };
     const failSetupOrReportTerminalFailure = (failure: WebDependencyError): void => {
       if (subscriptionReady) {
@@ -197,9 +200,10 @@ export const subscribeLocalTaskEventStreamEffect = (
     };
     const handleFrame = (event: MessageEvent<string>): void => {
       if (closed) return;
-      let raw: unknown;
+      let raw: JsonValue;
       try {
-        raw = JSON.parse(event.data);
+        // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
+        raw = JSON.parse(event.data) as JsonValue;
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",

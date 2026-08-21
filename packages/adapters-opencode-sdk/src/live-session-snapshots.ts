@@ -1,4 +1,5 @@
 import type { JsonValue } from "@openducktor/contracts";
+import type { Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -8,7 +9,6 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { readStringProp } from "./guards";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import {
   clearAwaitingRuntimeTurnStart,
@@ -62,7 +62,7 @@ type OpencodeLiveSessionPendingInputBySessionId = Record<
   }
 >;
 
-const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity => {
+const toOpencodeRuntimeActivity = (status: JsonValue | undefined): AgentSessionRuntimeActivity => {
   if (status === undefined || status === null) {
     return "idle";
   }
@@ -70,7 +70,7 @@ const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity
     throw new Error("Malformed live agent session status payload from Opencode.");
   }
 
-  const type = (status as { type?: unknown }).type;
+  const type = (status as { type?: JsonValue }).type;
   if (type === "busy") {
     return "running";
   }
@@ -86,7 +86,7 @@ const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity
 };
 
 const toOpencodeSessionStatusMap = (
-  payload: unknown,
+  payload: JsonValue | undefined,
   directory: string,
 ): Record<string, JsonValue> => {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
@@ -99,7 +99,7 @@ const toOpencodeSessionStatusMap = (
   return payload as Record<string, JsonValue>;
 };
 
-const normalizeSessionDirectory = (directory: unknown): string | undefined => {
+const normalizeSessionDirectory = (directory: JsonValue | undefined): string | undefined => {
   if (typeof directory !== "string") {
     return undefined;
   }
@@ -233,7 +233,7 @@ export const findOpencodeLocalRuntimeSnapshot = ({
   };
 };
 
-const requireSessionDirectory = (directory: unknown, sessionId: string): string => {
+const requireSessionDirectory = (directory: JsonValue | undefined, sessionId: string): string => {
   const normalized = normalizeSessionDirectory(directory);
   if (normalized !== undefined) {
     return normalized;
@@ -241,15 +241,15 @@ const requireSessionDirectory = (directory: unknown, sessionId: string): string 
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
 };
 
-const requireSessionTitle = (title: unknown, sessionId: string): string => {
+const requireSessionTitle = (title: JsonValue | undefined, sessionId: string): string => {
   if (typeof title === "string") {
     return title;
   }
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing title.`);
 };
 
-const readParentExternalSessionId = (session: unknown): string | undefined => {
-  const parentId = readStringProp(session, ["parentID", "parentId", "parent_id"])?.trim();
+const readParentExternalSessionId = (session: Session): string | undefined => {
+  const parentId = session.parentID?.trim();
   return parentId || undefined;
 };
 

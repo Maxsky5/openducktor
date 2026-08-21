@@ -22,7 +22,7 @@ import {
 export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
-  onDegraded: (error: unknown) => void;
+  onDegraded: (cause: unknown) => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -44,9 +44,9 @@ const lifecycleNotifications: LifecycleNotificationPort = {
   dismiss: (id) => toast.dismiss(id),
 };
 
-const lifecycleTimers: LifecycleTimerPort = {
+const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
-  clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  clearTimeout: (timer) => clearTimeout(timer),
 };
 
 export function useAppLifecycle({
@@ -99,8 +99,8 @@ export function useAppLifecycle({
         toast.error("Task stream degraded", { description });
       },
     });
-    void controller.start().catch((error: unknown) => {
-      toast.error("Task stream unavailable", { description: errorMessage(error) });
+    void controller.start().catch((cause: unknown) => {
+      toast.error("Task stream unavailable", { description: errorMessage(cause) });
     });
     return () => {
       void controller.stop();

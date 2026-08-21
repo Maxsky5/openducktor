@@ -217,7 +217,7 @@ let latestHarnessValue: ReturnType<typeof useTaskApprovalFlow> | null = null;
 
 function createDeferred<TValue>() {
   let resolvePromise!: (value: TValue) => void;
-  let rejectPromise!: (reason?: unknown) => void;
+  let rejectPromise!: (cause?: unknown) => void;
   const promise = new Promise<TValue>((resolve, reject) => {
     resolvePromise = resolve;
     rejectPromise = reject;

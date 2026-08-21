@@ -28,7 +28,7 @@ export class OdtTaskStore {
 
   private resolveWorkspaceId(
     toolName: WorkspaceScopedToolName,
-    input: { workspaceId?: string },
+    input: { workspaceId?: string | undefined },
   ): string {
     const workspaceId = input.workspaceId ?? this.workspaceId;
     if (workspaceId) {
@@ -44,67 +44,65 @@ export class OdtTaskStore {
 
   private async executeWorkspaceScoped<Name extends WorkspaceScopedToolName>(
     toolName: Name,
-    rawInput: unknown,
+    input: ToolInput<Name>,
   ) {
-    const parsed = ODT_TOOL_SCHEMAS[toolName].parse(rawInput) as ToolInput<Name>;
-    const workspaceId = this.resolveWorkspaceId(toolName, parsed as { workspaceId?: string });
-    return this.client.call(toolName, workspaceId, parsed);
+    const workspaceId = this.resolveWorkspaceId(toolName, input);
+    return this.client.call(toolName, workspaceId, input);
   }
 
-  async getWorkspaces(rawInput: unknown) {
-    ODT_TOOL_SCHEMAS.odt_get_workspaces.parse(rawInput);
+  async getWorkspaces(_input: ToolInput<"odt_get_workspaces">) {
     return this.client.getWorkspaces();
   }
 
-  async readTask(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_read_task", rawInput);
+  async readTask(input: ToolInput<"odt_read_task">) {
+    return this.executeWorkspaceScoped("odt_read_task", input);
   }
 
-  async readTaskAssets(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_read_task_assets", rawInput);
+  async readTaskAssets(input: ToolInput<"odt_read_task_assets">) {
+    return this.executeWorkspaceScoped("odt_read_task_assets", input);
   }
 
-  async readTaskDocuments(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_read_task_documents", rawInput);
+  async readTaskDocuments(input: ToolInput<"odt_read_task_documents">) {
+    return this.executeWorkspaceScoped("odt_read_task_documents", input);
   }
 
-  async createTask(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_create_task", rawInput);
+  async createTask(input: ToolInput<"odt_create_task">) {
+    return this.executeWorkspaceScoped("odt_create_task", input);
   }
 
-  async searchTasks(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_search_tasks", rawInput);
+  async searchTasks(input: ToolInput<"odt_search_tasks">) {
+    return this.executeWorkspaceScoped("odt_search_tasks", input);
   }
 
-  async setSpec(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_set_spec", rawInput);
+  async setSpec(input: ToolInput<"odt_set_spec">) {
+    return this.executeWorkspaceScoped("odt_set_spec", input);
   }
 
-  async setPlan(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_set_plan", rawInput);
+  async setPlan(input: ToolInput<"odt_set_plan">) {
+    return this.executeWorkspaceScoped("odt_set_plan", input);
   }
 
-  async buildBlocked(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_build_blocked", rawInput);
+  async buildBlocked(input: ToolInput<"odt_build_blocked">) {
+    return this.executeWorkspaceScoped("odt_build_blocked", input);
   }
 
-  async buildResumed(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_build_resumed", rawInput);
+  async buildResumed(input: ToolInput<"odt_build_resumed">) {
+    return this.executeWorkspaceScoped("odt_build_resumed", input);
   }
 
-  async buildCompleted(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_build_completed", rawInput);
+  async buildCompleted(input: ToolInput<"odt_build_completed">) {
+    return this.executeWorkspaceScoped("odt_build_completed", input);
   }
 
-  async setPullRequest(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_set_pull_request", rawInput);
+  async setPullRequest(input: ToolInput<"odt_set_pull_request">) {
+    return this.executeWorkspaceScoped("odt_set_pull_request", input);
   }
 
-  async qaApproved(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_qa_approved", rawInput);
+  async qaApproved(input: ToolInput<"odt_qa_approved">) {
+    return this.executeWorkspaceScoped("odt_qa_approved", input);
   }
 
-  async qaRejected(rawInput: unknown) {
-    return this.executeWorkspaceScoped("odt_qa_rejected", rawInput);
+  async qaRejected(input: ToolInput<"odt_qa_rejected">) {
+    return this.executeWorkspaceScoped("odt_qa_rejected", input);
   }
 }

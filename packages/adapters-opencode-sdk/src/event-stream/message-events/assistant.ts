@@ -1,4 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
+import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -53,7 +54,7 @@ export const emitAssistantPart = (
     return false;
   }
 
-  const mapped = mapPartToAgentStreamPart(part);
+  const mapped = mapPartToAgentStreamPart(jsonValueSchema.parse(part));
   if (!mapped) {
     return false;
   }
@@ -202,7 +203,7 @@ export const maybeEmitCompletedAssistantMessage = (
   input: {
     messageId: string;
     timestamp?: string;
-    info?: unknown;
+    info?: JsonValue | undefined;
     hasStopSignal?: boolean;
   },
 ): boolean => {

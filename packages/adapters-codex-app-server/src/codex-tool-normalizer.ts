@@ -47,7 +47,7 @@ export type NormalizedCodexToolInvocation = {
   callId: string;
   rawToolName: string;
   namespace?: string;
-  status?: unknown;
+  status?: JsonValue;
   title?: string;
   displayLabel?: string;
   preview?: string;
@@ -60,7 +60,7 @@ export type NormalizedCodexToolInvocation = {
   endedAtMs?: number;
 };
 
-export const statusFromCodexStatus = (status: unknown): AgentToolStatus => {
+export const statusFromCodexStatus = (status: JsonValue | undefined): AgentToolStatus => {
   const normalized =
     typeof status === "string"
       ? status

@@ -296,6 +296,7 @@ describe("HostClient", () => {
       "agentSessionUpsert",
       "agentSessionLiveList",
       "agentSessionLiveLoadContext",
+      "agentSessionLiveLoadDiff",
       "agentSessionLiveRead",
       "agentSessionLiveRefresh",
       "agentSessionLiveReplyApproval",
@@ -373,6 +374,17 @@ describe("HostClient", () => {
       if (command === "agent_session_live_read") {
         return { type: "live", session };
       }
+      if (command === "agent_session_live_load_diff") {
+        return [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ];
+      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -382,6 +394,9 @@ describe("HostClient", () => {
       type: "live",
       session,
     });
+    await expect(
+      client.agentSessionLiveLoadDiff({ ...session.ref, runtimeHistoryAnchor: "turn-1" }),
+    ).resolves.toEqual([expect.objectContaining({ file: "src/app.ts" })]);
     expect(calls).toEqual([
       {
         command: "agent_session_live_refresh",
@@ -389,6 +404,10 @@ describe("HostClient", () => {
       },
       { command: "agent_session_live_list", args: { repoPath: "/repo" } },
       { command: "agent_session_live_read", args: session.ref },
+      {
+        command: "agent_session_live_load_diff",
+        args: { ...session.ref, runtimeHistoryAnchor: "turn-1" },
+      },
     ]);
   });
 

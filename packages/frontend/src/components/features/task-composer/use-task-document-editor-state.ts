@@ -239,8 +239,8 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 };
 
-const toErrorMessage = (reason: unknown): string =>
-  reason instanceof Error ? reason.message : "Unable to load document.";
+const toErrorMessage = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : "Unable to load document.";
 
 export function useTaskDocumentEditorState({
   open,

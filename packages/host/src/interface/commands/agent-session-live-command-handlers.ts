@@ -10,6 +10,7 @@ import {
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
+  agentSessionLiveLoadDiffInputSchema,
   agentSessionLiveReadInputSchema,
   agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
@@ -26,7 +27,7 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 import type { JsonValue } from "@openducktor/contracts";
 
 type Parser<Output> = {
-  parse(value: unknown): Output;
+  parse(value: JsonValue | undefined): Output;
 };
 
 const parseCommandInput = <Output>(
@@ -125,6 +126,12 @@ export const createAgentSessionLiveCommandHandlers = (
       args,
       "agent_session_live_load_context",
     ).pipe(Effect.flatMap(service.loadContext)),
+  agent_session_live_load_diff: (args) =>
+    parseCommandInput(
+      agentSessionLiveLoadDiffInputSchema,
+      args,
+      "agent_session_live_load_diff",
+    ).pipe(Effect.flatMap(service.loadSessionDiff)),
   agent_session_live_read: (args) =>
     parseCommandInput(agentSessionLiveReadInputSchema, args, "agent_session_live_read").pipe(
       Effect.flatMap(service.read),

@@ -1,4 +1,5 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
+import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
 import { asUnknownRecord, readRecordProp, readStringProp } from "../../guards";
 import { readMessageModelSelection } from "../../message-normalizers";
 import { toIsoFromEpoch } from "../../session-runtime-utils";

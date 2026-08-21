@@ -5,10 +5,10 @@ import type {
 import type { InvokeFn } from "./invoke-utils";
 
 import { toCommandArgs } from "./invoke-utils";
-export const claudeRuntimeCommand = async <Input, Response>(
+export const claudeRuntimeCommand = async <Input, Response, RawInput = Input>(
   invokeFn: InvokeFn,
   contract: ClaudeRuntimeCommandContract<Input, Response> & { command: ClaudeRuntimeCommandName },
-  input: unknown,
+  input: RawInput,
 ): Promise<Response> => {
   const parsedInput = contract.inputSchema.parse(input);
   const payload = await invokeFn(contract.command, toCommandArgs({ input: parsedInput }));

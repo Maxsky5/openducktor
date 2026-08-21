@@ -36,7 +36,7 @@ const diffHeaderPath = (file: string): string =>
 
 const structuredPatchRange = (start: number, lines: number): string => `${start},${lines}`;
 
-const readStructuredPatchHunk = (value: unknown): string | null => {
+const readStructuredPatchHunk = (value: JsonValue | undefined): string | null => {
   if (!isRecord(value)) {
     return null;
   }
@@ -63,7 +63,10 @@ const readStructuredPatchHunk = (value: unknown): string | null => {
   ].join("\n");
 };
 
-const readStructuredPatch = (value: unknown, file: string | undefined): string | null => {
+const readStructuredPatch = (
+  value: JsonValue | undefined,
+  file: string | undefined,
+): string | null => {
   if (!Array.isArray(value)) {
     return null;
   }

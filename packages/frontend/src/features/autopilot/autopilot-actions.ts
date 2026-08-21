@@ -144,15 +144,15 @@ const resolveAutopilotSelection = async ({
   return catalogDefaultSelection;
 };
 
-const isSkippableAutopilotError = (action: AutopilotActionDefinition, error: unknown): boolean => {
-  if (!(error instanceof Error)) {
+const isSkippableAutopilotError = (action: AutopilotActionDefinition, cause: unknown): boolean => {
+  if (!(cause instanceof Error)) {
     return false;
   }
 
   return (
     action.startPolicy.kind === "launchAction" &&
     action.startPolicy.missingBuildTargetOutcome === "skip" &&
-    error.message.includes(MISSING_BUILD_TARGET_ERROR)
+    cause.message.includes(MISSING_BUILD_TARGET_ERROR)
   );
 };
 

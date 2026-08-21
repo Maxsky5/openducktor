@@ -1,5 +1,5 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
 import { readStringProp } from "../../guards";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
 import { readEventProperties } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
 import { removeMessageProjectionState } from "./message-state";

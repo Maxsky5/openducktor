@@ -1,9 +1,11 @@
-import { skillCatalogSchema } from "@openducktor/contracts";
+import { jsonValueSchema, skillCatalogSchema, type JsonValue } from "@openducktor/contracts";
 import type { AgentSkillCatalog } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
-import type { CodexSkillsListResponse } from "./types";
 
-const readOptionalString = (value: unknown, fieldName: string): string | undefined => {
+const readOptionalString = (
+  value: JsonValue | undefined,
+  fieldName: string,
+): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -14,7 +16,7 @@ const readOptionalString = (value: unknown, fieldName: string): string | undefin
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const requireString = (value: unknown, fieldName: string): string => {
+const requireString = (value: JsonValue | undefined, fieldName: string): string => {
   const trimmed = readOptionalString(value, fieldName);
   if (!trimmed) {
     throw new Error(`Invalid Codex skill payload: missing ${fieldName}.`);
@@ -22,7 +24,7 @@ const requireString = (value: unknown, fieldName: string): string => {
   return trimmed;
 };
 
-const readEnabled = (value: unknown): boolean => {
+const readEnabled = (value: JsonValue | undefined): boolean => {
   if (value === undefined || value === null) {
     return true;
   }
@@ -42,11 +44,12 @@ const compareSkillsByName = (
 };
 
 export const toCodexSkillCatalog = (response: unknown): AgentSkillCatalog => {
-  if (!isPlainObject(response) || !Array.isArray(response.data)) {
+  const parsed = jsonValueSchema.safeParse(response);
+  if (!parsed.success || !isPlainObject(parsed.data) || !Array.isArray(parsed.data.data)) {
     throw new Error("Invalid Codex skills/list payload: expected an object with data array.");
   }
 
-  const catalogs = (response as CodexSkillsListResponse).data as unknown[];
+  const catalogs = parsed.data.data;
   const skills = catalogs.flatMap((catalog, catalogIndex) => {
     if (!isPlainObject(catalog)) {
       throw new Error(

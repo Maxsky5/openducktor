@@ -1,26 +1,30 @@
 import { Effect } from "effect";
-import type { TaskService, TaskServiceError } from "../../application/tasks/task-service";
+import type { JsonValue } from "@openducktor/contracts";
+import type { TaskService } from "../../application/tasks/task-service";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
+import type { HostCommandHandlerError } from "../router/host-command-router";
 
-const runHandler = <T>(effect: unknown): Promise<T> => {
+const runHandler = <T>(
+  effect: Effect.Effect<T, HostCommandHandlerError> | undefined,
+): Promise<T> => {
   if (!effect) {
     throw new Error("Expected task command handler to be registered");
   }
-  return Effect.runPromise(effect as Effect.Effect<T, TaskServiceError>);
+  return Effect.runPromise(effect);
 };
 
 describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
     const service: Partial<TaskService> = {
-      agentSessionDelete(input: unknown) {
+      agentSessionDelete(input: JsonValue | undefined) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
           return true;
         });
       },
-      agentSessionUpsert(input: unknown) {
+      agentSessionUpsert(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_session_upsert", input });
@@ -34,7 +38,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsList(input: unknown) {
+      agentSessionsList(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_sessions_list", input });
@@ -48,13 +52,13 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsListForTasks(input: unknown) {
+      agentSessionsListForTasks(input: JsonValue | undefined) {
         return Effect.sync(() => {
           calls.push({ command: "agent_sessions_list_for_tasks", input });
           return [];
         });
       },
-      getApprovalContext(input: unknown) {
+      getApprovalContext(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_approval_context_get", input });
@@ -68,7 +72,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      detectPullRequest(input: unknown) {
+      detectPullRequest(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_detect", input });
@@ -82,7 +86,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      unlinkPullRequest(input: unknown) {
+      unlinkPullRequest(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_unlink", input });
@@ -96,7 +100,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      upsertPullRequest(input: unknown) {
+      upsertPullRequest(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_upsert", input });
@@ -110,7 +114,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      directMerge(input: unknown) {
+      directMerge(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge", input });
@@ -124,7 +128,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      completeDirectMerge(input: unknown) {
+      completeDirectMerge(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge_complete", input });
@@ -138,7 +142,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      linkMergedPullRequest(input: unknown) {
+      linkMergedPullRequest(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_link_merged", input });
@@ -152,7 +156,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildBlocked(input: unknown) {
+      buildBlocked(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_blocked", input });
@@ -166,7 +170,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildStart(input: unknown) {
+      buildStart(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_start", input });
@@ -180,7 +184,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildCompleted(input: unknown) {
+      buildCompleted(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_completed", input });
@@ -194,7 +198,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildResumed(input: unknown) {
+      buildResumed(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_resumed", input });
@@ -208,7 +212,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      createTask(input: unknown) {
+      createTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_create", input });
@@ -222,7 +226,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      deleteTask(input: unknown) {
+      deleteTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_delete", input });
@@ -236,7 +240,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      closeTask(input: unknown) {
+      closeTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_close", input });
@@ -250,7 +254,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetImplementation(input: unknown) {
+      resetImplementation(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset_implementation", input });
@@ -264,7 +268,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetTask(input: unknown) {
+      resetTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset", input });
@@ -278,7 +282,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      listTasks(input: unknown) {
+      listTasks(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "tasks_list", input });
@@ -292,7 +296,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      getTaskMetadata(input: unknown) {
+      getTaskMetadata(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_metadata_get", input });
@@ -306,7 +310,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanApprove(input: unknown) {
+      humanApprove(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_approve", input });
@@ -320,7 +324,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanRequestChanges(input: unknown) {
+      humanRequestChanges(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_request_changes", input });
@@ -334,7 +338,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      savePlanDocument(input: unknown) {
+      savePlanDocument(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_save_document", input });
@@ -348,7 +352,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      planGet(input: unknown) {
+      planGet(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_get", input });
@@ -362,7 +366,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      saveSpecDocument(input: unknown) {
+      saveSpecDocument(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_save_document", input });
@@ -376,7 +380,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      specGet(input: unknown) {
+      specGet(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_get", input });
@@ -390,7 +394,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setPlan(input: unknown) {
+      setPlan(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_plan", input });
@@ -407,7 +411,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setSpec(input: unknown) {
+      setSpec(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_spec", input });
@@ -421,7 +425,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaApproved(input: unknown) {
+      qaApproved(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_approved", input });
@@ -435,7 +439,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaGetReport(input: unknown) {
+      qaGetReport(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_get_report", input });
@@ -449,7 +453,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaRejected(input: unknown) {
+      qaRejected(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_rejected", input });
@@ -463,7 +467,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSync(input: unknown) {
+      repoPullRequestSync(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync", input });
@@ -477,7 +481,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSyncDetailed(input: unknown) {
+      repoPullRequestSyncDetailed(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
@@ -491,7 +495,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      transitionTask(input: unknown) {
+      transitionTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_transition", input });
@@ -505,7 +509,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      updateTask(input: unknown) {
+      updateTask(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_update", input });

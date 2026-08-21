@@ -1,4 +1,5 @@
 import { agentRoleSchema } from "@openducktor/contracts";
+import type { JsonValue } from "@openducktor/contracts";
 import type {
   AgentSessionDeleteInput,
   AgentSessionUpsertInput,
@@ -45,12 +46,12 @@ import {
   requireString,
 } from "./task-command-parsing";
 
-export const parseRepoPathInput = (input: unknown, label: string): RepoPathInput => {
+export const parseRepoPathInput = (input: JsonValue | undefined, label: string): RepoPathInput => {
   const record = requireRecord(input, label);
   return { repoPath: requireString(record.repoPath, "repoPath") };
 };
 
-export const parseTaskIdInput = (input: unknown, label: string): TaskIdInput => {
+export const parseTaskIdInput = (input: JsonValue | undefined, label: string): TaskIdInput => {
   const record = requireRecord(input, label);
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -58,7 +59,7 @@ export const parseTaskIdInput = (input: unknown, label: string): TaskIdInput => 
   };
 };
 
-export const parseListTasksInput = (input: unknown): ListTasksInput => {
+export const parseListTasksInput = (input: JsonValue | undefined): ListTasksInput => {
   const record = requireRecord(input, "tasks_list input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const doneVisibleDays = optionalNonNegativeInteger(record.doneVisibleDays, "doneVisibleDays");
@@ -66,7 +67,7 @@ export const parseListTasksInput = (input: unknown): ListTasksInput => {
 };
 
 export const parseListAgentSessionsForTasksInput = (
-  input: unknown,
+  input: JsonValue | undefined,
 ): ListAgentSessionsForTasksInput => {
   const record = requireRecord(input, "agent_sessions_list_for_tasks input");
   if (!Array.isArray(record.taskIds)) {
@@ -94,7 +95,9 @@ export const parseListAgentSessionsForTasksInput = (
   };
 };
 
-export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsertInput => {
+export const parseAgentSessionUpsertInput = (
+  input: JsonValue | undefined,
+): AgentSessionUpsertInput => {
   const record = requireRecord(input, "agent_session_upsert input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -103,7 +106,9 @@ export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsert
   };
 };
 
-export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDeleteInput => {
+export const parseAgentSessionDeleteInput = (
+  input: JsonValue | undefined,
+): AgentSessionDeleteInput => {
   const record = requireRecord(input, "agent_session_delete input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -112,7 +117,9 @@ export const parseAgentSessionDeleteInput = (input: unknown): AgentSessionDelete
   };
 };
 
-export const parsePullRequestUpsertInput = (input: unknown): PullRequestUpsertInput => {
+export const parsePullRequestUpsertInput = (
+  input: JsonValue | undefined,
+): PullRequestUpsertInput => {
   const record = requireRecord(input, "task_pull_request_upsert input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -121,7 +128,9 @@ export const parsePullRequestUpsertInput = (input: unknown): PullRequestUpsertIn
   };
 };
 
-export const parsePullRequestLinkMergedInput = (input: unknown): PullRequestLinkMergedInput => {
+export const parsePullRequestLinkMergedInput = (
+  input: JsonValue | undefined,
+): PullRequestLinkMergedInput => {
   const record = requireRecord(input, "task_pull_request_link_merged input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -130,7 +139,7 @@ export const parsePullRequestLinkMergedInput = (input: unknown): PullRequestLink
   };
 };
 
-export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
+export const parseDirectMergeInput = (input: JsonValue | undefined): DirectMergeInput => {
   const record = requireRecord(input, "task_direct_merge input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -139,7 +148,7 @@ export const parseDirectMergeInput = (input: unknown): DirectMergeInput => {
   };
 };
 
-export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => {
+export const parseCreateTaskInput = (input: JsonValue | undefined): CreateTaskUseCaseInput => {
   const record = requireRecord(input, "task_create input");
   const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
   return {
@@ -149,7 +158,7 @@ export const parseCreateTaskInput = (input: unknown): CreateTaskUseCaseInput => 
   };
 };
 
-export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
+export const parseDeleteTaskInput = (input: JsonValue | undefined): DeleteTaskInput => {
   const record = requireRecord(input, "task_delete input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -158,7 +167,7 @@ export const parseDeleteTaskInput = (input: unknown): DeleteTaskInput => {
   };
 };
 
-export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
+export const parseUpdateTaskInput = (input: JsonValue | undefined): UpdateTaskInput => {
   const record = requireRecord(input, "task_update input");
   const patch = parseUpdatePatch(record.patch);
   const descriptionAssets = parseDescriptionAssets(record.descriptionAssets);
@@ -176,7 +185,7 @@ export const parseUpdateTaskInput = (input: unknown): UpdateTaskInput => {
   };
 };
 
-export const parseTransitionTaskInput = (input: unknown): TransitionTaskInput => {
+export const parseTransitionTaskInput = (input: JsonValue | undefined): TransitionTaskInput => {
   const record = requireRecord(input, "task_transition input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -186,7 +195,7 @@ export const parseTransitionTaskInput = (input: unknown): TransitionTaskInput =>
 };
 
 export const parseMarkdownDocumentInput = (
-  input: unknown,
+  input: JsonValue | undefined,
   commandLabel: string,
   markdownLabel: string,
 ): MarkdownDocumentInput => {
@@ -199,7 +208,7 @@ export const parseMarkdownDocumentInput = (
 };
 
 export const parseQaOutcomeInput = (
-  input: unknown,
+  input: JsonValue | undefined,
   commandLabel: string,
 ): MarkdownDocumentInput => {
   const record = requireRecord(input, commandLabel);
@@ -210,7 +219,7 @@ export const parseQaOutcomeInput = (
   };
 };
 
-export const parseSetPlanInput = (input: unknown): SetPlanInput => {
+export const parseSetPlanInput = (input: JsonValue | undefined): SetPlanInput => {
   const record = requireRecord(input, "set_plan input");
   const planInput = requireRecord(record.input, "set_plan input.input");
   return {
@@ -222,7 +231,7 @@ export const parseSetPlanInput = (input: unknown): SetPlanInput => {
   };
 };
 
-export const parseBuildStartInput = (input: unknown): BuildStartInput => {
+export const parseBuildStartInput = (input: JsonValue | undefined): BuildStartInput => {
   const record = requireRecord(input, "build_start input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -232,7 +241,7 @@ export const parseBuildStartInput = (input: unknown): BuildStartInput => {
 };
 
 export const parseTaskSessionBootstrapPrepareInput = (
-  input: unknown,
+  input: JsonValue | undefined,
 ): TaskSessionBootstrapPrepareInput => {
   const record = requireRecord(input, "task_session_bootstrap_prepare input");
   const parsedRole = agentRoleSchema.safeParse(record.role);
@@ -256,7 +265,7 @@ export const parseTaskSessionBootstrapPrepareInput = (
 };
 
 export const parseTaskSessionBootstrapFinalizeInput = (
-  input: unknown,
+  input: JsonValue | undefined,
   label: string,
 ): TaskSessionBootstrapFinalizeInput => {
   const record = requireRecord(input, label);
@@ -268,7 +277,7 @@ export const parseTaskSessionBootstrapFinalizeInput = (
 };
 
 export const parseTaskSessionStartupLeasePrepareInput = (
-  input: unknown,
+  input: JsonValue | undefined,
 ): TaskSessionStartupLeasePrepareInput => {
   const record = requireRecord(input, "task_session_startup_lease_prepare input");
   const role = agentRoleSchema.safeParse(record.role);
@@ -285,7 +294,7 @@ export const parseTaskSessionStartupLeasePrepareInput = (
 };
 
 export const parseTaskSessionStartupLeaseFinalizeInput = (
-  input: unknown,
+  input: JsonValue | undefined,
   label: string,
 ): TaskSessionStartupLeaseFinalizeInput => {
   const record = requireRecord(input, label);
@@ -296,7 +305,7 @@ export const parseTaskSessionStartupLeaseFinalizeInput = (
   };
 };
 
-export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
+export const parseBuildBlockedInput = (input: JsonValue | undefined): BuildBlockedInput => {
   const record = requireRecord(input, "build_blocked input");
   const reason = typeof record.reason === "string" ? record.reason.trim() : "";
   if (!reason) {
@@ -312,7 +321,7 @@ export const parseBuildBlockedInput = (input: unknown): BuildBlockedInput => {
   };
 };
 
-export const parseBuildCompletedInput = (input: unknown): BuildCompletedInput => {
+export const parseBuildCompletedInput = (input: JsonValue | undefined): BuildCompletedInput => {
   const record = requireRecord(input, "build_completed input");
   const inputRecord =
     record.input === undefined || record.input === null
@@ -327,7 +336,7 @@ export const parseBuildCompletedInput = (input: unknown): BuildCompletedInput =>
 };
 
 export const parseOptionalNoteInput = (
-  input: unknown,
+  input: JsonValue | undefined,
   label: string,
   noteLabel: string,
 ): OptionalNoteInput => {

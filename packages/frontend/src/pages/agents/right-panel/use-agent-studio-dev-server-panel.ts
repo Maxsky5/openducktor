@@ -351,7 +351,7 @@ export function useAgentStudioDevServerPanel({
         syncMutationSuccessState(data, context.transportEpoch);
       },
       onError: (
-        error: unknown,
+        cause: unknown,
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
@@ -363,17 +363,17 @@ export function useAgentStudioDevServerPanel({
           if (options.restoreCachedStateOnError) {
             restoreCachedState(context.transportEpoch);
           }
-          dispatchLocalState({ type: "actionFailed", error: errorMessage(error) });
+          dispatchLocalState({ type: "actionFailed", error: errorMessage(cause) });
         }
       },
       onSettled: (
         _data: DevServerGroupState | undefined,
-        error: unknown,
+        cause: unknown,
         scope: DevServerTaskScope,
         context: DevServerMutationContext | undefined,
       ) => {
         if (
-          error &&
+          cause &&
           context?.transportEpoch &&
           context.transportEpoch === transportEpochRef.current
         ) {
@@ -499,9 +499,9 @@ export function useAgentStudioDevServerPanel({
           transportEpoch: subscription.transportEpoch,
         });
       })
-      .catch((error: unknown) => {
+      .catch((cause: unknown) => {
         if (!cancelled) {
-          dispatchLocalState({ type: "subscriptionFailed", error: errorMessage(error) });
+          dispatchLocalState({ type: "subscriptionFailed", error: errorMessage(cause) });
         }
       });
 

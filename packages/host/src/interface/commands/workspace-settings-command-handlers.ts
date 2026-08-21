@@ -26,7 +26,7 @@ const requireObjectArg = (
   command: string,
   args: Record<string, JsonValue> | undefined,
   key: string,
-): unknown => {
+): JsonValue | undefined => {
   if (!args || !(key in args)) {
     throw new HostValidationError({
       message: `${command} expects argument '${key}'.`,
@@ -38,7 +38,7 @@ const requireObjectArg = (
   return args[key];
 };
 
-const requireStringArray = (value: unknown, label: string): string[] => {
+const requireStringArray = (value: JsonValue | undefined, label: string): string[] => {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
@@ -49,7 +49,7 @@ const requireStringArray = (value: unknown, label: string): string[] => {
     });
   }
 
-  return value;
+  return value as string[];
 };
 
 const optionalRuntimeKind = (record: Record<string, JsonValue>) => {

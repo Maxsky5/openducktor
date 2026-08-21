@@ -45,17 +45,17 @@ export class DiagnosticsQueryTimeoutError extends Error {
 }
 
 export const classifyDiagnosticsQueryError = (
-  error: unknown,
+  cause: unknown,
 ): { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> } => {
-  if (error instanceof DiagnosticsQueryTimeoutError) {
+  if (cause instanceof DiagnosticsQueryTimeoutError) {
     return {
-      message: error.message,
-      failureKind: error.failureKind,
+      message: cause.message,
+      failureKind: cause.failureKind,
     };
   }
 
   return {
-    message: errorMessage(error),
+    message: errorMessage(cause),
     failureKind: "error",
   };
 };

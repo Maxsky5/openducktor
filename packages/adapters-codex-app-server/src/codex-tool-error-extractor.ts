@@ -1,13 +1,12 @@
-import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import { jsonValueSchema, odtToolErrorPayloadSchema, type JsonValue } from "@openducktor/contracts";
 import {
   arrayFromUnknown,
   extractStringField,
   isPlainObject,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
-import type { JsonValue } from "@openducktor/contracts";
 
-const parseJsonObjectString = (value: unknown): Record<string, JsonValue> | null => {
+const parseJsonObjectString = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
   if (typeof value !== "string") {
     return null;
   }
@@ -17,17 +16,17 @@ const parseJsonObjectString = (value: unknown): Record<string, JsonValue> | null
   }
 
   try {
-    const parsed: unknown = JSON.parse(trimmed);
-    return isPlainObject(parsed) ? parsed : null;
+    const parsed = jsonValueSchema.safeParse(JSON.parse(trimmed));
+    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
   } catch {
     return null;
   }
 };
 
-const asRecord = (value: unknown): Record<string, JsonValue> | null =>
+const asRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null =>
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
-const nonEmptyString = (value: unknown): string | null => {
+const nonEmptyString = (value: JsonValue | undefined): string | null => {
   if (typeof value !== "string") {
     return null;
   }
@@ -35,12 +34,12 @@ const nonEmptyString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const errorMessageFromValue = (value: unknown): string | null => {
+const errorMessageFromValue = (value: JsonValue | undefined): string | null => {
   return nonEmptyString(value) ?? extractStringField(value, ["message"]);
 };
 
-const contentText = (value: unknown): string | null => {
-  let content: unknown[] = [];
+const contentText = (value: JsonValue | undefined): string | null => {
+  let content: JsonValue[] = [];
   if (Array.isArray(value)) {
     content = value;
   } else if (isPlainObject(value)) {
@@ -63,7 +62,7 @@ const contentText = (value: unknown): string | null => {
   return text.length > 0 ? text : null;
 };
 
-const odtErrorEnvelopeMessage = (value: unknown): string | null => {
+const odtErrorEnvelopeMessage = (value: JsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return null;
@@ -78,7 +77,7 @@ const odtErrorEnvelopeMessage = (value: unknown): string | null => {
   return message.length > 0 ? message : "Tool failed";
 };
 
-const looseErrorEnvelopeMessage = (value: unknown): string | null => {
+const looseErrorEnvelopeMessage = (value: JsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (record?.ok !== false) {
     return null;
@@ -87,12 +86,12 @@ const looseErrorEnvelopeMessage = (value: unknown): string | null => {
   return odtErrorEnvelopeMessage(record) ?? errorMessageFromValue(record.error) ?? "Tool failed";
 };
 
-const mcpTransportErrorMessage = (value: unknown): string | null => {
+const mcpTransportErrorMessage = (value: JsonValue | undefined): string | null => {
   const text = nonEmptyString(value);
   return text && /^MCP error\s+-?\d+:/i.test(text) ? text : null;
 };
 
-const mcpContentErrorMessage = (value: unknown): string | null => {
+const mcpContentErrorMessage = (value: JsonValue | undefined): string | null => {
   const text = contentText(value);
   if (!text) {
     return null;
@@ -100,7 +99,7 @@ const mcpContentErrorMessage = (value: unknown): string | null => {
   return odtErrorEnvelopeMessage(text) ?? mcpTransportErrorMessage(text);
 };
 
-const dynamicContentErrorMessage = (value: unknown): string | null => {
+const dynamicContentErrorMessage = (value: JsonValue | undefined): string | null => {
   const text = contentText(value);
   return text ? looseErrorEnvelopeMessage(text) : null;
 };
@@ -136,7 +135,7 @@ const failureMarkerMessage = (
   );
 };
 
-const failedStatus = (value: unknown): boolean => {
+const failedStatus = (value: JsonValue | undefined): boolean => {
   if (typeof value !== "string") {
     return false;
   }
@@ -152,7 +151,7 @@ const failedStatus = (value: unknown): boolean => {
   );
 };
 
-const mcpToolErrorFromValue = (value: unknown): string | null => {
+const mcpToolErrorFromValue = (value: JsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return mcpContentErrorMessage(value) ?? mcpTransportErrorMessage(value);
@@ -168,7 +167,7 @@ const mcpToolErrorFromValue = (value: unknown): string | null => {
   );
 };
 
-const dynamicToolErrorFromValue = (value: unknown): string | null => {
+const dynamicToolErrorFromValue = (value: JsonValue | undefined): string | null => {
   const record = asRecord(value);
   if (!record) {
     return dynamicContentErrorMessage(value);
@@ -186,14 +185,15 @@ const dynamicToolErrorFromValue = (value: unknown): string | null => {
 };
 
 export const codexMcpToolErrorFromResult = (
-  result: unknown,
+  result: JsonValue | undefined,
   item?: Record<string, JsonValue>,
 ): string | null => {
   return mcpToolErrorFromValue(result) ?? (item ? mcpToolErrorFromValue(item) : null);
 };
 
-export const codexDynamicToolDisplayPayload = (item: Record<string, JsonValue>): unknown =>
-  item.contentItems ?? item.content_items ?? item.result;
+export const codexDynamicToolDisplayPayload = (
+  item: Record<string, JsonValue>,
+): JsonValue | undefined => item.contentItems ?? item.content_items ?? item.result;
 
 export const codexDynamicToolErrorFromItem = (item: Record<string, JsonValue>): string | null => {
   return (

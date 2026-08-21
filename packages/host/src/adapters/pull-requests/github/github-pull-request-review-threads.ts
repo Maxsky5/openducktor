@@ -1,4 +1,8 @@
-import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
+import type {
+  GitProviderRepository,
+  JsonValue,
+  PullRequestReviewActivity,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type GithubCommandDependencies,
@@ -118,7 +122,7 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 }
 `;
 
-const toNullableNumber = (value: unknown): number | null =>
+const toNullableNumber = (value: JsonValue | undefined): number | null =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
 
 const toLineRange = (
@@ -128,7 +132,7 @@ const toLineRange = (
   endLine === null ? null : { startLine: startLine ?? endLine, endLine };
 
 const toReviewThreadComment = (
-  payloadValue: unknown,
+  payloadValue: JsonValue | undefined,
   field: string,
   threadId: string,
   isResolved: boolean,
@@ -175,7 +179,7 @@ const toReviewThreadComment = (
   };
 };
 
-const parseThread = (threadValue: unknown, field: string) => {
+const parseThread = (threadValue: JsonValue | undefined, field: string) => {
   const thread = requireGithubObject(threadValue, field);
   const threadId = requireGithubString(thread.id, `${field}.id`);
   const isResolved = requireGithubBoolean(thread.isResolved, `${field}.isResolved`);

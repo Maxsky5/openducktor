@@ -32,7 +32,7 @@ export const routeTaskAssetHttpRequest = ({
     }
 
     yield* validateAppSessionCookie(request, appToken);
-    const [, workspaceId, taskId, scope, assetId] = taskAssetMatch;
+    const [, workspaceId = "", taskId = "", scope = "", assetId = ""] = taskAssetMatch;
     const asset = yield* taskAssetReadService.read({ workspaceId, taskId, scope, assetId }).pipe(
       Effect.mapError(
         (error) =>

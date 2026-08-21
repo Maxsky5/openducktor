@@ -1,7 +1,6 @@
 import {
   type DevServerEvent,
   type DevServerScriptState,
-  devServerEventSchema,
   devServerGroupStateSchema,
   type RepoConfig,
 } from "@openducktor/contracts";
@@ -32,9 +31,9 @@ import type {
 } from "./dev-server-service-types";
 import {
   buildGroupState,
+  createDevServerEventEnvelope,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
-  DEV_SERVER_EVENT_CHANNEL,
   DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
@@ -65,7 +64,7 @@ export const createDevServerService = ({
   const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
   const publish = (event: DevServerEvent): void =>
-    eventBus?.publish(DEV_SERVER_EVENT_CHANNEL, devServerEventSchema.parse(event));
+    eventBus?.publish(createDevServerEventEnvelope(event));
   const terminalWriter = createDevServerTerminalWriter(publish);
   const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
     publish({ type: "snapshot", state: runtime.state });

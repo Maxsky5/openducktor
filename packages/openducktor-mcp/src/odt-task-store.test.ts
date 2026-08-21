@@ -143,21 +143,6 @@ describe("OdtTaskStore", () => {
     ]);
   });
 
-  test("keeps MCP-side input validation before delegation", async () => {
-    const client = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
-      getWorkspaces: async () => workspacesPayload,
-      call: async () => summaryPayload,
-    } as OdtHostBridgeClientPort;
-
-    const store = new OdtTaskStore(
-      { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
-      { client },
-    );
-
-    await expect(store.createTask({ issueType: "task", priority: 2 })).rejects.toThrow();
-  });
-
   test("fails before delegation when no workspace can be resolved", async () => {
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),

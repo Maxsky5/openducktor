@@ -3,10 +3,10 @@ import type { JsonValue } from "@openducktor/contracts";
 
 export type GithubPayloadObject = Record<string, JsonValue>;
 
-const isGithubPayloadObject = (value: unknown): value is GithubPayloadObject =>
+const isGithubPayloadObject = (value: JsonValue | undefined): value is GithubPayloadObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const githubPayloadValueType = (value: unknown): string => {
+const githubPayloadValueType = (value: JsonValue | undefined): string => {
   if (value === null) {
     return "null";
   }
@@ -16,9 +16,10 @@ const githubPayloadValueType = (value: unknown): string => {
   return typeof value;
 };
 
-export const parseGithubJson = (payload: string, responseLabel: string): unknown => {
+export const parseGithubJson = (payload: string, responseLabel: string): JsonValue => {
   try {
-    return JSON.parse(payload);
+    // SAFETY: JSON.parse returns JSON-compatible values for a GitHub JSON response.
+    return JSON.parse(payload) as JsonValue;
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",
@@ -28,7 +29,10 @@ export const parseGithubJson = (payload: string, responseLabel: string): unknown
   }
 };
 
-export const requireGithubObject = (value: unknown, field: string): GithubPayloadObject => {
+export const requireGithubObject = (
+  value: JsonValue | undefined,
+  field: string,
+): GithubPayloadObject => {
   if (!isGithubPayloadObject(value)) {
     throw new HostValidationError({
       field,
@@ -45,7 +49,7 @@ export const parseGithubJsonObject = (
 ): GithubPayloadObject => requireGithubObject(parseGithubJson(payload, responseLabel), "payload");
 
 export const toNullableGithubObject = (
-  value: unknown,
+  value: JsonValue | undefined,
   field: string,
 ): GithubPayloadObject | null => {
   if (value === null || value === undefined) {
@@ -54,10 +58,10 @@ export const toNullableGithubObject = (
   return requireGithubObject(value, field);
 };
 
-export const toNullableGithubString = (value: unknown): string | null =>
+export const toNullableGithubString = (value: JsonValue | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
 
-export const requireGithubString = (value: unknown, field: string): string => {
+export const requireGithubString = (value: JsonValue | undefined, field: string): string => {
   const parsed = toNullableGithubString(value);
   if (!parsed) {
     throw new HostValidationError({
@@ -68,7 +72,7 @@ export const requireGithubString = (value: unknown, field: string): string => {
   return parsed;
 };
 
-export const requireGithubBoolean = (value: unknown, field: string): boolean => {
+export const requireGithubBoolean = (value: JsonValue | undefined, field: string): boolean => {
   if (typeof value !== "boolean") {
     throw new HostValidationError({
       field,
@@ -78,7 +82,10 @@ export const requireGithubBoolean = (value: unknown, field: string): boolean => 
   return value;
 };
 
-export const parseGithubNextPageCursor = (pageInfoValue: unknown, field: string): string | null => {
+export const parseGithubNextPageCursor = (
+  pageInfoValue: JsonValue | undefined,
+  field: string,
+): string | null => {
   const pageInfo = requireGithubObject(pageInfoValue, field);
   return requireGithubBoolean(pageInfo.hasNextPage, `${field}.hasNextPage`)
     ? requireGithubString(pageInfo.endCursor, `${field}.endCursor`)

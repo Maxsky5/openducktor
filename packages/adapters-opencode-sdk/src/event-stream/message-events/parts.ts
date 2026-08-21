@@ -1,5 +1,7 @@
-import type { Event, Part } from "@opencode-ai/sdk/v2/client";
-import { readNumberProp, readRecordProp, readStringProp, readUnknownProp } from "../../guards";
+import type { Part } from "@opencode-ai/sdk/v2/client";
+import { readNumberProp, readStringProp, readUnknownProp } from "../../guards";
+import type { JsonValue } from "@openducktor/contracts";
+import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
 import { readEventPart, readEventProperties } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -26,21 +28,28 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
 };
 
-const readIsoTimestampFromTime = (time: unknown): string | undefined => {
+const readIsoTimestampFromTime = (time: JsonValue | undefined): string | undefined => {
   if (typeof time === "number") {
     return toIsoTimestamp(time);
   }
   return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
 };
 
-const readPartUpdatedTimestamp = (properties: unknown, part: unknown): string | undefined => {
+const readPartUpdatedTimestamp = (
+  properties: JsonValue | undefined,
+  part: Part,
+): string | undefined => {
   const eventTimestamp = readIsoTimestampFromTime(readUnknownProp(properties, "time"));
   if (eventTimestamp) {
     return eventTimestamp;
   }
 
   const partTime =
-    readRecordProp(part, "time") ?? readRecordProp(readRecordProp(part, "state"), "time");
+    part.type === "tool" && part.state.status !== "pending"
+      ? part.state.time
+      : "time" in part
+        ? part.time
+        : undefined;
   return readIsoTimestampFromTime(partTime);
 };
 

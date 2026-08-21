@@ -66,7 +66,7 @@ export type ResolvedLocalAttachment = {
   path: string;
 };
 
-const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
+const parseStagedLocalAttachment = (payload: JsonValue | undefined): StagedLocalAttachment => {
   if (!payload || typeof payload !== "object") {
     throw new Error("Expected staged local attachment payload from host command");
   }
@@ -80,7 +80,7 @@ const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => 
   return { path };
 };
 
-const parseResolvedLocalAttachment = (payload: unknown): ResolvedLocalAttachment => {
+const parseResolvedLocalAttachment = (payload: JsonValue | undefined): ResolvedLocalAttachment => {
   return parseStagedLocalAttachment(payload);
 };
 

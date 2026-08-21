@@ -32,6 +32,8 @@ import {
 } from "../agent-studio-test-utils";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
+import type { useAgentStudioSessionActions } from "../use-agent-studio-session-actions";
 
 enableReactActEnvironment();
 
@@ -47,7 +49,7 @@ type SessionFixture = ReturnType<typeof createSession>;
 const selectedSessionKey = (): string => agentSessionIdentityKey(createSession());
 
 const retryNavigationPersistence = mock(() => {});
-const updateQuery = mock((_updates?: unknown) => {});
+const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
 const handleResolveRebaseConflict = mock(async () => true);
@@ -110,7 +112,7 @@ type OrchestrationState = {
   retryChatSettingsLoad: typeof retryChatSettingsLoad;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
-  startSessionRequest: (request: unknown) => Promise<string | undefined>;
+  startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
   activeTabValue: string;
   agentStudioTaskTabsModel: { tabs: [] };
   agentStudioHeaderModel: { title: string };

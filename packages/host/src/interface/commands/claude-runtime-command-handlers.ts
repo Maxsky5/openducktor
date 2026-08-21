@@ -13,6 +13,7 @@ import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { HostCommandHandler, HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord } from "./command-inputs";
+import { jsonValueSchema } from "@openducktor/contracts";
 
 const requireClaudeRuntimeWorkingDirectory = (
   runtimeRegistry: RuntimeRegistryPort,
@@ -52,7 +53,7 @@ const createClaudeCommandHandler = <Input, Response>(
       });
       const output = yield* invoke(service, input);
       return yield* Effect.try({
-        try: () => contract.responseSchema.parse(output),
+        try: () => contract.responseSchema.parse(jsonValueSchema.parse(output)),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

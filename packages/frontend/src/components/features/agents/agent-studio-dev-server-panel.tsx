@@ -24,7 +24,6 @@ import {
   createDevServerTaskScope,
   formatDevServerTaskScopeKey,
 } from "@/types/dev-server-task-scope";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type AgentStudioDevServerPanelMode = "loading" | "empty" | "disabled" | "stopped" | "active";
 

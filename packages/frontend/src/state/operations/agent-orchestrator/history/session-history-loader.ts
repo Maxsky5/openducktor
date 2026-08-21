@@ -99,14 +99,14 @@ const failSessionHistoryLoad = (
 ): AgentSessionState | null =>
   updateSession(identity, (session) => policy.failLoad(session, failure));
 
-const sessionHistoryFailureFromError = (error: unknown): SessionHistoryFailure => {
-  if (error instanceof HostInvokeError && error.failure?.kind === "session_history") {
-    return error.failure.sessionHistoryFailure;
+const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure => {
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
+    return cause.failure.sessionHistoryFailure;
   }
   return {
     code: "request_failed",
     summary: "Conversation history could not be loaded.",
-    detail: error instanceof Error ? error.message : String(error),
+    detail: cause instanceof Error ? cause.message : String(cause),
   };
 };
 

@@ -4,27 +4,15 @@ import {
   createContextMenuTemplate,
   createViewMenu,
 } from "./main-menu-template";
-import type { JsonValue } from "@openducktor/contracts";
+import type { MenuItemConstructorOptions } from "electron";
 
-const rolesFromSubmenu = (submenu: unknown): string[] => {
-  if (!Array.isArray(submenu)) {
-    throw new Error("submenu must be an array");
-  }
-  const roles: string[] = [];
-  for (const item of submenu) {
-    if (item && typeof item === "object" && "role" in item) {
-      roles.push(String(item.role));
-    }
-  }
-  return roles;
-};
+type MenuSubmenu = MenuItemConstructorOptions["submenu"] | undefined;
 
-const submenuItems = (submenu: unknown): Array<Record<string, JsonValue>> => {
-  if (!Array.isArray(submenu)) {
-    return [];
-  }
-  return submenu.filter((item): item is Record<string, JsonValue> => Boolean(item));
-};
+const submenuItems = (submenu: MenuSubmenu): MenuItemConstructorOptions[] =>
+  Array.isArray(submenu) ? submenu : [];
+
+const rolesFromSubmenu = (submenu: MenuSubmenu): string[] =>
+  submenuItems(submenu).flatMap((item) => (item.role ? [item.role] : []));
 
 describe("main menu template", () => {
   test("adds devtools but not reload roles to the dev View menu", () => {

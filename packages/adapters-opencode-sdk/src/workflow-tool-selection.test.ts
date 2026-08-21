@@ -214,7 +214,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch((cause: unknown) => cause);
 
     expect(selection).toBeInstanceOf(Error);
     expect((selection as Error).message).toBe("boom");
@@ -229,7 +229,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
     expect((selectionError as Error).message).toContain('unavailable for "/repo"');
@@ -299,7 +299,7 @@ describe("workflow-tool-selection", () => {
       role: "build",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo/.openducktor/worktrees/task-1",
-    }).catch((error: unknown) => error);
+    }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
     expect((selectionError as Error).message).toBe("mcp-connect-down");
@@ -314,7 +314,7 @@ describe("workflow-tool-selection", () => {
       role: "spec",
       runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
       workingDirectory: "/repo",
-    }).catch((error: unknown) => error);
+    }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
     expect((selectionError as Error).message).toBe("mcp-down");

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  agentRuntimeEventSchema,
   agentSessionLiveSnapshotSchema,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
 } from "@openducktor/contracts";
@@ -7,6 +8,7 @@ import {
   codexSessionRef,
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexThreadFixture,
   codexUserMessageInput,
   createAdapterWithTransport,
   createDeferred,
@@ -37,11 +39,10 @@ type ApprovalRequiredEvent = {
   requestType: string;
 };
 
-const isApprovalRequiredEvent = (event: unknown): event is ApprovalRequiredEvent =>
-  typeof event === "object" &&
-  event !== null &&
-  (event as { type?: unknown }).type === "approval_required" &&
-  typeof (event as { requestId?: unknown }).requestId === "string";
+const isApprovalRequiredEvent = <Event>(event: Event): event is Event & ApprovalRequiredEvent => {
+  const parsed = agentRuntimeEventSchema.safeParse(event);
+  return parsed.success && parsed.data.type === "approval_required";
+};
 
 class ReloadedParentWithChildTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -55,18 +56,16 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: [
-          {
+          codexThreadFixture({
             id: "parent-thread",
-            cwd: "/repo",
             createdAt: 1,
             preview: "Parent",
             status: { type: "active", activeFlags: [] },
-          },
+          }),
           ...(includesSubagents
             ? [
-                {
+                codexThreadFixture({
                   id: "child-thread",
-                  cwd: "/repo",
                   createdAt: 2,
                   preview: "Child",
                   status: { type: "active", activeFlags: ["waitingOnApproval"] },
@@ -82,11 +81,12 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
                       },
                     },
                   },
-                },
+                }),
               ]
             : []),
         ],
         nextCursor: null,
+        backwardsCursor: null,
       } as Response;
     }
     return super.request<Response>(request);
@@ -123,6 +123,7 @@ describe("CodexAppServerAdapter approvals", () => {
           turnId: "child-turn",
           itemId: "child-command",
           startedAtMs: 1,
+          environmentId: "local",
           command: "pwd",
           cwd: "/repo",
           commandActions: [{ type: "unknown", command: "pwd" }],
@@ -268,6 +269,7 @@ describe("CodexAppServerAdapter approvals", () => {
           turnId: "turn-permission",
           itemId: "permission-item-1",
           startedAtMs: 1,
+          environmentId: "local",
           cwd: "/repo",
           reason: "Need one-time network access.",
           permissions: {
@@ -390,6 +392,8 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 73,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-concurrent-question",
           itemId: "question-item",
@@ -501,6 +505,8 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 75,
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-retry-question",
           itemId: "question-item-retry",
@@ -624,6 +630,8 @@ describe("CodexAppServerAdapter approvals", () => {
         id: 36,
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
           threadId: "thread/start-runtime-live",
           turnId: "turn-question",
           itemId: "item-1",

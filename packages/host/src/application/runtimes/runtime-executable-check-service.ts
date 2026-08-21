@@ -23,13 +23,13 @@ export type RuntimeExecutableCheckService = {
 const invalidRow = (
   kind: RuntimeKind,
   path: string,
-  error: unknown,
+  cause: unknown,
 ): RuntimeExecutableCheckResult => ({
   kind,
   path,
   ok: false,
   version: null,
-  error: errorMessage(error),
+  error: errorMessage(cause),
 });
 
 const checkRuntimeExecutable = ({

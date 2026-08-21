@@ -5,6 +5,7 @@ import {
   type PullRequestReviewCheckConclusion,
   type PullRequestReviewCheckStatus,
   type PullRequestReviewContext,
+  type JsonValue,
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -43,7 +44,7 @@ const isNoChecksReported = (result: {
   result.stdout.trim().length === 0 &&
   result.stderr.toLowerCase().includes("no checks reported");
 
-const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
+const normalizeCheckStatus = (state: JsonValue | undefined): PullRequestReviewCheckStatus => {
   const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
   if (
     normalized.includes("queued") ||
@@ -62,8 +63,8 @@ const normalizeCheckStatus = (state: unknown): PullRequestReviewCheckStatus => {
 };
 
 const normalizeCheckConclusion = (
-  bucket: unknown,
-  state: unknown,
+  bucket: JsonValue | undefined,
+  state: JsonValue | undefined,
 ): PullRequestReviewCheckConclusion | null => {
   const value =
     typeof bucket === "string" && bucket.trim().length > 0

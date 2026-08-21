@@ -71,8 +71,8 @@ const writeTerminalOutput = (terminal: TerminalBinding["terminal"], data: string
   terminal.write(data);
 };
 
-const readTerminalErrorMessage = (action: "initialize" | "render", error: unknown): string => {
-  const message = error instanceof Error ? error.message : String(error);
+const readTerminalErrorMessage = (action: "initialize" | "render", cause: unknown): string => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   return `Failed to ${action} dev server terminal: ${message}`;
 };
 

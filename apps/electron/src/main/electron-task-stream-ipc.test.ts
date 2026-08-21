@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskEventStreamFrame } from "@openducktor/contracts";
+import type {
+  JsonValue,
+  TaskEventStreamFrame,
+  TaskEventStreamSubscribe,
+} from "@openducktor/contracts";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -18,7 +22,13 @@ const frame: TaskEventStreamFrame = {
   reason: "buffer_gap",
 };
 
-type Handler = (event: unknown, value: unknown) => unknown;
+type ElectronTaskStreamEvent = {
+  frameId: number;
+  processId: number;
+  sender: ReturnType<typeof createSender>["sender"];
+  senderFrame: ReturnType<typeof createFrame> | null;
+};
+type Handler = (event: ElectronTaskStreamEvent, value: JsonValue | undefined) => unknown;
 type NavigationDetails = { isMainFrame: boolean; isSameDocument: boolean };
 type LifecycleListener = () => void;
 type NavigationListener = (details: NavigationDetails) => void;
@@ -91,10 +101,12 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
   const stream = {
     acknowledge,
     publish: mock(() => {}),
-    subscribe: mock((_input: unknown, sink: (received: TaskEventStreamFrame) => void) => {
-      const index = sinks.push(sink) - 1;
-      return { subscriptionId: subscriptionIds[index], unsubscribe };
-    }),
+    subscribe: mock(
+      (_input: TaskEventStreamSubscribe, sink: (received: TaskEventStreamFrame) => void) => {
+        const index = sinks.push(sink) - 1;
+        return { subscriptionId: subscriptionIds[index], unsubscribe };
+      },
+    ),
   };
   const reportDeliveryFailure = mock(() => {});
   registerElectronTaskStreamIpc({
@@ -102,7 +114,11 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
     reportDeliveryFailure,
     taskEventStream: stream as never,
   });
-  const invoke = (channel: string, event: unknown, value: unknown) => {
+  const invoke = (
+    channel: string,
+    event: ElectronTaskStreamEvent,
+    value: JsonValue | undefined,
+  ) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`No handler registered for ${channel}.`);
     return handler(event, value);

@@ -1,4 +1,3 @@
-import type { JsonValue } from "@openducktor/contracts";
 import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
 
 type ResponseMetadata = {
@@ -54,13 +53,14 @@ export class OpenCodeRequestError extends Error {
   }
 }
 
+const isRequestFailureRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const readUnknownProp = (value: unknown, key: string): unknown => {
-  if (!value || typeof value !== "object") {
+  if (!isRequestFailureRecord(value)) {
     return undefined;
   }
-  // SAFETY: request error payloads arrive over the SDK JSON-RPC transport, which serializes
-  // payloads to JSON-compatible values before they reach this layer.
-  return (value as Record<string, JsonValue>)[key];
+  return value[key];
 };
 
 const readStringProp = (value: unknown, key: string): string | undefined => {
@@ -165,30 +165,30 @@ const buildOpenCodeRequestErrorMessage = (
   return `${base}: ${failure.message}`;
 };
 
-const buildFailureSources = (error: unknown): unknown[] => {
-  return [error, readUnknownProp(error, "cause"), readUnknownProp(error, "data")];
+const buildFailureSources = (cause: unknown): unknown[] => {
+  return [cause, readUnknownProp(cause, "cause"), readUnknownProp(cause, "data")];
 };
 
 const extractRequestFailure = (
   action: string,
-  error: unknown,
+  cause: unknown,
   response?: ResponseMetadata,
 ): NormalizedRequestFailure => {
   const prefix = `OpenCode request failed: ${action}`;
 
-  if (error instanceof OpenCodeRequestError) {
+  if (cause instanceof OpenCodeRequestError) {
     return {
-      message: error.message,
-      failureKind: error.failureKind,
+      message: cause.message,
+      failureKind: cause.failureKind,
       hasPrefixedMessage: true,
-      ...(error.status !== undefined ? { status: error.status } : {}),
-      ...(error.statusText !== undefined ? { statusText: error.statusText } : {}),
-      ...(error.code !== undefined ? { code: error.code } : {}),
-      ...(error.cause !== undefined ? { cause: error.cause } : {}),
+      ...(cause.status !== undefined ? { status: cause.status } : {}),
+      ...(cause.statusText !== undefined ? { statusText: cause.statusText } : {}),
+      ...(cause.code !== undefined ? { code: cause.code } : {}),
+      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
     };
   }
 
-  const sources = buildFailureSources(error);
+  const sources = buildFailureSources(cause);
   const status = readNumberPropFromSources(sources, "status");
   const statusText = readStringPropFromSources(sources, "statusText");
   const code = readCodePropFromSources(sources, "code");
@@ -204,11 +204,11 @@ const extractRequestFailure = (
       ? response.statusText
       : undefined);
 
-  if (error instanceof Error && error.message.startsWith(prefix)) {
+  if (cause instanceof Error && cause.message.startsWith(prefix)) {
     return {
-      message: error.message,
+      message: cause.message,
       failureKind:
-        readFailureKind(error) ??
+        readFailureKind(cause) ??
         classifyOpenCodeRequestFailureKind({
           status: resolvedStatus,
           code,
@@ -217,12 +217,12 @@ const extractRequestFailure = (
       ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
       ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
       ...(code !== undefined ? { code } : {}),
-      ...(error.cause !== undefined ? { cause: error.cause } : {}),
+      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
     };
   }
 
   const message =
-    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    (cause instanceof Error && cause.message.trim().length > 0 ? cause.message : undefined) ??
     readStringPropFromSources(sources, "message") ??
     prefix;
 
@@ -236,16 +236,16 @@ const extractRequestFailure = (
     ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
     ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
     ...(code !== undefined ? { code } : {}),
-    ...(error instanceof Error ? { cause: error } : {}),
+    ...(cause instanceof Error ? { cause } : {}),
   };
 };
 
 export const toOpenCodeRequestError = (
   action: string,
-  error: unknown,
+  cause: unknown,
   response?: ResponseMetadata,
 ): OpenCodeRequestError => {
-  const failure = extractRequestFailure(action, error, response);
+  const failure = extractRequestFailure(action, cause, response);
 
   return new OpenCodeRequestError(
     failure.hasPrefixedMessage

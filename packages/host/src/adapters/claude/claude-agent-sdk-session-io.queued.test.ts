@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -79,7 +80,7 @@ describe("Claude session I/O queued messages", () => {
       activity: "running",
       sdkState: "running",
       query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
         setModel: mock(async (_model?: string) => {}),
       } as unknown as ClaudeSession["query"],
       queue,
@@ -134,7 +135,7 @@ describe("Claude session I/O queued messages", () => {
         variant: "high",
       },
       query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
         setModel: mock(async (_model?: string) => {}),
       } as unknown as ClaudeSession["query"],
       queue,
@@ -255,7 +256,7 @@ describe("Claude session I/O queued messages", () => {
     const events: AgentEvent[] = [];
     const pushed: SDKUserMessage[] = [];
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {
       pushed.push(message);
@@ -371,7 +372,7 @@ describe("Claude session I/O queued messages", () => {
         variant: "high",
       },
       query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
         setModel: mock(async (_model?: string) => {}),
       } as unknown as ClaudeSession["query"],
       queue,
@@ -710,7 +711,7 @@ describe("Claude session I/O queued messages", () => {
         variant: "high",
       },
       query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
         setModel: mock(async (_model?: string) => {}),
       } as unknown as ClaudeSession["query"],
       queue,

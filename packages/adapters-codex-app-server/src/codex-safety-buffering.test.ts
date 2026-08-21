@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexTurnFixture,
   codexUserMessageInput,
   createHarness,
   createRuntimeStreamSubscription,
@@ -46,7 +47,7 @@ describe("Codex safety buffering", () => {
       method: "turn/started",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: { id: "turn-live" },
+        turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
       },
     });
     emitSafetyBuffering("turn-live", true);
@@ -75,7 +76,7 @@ describe("Codex safety buffering", () => {
     ]);
 
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     unsubscribe();
   });

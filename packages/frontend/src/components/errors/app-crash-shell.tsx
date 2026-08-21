@@ -18,10 +18,10 @@ export function AppCrashShell({
   const reportRef = useRef<FatalErrorReport | null>(null);
 
   const reportFatal = useCallback(
-    (report: FatalErrorReport, rawValue: unknown, componentStack?: string): void => {
+    (report: FatalErrorReport, cause: unknown, componentStack?: string): void => {
       if (reportRef.current !== null) return;
       reportRef.current = report;
-      logFatalError(report, rawValue, componentStack);
+      logFatalError(report, cause, componentStack);
       setFatalReport(report);
     },
     [],

@@ -1,26 +1,29 @@
-import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
+import {
+  type AgentSessionRecord,
+  agentSessionRecordSchema,
+  type JsonValue,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
 import type { TaskRow } from "./sqlite-task-store-schema";
-import type { JsonValue } from "@openducktor/contracts";
 
 type SafeParseResult<A> =
   | { readonly success: true; readonly data: A }
   | { readonly success: false; readonly error: { readonly message: string } };
 
 type SafeParser<A> = {
-  readonly safeParse: (value: unknown) => SafeParseResult<A>;
+  readonly safeParse: (value: JsonValue | A) => SafeParseResult<A>;
 };
 
 export const normalizeLabels = (labels: string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
-export const encodeJson = (value: unknown): string => JSON.stringify(value);
+export const encodeJson = <A>(value: A): string => JSON.stringify(value);
 
 export const decodeWithSchema = <A>(
   parser: SafeParser<A>,
-  value: unknown,
+  value: JsonValue | A,
   field: string,
   details?: Readonly<Record<string, JsonValue>>,
 ): Effect.Effect<A, SqliteTaskStoreDataError> => {
@@ -39,15 +42,16 @@ export const decodeWithSchema = <A>(
 
 export const parseJsonColumnValue = (
   value: string | null,
-  fallback: unknown,
+  fallback: JsonValue,
   field: string,
   taskId: string,
-): Effect.Effect<unknown, SqliteTaskStoreDataError> => {
+): Effect.Effect<JsonValue, SqliteTaskStoreDataError> => {
   if (value === null) {
     return Effect.succeed(fallback);
   }
   return Effect.try({
-    try: () => JSON.parse(value),
+    // SAFETY: JSON.parse returns JSON-compatible values for a SQLite JSON column.
+    try: () => JSON.parse(value) as JsonValue,
     catch: (cause) =>
       new SqliteTaskStoreDataError({
         message: `Invalid SQLite task ${taskId} ${field} JSON: ${errorMessage(cause)}`,
@@ -60,8 +64,8 @@ export const parseJsonColumnValue = (
 
 const parseJsonColumn = <A>(
   value: string | null,
-  fallback: unknown,
-  parse: (value: unknown) => Effect.Effect<A, SqliteTaskStoreDataError>,
+  fallback: JsonValue,
+  parse: (value: JsonValue) => Effect.Effect<A, SqliteTaskStoreDataError>,
   field: string,
   taskId: string,
 ): Effect.Effect<A, SqliteTaskStoreDataError> =>
@@ -84,7 +88,8 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
           }),
         );
       }
-      return Effect.succeed(normalizeLabels(value));
+      // SAFETY: the check above guarantees every array entry is a string.
+      return Effect.succeed(normalizeLabels(value as string[]));
     },
     "labels_json",
     row.id,
@@ -111,7 +116,7 @@ export const agentSessionsFromRow = (
 export const optionalJsonFromRow = <A>(
   row: TaskRow,
   field: keyof Pick<TaskRow, "directMergeJson" | "pullRequestJson" | "targetBranchJson">,
-  parse: (value: unknown) => Effect.Effect<A, SqliteTaskStoreDataError>,
+  parse: (value: JsonValue) => Effect.Effect<A, SqliteTaskStoreDataError>,
 ): Effect.Effect<A | undefined, SqliteTaskStoreDataError> =>
   parseJsonColumn(
     row[field],

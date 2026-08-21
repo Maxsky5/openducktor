@@ -29,7 +29,7 @@ const createDependencies = ({
     exitCode?: number | null;
   };
 } = {}): GithubCommandDependencies => {
-  const succeed = (stdout: unknown) =>
+  const succeed = (stdout: JsonValue | undefined) =>
     Effect.gen(function* () {
       if (commandActivity) {
         commandActivity.active += 1;
@@ -80,6 +80,7 @@ const createDependencies = ({
       if (command.includes("api graphql")) {
         if (command.includes("PullRequestReviewOverview")) {
           const view = pullRequestViewResponse as Record<string, JsonValue>;
+          // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
           return succeed({
             data: {
               repository: {
@@ -98,19 +99,21 @@ const createDependencies = ({
             },
           });
         }
+        // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
         return succeed(
-          reviewThreadResponse?.(args) ?? {
-            data: {
-              repository: {
-                pullRequest: {
-                  reviewThreads: {
-                    nodes: reviewThreadNodes,
-                    pageInfo: { hasNextPage: false, endCursor: null },
+          (reviewThreadResponse?.(args) as JsonValue | undefined) ??
+            ({
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      nodes: reviewThreadNodes as JsonValue[],
+                      pageInfo: { hasNextPage: false, endCursor: null },
+                    },
                   },
                 },
               },
-            },
-          },
+            } as JsonValue),
         );
       }
       return Effect.fail(

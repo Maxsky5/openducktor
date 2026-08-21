@@ -4,7 +4,7 @@ import { OdtHostBridgeClient } from "./host-bridge-client";
 import { OdtToolError } from "./tool-results";
 import type { JsonValue } from "@openducktor/contracts";
 
-const jsonResponse = (payload: unknown, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: JsonValue | undefined, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,

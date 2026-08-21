@@ -27,7 +27,7 @@ export type TerminalWebSocketData = {
   pendingBytes: number;
   pendingFrames: Uint8Array[];
   logger: WebLogger;
-  onBackgroundFailure(failure: unknown): void;
+  onBackgroundFailure(cause: unknown): void;
 };
 
 const closeForQueueOverflow = (socket: Bun.ServerWebSocket<TerminalWebSocketData>): void => {

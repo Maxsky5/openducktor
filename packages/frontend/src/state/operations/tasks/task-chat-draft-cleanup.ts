@@ -51,9 +51,9 @@ export const createTaskChatDraftCleanup = ({
   draftClearPort: TaskChatDraftClearPort;
   notificationPort: TaskChatDraftCleanupNotificationPort;
 }): TaskChatDraftCleanup => {
-  const reportFailure = (error: unknown): void => {
+  const reportFailure = (cause: unknown): void => {
     notificationPort.error("Task updated, but chat draft cleanup failed", {
-      description: errorMessage(error),
+      description: errorMessage(cause),
     });
   };
 

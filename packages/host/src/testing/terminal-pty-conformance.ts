@@ -64,7 +64,7 @@ export const observeLiveTerminalPtyConformance = async (
   let transcript = "";
   const eventOrder: string[] = [];
   let settleExit: ((exit: TerminalPtyExit) => void) | null = null;
-  let rejectExit: ((failure: unknown) => void) | null = null;
+  let rejectExit: ((cause: unknown) => void) | null = null;
   const exitPromise = new Promise<TerminalPtyExit>((resolve) => {
     settleExit = resolve;
   }).catch((failure) => {
@@ -123,7 +123,7 @@ export const verifyLiveTerminalPtyProcessTreeTermination = async (
   const decoder = new TextDecoder();
   let transcript = "";
   let settleChildPid: ((pid: number) => void) | null = null;
-  let rejectChildPid: ((failure: unknown) => void) | null = null;
+  let rejectChildPid: ((cause: unknown) => void) | null = null;
   const childPidPromise = new Promise<number>((resolve) => {
     settleChildPid = resolve;
   });
@@ -201,7 +201,7 @@ export const verifyLiveTerminalPtyNaturalExitCleanup = async (
   let transcript = "";
   let settleChildPid: ((pid: number) => void) | null = null;
   let settleExit: ((exit: TerminalPtyExit) => void) | null = null;
-  let rejectSession: ((failure: unknown) => void) | null = null;
+  let rejectSession: ((cause: unknown) => void) | null = null;
   const childPidPromise = new Promise<number>((resolve) => {
     settleChildPid = resolve;
   });
@@ -260,7 +260,7 @@ export const verifyLiveTerminalPtyInterrupt = async (
   let transcript = "";
   let settleReady: (() => void) | null = null;
   let settleExit: ((exit: TerminalPtyExit) => void) | null = null;
-  let rejectSession: ((failure: unknown) => void) | null = null;
+  let rejectSession: ((cause: unknown) => void) | null = null;
   const readyPromise = new Promise<void>((resolve) => {
     settleReady = resolve;
   });

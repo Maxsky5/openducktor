@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
+import {
+  permissionAskedEvent,
+  permissionRepliedEvent,
+  sessionStatusEvent,
+} from "./event-stream.test-support";
 
 type LiveClientHarness = {
   client: OpencodeClient;
@@ -100,7 +105,7 @@ const createLiveClientHarness = (
         ),
         error: undefined,
       }),
-      messages: async (request: unknown) => {
+      messages: async (request: JsonValue | undefined) => {
         messageCalls.push(request);
         input.onMessages?.();
         await input.messagesBarrier;
@@ -124,7 +129,7 @@ const createLiveClientHarness = (
           error: undefined,
         };
       },
-      promptAsync: async (request: unknown) => {
+      promptAsync: async (request: JsonValue | undefined) => {
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
@@ -138,6 +143,8 @@ const createLiveClientHarness = (
               sessionID: sessionId,
               permission: "read",
               patterns: ["README.md"],
+              metadata: {},
+              always: [],
             }))
           : [];
         input.onPermissionList?.();
@@ -149,7 +156,7 @@ const createLiveClientHarness = (
         input.onPermissionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: unknown) => {
+      reply: async (request: JsonValue | undefined) => {
         permissionReplyCalls.push(request);
         if (permissionReplyError) {
           return { data: undefined, error: permissionReplyError };
@@ -184,7 +191,7 @@ const createLiveClientHarness = (
         input.onQuestionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: unknown) => {
+      reply: async (request: JsonValue | undefined) => {
         questionReplyCalls.push(request);
         pendingQuestion = false;
         return { data: true, error: undefined };
@@ -326,13 +333,7 @@ describe("OpenCode session runtime connection", () => {
       type: "server.heartbeat",
       properties: {},
     } as unknown as Event);
-    harness.emit({
-      type: "session.status",
-      properties: {
-        sessionID: "session-1",
-        status: { type: "busy" },
-      },
-    } as Event);
+    harness.emit(sessionStatusEvent({ type: "busy" }, "session-1"));
 
     expect(await observation).toBe("status");
     expect(await prepared.connection.readSessionSources()).toHaveLength(1);
@@ -505,15 +506,14 @@ describe("OpenCode session runtime connection", () => {
     const creating = createPrepareRuntime(createdHarness)(runtimeInput);
     await createdReadStarted;
     createdHarness.setPendingApproval(true);
-    await createdHarness.emitAndWait({
-      type: "permission.asked",
-      properties: {
-        id: "native-request-1",
-        sessionID: "session-1",
+    await createdHarness.emitAndWait(
+      permissionAskedEvent({
+        requestId: "native-request-1",
+        sessionId: "session-1",
         permission: "read",
         patterns: ["README.md"],
-      },
-    } as Event);
+      }),
+    );
     releaseCreatedRead();
     const created = await creating;
     expect(created.initialSources[0]?.pendingApprovals).toHaveLength(1);
@@ -540,13 +540,9 @@ describe("OpenCode session runtime connection", () => {
     const resolving = createPrepareRuntime(resolvedHarness)(runtimeInput);
     await resolvedReadStarted;
     resolvedHarness.setPendingApproval(false);
-    await resolvedHarness.emitAndWait({
-      type: "permission.replied",
-      properties: {
-        requestID: "native-request-1",
-        sessionID: "session-1",
-      },
-    } as Event);
+    await resolvedHarness.emitAndWait(
+      permissionRepliedEvent({ requestId: "native-request-1", sessionId: "session-1" }),
+    );
     releaseResolvedRead();
     const resolved = await resolving;
     expect(resolved.initialSources[0]?.pendingApprovals).toEqual([]);
@@ -659,18 +655,12 @@ describe("OpenCode session runtime connection", () => {
       }
     });
 
-    await harness.emitAndWait({
-      type: "session.status",
-      properties: {
-        sessionID: "session-1",
-        status: {
-          type: "retry",
-          attempt: 2,
-          message: "Retrying request",
-          next: 250,
-        },
-      },
-    } as Event);
+    await harness.emitAndWait(
+      sessionStatusEvent(
+        { type: "retry", attempt: 2, message: "Retrying request", next: 250 },
+        "session-1",
+      ),
+    );
     await statusSignal;
 
     expect(signals).toContainEqual({
@@ -755,6 +745,8 @@ describe("OpenCode session runtime connection", () => {
             messageID: "assistant-stop-only",
             type: "step-finish",
             reason: "stop",
+            cost: 0,
+            tokens: {},
           },
         ],
       },

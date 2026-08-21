@@ -75,7 +75,7 @@ const summarizeSearchInput = (
   return null;
 };
 
-const countCollectionItems = (value: unknown): number | null => {
+const countCollectionItems = (value: JsonValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
@@ -100,7 +100,7 @@ const countCollectionItems = (value: unknown): number | null => {
 
 const summarizeTodoTool = (
   input: Record<string, JsonValue> | undefined,
-  output: unknown,
+  output: JsonValue | undefined,
 ): string | null => {
   const count = countCollectionItems(output) ?? countCollectionItems(input?.todos ?? input?.items);
   if (count === null) {
@@ -112,7 +112,7 @@ const summarizeTodoTool = (
 const summarizeQuestionTool = (
   input: Record<string, JsonValue> | undefined,
   metadata: Record<string, JsonValue> | undefined,
-  output: unknown,
+  output: JsonValue | undefined,
 ): string | null => {
   const sources = [input, metadata, asUnknownRecord(output)];
   for (const source of sources) {
@@ -133,7 +133,7 @@ const summarizeQuestionTool = (
 const summarizeTaskTool = (
   input: Record<string, JsonValue> | undefined,
   metadata: Record<string, JsonValue> | undefined,
-  output: unknown,
+  output: JsonValue | undefined,
 ): string | null => {
   const summaryCount = countCollectionItems(metadata?.summary);
   if (summaryCount !== null) {
@@ -153,7 +153,7 @@ const summarizeTaskTool = (
 
 const summarizeOdtReadTask = (
   input: Record<string, JsonValue> | undefined,
-  output: unknown,
+  output: JsonValue | undefined,
 ): string | null => {
   const taskId = readTrimmedString(input, ["taskId"]);
   if (taskId) {
@@ -270,8 +270,8 @@ const summarizeGenericInput = (input: Record<string, JsonValue> | undefined): st
 
 export const deriveToolPreview = (input: {
   tool: string;
-  rawInput: unknown;
-  rawOutput: unknown;
+  rawInput: JsonValue | undefined;
+  rawOutput: JsonValue | undefined;
   metadata?: Record<string, JsonValue>;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);

@@ -1,4 +1,3 @@
-import type { Event } from "@opencode-ai/sdk/v2/client";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -10,6 +9,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 import {
   listOpencodeRuntimeSnapshotSources,
@@ -105,7 +105,7 @@ const waitForRuntimeInitialization = <Value>(
     signal.addEventListener("abort", abort, { once: true });
     void initialization.then(
       (value) => finish(() => resolve(value)),
-      (error: unknown) => finish(() => reject(error)),
+      (cause: unknown) => finish(() => reject(cause)),
     );
     if (signal.aborted) abort();
   });

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import { probeCodexSessionStatus } from "./codex-session-status-probe";
 
-const codexResult = (value: unknown) => Effect.succeed(value as CodexAppServerRequestResult);
+const codexResult = (value: JsonValue | undefined) =>
+  Effect.succeed(value as CodexAppServerRequestResult);
 
 const probeThreadStatus = (input: {
   status: { type: "active"; activeFlags: [] } | { type: "idle" | "notLoaded" | "systemError" };

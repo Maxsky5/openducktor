@@ -9,7 +9,7 @@ import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-tr
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 type ForwardedClaudeSubagentMessage = {
   message: SDKMessage;
@@ -20,16 +20,22 @@ const hasToolResultForParent = (
   message: Extract<SDKMessage, { type: "user" }>,
   parentToolUseId: string,
 ): boolean => {
-  const content = (message.message as { content?: unknown }).content;
+  const content = message.message.content;
   if (Array.isArray(content)) {
     for (const block of content) {
-      const result = decodeClaudeToolResultValue(block, null);
+      const result = decodeClaudeToolResultValue(
+        parseClaudeJsonValue(block, "claudeUserMessage.content"),
+        null,
+      );
       if (result?.toolUseId === parentToolUseId) {
         return true;
       }
     }
   }
-  const rawMessage = message as unknown as Record<string, JsonValue>;
+  const rawMessage = parseClaudeJsonValue(message, "claudeUserMessage");
+  if (!isRecord(rawMessage)) {
+    return false;
+  }
   const directResult =
     decodeClaudeToolResultValue(rawMessage.tool_use_result, parentToolUseId, {
       allowNonToolResultType: true,
@@ -41,19 +47,24 @@ const hasToolResultForParent = (
 };
 
 const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "user" }>): boolean => {
-  const content = (message.message as { content?: unknown }).content;
+  const content = message.message.content;
   if (
     Array.isArray(content) &&
-    content.some(
-      (block) =>
-        isRecord(block) &&
-        (readStringProp(block, "type") === "tool_result" ||
-          readStringProp(block, "type") === "mcp_tool_result"),
-    )
+    content.some((block) => {
+      const contentBlock = parseClaudeJsonValue(block, "claudeUserMessage.content");
+      return (
+        isRecord(contentBlock) &&
+        (readStringProp(contentBlock, "type") === "tool_result" ||
+          readStringProp(contentBlock, "type") === "mcp_tool_result")
+      );
+    })
   ) {
     return true;
   }
-  const rawMessage = message as unknown as Record<string, JsonValue>;
+  const rawMessage = parseClaudeJsonValue(message, "claudeUserMessage");
+  if (!isRecord(rawMessage)) {
+    return false;
+  }
   return isRecord(rawMessage.tool_use_result) || isRecord(rawMessage.toolUseResult);
 };
 
@@ -68,16 +79,18 @@ export const emitClaudeSubagentUserMessage = ({
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
+  const messageValue = parseClaudeJsonValue(message, "claudeUserMessage");
+  const content = parseClaudeJsonValue(message.message, "claudeUserMessage.content");
   if (
     !isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
     isClaudeToolResultUserMessage(message) ||
-    !isClaudeHumanUserMessage(message)
+    !isClaudeHumanUserMessage(messageValue)
   ) {
     return;
   }
   const messageId = message.uuid ?? `claude-user:${session.externalSessionId}:${timestamp}`;
-  const text = historyMessageText(message.message);
-  const parts = readClaudeHistoryDisplayParts(messageId, message.message);
+  const text = historyMessageText(content);
+  const parts = readClaudeHistoryDisplayParts(messageId, content);
   if (text.length === 0 && parts.length === 0) {
     return;
   }

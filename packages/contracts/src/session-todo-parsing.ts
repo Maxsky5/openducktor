@@ -1,59 +1,48 @@
-import type { JsonObject } from "./json-types";
+import { z } from "zod";
+import type { JsonValue } from "./json-types";
+
 export type AgentSessionTodoPayloadRecord = {
   id: string;
   content: string;
-  status?: unknown;
-  priority?: unknown;
-  completed?: boolean;
+  status?: string | undefined;
+  priority?: string | undefined;
+  completed?: boolean | undefined;
 };
 
 export type ParseAgentSessionTodoPayloadOptions = {
   allowStringEntries?: boolean;
 };
 
-const parseTodoId = (record: JsonObject, fallbackId: string): string => {
-  return (
-    (typeof record.id === "string" ? record.id.trim() : "") ||
-    (typeof record.todoId === "string" ? record.todoId.trim() : "") ||
-    fallbackId
-  );
-};
-
-const parseTodoContent = (record: JsonObject): string => {
-  const contentCandidate =
-    typeof record.content === "string"
-      ? record.content
-      : typeof record.text === "string"
-        ? record.text
-        : typeof record.title === "string"
-          ? record.title
-          : "";
-  return contentCandidate.trim();
-};
-
-export const parseAgentSessionTodoPayloadEntry = (
-  value: unknown,
+const normalizeLooseTodoEntry = (
+  entry: JsonValue | undefined,
   fallbackId: string,
-  options: ParseAgentSessionTodoPayloadOptions = {},
+  options: ParseAgentSessionTodoPayloadOptions,
 ): AgentSessionTodoPayloadRecord | null => {
-  if (options.allowStringEntries && typeof value === "string") {
-    const content = value.trim();
+  if (options.allowStringEntries && typeof entry === "string") {
+    const content = entry.trim();
     if (!content) {
       return null;
     }
-    return {
-      id: fallbackId,
-      content,
-    };
+    return { id: fallbackId, content };
   }
 
-  if (!value || typeof value !== "object") {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
     return null;
   }
 
-  const record = value as JsonObject;
-  const id = parseTodoId(record, fallbackId);
-  const content = parseTodoContent(record);
+  const id =
+    (typeof entry.id === "string" ? entry.id.trim() : "") ||
+    (typeof entry.todoId === "string" ? entry.todoId.trim() : "") ||
+    fallbackId;
+  const content = (
+    typeof entry.content === "string"
+      ? entry.content
+      : typeof entry.text === "string"
+        ? entry.text
+        : typeof entry.title === "string"
+          ? entry.title
+          : ""
+  ).trim();
   if (!id || !content) {
     return null;
   }
@@ -61,21 +50,28 @@ export const parseAgentSessionTodoPayloadEntry = (
   return {
     id,
     content,
-    status: record.status,
-    priority: record.priority,
-    ...(typeof record.completed === "boolean" ? { completed: record.completed } : {}),
+    ...(typeof entry.status === "string" ? { status: entry.status } : {}),
+    ...(typeof entry.priority === "string" ? { priority: entry.priority } : {}),
+    ...(typeof entry.completed === "boolean" ? { completed: entry.completed } : {}),
   };
 };
 
-export const parseAgentSessionTodoPayloadList = (
-  payload: unknown,
-  options: ParseAgentSessionTodoPayloadOptions = {},
-): AgentSessionTodoPayloadRecord[] => {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
+export const agentSessionTodoPayloadSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  status: z.string().optional(),
+  priority: z.string().optional(),
+  completed: z.boolean().optional(),
+});
 
-  return payload
-    .map((entry, index) => parseAgentSessionTodoPayloadEntry(entry, `todo:${index}`, options))
-    .filter((entry): entry is AgentSessionTodoPayloadRecord => entry !== null);
-};
+export const agentSessionTodoPayloadListSchema = (
+  options: ParseAgentSessionTodoPayloadOptions = {},
+) =>
+  z.preprocess((payload: JsonValue | undefined) => {
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+    return payload
+      .map((entry, index) => normalizeLooseTodoEntry(entry, `todo:${index}`, options))
+      .filter((entry): entry is AgentSessionTodoPayloadRecord => entry !== null);
+  }, z.array(agentSessionTodoPayloadSchema));

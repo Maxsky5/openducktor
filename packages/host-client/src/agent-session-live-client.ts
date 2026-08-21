@@ -11,12 +11,14 @@ import {
   type AgentSessionControlUpdateModelInput,
   type AgentSessionLiveListInput,
   type AgentSessionLiveLoadContextInput,
+  type AgentSessionLiveLoadDiffInput,
   type AgentSessionLiveReadInput,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRefreshInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type FileDiff,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
@@ -29,13 +31,14 @@ import {
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
+  agentSessionLiveLoadDiffInputSchema,
+  agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadInputSchema,
   agentSessionLiveReadResultSchema,
   agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
   agentSessionLiveSnapshotSchema,
-  type JsonValue,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, toCommandArgs } from "./invoke-utils";
@@ -139,6 +142,14 @@ export class HostAgentSessionLiveClient {
       toCommandArgs(agentSessionLiveLoadContextInputSchema.parse(input)),
     );
     return agentSessionContextUsageSchema.nullable().parse(payload);
+  }
+
+  async agentSessionLiveLoadDiff(input: AgentSessionLiveLoadDiffInput): Promise<FileDiff[]> {
+    const payload = await this.invokeFn(
+      "agent_session_live_load_diff",
+      toCommandArgs(agentSessionLiveLoadDiffInputSchema.parse(input)),
+    );
+    return agentSessionLiveLoadDiffResultSchema.parse(payload);
   }
 
   async agentSessionLiveReplyApproval(input: AgentSessionLiveReplyApprovalInput): Promise<void> {

@@ -6,6 +6,7 @@ import {
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
+import { parseClaudeJsonRecord } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -48,10 +49,10 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
     (candidate) => candidate.toLowerCase() === dialogKind.trim().toLowerCase(),
   );
 
-const readString = (value: unknown): string | null =>
+const readString = (value: JsonValue | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
-const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
+const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -274,8 +275,7 @@ export const createClaudeUserDialogHandler = ({
       randomId,
       session,
       signal: options.signal,
-      // SAFETY: the Claude Agent SDK delivers dialog payloads as JSON over its message transport.
-      toolInput: request.payload as Record<string, JsonValue>,
+      toolInput: parseClaudeJsonRecord(request.payload, "claudeUserDialogPayload"),
       toolUseID: request.toolUseID,
     });
     if (!result) {

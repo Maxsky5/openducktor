@@ -6,9 +6,17 @@ import {
   type SessionStoreEntry,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  parseClaudeHistoryAssistantEntry,
+  parseClaudeHistoryAttachment,
+  parseClaudeHistoryAttachmentEntry,
+  parseClaudeHistoryConversationEntry,
+  parseClaudeHistoryStoreEntry,
+  parseClaudeMetaQueuedCommandAttachment,
+} from "./claude-agent-sdk-ingress-schemas";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
-import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import { readStringProp } from "./claude-agent-sdk-utils";
 
 export type ClaudeHistoryResultMessage = SessionStoreEntry & {
   type: "result";
@@ -70,12 +78,15 @@ export type ClaudeHistoryEntryMetadata = {
   timestamp?: unknown;
 };
 
+const sessionStoreEntryValue = (entry: SessionStoreEntry) => parseClaudeHistoryStoreEntry(entry);
+
 const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHistoryMessage => {
+  const value = sessionStoreEntryValue(entry);
   if (entry.type === "queue-operation") {
-    return readStringProp(entry, "operation") === "enqueue" && typeof entry.content === "string";
+    return readStringProp(value, "operation") === "enqueue" && typeof entry.content === "string";
   }
   if (entry.type === "assistant" || entry.type === "user" || entry.type === "system") {
-    const subtype = isRecord(entry) ? readStringProp(entry, "subtype") : undefined;
+    const subtype = readStringProp(value, "subtype");
     if (entry.type === "system" && subtype === "model_refusal_fallback") {
       return typeof entry.uuid === "string";
     }
@@ -97,6 +108,11 @@ const isMainClaudeHistoryMessage = (entry: SessionStoreEntry): entry is ClaudeHi
     ) {
       return typeof entry.uuid === "string" && typeof entry.content === "string";
     }
+    if (entry.type === "assistant") {
+      parseClaudeHistoryAssistantEntry(value);
+    } else if (entry.type === "user") {
+      parseClaudeHistoryConversationEntry(value);
+    }
     return typeof entry.uuid === "string" && "message" in entry;
   }
   return entry.type === "result";
@@ -108,28 +124,28 @@ const queuedPromptKey = (
 ): string | null => (timestamp && prompt ? JSON.stringify([timestamp, prompt]) : null);
 
 const readMetaQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
-  if (entry.type !== "attachment" || !isRecord(entry)) {
+  const value = sessionStoreEntryValue(entry);
+  if (entry.type !== "attachment") {
     return null;
   }
-  const attachment = entry.attachment;
-  if (
-    !isRecord(attachment) ||
-    readStringProp(attachment, "type") !== "queued_command" ||
-    attachment.isMeta !== true
-  ) {
+  const attachmentEntry = parseClaudeHistoryAttachmentEntry(value);
+  const attachment = parseClaudeHistoryAttachment(attachmentEntry.attachment);
+  if (attachment.type !== "queued_command" || attachment.isMeta !== true) {
     return null;
   }
+  const metaQueuedCommand = parseClaudeMetaQueuedCommandAttachment(attachmentEntry.attachment);
   return queuedPromptKey(
-    readStringProp(entry, "timestamp") ?? readStringProp(attachment, "timestamp"),
-    readStringProp(attachment, "prompt"),
+    readStringProp(value, "timestamp") ?? metaQueuedCommand.timestamp,
+    metaQueuedCommand.prompt,
   );
 };
 
 const readQueuedPromptKey = (entry: SessionStoreEntry): string | null => {
-  if (entry.type !== "queue-operation" || readStringProp(entry, "operation") !== "enqueue") {
+  const value = sessionStoreEntryValue(entry);
+  if (entry.type !== "queue-operation" || readStringProp(value, "operation") !== "enqueue") {
     return null;
   }
-  return queuedPromptKey(readStringProp(entry, "timestamp"), readStringProp(entry, "content"));
+  return queuedPromptKey(readStringProp(value, "timestamp"), readStringProp(value, "content"));
 };
 
 export const filterClaudeHistoryMessages = (
@@ -147,20 +163,23 @@ export const filterClaudeHistoryMessages = (
 
 export const isClaudeHistorySubagentSystemMessage = (
   entry: ClaudeHistoryMessage,
-): entry is ClaudeHistorySubagentSystemMessage =>
-  entry.type === "system" &&
-  isRecord(entry) &&
-  (readStringProp(entry, "subtype") === "task_started" ||
-    readStringProp(entry, "subtype") === "task_progress" ||
-    readStringProp(entry, "subtype") === "task_updated" ||
-    readStringProp(entry, "subtype") === "task_notification");
+): entry is ClaudeHistorySubagentSystemMessage => {
+  const value = sessionStoreEntryValue(entry);
+  return (
+    entry.type === "system" &&
+    (readStringProp(value, "subtype") === "task_started" ||
+      readStringProp(value, "subtype") === "task_progress" ||
+      readStringProp(value, "subtype") === "task_updated" ||
+      readStringProp(value, "subtype") === "task_notification")
+  );
+};
 
 export const isClaudeHistoryCompactBoundaryMessage = (
   entry: ClaudeHistoryMessage,
-): entry is ClaudeHistoryCompactBoundaryMessage =>
-  entry.type === "system" &&
-  isRecord(entry) &&
-  readStringProp(entry, "subtype") === "compact_boundary";
+): entry is ClaudeHistoryCompactBoundaryMessage => {
+  const value = sessionStoreEntryValue(entry);
+  return entry.type === "system" && readStringProp(value, "subtype") === "compact_boundary";
+};
 
 const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: string }) => {
   const entriesBySubpath = new Map<string | undefined, SessionStoreEntry[]>();
@@ -171,6 +190,7 @@ const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: s
         return;
       }
       const entries = entriesBySubpath.get(key.subpath) ?? [];
+      nextEntries.forEach(parseClaudeHistoryStoreEntry);
       entries.push(...nextEntries);
       entriesBySubpath.set(key.subpath, entries);
     },
@@ -183,19 +203,13 @@ const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: s
 const readAgentToolUseIds = (entries: readonly SessionStoreEntry[]): Set<string> => {
   const toolUseIds = new Set<string>();
   for (const entry of entries) {
-    if (entry.type !== "assistant" || !isRecord(entry.message)) {
+    const value = sessionStoreEntryValue(entry);
+    if (entry.type !== "assistant") {
       continue;
     }
-    const content = entry.message.content;
-    if (!Array.isArray(content)) {
-      continue;
-    }
+    const content = parseClaudeHistoryAssistantEntry(value).message.content;
     for (const block of content) {
-      if (
-        isRecord(block) &&
-        readStringProp(block, "type") === "tool_use" &&
-        readStringProp(block, "name") === "Agent"
-      ) {
+      if (block.type === "tool_use" && readStringProp(block, "name") === "Agent") {
         const toolUseId = readStringProp(block, "id");
         if (toolUseId) {
           toolUseIds.add(toolUseId);
@@ -223,7 +237,7 @@ export const readSubagentAgentIdsByToolUseId = (
     }
     const agentId = readSubagentAgentId(subpath);
     const parentToolUseId = entries
-      .map((entry) => readStringProp(entry, "parent_tool_use_id"))
+      .map((entry) => readStringProp(sessionStoreEntryValue(entry), "parent_tool_use_id"))
       .find((value): value is string => Boolean(value));
     if (agentId && parentToolUseId && targetToolUseIds.has(parentToolUseId)) {
       agentIdsByToolUseId.set(parentToolUseId, agentId);
@@ -248,6 +262,9 @@ export const loadClaudeHistoryProjectionInput = async (
       includeSubagents: true,
     });
   } catch (cause) {
+    if (cause instanceof HostValidationError) {
+      throw cause;
+    }
     throw new HostOperationError({
       operation: "claude.session.history.import",
       message: `Failed to load Claude session '${target.sessionId}' history: ${errorMessage(cause)}`,

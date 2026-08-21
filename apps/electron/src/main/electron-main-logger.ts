@@ -28,7 +28,7 @@ type ElectronMainLoggerInput = {
 };
 
 export type ElectronMainLogger = {
-  error(message: string, error?: unknown): Effect.Effect<void, OpenDucktorLogPersistenceError>;
+  error(message: string, cause?: unknown): Effect.Effect<void, OpenDucktorLogPersistenceError>;
   info(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
   warn(message: string): Effect.Effect<void, OpenDucktorLogPersistenceError>;
 };
@@ -110,14 +110,14 @@ const colorMessage = (useAnsi: boolean, level: LogLevel, message: string): strin
   return message;
 };
 
-const formatError = (error: unknown): string => {
-  if (error instanceof Error) {
-    const stack = error.stack ?? error.message;
-    return Object.keys(error).length > 0
-      ? `${stack}\n${Inspectable.toStringUnknown(error)}`
+const formatError = (cause: unknown): string => {
+  if (cause instanceof Error) {
+    const stack = cause.stack ?? cause.message;
+    return Object.keys(cause).length > 0
+      ? `${stack}\n${Inspectable.toStringUnknown(cause)}`
       : stack;
   }
-  return Inspectable.toStringUnknown(error);
+  return Inspectable.toStringUnknown(cause);
 };
 
 export const createElectronMainLogger = ({
@@ -147,8 +147,8 @@ export const createElectronMainLogger = ({
         });
 
       return {
-        error(message, error) {
-          return log("ERROR", error === undefined ? message : `${message}: ${formatError(error)}`);
+        error(message, cause) {
+          return log("ERROR", cause === undefined ? message : `${message}: ${formatError(cause)}`);
         },
         info(message) {
           return log("INFO", message);

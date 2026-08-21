@@ -1,13 +1,13 @@
-import { extractThreadIdFromParams } from "./codex-app-server-requests";
-import { type CodexLiveEventPump, isPlainObject } from "./codex-app-server-shared";
+import { jsonValueSchema } from "@openducktor/contracts";
+import {
+  codexRuntimeStreamFault,
+  parseCodexRuntimeStreamEvent,
+  type CodexRuntimeStreamEvent,
+} from "./codex-runtime-event-schema";
+import type { CodexLiveEventPump } from "./codex-app-server-shared";
 import type { CodexAppServerAdapterOptions } from "./types";
 
-export type CodexRuntimeStreamEvent = {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: unknown;
-};
+export { type CodexRuntimeStreamEvent } from "./codex-runtime-event-schema";
 
 export class CodexRuntimeEventSubscriptions {
   private readonly pumpsByRuntimeId = new Map<string, CodexLiveEventPump>();
@@ -36,7 +36,23 @@ export class CodexRuntimeEventSubscriptions {
         if (event.runtimeId !== runtimeId) {
           return;
         }
-        onEvent(event);
+        const message = jsonValueSchema.safeParse(event.message);
+        try {
+          const parsed = parseCodexRuntimeStreamEvent(jsonValueSchema.parse(event));
+          if (parsed.kind !== "ignored_notification") {
+            onEvent(parsed);
+          }
+        } catch (cause) {
+          onEvent(
+            codexRuntimeStreamFault({
+              cause,
+              message: message.success ? message.data : undefined,
+              receivedAt: event.receivedAt,
+              runtimeId: event.runtimeId,
+              sourceKind: event.kind,
+            }),
+          );
+        }
       });
     } catch (error) {
       if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
@@ -78,11 +94,21 @@ export class CodexRuntimeEventSubscriptions {
   }
 }
 
-export const threadIdFromRuntimeStreamEvent = (
-  event: Pick<CodexRuntimeStreamEvent, "message">,
-): string | null => {
-  if (!isPlainObject(event.message)) {
-    return null;
+export const threadIdFromRuntimeStreamEvent = (event: CodexRuntimeStreamEvent): string | null => {
+  if (event.kind === "fault") {
+    return event.threadId;
   }
-  return extractThreadIdFromParams(event.message.params);
+  if (event.kind === "notification") {
+    return event.message.method === "skills/changed" ? null : event.message.params.threadId;
+  }
+  switch (event.message.method) {
+    case "execCommandApproval":
+    case "applyPatchApproval":
+      return event.message.params.conversationId;
+    case "account/chatgptAuthTokens/refresh":
+    case "attestation/generate":
+      return null;
+    default:
+      return event.message.params.threadId ?? null;
+  }
 };

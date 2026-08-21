@@ -162,7 +162,7 @@ describe("ThemeProvider", () => {
         )
         .then(
           (snapshot) => ({ snapshot, error: null }),
-          (error: unknown) => ({ snapshot: null, error }),
+          (cause: unknown) => ({ snapshot: null, error: cause }),
         );
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));

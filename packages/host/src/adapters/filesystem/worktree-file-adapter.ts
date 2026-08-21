@@ -10,8 +10,8 @@ import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-f
 
 const metadataDirectoryName = ".git";
 const normalizeMissingPath = (inputPath: string): string => path.resolve(inputPath);
-const hasErrorCode = (error: unknown, code: string): boolean =>
-  typeof error === "object" && error !== null && "code" in error && error.code === code;
+const hasErrorCode = (cause: unknown, code: string): boolean =>
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
 const resolvePathThroughExistingAncestor = (
   inputPath: string,
   missingSegments: string[] = [],

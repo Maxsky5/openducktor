@@ -1,5 +1,9 @@
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
@@ -83,10 +87,12 @@ export const acquirePendingResponse = ({
       reject: (error) => {
         finish(
           Effect.fail(
-            toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-              runtimeId,
-              method,
-            }),
+            error instanceof HostValidationError
+              ? error
+              : toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
+                  runtimeId,
+                  method,
+                }),
           ),
         );
       },

@@ -15,30 +15,32 @@ export type LoadedGlobalConfig = GlobalConfig & {
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 }) as LoadedGlobalConfig;
 
-const migratePersistedConfigShape = (payload: unknown): unknown => {
+const migratePersistedConfigShape = (payload: JsonValue | undefined): JsonValue | undefined => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return payload;
   }
 
   const candidate = payload as Record<string, JsonValue>;
   const chat = candidate.chat;
-  if (
-    candidate.reusablePrompts !== undefined ||
-    !chat ||
-    typeof chat !== "object" ||
-    Array.isArray(chat) ||
-    !Array.isArray((chat as Record<string, JsonValue>).customPrompts)
-  ) {
+  const customPrompts =
+    chat && typeof chat === "object" && !Array.isArray(chat)
+      ? (chat as Record<string, JsonValue>).customPrompts
+      : undefined;
+  if (candidate.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
     return payload;
   }
 
-  return {
+  const migrated: Record<string, JsonValue> = {
     ...candidate,
-    reusablePrompts: (chat as Record<string, JsonValue>).customPrompts,
+    reusablePrompts: customPrompts,
   };
+  return migrated;
 };
 
-const assertSupportedConfigVersion = (payload: unknown, expectedVersion: 2 | 3): void => {
+const assertSupportedConfigVersion = (
+  payload: JsonValue | undefined,
+  expectedVersion: 2 | 3,
+): void => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
@@ -51,7 +53,7 @@ const assertSupportedConfigVersion = (payload: unknown, expectedVersion: 2 | 3):
   }
 };
 
-export const parsePersistedGlobalConfig = (payload: unknown): LoadedGlobalConfig => {
+export const parsePersistedGlobalConfig = (payload: JsonValue | undefined): LoadedGlobalConfig => {
   assertSupportedConfigVersion(payload, 3);
   try {
     return globalConfigSchema.parse(migratePersistedConfigShape(payload)) as LoadedGlobalConfig;
@@ -63,7 +65,9 @@ export const parsePersistedGlobalConfig = (payload: unknown): LoadedGlobalConfig
   }
 };
 
-export const parsePersistedGlobalConfigV2 = (payload: unknown): PersistedGlobalConfigV2 => {
+export const parsePersistedGlobalConfigV2 = (
+  payload: JsonValue | undefined,
+): PersistedGlobalConfigV2 => {
   assertSupportedConfigVersion(payload, 2);
   try {
     return persistedGlobalConfigV2Schema.parse(migratePersistedConfigShape(payload));
@@ -75,7 +79,7 @@ export const parsePersistedGlobalConfigV2 = (payload: unknown): PersistedGlobalC
   }
 };
 
-export const readPersistedGlobalConfigVersion = (payload: unknown): 2 | 3 => {
+export const readPersistedGlobalConfigVersion = (payload: JsonValue | undefined): 2 | 3 => {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }

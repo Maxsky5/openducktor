@@ -1,10 +1,11 @@
+import type { IpcMainInvokeEvent } from "electron";
 import {
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE,
 } from "../shared/electron-bridge-contract";
 
 type ElectronEditorClipboardIpcMain = {
-  handle(channel: string, listener: (event: unknown, type?: unknown) => string): void;
+  handle(channel: string, listener: (event: IpcMainInvokeEvent, type?: string) => string): void;
 };
 
 type ElectronEditorClipboard = {
@@ -19,7 +20,7 @@ type RegisterElectronEditorClipboardIpcInput = {
 
 export const readEditorClipboardText = (
   clipboard: ElectronEditorClipboard,
-  type?: unknown,
+  type?: string,
 ): string => {
   if (type === undefined) return clipboard.readText();
   if (type !== PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE) {

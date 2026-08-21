@@ -6,7 +6,7 @@ export type QuestionToolDetail = {
   answers: string[];
 };
 
-const parseJsonIfPossible = (value: string | undefined): unknown => {
+const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined => {
   if (!value || value.trim().length === 0) {
     return undefined;
   }
@@ -15,13 +15,13 @@ const parseJsonIfPossible = (value: string | undefined): unknown => {
     return undefined;
   }
   try {
-    return JSON.parse(trimmed) as unknown;
+    return JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
   } catch {
     return undefined;
   }
 };
 
-const readQuestionPrompt = (value: unknown): string | null => {
+const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -42,7 +42,7 @@ const readQuestionPrompt = (value: unknown): string | null => {
   return null;
 };
 
-const normalizeAnswerValues = (value: unknown): string[] => {
+const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
@@ -64,7 +64,7 @@ const normalizeAnswerValues = (value: unknown): string[] => {
   );
 };
 
-const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
+const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -85,7 +85,7 @@ const collectQuestionDetails = (value: unknown): QuestionToolDetail[] => {
   }, []);
 };
 
-const normalizeAnswerGroups = (value: unknown): string[][] => {
+const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
@@ -112,7 +112,7 @@ const normalizeAnswerGroups = (value: unknown): string[][] => {
   return normalizeAnswerGroups(nested);
 };
 
-const firstNonEmptyAnswerGroups = (candidates: unknown[]): string[][] => {
+const firstNonEmptyAnswerGroups = (candidates: Array<JsonValue | undefined>): string[][] => {
   for (const candidate of candidates) {
     const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
       const answers = entry.filter((value) => value.trim().length > 0);

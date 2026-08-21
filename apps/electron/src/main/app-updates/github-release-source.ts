@@ -1,4 +1,5 @@
 import { compare, prerelease, valid } from "semver";
+import type { JsonValue } from "@openducktor/contracts";
 
 export type GitHubRelease = {
   prerelease: boolean;
@@ -23,7 +24,7 @@ const apiHeaders = {
 
 const GITHUB_RELEASE_REQUEST_TIMEOUT_MS = 15_000;
 
-const readObject = (value: unknown, description: string): object => {
+const readObject = (value: JsonValue | undefined, description: string): object => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${description} is not an object.`);
   }
@@ -46,7 +47,7 @@ const readBoolean = (value: object, property: string, description: string): bool
   return propertyValue;
 };
 
-const readRelease = (value: unknown): Omit<GitHubRelease, "version"> => {
+const readRelease = (value: JsonValue | undefined): Omit<GitHubRelease, "version"> => {
   const release = readObject(value, "GitHub release");
   const tagName = readString(release, "tag_name", "GitHub release");
   return {
@@ -55,7 +56,7 @@ const readRelease = (value: unknown): Omit<GitHubRelease, "version"> => {
   };
 };
 
-const parseRelease = (value: unknown): GitHubRelease => {
+const parseRelease = (value: JsonValue | undefined): GitHubRelease => {
   const release = readRelease(value);
   const { tagName } = release;
   const version = valid(tagName);
@@ -68,14 +69,18 @@ const parseRelease = (value: unknown): GitHubRelease => {
   };
 };
 
-const readJson = async (response: Response, description: string): Promise<unknown> => {
+const readJson = async (
+  response: Response,
+  description: string,
+): Promise<JsonValue | undefined> => {
   if (!response.ok) {
     throw new Error(`${description} returned HTTP ${response.status}.`);
   }
-  return response.json();
+  // SAFETY: Response.json returns parsed JSON wire data.
+  return (await response.json()) as JsonValue | undefined;
 };
 
-const parseReleasePage = (value: unknown): GitHubRelease[] => {
+const parseReleasePage = (value: JsonValue | undefined): GitHubRelease[] => {
   if (!Array.isArray(value)) {
     throw new Error("GitHub releases response is not an array.");
   }
@@ -90,7 +95,7 @@ const fetchReleaseJson = async (
   fetch: typeof globalThis.fetch,
   url: string,
   description: string,
-): Promise<{ response: Response; value: unknown }> => {
+): Promise<{ response: Response; value: JsonValue | undefined }> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();

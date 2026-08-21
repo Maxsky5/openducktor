@@ -8,7 +8,6 @@ import {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import * as sonnerActual from "sonner";
 import {
   createSessionStartWorkflowRunner,
   type SessionStartWorkflowResult,
@@ -22,7 +21,7 @@ import {
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
@@ -40,8 +39,6 @@ import {
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
 
 enableReactActEnvironment();
-
-const toastErrorMock = mock(() => {});
 
 type HookArgs = Parameters<typeof useSessionStartFlow>[0];
 
@@ -394,12 +391,6 @@ describe("useAgentStudioSessionStartFlow", () => {
   const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
   beforeEach(() => {
-    mock.module("sonner", () => ({
-      toast: {
-        error: toastErrorMock,
-      },
-    }));
-    toastErrorMock.mockClear();
     host.workspaceList = async () => [
       {
         workspaceId: "repo",
@@ -445,10 +436,6 @@ describe("useAgentStudioSessionStartFlow", () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.taskWorktreeGet = originalBuildContinuationTargetGet;
-  });
-
-  afterEach(async () => {
-    await restoreMockedModules([["sonner", async () => sonnerActual]]);
   });
 
   test("startSession starts a fresh session even when another session is active", async () => {
@@ -524,10 +511,10 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.waitFor((state) => state.isStarting);
     expect(harness.getLatest().isStarting).toBe(true);
 
-    await harness.run(async () => {
+    await harness.run(() => {
       startDeferred.resolve(sessionIdentity("session-new"));
-      await startPromise;
     });
+    await startPromise;
     await harness.waitFor((state) => !state.isStarting);
 
     await harness.unmount();
@@ -923,20 +910,22 @@ describe("useAgentStudioSessionStartFlow", () => {
         disabled: false,
       });
     });
-    await confirmSessionStartModal({
-      harness,
-      profileId: "planner",
-      modelId: "openai/gpt-5",
-      variant: "default",
-    });
+    await withMockedToast(async ({ toastErrorMock }) => {
+      await confirmSessionStartModal({
+        harness,
+        profileId: "planner",
+        modelId: "openai/gpt-5",
+        variant: "default",
+      });
 
-    expect(startAgentSession).toHaveBeenCalledTimes(1);
-    await harness.waitFor((state) => state.isStarting === false);
+      expect(startAgentSession).toHaveBeenCalledTimes(1);
+      await harness.waitFor((state) => state.isStarting === false);
 
-    expect(updateCalls).toEqual([]);
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-    expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
-      description: "start failed",
+      expect(updateCalls).toEqual([]);
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
+        description: "start failed",
+      });
     });
 
     await harness.unmount();
@@ -1250,17 +1239,19 @@ describe("useAgentStudioSessionStartFlow", () => {
         disabled: false,
       });
     });
-    await confirmSessionStartModal({
-      harness,
-      profileId: "builder",
-      modelId: "openai/gpt-5",
-      variant: "default",
-      startMode: "reuse",
-      sourceExternalSessionId: "session-existing",
-    });
+    await withMockedToast(async ({ toastErrorMock }) => {
+      await confirmSessionStartModal({
+        harness,
+        profileId: "builder",
+        modelId: "openai/gpt-5",
+        variant: "default",
+        startMode: "reuse",
+        sourceExternalSessionId: "session-existing",
+      });
 
-    await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
-    expect(updateCalls).toEqual([]);
+      await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
+      expect(updateCalls).toEqual([]);
+    });
 
     await harness.unmount();
   });

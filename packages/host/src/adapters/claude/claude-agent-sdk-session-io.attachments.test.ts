@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +24,7 @@ describe("Claude session I/O attachments and invalid updates", () => {
       const session = createClaudeSession({
         activity: "idle",
         query: {
-          applyFlagSettings: mock(async (_settings: unknown) => {}),
+          applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
           setModel: mock(async (_model?: string) => {}),
         } as unknown as ClaudeSession["query"],
         queue,
@@ -136,7 +137,7 @@ describe("Claude session I/O attachments and invalid updates", () => {
       const session = createClaudeSession({
         activity: "idle",
         query: {
-          applyFlagSettings: mock(async (_settings: unknown) => {}),
+          applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
           setModel: mock(async (_model?: string) => {}),
         } as unknown as ClaudeSession["query"],
       });
@@ -199,7 +200,7 @@ describe("Claude session I/O attachments and invalid updates", () => {
   });
 
   test("rejects unsupported live Claude effort changes without mutating session model", async () => {
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
     const session = createClaudeSession({
       model: {
         providerId: "claude",

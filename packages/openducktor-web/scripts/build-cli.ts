@@ -47,8 +47,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
 export const buildWebCli = (): Promise<void> => runWebBoundary(buildWebCliEffect());
 
 if (import.meta.main) {
-  await buildWebCli().catch((error: unknown) => {
-    console.error(errorMessage(error));
+  await buildWebCli().catch((cause: unknown) => {
+    console.error(errorMessage(cause));
     process.exit(1);
   });
 }

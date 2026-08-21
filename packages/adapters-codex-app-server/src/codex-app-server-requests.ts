@@ -1,9 +1,9 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerRequestId,
+  codexAppServerMcpServerElicitationRequestParamsSchema,
   isCodexAppServerCommandRequestMethod,
   isCodexAppServerFileMutationRequestMethod,
-  isCodexAppServerMcpServerElicitationRequestParams,
   isCodexAppServerPermissionRequestMethod,
   type RuntimeApprovalReplyOutcome,
   type RuntimeApprovalRequestType,
@@ -12,10 +12,14 @@ import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@opendu
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
-import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
+import type { CodexServerRequestRecord } from "./types";
 import type { JsonValue } from "@openducktor/contracts";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
+export {
+  parseCodexRuntimeNotificationRecord as parseNotificationRecord,
+  parseCodexRuntimeServerRequestRecord as parseServerRequestRecord,
+} from "./codex-runtime-event-schema";
 
 const MCP_APPROVAL_KIND_KEY = "codex_approval_kind";
 const MCP_APPROVAL_KIND_TOOL_CALL = "mcp_tool_call";
@@ -41,26 +45,6 @@ const APPROVE_ONCE_SESSION_AND_REJECT = [
   "approve_session",
   "reject",
 ] as const satisfies readonly RuntimeApprovalReplyOutcome[];
-
-export const parseServerRequestRecord = (value: unknown): CodexServerRequestRecord => {
-  if (!isPlainObject(value)) {
-    throw new Error("Codex app-server server request must be an object.");
-  }
-
-  const { id, method, params } = value;
-  if (id !== undefined && typeof id !== "number" && typeof id !== "string") {
-    throw new Error("Codex app-server server request id must be a string or number when present.");
-  }
-  if (typeof method !== "string" || method.trim().length === 0) {
-    throw new Error("Codex app-server server request is missing method.");
-  }
-
-  return {
-    ...(id !== undefined ? { id } : {}),
-    method: method.trim(),
-    ...(params !== undefined ? { params } : {}),
-  };
-};
 
 export const classifyCodexRequestMutation = (
   request: CodexServerRequestRecord,
@@ -104,7 +88,7 @@ const classifyApprovalRequestType = (
   return "runtime_tool";
 };
 
-const extractCommandText = (params: unknown): string | null => {
+const extractCommandText = (params: JsonValue | undefined): string | null => {
   if (!isPlainObject(params)) {
     return null;
   }
@@ -142,7 +126,7 @@ const extractCommandText = (params: unknown): string | null => {
   return null;
 };
 
-const extractCommandWorkingDirectory = (params: unknown): string | null =>
+const extractCommandWorkingDirectory = (params: JsonValue | undefined): string | null =>
   isPlainObject(params) ? extractStringField(params, ["cwd"]) : null;
 
 const hasNetworkApprovalContext = (request: CodexServerRequestRecord): boolean =>
@@ -152,7 +136,7 @@ const hasNetworkApprovalContext = (request: CodexServerRequestRecord): boolean =
   request.params.networkApprovalContext !== undefined &&
   request.params.networkApprovalContext !== null;
 
-const isDecisionObject = (value: unknown, key: string): boolean =>
+const isDecisionObject = (value: JsonValue | undefined, key: string): boolean =>
   isPlainObject(value) && key in value;
 
 const commandApprovalSupportedReplyOutcomes = (
@@ -297,15 +281,11 @@ const mcpToolApprovalMeta = (
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
-  if (!isCodexAppServerMcpServerElicitationRequestParams(request.params)) {
-    throw new Error("Codex MCP elicitation request params must match the app-server schema.");
-  }
-  if (request.params.mode !== "form" || !isPlainObject(request.params._meta)) {
+  const params = codexAppServerMcpServerElicitationRequestParamsSchema.parse(request.params);
+  if (params.mode !== "form" || !isPlainObject(params._meta)) {
     return null;
   }
-  return request.params._meta[MCP_APPROVAL_KIND_KEY] === MCP_APPROVAL_KIND_TOOL_CALL
-    ? request.params._meta
-    : null;
+  return params._meta[MCP_APPROVAL_KIND_KEY] === MCP_APPROVAL_KIND_TOOL_CALL ? params._meta : null;
 };
 
 const mcpToolApprovalSupportsPersistMode = (
@@ -346,13 +326,13 @@ export const toMcpElicitationApprovalRequest = (
   }
 
   const meta = mcpToolApprovalMeta(request);
-  if (!meta || !isCodexAppServerMcpServerElicitationRequestParams(request.params)) {
+  if (!meta) {
     return null;
   }
+  const params = codexAppServerMcpServerElicitationRequestParamsSchema.parse(request.params);
 
   const toolName =
-    extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ??
-    `${request.params.serverName} MCP tool`;
+    extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ?? `${params.serverName} MCP tool`;
   const toolTitle = extractStringField(meta, [MCP_APPROVAL_TOOL_TITLE_KEY]) ?? toolName;
   const toolDescription = extractStringField(meta, [MCP_APPROVAL_TOOL_DESCRIPTION_KEY]);
   const toolParams = meta[MCP_APPROVAL_TOOL_PARAMS_KEY];
@@ -360,7 +340,7 @@ export const toMcpElicitationApprovalRequest = (
   return {
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
-    summary: request.params.message,
+    summary: params.message,
     ...(toolDescription ? { details: toolDescription } : {}),
     tool: {
       name: toolName,
@@ -370,12 +350,12 @@ export const toMcpElicitationApprovalRequest = (
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
     metadata: {
-      serverName: request.params.serverName,
+      serverName: params.serverName,
     },
   };
 };
 
-export const extractTurnId = (value: unknown): string | null => {
+export const extractTurnId = (value: JsonValue | undefined): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -387,21 +367,13 @@ export const extractTurnId = (value: unknown): string | null => {
   return extractStringField(turn, ["id", "turnId"]);
 };
 
-export const extractThreadIdFromParams = (value: unknown): string | null => {
+export const extractThreadIdFromParams = (value: JsonValue | undefined): string | null => {
   return extractStringField(value, ["threadId", "thread_id", "conversationId"]);
 };
 
 export const codexTurnKey = (threadId: string, turnId: string): string => `${threadId}:${turnId}`;
 
-const assertParseableNotificationReceivedAt = (receivedAt: string): void => {
-  if (!Number.isFinite(Date.parse(receivedAt))) {
-    throw new Error(
-      `Codex app-server notification has an unparsable receivedAt timestamp '${receivedAt}'.`,
-    );
-  }
-};
-
-export const isTerminalTurnStatus = (value: unknown): boolean => {
+export const isTerminalTurnStatus = (value: JsonValue | undefined): boolean => {
   if (!isPlainObject(value)) {
     return false;
   }
@@ -495,28 +467,5 @@ export const parseQuestionRequest = (
     turnId,
     questionIds,
     serverRequestId: request.id,
-  };
-};
-
-export const parseNotificationRecord = (
-  value: unknown,
-  receivedAt?: string,
-): CodexNotificationRecord => {
-  if (!isPlainObject(value)) {
-    throw new Error("Codex app-server notification must be an object.");
-  }
-  const { method, params } = value;
-  if (typeof method !== "string" || method.trim().length === 0) {
-    throw new Error("Codex app-server notification is missing method.");
-  }
-  const parsedReceivedAt = receivedAt ?? value.receivedAt;
-  if (typeof parsedReceivedAt !== "string" || parsedReceivedAt.trim().length === 0) {
-    throw new Error("Codex app-server notification is missing receivedAt.");
-  }
-  assertParseableNotificationReceivedAt(parsedReceivedAt);
-  return {
-    method: method.trim(),
-    ...(params !== undefined ? { params } : {}),
-    receivedAt: parsedReceivedAt,
   };
 };

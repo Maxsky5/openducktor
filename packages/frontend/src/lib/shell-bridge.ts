@@ -3,6 +3,7 @@ import type {
   AgentSessionLiveRefreshInput,
   AppUpdateCommandResult,
   AppUpdateState,
+  JsonValue,
   TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
@@ -10,7 +11,7 @@ import type {
 } from "@openducktor/contracts";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 
-export type HostEventListener = (payload: unknown) => void;
+export type HostEventListener = (payload: JsonValue | undefined) => void;
 
 export type TaskStreamFrame = TaskEventStreamFrame;
 
@@ -36,7 +37,7 @@ export type HostBridge = {
   subscribeTaskStream: (
     input: { cursor: TaskEventCursor | null },
     onFrame: (frame: TaskStreamFrame) => void,
-    onTerminalFailure?: (error: unknown) => void,
+    onTerminalFailure?: (cause: unknown) => void,
   ) => Promise<TaskStreamSubscription>;
 };
 

@@ -1,4 +1,5 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
+import type { JsonValue } from "@openducktor/contracts";
 import { readStringProp } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionRecord } from "../../types";
@@ -9,7 +10,7 @@ import {
 import type { EventStreamRuntime } from "../shared";
 
 export const readExplicitUserMessageState = (
-  ...sources: Array<unknown>
+  ...sources: Array<JsonValue | undefined>
 ): AgentUserMessageState | undefined => {
   for (const source of sources) {
     const rawState = readStringProp(source, ["state"]);

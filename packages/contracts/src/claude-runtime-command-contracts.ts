@@ -147,8 +147,8 @@ export const claudeFileStatusesSchema = agentFileStatusesSchema;
 
 export type ClaudeRuntimeCommandContract<Input = unknown, Response = unknown> = {
   command: string;
-  inputSchema: { parse(value: unknown): Input };
-  responseSchema: { parse(value: unknown): Response };
+  inputSchema: z.ZodType<Input>;
+  responseSchema: z.ZodType<Response>;
 };
 
 export const CLAUDE_RUNTIME_COMMAND_CONTRACTS = {
@@ -215,9 +215,17 @@ export type ClaudeRuntimeCommandOutput<Command extends ClaudeRuntimeCommandName>
   ClaudeRuntimeCommandContractFor<Command>["responseSchema"]
 >;
 
-export const CLAUDE_RUNTIME_HOST_COMMAND_NAMES = Object.values(CLAUDE_RUNTIME_COMMAND_CONTRACTS)
-  .map((contract) => contract.command)
-  .sort();
+export const CLAUDE_RUNTIME_HOST_COMMAND_NAMES = [
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos.command,
+  CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles.command,
+] as const;
 
 export const CLAUDE_RUNTIME_COMMAND_CONTRACTS_BY_COMMAND = {
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels.command]:

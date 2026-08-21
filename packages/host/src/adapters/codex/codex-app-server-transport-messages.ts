@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type {
   CodexAppServerProtocolMessage,
@@ -5,90 +6,26 @@ import type {
 } from "../../ports/codex-app-server-port";
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS,
-  type CodexAppServerCommandExecutionRequestApprovalParams,
-  type CodexAppServerExecCommandApprovalParams,
-  type CodexAppServerPermissionsRequestApprovalParams,
+  type CodexAppServerServerNotification,
+  type CodexAppServerServerRequest,
   type CodexAppServerServerRequestMethod,
-  isCodexAppServerCommandAction,
-  isCodexAppServerJsonValue,
-  isCodexAppServerLegacyParsedCommand,
-  isCodexAppServerMcpServerElicitationRequestParams,
-  isCodexAppServerRequestPermissionProfile,
+  codexAppServerServerRequestSchema,
+  codexAppServerServerNotificationSchema,
 } from "../../ports/codex-app-server-protocol";
-import type { JsonValue } from "@openducktor/contracts";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerCurrentTimeReadResponse,
+  type CodexAppServerRequestId,
+  type JsonValue,
+} from "@openducktor/contracts";
 
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
-export const isJsonRecord = (value: unknown): value is Record<string, JsonValue> =>
+export const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isCodexServerRequestMethod = (method: string): method is CodexAppServerServerRequestMethod =>
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
-
-const isStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
-
-const isExecCommandApprovalParams = (
-  value: unknown,
-): value is CodexAppServerExecCommandApprovalParams =>
-  isJsonRecord(value) &&
-  (value.approvalId === null || typeof value.approvalId === "string") &&
-  typeof value.callId === "string" &&
-  isStringArray(value.command) &&
-  typeof value.conversationId === "string" &&
-  typeof value.cwd === "string" &&
-  Array.isArray(value.parsedCmd) &&
-  value.parsedCmd.every(isCodexAppServerLegacyParsedCommand) &&
-  (value.reason === null || typeof value.reason === "string");
-
-const isOptionalString = (value: unknown): boolean =>
-  value === undefined || value === null || typeof value === "string";
-
-const isOptionalJsonArray = (value: unknown): boolean =>
-  value === undefined ||
-  value === null ||
-  (Array.isArray(value) && value.every(isCodexAppServerJsonValue));
-
-const isCommandExecutionApprovalParams = (
-  value: unknown,
-): value is CodexAppServerCommandExecutionRequestApprovalParams =>
-  isJsonRecord(value) &&
-  typeof value.itemId === "string" &&
-  typeof value.startedAtMs === "number" &&
-  Number.isFinite(value.startedAtMs) &&
-  typeof value.threadId === "string" &&
-  typeof value.turnId === "string" &&
-  isOptionalString(value.approvalId) &&
-  isOptionalString(value.command) &&
-  isOptionalString(value.cwd) &&
-  isOptionalString(value.reason) &&
-  (value.commandActions === undefined ||
-    value.commandActions === null ||
-    (Array.isArray(value.commandActions) &&
-      value.commandActions.every(isCodexAppServerCommandAction))) &&
-  (value.additionalPermissions === undefined ||
-    value.additionalPermissions === null ||
-    isCodexAppServerRequestPermissionProfile(value.additionalPermissions)) &&
-  (value.networkApprovalContext === undefined ||
-    value.networkApprovalContext === null ||
-    isCodexAppServerJsonValue(value.networkApprovalContext)) &&
-  (value.proposedExecpolicyAmendment === undefined ||
-    value.proposedExecpolicyAmendment === null ||
-    isCodexAppServerJsonValue(value.proposedExecpolicyAmendment)) &&
-  isOptionalJsonArray(value.proposedNetworkPolicyAmendments);
-
-const isPermissionsRequestApprovalParams = (
-  value: unknown,
-): value is CodexAppServerPermissionsRequestApprovalParams =>
-  isJsonRecord(value) &&
-  typeof value.threadId === "string" &&
-  typeof value.turnId === "string" &&
-  typeof value.itemId === "string" &&
-  typeof value.startedAtMs === "number" &&
-  Number.isFinite(value.startedAtMs) &&
-  typeof value.cwd === "string" &&
-  isOptionalString(value.reason) &&
-  isCodexAppServerRequestPermissionProfile(value.permissions);
 
 export const resolveAfterQueuedMessages = (
   resolve: (value: CodexAppServerRequestResult) => void,
@@ -106,21 +43,56 @@ export const appendCapturedStderr = (current: string, line: string): string => {
   return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
 };
 
-export const extractErrorMessage = (value: unknown): string => {
+export const extractErrorMessage = (value: JsonValue | undefined): string => {
   if (typeof value === "string") {
     return value;
   }
   if (isJsonRecord(value) && typeof value.message === "string") {
     return value.message;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value ?? null);
 };
 
-export const parseStreamMessage = (
+type SendAutomaticServerResponse = (message: {
+  jsonrpc: "2.0";
+  id: CodexAppServerRequestId;
+  result: CodexAppServerCurrentTimeReadResponse;
+}) => Effect.Effect<void, Error>;
+
+export const respondToAutomaticServerRequest = (
+  request: CodexAppServerServerRequest,
+  sendResponse: SendAutomaticServerResponse,
+  failFast: (error: Error) => void,
+): boolean => {
+  if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.CURRENT_TIME_READ) {
+    return false;
+  }
+  const result: CodexAppServerCurrentTimeReadResponse = {
+    currentTimeAt: Math.floor(Date.now() / 1_000),
+  };
+  Effect.runFork(
+    sendResponse({ jsonrpc: "2.0", id: request.id, result }).pipe(
+      Effect.catchAll((error) => Effect.sync(() => failFast(error))),
+    ),
+  );
+  return true;
+};
+
+export function parseStreamMessage(
+  runtimeId: string,
+  message: Record<string, JsonValue>,
+  kind: "notification",
+): CodexAppServerServerNotification;
+export function parseStreamMessage(
+  runtimeId: string,
+  message: Record<string, JsonValue>,
+  kind: "server_request",
+): CodexAppServerServerRequest;
+export function parseStreamMessage(
   runtimeId: string,
   message: Record<string, JsonValue>,
   kind: "notification" | "server_request",
-): CodexAppServerProtocolMessage => {
+): CodexAppServerProtocolMessage {
   if (typeof message.method !== "string" || message.method.trim().length === 0) {
     throw new HostValidationError({
       message: `Codex app-server ${kind} for ${runtimeId} is missing a method`,
@@ -135,13 +107,6 @@ export const parseStreamMessage = (
       details: { runtimeId, kind, method: message.method },
     });
   }
-  if (!isCodexAppServerJsonValue(message.params)) {
-    throw new HostValidationError({
-      message: `Codex app-server ${kind} params for ${runtimeId} must be JSON-compatible`,
-      field: "params",
-      details: { runtimeId, kind, method: message.method },
-    });
-  }
   if (kind === "server_request") {
     if (typeof message.id !== "number" && typeof message.id !== "string") {
       throw new HostValidationError({
@@ -150,7 +115,6 @@ export const parseStreamMessage = (
         details: { runtimeId, kind },
       });
     }
-    const serverRequestId = message.id;
     if (!isCodexServerRequestMethod(message.method)) {
       throw new HostValidationError({
         message: `Unsupported Codex app-server server request method for ${runtimeId}: ${message.method}`,
@@ -158,67 +122,16 @@ export const parseStreamMessage = (
         details: { runtimeId, kind, method: message.method },
       });
     }
-    if (message.method === "execCommandApproval") {
-      if (!isExecCommandApprovalParams(message.params)) {
-        throw new HostValidationError({
-          message: `Codex app-server execCommandApproval request for ${runtimeId} has invalid params`,
-          field: "params",
-          details: { runtimeId, kind, method: message.method },
-        });
-      }
-      return {
-        method: message.method,
-        id: serverRequestId,
-        params: message.params,
-      };
+    const parsed = codexAppServerServerRequestSchema.safeParse(message);
+    if (!parsed.success) {
+      throw new HostValidationError({
+        message: `Codex app-server ${message.method} request for ${runtimeId} has invalid params`,
+        field: "params",
+        cause: parsed.error,
+        details: { runtimeId, kind, method: message.method },
+      });
     }
-    if (message.method === "item/commandExecution/requestApproval") {
-      if (!isCommandExecutionApprovalParams(message.params)) {
-        throw new HostValidationError({
-          message: `Codex app-server command execution approval request for ${runtimeId} has invalid params`,
-          field: "params",
-          details: { runtimeId, kind, method: message.method },
-        });
-      }
-      return {
-        method: message.method,
-        id: serverRequestId,
-        params: message.params,
-      };
-    }
-    if (message.method === "item/permissions/requestApproval") {
-      if (!isPermissionsRequestApprovalParams(message.params)) {
-        throw new HostValidationError({
-          message: `Codex app-server permissions approval request for ${runtimeId} has invalid params`,
-          field: "params",
-          details: { runtimeId, kind, method: message.method },
-        });
-      }
-      return {
-        method: message.method,
-        id: serverRequestId,
-        params: message.params,
-      };
-    }
-    if (message.method === "mcpServer/elicitation/request") {
-      if (!isCodexAppServerMcpServerElicitationRequestParams(message.params)) {
-        throw new HostValidationError({
-          message: `Codex app-server MCP server elicitation request for ${runtimeId} has invalid params`,
-          field: "params",
-          details: { runtimeId, kind, method: message.method },
-        });
-      }
-      return {
-        method: message.method,
-        id: serverRequestId,
-        params: message.params,
-      };
-    }
-    return {
-      method: message.method,
-      id: serverRequestId,
-      params: message.params,
-    };
+    return parsed.data;
   }
   if (isCodexServerRequestMethod(message.method)) {
     throw new HostValidationError({
@@ -227,8 +140,14 @@ export const parseStreamMessage = (
       details: { runtimeId, kind, method: message.method },
     });
   }
-  return {
-    method: message.method,
-    params: message.params,
-  };
-};
+  const parsed = codexAppServerServerNotificationSchema.safeParse(message);
+  if (!parsed.success) {
+    throw new HostValidationError({
+      message: `Codex app-server notification for ${runtimeId} has invalid params`,
+      field: "params",
+      cause: parsed.error,
+      details: { runtimeId, kind, method: message.method },
+    });
+  }
+  return parsed.data;
+}

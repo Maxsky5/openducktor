@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { IDisposable, ITerminalAddon } from "@xterm/xterm";
 import { render, waitFor } from "@testing-library/react";
 import { AgentStudioDevServerTerminal } from "./agent-studio-dev-server-terminal";
 
@@ -13,7 +14,7 @@ afterEach(() => {
 
 const createQueuedWriteTerminalHarness = (queuedData: string) => {
   const open = mock((_container: HTMLElement) => {});
-  const loadAddon = mock((_addon: unknown) => {});
+  const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
   const fit = mock(() => {});
   let screen = "";
   const queuedWrites: Array<() => void> = [];
@@ -49,7 +50,7 @@ const createQueuedWriteTerminalHarness = (queuedData: string) => {
       callback?.();
     });
     open(container);
-    loadAddon({});
+    loadAddon({ dispose: () => {} });
     return {
       terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
       fitAddon: { dispose: mock(() => {}), fit },
@@ -66,7 +67,7 @@ const createQueuedWriteTerminalHarness = (queuedData: string) => {
 describe("AgentStudioDevServerTerminal", () => {
   test("creates a read-only terminal and replays buffered chunks", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {});
@@ -84,7 +85,7 @@ describe("AgentStudioDevServerTerminal", () => {
     ) => {
       capturedOptions = options;
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -128,7 +129,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("appends only new chunks until a reset token forces replay", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {});
@@ -141,7 +142,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const onRendererError = () => {};
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -250,7 +251,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("continues rendering live chunks when an incremental write callback stalls", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {});
@@ -269,7 +270,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const onRendererError = () => {};
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -397,7 +398,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("clears stale terminal rows before replaying a reset window", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     let screen = "";
     const reset = mock(() => {});
@@ -412,7 +413,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const onRendererError = () => {};
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -482,7 +483,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("replays from scratch when the task scope changes with the same script id", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     let screen = "";
     const reset = mock(() => {
@@ -499,7 +500,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const onRendererError = () => {};
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -568,7 +569,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("preserves split ANSI sequences across replay and incremental writes", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {
@@ -585,7 +586,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const onRendererError = () => {};
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: {
           clear,
@@ -924,7 +925,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("surfaces renderer update failures", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {});
@@ -940,7 +941,7 @@ describe("AgentStudioDevServerTerminal", () => {
     });
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
@@ -1021,7 +1022,7 @@ describe("AgentStudioDevServerTerminal", () => {
 
   test("copies terminal selection on keyboard copy shortcut", async () => {
     const open = mock((_container: HTMLElement) => {});
-    const loadAddon = mock((_addon: unknown) => {});
+    const loadAddon = mock((_addon: ITerminalAddon | IDisposable) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
     const clear = mock(() => {});
@@ -1035,7 +1036,7 @@ describe("AgentStudioDevServerTerminal", () => {
     let keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
     const createTerminalBinding = (container: HTMLElement) => {
       open(container);
-      loadAddon({});
+      loadAddon({ dispose: () => {} });
       return {
         terminal: {
           attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {

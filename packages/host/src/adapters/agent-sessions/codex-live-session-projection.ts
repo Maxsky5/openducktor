@@ -24,7 +24,7 @@ type CodexProjectionRuntime = {
 type QueuedMutation = {
   readonly mutation: CodexLiveSessionMutation;
   readonly resolve: () => void;
-  readonly reject: (error: unknown) => void;
+  readonly reject: (cause: unknown) => void;
 };
 
 const refKey = (ref: AgentSessionLiveRef): string =>

@@ -1,20 +1,26 @@
-import { ElectronValidationError } from "../effect/electron-errors";
+import { errorMessage, ElectronValidationError } from "../effect/electron-errors";
 import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
-import type { JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { hostInvokeFailureFromError, parseHostCommandResponse } from "@openducktor/host";
+import type { IpcMainInvokeEvent } from "electron";
+import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke";
 
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (event: unknown, request: unknown) => Promise<ElectronHostInvokeResponse>,
+    listener: (event: IpcMainInvokeEvent, request: unknown) => Promise<ElectronHostInvokeResponse>,
   ): void;
 };
 
 type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
-  invoke(command: string, args?: Record<string, JsonValue>): Promise<unknown>;
+  invoke(
+    command: string,
+    args?: Record<string, JsonValue>,
+  ): Promise<UnvalidatedElectronHostInvokeResult>;
 };
 
 type ValidatedElectronHostInvokeRequest = {
@@ -22,25 +28,26 @@ type ValidatedElectronHostInvokeRequest = {
   args?: Record<string, JsonValue>;
 };
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
+const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostInvokeRequest => {
-  if (!isRecord(request)) {
+  const parsedRequest = jsonValueSchema.safeParse(request);
+  if (!parsedRequest.success || !isRecord(parsedRequest.data)) {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke request must be an object.",
       field: "request",
     });
   }
-  if (typeof request.command !== "string") {
+  if (typeof parsedRequest.data.command !== "string") {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke command must be a string.",
       field: "command",
     });
   }
-  if (request.args !== undefined && !isRecord(request.args)) {
+  if (parsedRequest.data.args !== undefined && !isRecord(parsedRequest.data.args)) {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke arguments must be an object when provided.",
@@ -48,9 +55,37 @@ const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostI
     });
   }
 
-  return request.args === undefined
-    ? { command: request.command }
-    : { command: request.command, args: request.args };
+  return parsedRequest.data.args === undefined
+    ? { command: parsedRequest.data.command }
+    : { command: parsedRequest.data.command, args: parsedRequest.data.args };
+};
+
+const validateElectronHostInvokeResult = (
+  command: string,
+  result: UnvalidatedElectronHostInvokeResult,
+): ElectronHostInvokeResponse => {
+  if (!result.ok) {
+    return { status: "success", payload: result };
+  }
+
+  try {
+    return {
+      status: "success",
+      payload: { ok: true, value: parseHostCommandResponse(command, result.value) },
+    };
+  } catch (cause) {
+    const failure = hostInvokeFailureFromError(cause);
+    return {
+      status: "success",
+      payload: {
+        ok: false,
+        error: {
+          message: errorMessage(cause),
+          ...(failure ? { failure } : {}),
+        },
+      },
+    };
+  }
 };
 
 export const registerElectronHostInvokeHandler = (
@@ -63,7 +98,9 @@ export const registerElectronHostInvokeHandler = (
     }
 
     const parsedRequest = readElectronHostInvokeRequest(request);
-    const invocation = options.invoke(parsedRequest.command, parsedRequest.args);
-    return { status: "success", payload: await invocation };
+    return validateElectronHostInvokeResult(
+      parsedRequest.command,
+      await options.invoke(parsedRequest.command, parsedRequest.args),
+    );
   });
 };

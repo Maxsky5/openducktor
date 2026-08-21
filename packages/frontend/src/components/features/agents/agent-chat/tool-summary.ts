@@ -91,7 +91,7 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
     if (Array.isArray(parsed)) {
       return null;
     }
@@ -114,7 +114,7 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 };
 
-const countTodosFromUnknown = (value: unknown): number | null => {
+const countTodosFromUnknown = (value: JsonValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
@@ -143,7 +143,7 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
-    const parsed = JSON.parse(output) as unknown;
+    const parsed = JSON.parse(output) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
     return countTodosFromUnknown(parsed);
   } catch {
     return null;

@@ -16,6 +16,8 @@ import {
   makeClientWithEvents,
   makeSessionInput,
   makeSessionRecord,
+  permissionAskedEvent,
+  questionAskedEvent,
   runtimeSourceSyncChildSessionCreatedEvent,
   runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
   syncChildSessionCreatedEvent,
@@ -100,31 +102,25 @@ const assistantTaskToolEvent = (input: {
   }) as unknown as Event;
 
 const childPermissionEvent = (childSessionId: string): Event =>
-  ({
-    type: "permission.asked",
-    properties: {
-      sessionID: childSessionId,
-      id: "permission-child-1",
-      permission: "read",
-      patterns: ["omp.json"],
-    },
-  }) as unknown as Event;
+  permissionAskedEvent({
+    requestId: "permission-child-1",
+    sessionId: childSessionId,
+    permission: "read",
+    patterns: ["omp.json"],
+  });
 
 const childQuestionEvent = (childSessionId: string): Event =>
-  ({
-    type: "question.asked",
-    properties: {
-      sessionID: childSessionId,
-      id: "question-child-1",
-      questions: [
-        {
-          header: "Scope",
-          question: "Pick target",
-          options: [{ label: "Current file", description: "Inspect only the requested file" }],
-        },
-      ],
-    },
-  }) as unknown as Event;
+  questionAskedEvent({
+    requestId: "question-child-1",
+    sessionId: childSessionId,
+    questions: [
+      {
+        header: "Scope",
+        question: "Pick target",
+        options: [{ label: "Current file", description: "Inspect only the requested file" }],
+      },
+    ],
+  });
 
 const syncAssistantSubtaskEvent = (input: {
   messageId: string;
@@ -345,6 +341,7 @@ describe("session registry runtime event transport", () => {
     const emitted = await runRuntimeEventTransport(
       [
         {
+          id: "event-status-external-session-1",
           type: "session.status",
           properties: {
             sessionID: "external-session-1",
@@ -352,6 +349,7 @@ describe("session registry runtime event transport", () => {
           },
         } as unknown as GlobalEventPayload,
         {
+          id: "event-status-external-session-2",
           type: "session.status",
           properties: {
             sessionID: "external-session-2",
@@ -365,7 +363,7 @@ describe("session registry runtime event transport", () => {
     expect(emitted.filter((event) => event.type === "session_error")).toEqual([
       expect.objectContaining({
         externalSessionId: "external-session-1",
-        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+        message: expect.stringContaining("session.status"),
       }),
     ]);
     expect(emitted).toContainEqual(
@@ -381,6 +379,7 @@ describe("session registry runtime event transport", () => {
     const emitted = await runRuntimeEventTransport(
       [
         {
+          id: "event-status-external-session-1",
           type: "session.status",
           properties: {
             sessionID: "external-session-1",

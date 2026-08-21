@@ -31,7 +31,8 @@ const toolStreamStateFor = (session: object): ToolStreamState => {
 
 const tryParseJsonRecord = (json: string): Record<string, JsonValue> | null => {
   try {
-    const parsed = JSON.parse(json) as unknown;
+    // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
+    const parsed = JSON.parse(json) as JsonValue;
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;

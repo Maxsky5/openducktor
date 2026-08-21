@@ -1,6 +1,7 @@
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
+import type { JsonValue } from "@openducktor/contracts";
 
-export const readClaudeTurnOriginKind = (message: unknown): string | undefined => {
+export const readClaudeTurnOriginKind = (message: JsonValue | undefined): string | undefined => {
   if (!isRecord(message) || message.shouldQuery === false) {
     return undefined;
   }
@@ -15,7 +16,7 @@ export const shouldFinalizeClaudeTurn = (
   originKind === "human" ||
   (originKind === "task-notification" && activeBackgroundSubagentTaskCount === 0);
 
-export const isClaudeHumanUserMessage = (message: unknown): boolean => {
+export const isClaudeHumanUserMessage = (message: JsonValue | undefined): boolean => {
   if (!isRecord(message) || message.isSynthetic === true || message.shouldQuery === false) {
     return false;
   }

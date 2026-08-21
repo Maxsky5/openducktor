@@ -57,7 +57,7 @@ const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
   const events: string[] = [];
   const bridge = createTestShellBridge();
   let configuredBridge: ShellBridge | null = null;
-  const reportSettingsPreloadError = mock((_error: unknown) => {
+  const reportSettingsPreloadError = mock((_cause: unknown) => {
     events.push("reportSettingsPreloadError");
   });
   const renderApp = mock((_rootElement: HTMLElement) => {
@@ -287,7 +287,7 @@ describe("shell entrypoints", () => {
       /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*prepare:\s*initializeElectronWindowChrome,\s*routerMode:\s*"hash",?\s*\}\)/u,
     );
     expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
+    expect(source).toContain('console.error("Critical Electron bootstrap failure", cause);');
     expectNoManualShellBootstrapSteps(source);
   });
 
@@ -301,7 +301,7 @@ describe("shell entrypoints", () => {
     expect(source).toContain("prepare: loadBrowserRuntimeConfig");
     expect(source).toContain("createShellBridge: createBrowserShellBridge");
     expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical browser bootstrap failure", error);');
+    expect(source).toContain('console.error("Critical browser bootstrap failure", cause);');
     expectNoManualShellBootstrapSteps(source);
   });
 

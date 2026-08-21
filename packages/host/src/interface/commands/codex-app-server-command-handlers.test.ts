@@ -1,8 +1,12 @@
+import type { CodexAppServerRequestInput } from "../../ports/codex-app-server-port";
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
-import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
+import {
+  parseCodexAppServerRequestResult,
+  type CodexAppServerRequestMethod,
+  type JsonValue,
+} from "@openducktor/contracts";
 import {
   type CreateHostCommandRouterInput,
   createEffectHostCommandRouter,
@@ -14,13 +18,64 @@ import { createCodexAppServerCommandHandlers } from "./codex-app-server-command-
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
+const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
+  parseCodexAppServerRequestResult(method, value);
+
+const threadStartResult = (threadId = "thread-1") =>
+  codexResult("thread/start", {
+    approvalPolicy: "on-request",
+    approvalsReviewer: "user",
+    cwd: "/repo",
+    instructionSources: [],
+    model: "gpt-5",
+    modelProvider: "openai",
+    reasoningEffort: "medium",
+    sandbox: {
+      type: "workspaceWrite",
+      writableRoots: ["/repo"],
+      networkAccess: true,
+      excludeTmpdirEnvVar: true,
+      excludeSlashTmp: true,
+    },
+    serviceTier: null,
+    thread: {
+      id: threadId,
+      extra: null,
+      sessionId: threadId,
+      forkedFromId: null,
+      parentThreadId: null,
+      preview: "Test thread",
+      ephemeral: false,
+      section: null,
+      sectionEnteredAt: null,
+      projectId: null,
+      historyMode: "paginated",
+      modelProvider: "openai",
+      createdAt: 1,
+      updatedAt: 1,
+      recencyAt: 1,
+      status: { type: "active", activeFlags: [] },
+      path: null,
+      cwd: "/repo",
+      cliVersion: "0.149.0-test",
+      source: "appServer",
+      canAcceptDirectInput: true,
+      threadSource: null,
+      agentNickname: null,
+      agentRole: null,
+      gitInfo: null,
+      name: null,
+      turns: [],
+    },
+  });
+
 describe("createCodexAppServerCommandHandlers", () => {
   test("forwards thread compaction requests to the Codex service", async () => {
     const requests: unknown[] = [];
     const service: CodexAppServerService = {
       request(input) {
         requests.push(input);
-        return Effect.succeed({} as CodexAppServerRequestResult);
+        return Effect.succeed(codexResult("thread/compact/start", {}));
       },
       listLoadedThreads() {
         return Effect.succeed({ data: [], nextCursor: null });
@@ -54,47 +109,25 @@ describe("createCodexAppServerCommandHandlers", () => {
     const service: CodexAppServerService = {
       request(input) {
         if (input.method === "thread/start") {
-          return Effect.succeed({
-            approvalPolicy: "on-request",
-            approvalsReviewer: "user",
-            cwd: "/repo",
-            instructionSources: [],
-            model: "gpt-5",
-            modelProvider: "openai",
-            reasoningEffort: "medium",
-            sandbox: {
-              type: "workspaceWrite",
-              writableRoots: ["/repo"],
-              networkAccess: true,
-              excludeTmpdirEnvVar: true,
-              excludeSlashTmp: true,
-            },
-            serviceTier: null,
-            thread: {
-              id: "thread-1",
-              cwd: "/repo",
-              createdAt: 1,
-              updatedAt: 1,
-              title: null,
-              status: { type: "active", activeFlags: [] },
-            },
-          } as unknown as CodexAppServerRequestResult);
+          return Effect.succeed(threadStartResult());
         }
         if (input.method === "turn/start") {
-          return Effect.succeed({
-            turn: {
-              id: "turn-1",
-              startedAt: 1,
-              completedAt: null,
-              durationMs: null,
-              error: null,
-              items: [],
-              itemsView: "full",
-              status: { type: "active" },
-            },
-          } as CodexAppServerRequestResult);
+          return Effect.succeed(
+            codexResult("turn/start", {
+              turn: {
+                id: "turn-1",
+                startedAt: 1,
+                completedAt: null,
+                durationMs: null,
+                error: null,
+                items: [],
+                itemsView: "full",
+                status: { type: "active" },
+              },
+            }),
+          );
         }
-        return Effect.succeed({ data: [], nextCursor: null } as CodexAppServerRequestResult);
+        return Effect.succeed(codexResult("model/list", { data: [], nextCursor: null }));
       },
       listLoadedThreads() {
         return Effect.succeed({ data: [], nextCursor: null });
@@ -124,7 +157,6 @@ describe("createCodexAppServerCommandHandlers", () => {
         developerInstructions: "Use the repo rules.",
         sandbox: "workspace-write",
         model: "gpt-5",
-        effort: "medium",
       },
     });
     await router.invoke("codex_app_server_request", {
@@ -134,7 +166,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         approvalPolicy: "on-request",
         approvalsReviewer: "user",
         threadId: "thread-1",
-        input: [{ type: "text", text: "check network" }],
+        input: [{ type: "text", text: "check network", text_elements: [] }],
         sandboxPolicy: {
           type: "workspaceWrite",
           writableRoots: ["/repo"],
@@ -153,7 +185,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         approvalPolicy: "on-request",
         approvalsReviewer: "user",
         threadId: "thread-1",
-        input: [{ type: "text", text: "check read-only network" }],
+        input: [{ type: "text", text: "check read-only network", text_elements: [] }],
         sandboxPolicy: {
           type: "readOnly",
           networkAccess: true,
@@ -171,9 +203,7 @@ describe("createCodexAppServerCommandHandlers", () => {
   });
 
   test("reports policy log failures without failing a completed Codex request", async () => {
-    const committedResult = {
-      thread: { id: "thread-1" },
-    } as unknown as CodexAppServerRequestResult;
+    const committedResult = threadStartResult();
     const persistenceFailure = new HostOperationError({
       operation: "openducktor.logs.append",
       message: "log append failed",
@@ -217,7 +247,7 @@ describe("createCodexAppServerCommandHandlers", () => {
   test("routes Codex app-server commands to the service", async () => {
     const calls: Array<{
       method: keyof CodexAppServerService;
-      input: unknown;
+      input: CodexAppServerRequestInput | JsonValue | undefined;
     }> = [];
     const service: CodexAppServerService = {
       request(input) {
@@ -259,7 +289,7 @@ describe("createCodexAppServerCommandHandlers", () => {
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "skills/list",
-        params: { cwd: "/repo", forceReload: false },
+        params: { cwds: ["/repo"], forceReload: false },
       }),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
@@ -294,7 +324,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         input: {
           runtimeId: "runtime-1",
           method: "skills/list",
-          params: { cwd: "/repo", forceReload: false },
+          params: { cwds: ["/repo"], forceReload: false },
         },
       },
       {
@@ -388,7 +418,7 @@ describe("createCodexAppServerCommandHandlers", () => {
 
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
-    const unexpectedCall = (input: unknown) =>
+    const unexpectedCall = (input: CodexAppServerRequestInput | JsonValue | undefined) =>
       Effect.sync(() => {
         calls.push(input);
       }).pipe(
@@ -452,7 +482,7 @@ describe("createCodexAppServerCommandHandlers", () => {
           method: "model/list",
           params,
         }),
-      ).rejects.toThrow("params must be a JSON object.");
+      ).rejects.toThrow("Invalid Codex app-server request params for method model/list");
     }
     expect(calls).toEqual([]);
   });

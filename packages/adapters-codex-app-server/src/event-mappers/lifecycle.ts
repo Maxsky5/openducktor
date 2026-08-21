@@ -1,4 +1,5 @@
 import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
+import type { JsonValue } from "@openducktor/contracts";
 import {
   codexItemId,
   codexItemTypeMatches,
@@ -16,7 +17,7 @@ import { noCodexMapperState } from "../codex-event-mapper";
 
 const toSessionCompactedEvent = (
   ctx: CodexMappingContext,
-  raw: unknown,
+  raw: JsonValue | undefined,
   messageId?: string,
 ): CodexCanonicalSessionCompactedEvent => ({
   kind: "session_compacted",
@@ -32,7 +33,7 @@ const toSessionCompactedEvent = (
 
 const toSessionCompactionStartedEvent = (
   ctx: CodexMappingContext,
-  raw: unknown,
+  raw: JsonValue | undefined,
   messageId?: string,
 ): CodexCanonicalSessionCompactionStartedEvent => ({
   kind: "session_compaction_started",

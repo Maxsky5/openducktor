@@ -1,8 +1,11 @@
 import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveRefreshInput,
-  agentSessionLiveEnvelopeSchema,
-  hostInvokeFailureSchema,
+  type HostErrorResponse,
+  type HostEventChannel,
+  type HostEventEnvelope,
+  parseHostEventEnvelope,
+  type JsonValue,
   type TaskEventCursor,
 } from "@openducktor/contracts";
 import type { DevServerEventSubscription } from "@openducktor/frontend";
@@ -10,15 +13,11 @@ import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
-import {
-  browserLiveControlEvent,
-  isBrowserLiveControlEvent,
-} from "@openducktor/frontend/lib/browser-live-control-events";
+import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
 import type {
   TaskStreamFrame,
   TaskStreamSubscription,
 } from "@openducktor/frontend/lib/shell-bridge";
-import type { HostEventChannel } from "@openducktor/host";
 import {
   createAgentSessionLiveAttachment,
   createHostClient,
@@ -36,11 +35,15 @@ import {
   type WebError,
   WebHostRequestError,
 } from "./effect/web-errors";
-import { readLocalHostErrorPayloadEffect } from "./local-host-errors";
+import {
+  readLocalHostErrorPayloadEffect,
+  readLocalHostInvokeErrorPayloadEffect,
+} from "./local-host-errors";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
-import type { JsonValue } from "@openducktor/contracts";
 
-type BrowserSseListener = (payload: unknown) => void;
+type BrowserSseControlEvent = ReturnType<typeof browserLiveControlEvent>;
+type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
+type BrowserSseListener = (event: BrowserSseEvent) => void;
 type BrowserSseListenerRegistration = {
   channel: HostEventChannel;
   listener: BrowserSseListener;
@@ -71,18 +74,39 @@ type BrowserSseSubscription = {
   ready: Promise<string>;
   unsubscribe: () => void;
 };
+type LocalHostRequestErrorInput = {
+  message: string;
+  status: number;
+  cause?: HostErrorResponse;
+  failureKind?: string;
+};
+
+const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseControlEvent =>
+  "__openducktorBrowserLive" in event;
+
+const asEventListener = (listener: (...args: never[]) => void): EventListener => {
+  // SAFETY: Each listener is registered only for the EventSource event shape it accepts.
+  return listener as EventListener;
+};
 
 let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
 let nextSseTransportEpoch = 0;
 let sessionPromise: Promise<void> | null = null;
 
-const readFailureKind = (payload: unknown): string | undefined => {
-  if (!payload || typeof payload !== "object" || !("failureKind" in payload)) {
-    return undefined;
+const createLocalHostRequestError = (
+  response: Response,
+  message: string,
+  payload: HostErrorResponse | null,
+): WebHostRequestError => {
+  const input: LocalHostRequestErrorInput = { message, status: response.status };
+  if (payload !== null) {
+    input.cause = payload;
   }
-  const failureKind = payload.failureKind;
-  return typeof failureKind === "string" && failureKind.trim() ? failureKind : undefined;
+  if (payload?.failureKind) {
+    input.failureKind = payload.failureKind;
+  }
+  return new WebHostRequestError(input);
 };
 
 const localHostRequestErrorEffect = (
@@ -90,40 +114,18 @@ const localHostRequestErrorEffect = (
 ): Effect.Effect<never, WebDependencyError | WebHostRequestError> =>
   Effect.gen(function* () {
     const { message, payload } = yield* readLocalHostErrorPayloadEffect(response);
-    const failureKind = payload !== null ? readFailureKind(payload) : undefined;
-    return yield* new WebHostRequestError({
-      message,
-      status: response.status,
-      ...(payload !== null ? { cause: payload } : {}),
-      ...(failureKind ? { failureKind } : {}),
-    });
+    return yield* createLocalHostRequestError(response, message, payload);
   });
 
 const localHostInvokeErrorEffect = (
   response: Response,
 ): Effect.Effect<never, WebDependencyError | WebHostRequestError | HostInvokeError> =>
   Effect.gen(function* () {
-    const { message, payload } = yield* readLocalHostErrorPayloadEffect(response);
-    if (payload && typeof payload === "object" && "failure" in payload) {
-      const failure = yield* Effect.try({
-        try: () => hostInvokeFailureSchema.parse(payload.failure),
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "local-web-host",
-            operation: "parse-invoke-failure",
-            message: "The local host returned an invalid invoke failure envelope.",
-            cause,
-          }),
-      });
-      return yield* Effect.fail(new HostInvokeError(message, failure));
+    const { message, payload } = yield* readLocalHostInvokeErrorPayloadEffect(response);
+    if (payload?.failure) {
+      return yield* Effect.fail(new HostInvokeError(message, payload.failure));
     }
-    const failureKind = payload !== null ? readFailureKind(payload) : undefined;
-    return yield* new WebHostRequestError({
-      message,
-      status: response.status,
-      ...(payload !== null ? { cause: payload } : {}),
-      ...(failureKind ? { failureKind } : {}),
-    });
+    return yield* createLocalHostRequestError(response, message, payload);
   });
 
 export const ensureLocalHostSessionEffect = (): Effect.Effect<void, WebError> =>
@@ -158,9 +160,9 @@ export const ensureLocalHostSession = (): Promise<void> => {
     return sessionPromise;
   }
 
-  sessionPromise = runWebBoundary(ensureLocalHostSessionEffect()).catch((error: unknown) => {
+  sessionPromise = runWebBoundary(ensureLocalHostSessionEffect()).catch((cause: unknown) => {
     sessionPromise = null;
-    throw error;
+    throw cause;
   });
 
   return sessionPromise;
@@ -214,7 +216,7 @@ const invokeLocalHostEffect = <T>(
     }
 
     return yield* Effect.tryPromise({
-      try: () => response.json() as Promise<T>,
+      try: () => response.json(),
       catch: (cause) =>
         new WebDependencyError({
           dependency: "local-web-host",
@@ -233,17 +235,7 @@ const createHttpInvoke =
 
 export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
 
-const parseHostEvent = (raw: string): { channel: string; payload: unknown } => {
-  const value: unknown = JSON.parse(raw);
-  if (!value || typeof value !== "object") {
-    throw new Error("Host event payload must be an object.");
-  }
-  const record = value as Record<string, JsonValue>;
-  if (typeof record.channel !== "string" || !("payload" in record)) {
-    throw new Error("Host event payload must contain channel and payload fields.");
-  }
-  return { channel: record.channel, payload: record.payload };
-};
+const parseHostEvent = (raw: string): HostEventEnvelope => parseHostEventEnvelope(JSON.parse(raw));
 
 const dispatchBrowserSseListeners = <Payload>(
   listeners: Iterable<(payload: Payload) => void>,
@@ -272,12 +264,12 @@ const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
   }
-  channel.eventSource.removeEventListener("message", channel.handleMessage as EventListener);
-  channel.eventSource.removeEventListener("open", channel.handleOpen as EventListener);
-  channel.eventSource.removeEventListener("error", channel.handleError as EventListener);
+  channel.eventSource.removeEventListener("message", asEventListener(channel.handleMessage));
+  channel.eventSource.removeEventListener("open", asEventListener(channel.handleOpen));
+  channel.eventSource.removeEventListener("error", asEventListener(channel.handleError));
   channel.eventSource.removeEventListener(
     "stream-warning",
-    channel.handleStreamWarning as EventListener,
+    asEventListener(channel.handleStreamWarning),
   );
   channel.eventSource.close();
   if (sseChannel === channel) {
@@ -320,7 +312,7 @@ const subscribeSseChannelEffect = (
         const hostEvent = parseHostEvent(event.data);
         for (const registration of listeners.values()) {
           if (registration.channel === hostEvent.channel) {
-            registration.listener(hostEvent.payload);
+            registration.listener(hostEvent);
           }
         }
       };
@@ -390,10 +382,10 @@ const subscribeSseChannelEffect = (
         dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], event.data);
       };
 
-      eventSource.addEventListener("message", handleMessage as EventListener);
-      eventSource.addEventListener("open", handleOpen as EventListener);
-      eventSource.addEventListener("error", handleError as EventListener);
-      eventSource.addEventListener("stream-warning", handleStreamWarning as EventListener);
+      eventSource.addEventListener("message", asEventListener(handleMessage));
+      eventSource.addEventListener("open", asEventListener(handleOpen));
+      eventSource.addEventListener("error", asEventListener(handleError));
+      eventSource.addEventListener("stream-warning", asEventListener(handleStreamWarning));
       channel = {
         eventSource,
         listeners,
@@ -409,12 +401,15 @@ const subscribeSseChannelEffect = (
 
     const listenerId = nextSseListenerId;
     nextSseListenerId += 1;
-    channel.listeners.set(listenerId, {
+    const registration: BrowserSseListenerRegistration = {
       channel: eventChannel,
       listener,
       receivesControlEvents,
-      ...(onReplayGap ? { onReplayGap } : {}),
-    });
+    };
+    if (onReplayGap) {
+      registration.onReplayGap = onReplayGap;
+    }
+    channel.listeners.set(listenerId, registration);
     const activeChannel = channel;
     const subscriptionReady = activeChannel.ready.then(() => {
       const transportEpoch = activeChannel.readTransportEpoch();
@@ -444,19 +439,23 @@ const subscribeSseChannelEffect = (
   });
 
 export const subscribeLocalHostRunEvents = async (
-  listener: (payload: unknown) => void,
+  listener: (payload: JsonValue | undefined) => void,
 ): Promise<() => void> => {
   return runWebBoundary(
     Effect.gen(function* () {
       yield* ensureLocalHostSessionDedupedEffect();
-      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, listener)).unsubscribe;
+      return (yield* subscribeSseChannelEffect(RUN_EVENT_CHANNEL, (event) => {
+        if (!isBrowserSseControlEvent(event) && event.channel === RUN_EVENT_CHANNEL) {
+          listener(event.payload);
+        }
+      })).unsubscribe;
     }),
   );
 };
 
 const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,
-  listener: (payload: unknown) => void,
+  listener: BrowserSseListener,
   onReplayGap?: (message: string) => void,
 ): Effect.Effect<DevServerEventSubscription, WebError> =>
   Effect.gen(function* () {
@@ -514,9 +513,19 @@ const subscribeReadyLocalHostEventsEffect = (
   });
 
 export const subscribeLocalHostDevServerEvents = async (
-  listener: (payload: unknown) => void,
+  listener: (payload: JsonValue | undefined) => void,
 ): Promise<DevServerEventSubscription> => {
-  return runWebBoundary(subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, listener));
+  return runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, (event) => {
+      if (isBrowserSseControlEvent(event)) {
+        listener(event);
+        return;
+      }
+      if (event.channel === DEV_SERVER_EVENT_CHANNEL) {
+        listener(event.payload);
+      }
+    }),
+  );
 };
 
 export const observeLocalHostAgentSessions = async (
@@ -550,15 +559,16 @@ export const observeLocalHostAgentSessions = async (
       };
       const subscription = yield* subscribeReadyLocalHostEventsEffect(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
-        (payload) => {
-          if (isBrowserLiveControlEvent(payload)) {
-            if (payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
+        (event) => {
+          if (isBrowserSseControlEvent(event)) {
+            if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
               refresh();
             }
             return;
           }
-          const envelope = agentSessionLiveEnvelopeSchema.parse(payload);
-          attachment.accept(envelope);
+          if (event.channel === AGENT_SESSION_LIVE_EVENT_CHANNEL) {
+            attachment.accept(event.payload);
+          }
         },
         (message) => {
           listener({ type: "transcript_gap", repoPath: input.repoPath, message });
@@ -593,7 +603,7 @@ export const observeLocalHostAgentSessions = async (
 export const subscribeLocalHostTaskStream = async (
   input: { cursor: TaskEventCursor | null },
   onFrame: (frame: TaskStreamFrame) => void,
-  onTerminalFailure?: (error: unknown) => void,
+  onTerminalFailure?: (cause: unknown) => void,
 ): Promise<TaskStreamSubscription> =>
   runWebBoundary(
     subscribeLocalTaskEventStreamEffect(input, onFrame, onTerminalFailure, {

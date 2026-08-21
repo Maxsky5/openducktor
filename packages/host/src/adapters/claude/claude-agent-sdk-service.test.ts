@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
@@ -623,7 +624,7 @@ describe("createClaudeAgentSdkService", () => {
 
   test("applies live Claude effort changes through the SDK session", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: unknown) => {});
+    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
     const session = createSession({
       model: {
         runtimeKind: "claude",
@@ -676,7 +677,7 @@ describe("createClaudeAgentSdkService", () => {
         variant: "high",
       },
       query: {
-        applyFlagSettings: mock(async (_settings: unknown) => {}),
+        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
         close: mock(() => {}),
         setModel: mock(async (_model?: string) => {}),
       } as unknown as ClaudeSession["query"],

@@ -1,7 +1,7 @@
 type ElectronAppUpdateLogger = {
-  error(message: string, error?: unknown): void | Promise<void>;
+  error(message: string, cause?: unknown): void | Promise<void>;
   info(message: string): void | Promise<void>;
-  warn(message: string, details?: unknown): void | Promise<void>;
+  warn(message: string, cause?: unknown): void | Promise<void>;
 };
 
 export type ElectronUpdaterConfigureOptions = {

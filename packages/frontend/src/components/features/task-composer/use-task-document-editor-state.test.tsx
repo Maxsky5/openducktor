@@ -17,12 +17,12 @@ type HookArgs = Parameters<typeof useTaskDocumentEditorState>[0];
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
+  reject: (cause?: unknown) => void;
 };
 
 const createDeferred = <T,>(): Deferred<T> => {
   let resolve: (value: T) => void = () => {};
-  let reject: (reason?: unknown) => void = () => {};
+  let reject: (cause?: unknown) => void = () => {};
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;

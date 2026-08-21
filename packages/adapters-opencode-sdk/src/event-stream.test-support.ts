@@ -1,10 +1,24 @@
 import type {
+  EventPermissionAsked,
+  EventPermissionReplied,
+  EventPermissionV2Asked,
+  EventPermissionV2Replied,
+  EventQuestionAsked,
+  EventQuestionRejected,
+  EventQuestionReplied,
+  EventQuestionV2Asked,
+  EventQuestionV2Rejected,
+  EventQuestionV2Replied,
   EventSessionCreated,
+  EventSessionStatus,
   GlobalEvent,
   OpencodeClient,
+  QuestionInfo,
   Session,
+  SessionStatus,
   SyncEventSessionCreated,
 } from "@opencode-ai/sdk/v2/client";
+import type { JsonObject, JsonValue } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
@@ -23,8 +37,26 @@ type GlobalEventPayload = GlobalEvent["payload"];
 type WithoutOuterSyncId<T> = T extends { type: "sync" } ? Omit<T, "id"> : never;
 type ParentAlias = "parentId" | "parent_id";
 type ParentAliasSessionInfo = Session & Partial<Record<ParentAlias, string>>;
+type ControlEventProperties = Record<string, JsonValue>;
 
-export type TestGlobalEventPayload = GlobalEventPayload | WithoutOuterSyncId<GlobalEventPayload>;
+export type MalformedControlEvent = {
+  id: string;
+  type:
+    | "permission.v2.replied"
+    | "question.asked"
+    | "question.rejected"
+    | "question.replied"
+    | "question.v2.asked"
+    | "question.v2.rejected"
+    | "question.v2.replied"
+    | "session.status";
+  properties: ControlEventProperties;
+};
+
+export type TestGlobalEventPayload =
+  | GlobalEventPayload
+  | WithoutOuterSyncId<GlobalEventPayload>
+  | MalformedControlEvent;
 export type RuntimeSourceSyncEventSessionCreated = Omit<SyncEventSessionCreated, "id">;
 export type UnsupportedParentAliasSessionCreatedEvent = Omit<EventSessionCreated, "properties"> & {
   properties: Omit<EventSessionCreated["properties"], "info"> & {
@@ -152,6 +184,196 @@ export const runtimeSourceSyncChildSessionCreatedEventWithParentAlias = (
     },
   } satisfies UnsupportedRuntimeSourceSyncSessionCreatedEvent;
 };
+
+export const permissionAskedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  permission?: string;
+  patterns?: string[];
+  metadata?: JsonObject;
+  always?: string[];
+  properties?: ControlEventProperties;
+}): EventPermissionAsked =>
+  ({
+    id: `event-${input.requestId}`,
+    type: "permission.asked",
+    properties: {
+      id: input.requestId,
+      sessionID: input.sessionId ?? "external-session-1",
+      permission: input.permission ?? "write",
+      patterns: input.patterns ?? ["src/**"],
+      metadata: input.metadata ?? {},
+      always: input.always ?? [],
+      ...input.properties,
+    },
+  }) satisfies EventPermissionAsked;
+
+export const permissionV2AskedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  action?: string;
+  resources?: string[];
+  save?: string[];
+  metadata?: JsonObject;
+  properties?: ControlEventProperties;
+}): EventPermissionV2Asked =>
+  ({
+    id: `event-${input.requestId}`,
+    type: "permission.v2.asked",
+    properties: {
+      id: input.requestId,
+      sessionID: input.sessionId ?? "external-session-1",
+      action: input.action ?? "edit",
+      resources: input.resources ?? ["src/**"],
+      ...(input.save ? { save: input.save } : {}),
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...input.properties,
+    },
+  }) satisfies EventPermissionV2Asked;
+
+export const permissionRepliedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  reply?: "once" | "always" | "reject";
+  properties?: ControlEventProperties;
+}): EventPermissionReplied =>
+  ({
+    id: `event-${input.requestId}-replied`,
+    type: "permission.replied",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+      reply: input.reply ?? "once",
+      ...input.properties,
+    },
+  }) satisfies EventPermissionReplied;
+
+export const permissionV2RepliedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  reply?: EventPermissionV2Replied["properties"]["reply"];
+}): EventPermissionV2Replied =>
+  ({
+    id: `event-${input.requestId}-v2-replied`,
+    type: "permission.v2.replied",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+      reply: input.reply ?? "once",
+    },
+  }) satisfies EventPermissionV2Replied;
+
+const defaultQuestion: QuestionInfo = {
+  header: "Scope",
+  question: "Pick target",
+  options: [{ label: "A", description: "Option A" }],
+};
+
+export const questionAskedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  questions?: QuestionInfo[];
+  properties?: ControlEventProperties;
+}): EventQuestionAsked =>
+  ({
+    id: `event-${input.requestId}`,
+    type: "question.asked",
+    properties: {
+      id: input.requestId,
+      sessionID: input.sessionId ?? "external-session-1",
+      questions: input.questions ?? [defaultQuestion],
+      ...input.properties,
+    },
+  }) satisfies EventQuestionAsked;
+
+export const questionV2AskedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  questions?: EventQuestionV2Asked["properties"]["questions"];
+  properties?: ControlEventProperties;
+}): EventQuestionV2Asked =>
+  ({
+    id: `event-${input.requestId}`,
+    type: "question.v2.asked",
+    properties: {
+      id: input.requestId,
+      sessionID: input.sessionId ?? "external-session-1",
+      questions: input.questions ?? [defaultQuestion],
+      ...input.properties,
+    },
+  }) satisfies EventQuestionV2Asked;
+
+export const questionRepliedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  answers?: EventQuestionReplied["properties"]["answers"];
+}): EventQuestionReplied =>
+  ({
+    id: `event-${input.requestId}-replied`,
+    type: "question.replied",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+      answers: input.answers ?? [["A"]],
+    },
+  }) satisfies EventQuestionReplied;
+
+export const questionV2RepliedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+  answers?: EventQuestionV2Replied["properties"]["answers"];
+}): EventQuestionV2Replied =>
+  ({
+    id: `event-${input.requestId}-v2-replied`,
+    type: "question.v2.replied",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+      answers: input.answers ?? [["A"]],
+    },
+  }) satisfies EventQuestionV2Replied;
+
+export const questionRejectedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+}): EventQuestionRejected =>
+  ({
+    id: `event-${input.requestId}-rejected`,
+    type: "question.rejected",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+    },
+  }) satisfies EventQuestionRejected;
+
+export const questionV2RejectedEvent = (input: {
+  requestId: string;
+  sessionId?: string;
+}): EventQuestionV2Rejected =>
+  ({
+    id: `event-${input.requestId}-v2-rejected`,
+    type: "question.v2.rejected",
+    properties: {
+      sessionID: input.sessionId ?? "external-session-1",
+      requestID: input.requestId,
+    },
+  }) satisfies EventQuestionV2Rejected;
+
+export const sessionStatusEvent = (
+  status: SessionStatus,
+  sessionId = "external-session-1",
+  properties: ControlEventProperties = {},
+): EventSessionStatus =>
+  ({
+    id: `event-status-${sessionId}`,
+    type: "session.status",
+    properties: { sessionID: sessionId, status, ...properties },
+  }) satisfies EventSessionStatus;
+
+export const malformedControlEvent = (
+  type: MalformedControlEvent["type"],
+  properties: ControlEventProperties,
+): MalformedControlEvent => ({ id: `malformed-${type}`, type, properties });
 
 export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
   return {

@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   taskAssetDiscardStagedInputSchema,
   taskAssetStageInputSchema,
 } from "@openducktor/contracts";
@@ -8,9 +9,11 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 
 const parseInput = <T>(
   schema: {
-    safeParse(value: unknown): { success: true; data: T } | { success: false; error: Error };
+    safeParse(
+      value: JsonValue | undefined,
+    ): { success: true; data: T } | { success: false; error: Error };
   },
-  value: unknown,
+  value: JsonValue | undefined,
   command: string,
 ): T => {
   const parsed = schema.safeParse(value);

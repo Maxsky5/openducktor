@@ -1,8 +1,10 @@
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
+import type { JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
+import type { CreateTaskUseCaseInput } from "../tasks/task-inputs";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
 import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 import type { TaskService } from "../tasks/task-service";
@@ -335,7 +337,7 @@ describe("createOdtMcpBridgeService", () => {
     const calls: unknown[] = [];
     let currentTask = taskCard();
     const taskService = createTaskService({
-      listTasks(input: unknown) {
+      listTasks(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "listTasks", input });
@@ -349,7 +351,7 @@ describe("createOdtMcpBridgeService", () => {
             }),
         });
       },
-      setSpec(input: unknown) {
+      setSpec(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setSpec", input });
@@ -515,7 +517,7 @@ describe("createOdtMcpBridgeService", () => {
   });
   test("creates through the host-owned task service facade", async () => {
     const taskService = createTaskService({
-      createTask(input: unknown) {
+      createTask(input: CreateTaskUseCaseInput) {
         return Effect.tryPromise({
           try: async () => {
             expect(input).toEqual({
@@ -560,7 +562,7 @@ describe("createOdtMcpBridgeService", () => {
   });
   test("orders task search results by recent activity before applying the result limit", async () => {
     const taskService = createTaskService({
-      listTasks(input: unknown) {
+      listTasks(input: JsonValue | undefined) {
         expect(input).toEqual({ repoPath: "/repo" });
         return Effect.succeed([
           taskCard({
@@ -626,7 +628,7 @@ describe("createOdtMcpBridgeService", () => {
             }),
         });
       },
-      linkPullRequest(input: unknown) {
+      linkPullRequest(input: JsonValue | undefined) {
         return Effect.tryPromise({
           try: async () => {
             linkPullRequestCalls.push(input);

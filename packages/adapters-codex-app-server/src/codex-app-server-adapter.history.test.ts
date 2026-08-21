@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { JsonValue } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
+  codexThreadStartResultFixture,
+  codexThreadFixture,
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
@@ -9,15 +11,75 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
-type PaginatedThreadFixture = Record<string, JsonValue> & { turns: unknown[] };
+type PaginatedTurnFixture = Record<string, JsonValue> & {
+  items: Array<Record<string, JsonValue>>;
+};
 
-const paginatedThreadReadResponse = (thread: PaginatedThreadFixture): unknown => ({
-  thread: { ...thread, turns: [] },
+type PaginatedThreadFixture = Record<string, JsonValue> & {
+  id: string;
+  turns: PaginatedTurnFixture[];
+};
+
+type ThreadListFixture = Record<string, JsonValue> & {
+  id: string;
+  status: { type: "active"; activeFlags?: string[] } | { type: "idle" };
+};
+
+const paginatedThreadReadResponse = (thread: PaginatedThreadFixture) => ({
+  thread: {
+    ...codexThreadFixture({ id: thread.id, status: { type: "idle" } }),
+    ...thread,
+    turns: [],
+  },
 });
 
-const paginatedTurnsListResponse = (thread: PaginatedThreadFixture): unknown => ({
-  data: thread.turns,
+const paginatedTurnsListResponse = (thread: PaginatedThreadFixture) => ({
+  data: thread.turns.map((turn) => ({
+    completedAt: null,
+    durationMs: null,
+    error: null,
+    itemsView: "full",
+    startedAt: null,
+    status: "completed",
+    ...turn,
+    items: turn.items.map((item) => {
+      if (item.type !== "dynamicToolCall") {
+        return item;
+      }
+      return {
+        namespace: null,
+        status: "completed",
+        contentItems: null,
+        success: true,
+        durationMs: null,
+        ...item,
+      };
+    }),
+  })),
   nextCursor: null,
+  backwardsCursor: null,
+});
+
+const paginatedTurnsResponse = (turns: PaginatedTurnFixture[]) =>
+  paginatedTurnsListResponse({ id: "fixture-thread", status: { type: "idle" }, turns });
+
+const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
+  data: threads.map((thread) => {
+    const activeStatus =
+      thread.status.type === "active"
+        ? {
+            ...thread.status,
+            activeFlags: thread.status.activeFlags ?? [],
+          }
+        : thread.status;
+    return {
+      ...codexThreadFixture({ id: thread.id, status: { type: "idle" } }),
+      ...thread,
+      status: activeStatus,
+    };
+  }),
+  nextCursor: null,
+  backwardsCursor: null,
 });
 
 describe("CodexAppServerAdapter history loading", () => {
@@ -141,7 +203,9 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method === "thread/turns/list") {
           const { threadId } = request.params as { threadId: string };
           if (threadId === "root-thread") {
-            return { data: [{ id: "root-turn" }], nextCursor: null } as Response;
+            return paginatedTurnsResponse([
+              { id: "root-turn", items: [], status: "completed" },
+            ]) as Response;
           }
           return paginatedTurnsListResponse(thread) as Response;
         }
@@ -230,18 +294,16 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "child-thread",
-              cwd: "/repo",
-              createdAt: 1_783_715_580,
-              status: { type: "idle" },
-              turns: [],
-            },
-          } as Response;
+          return paginatedThreadReadResponse({
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1_783_715_580,
+            status: { type: "idle" },
+            turns: [],
+          }) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return { data: turns, nextCursor: null } as Response;
+          return paginatedTurnsResponse(turns) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -286,34 +348,29 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "child-thread",
-              cwd: "/repo",
-              createdAt: 1,
-              status: { type: "idle" },
-              forkedFromId: "missing-parent",
-              parentThreadId: "missing-parent",
-              turns: [],
-            },
-          } as Response;
+          return paginatedThreadReadResponse({
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 1,
+            status: { type: "idle" },
+            forkedFromId: "missing-parent",
+            parentThreadId: "missing-parent",
+            turns: [],
+          }) as Response;
         }
         if (request.method === "thread/turns/list") {
           const params = request.params as { threadId: string };
           if (params.threadId === "missing-parent") {
             throw new Error(parentReadError);
           }
-          return {
-            data: [
-              {
-                id: "child-turn",
-                startedAt: 2,
-                status: "completed",
-                items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedTurnsResponse([
+            {
+              id: "child-turn",
+              startedAt: 2,
+              status: "completed",
+              items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+            },
+          ]) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -346,30 +403,25 @@ describe("CodexAppServerAdapter history loading", () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "child-thread",
-              cwd: "/repo",
-              createdAt: 10,
-              status: { type: "idle" },
-              forkedFromId: "missing-parent",
-              parentThreadId: "missing-parent",
-              turns: [],
-            },
-          } as Response;
+          return paginatedThreadReadResponse({
+            id: "child-thread",
+            cwd: "/repo",
+            createdAt: 10,
+            status: { type: "idle" },
+            forkedFromId: "missing-parent",
+            parentThreadId: "missing-parent",
+            turns: [],
+          }) as Response;
         }
         if (request.method === "thread/turns/list") {
           const params = request.params as { threadId: string };
           if (params.threadId === "missing-parent") {
             throw new Error("thread not loaded: missing-parent");
           }
-          return {
-            data: [
-              { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
-              { id: "child-turn", startedAt: 11, status: "completed", items: [] },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedTurnsResponse([
+            { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
+            { id: "child-turn", startedAt: 11, status: "completed", items: [] },
+          ]) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -723,18 +775,15 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: [], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              {
-                id: "thread-unloaded-idle",
-                cwd: "/repo",
-                createdAt: 1,
-                preview: "Unloaded idle thread",
-                status: { type: "idle" },
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            {
+              id: "thread-unloaded-idle",
+              cwd: "/repo",
+              createdAt: 1,
+              preview: "Unloaded idle thread",
+              status: { type: "idle" },
+            },
+          ]) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -770,42 +819,34 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: [], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([]) as Response;
         }
         if (request.method === "thread/resume") {
           throw new Error("Stored Codex history must be read without resuming the thread.");
         }
         if (request.method === "thread/read") {
-          return {
-            thread: {
-              id: "thread-unloaded",
-              cwd: "/repo",
-              status: { type: "idle" },
-              turns: [],
-            },
-          } as Response;
+          return paginatedThreadReadResponse({
+            id: "thread-unloaded",
+            cwd: "/repo",
+            status: { type: "idle" },
+            turns: [],
+          }) as Response;
         }
         if (request.method === "thread/turns/list") {
-          return {
-            data: [
-              {
-                id: "turn-1",
-                status: "completed",
-                items: [
-                  {
-                    id: "msg-1",
-                    type: "agentMessage",
-                    phase: "final_answer",
-                    text: "Hydrated from paginated history",
-                  },
-                ],
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedTurnsResponse([
+            {
+              id: "turn-1",
+              status: "completed",
+              items: [
+                {
+                  id: "msg-1",
+                  type: "agentMessage",
+                  phase: "final_answer",
+                  text: "Hydrated from paginated history",
+                },
+              ],
+            },
+          ]) as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -1026,17 +1067,14 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-command-actions"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              {
-                id: "thread-command-actions",
-                cwd: "/repo",
-                createdAt: 1,
-                status: { type: "active" },
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            {
+              id: "thread-command-actions",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "active" },
+            },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1176,10 +1214,9 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [{ id: "thread-todos", cwd: "/repo", createdAt: 1, status: { type: "active" } }],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            { id: "thread-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1192,16 +1229,16 @@ describe("CodexAppServerAdapter history loading", () => {
     };
     const adapter = createAdapterWithTransport(transport);
 
-    await expect(
-      adapter.loadSessionTodos({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      }),
-    ).resolves.toEqual([
+    const todos = await adapter.loadSessionTodos({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-todos",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(todos).toEqual([
       expect.objectContaining({ content: "Inspect docs", status: "completed" }),
       expect.objectContaining({ content: "Wire todos", status: "in_progress" }),
     ]);
@@ -1245,17 +1282,14 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: [], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              {
-                id: "thread-history-todos",
-                cwd: "/repo",
-                createdAt: 1,
-                status: { type: "active", activeFlags: [] },
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            {
+              id: "thread-history-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+            },
+          ]) as Response;
         }
         if (request.method === "thread/read") {
           return paginatedThreadReadResponse(thread) as Response;
@@ -1407,27 +1441,23 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-empty-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              {
-                id: "thread-empty-todos",
-                cwd: "/repo",
-                createdAt: 1,
-                status: { type: "idle" },
-              },
-            ],
-            nextCursor: null,
-          } as Response;
-        }
-        if (request.method === "thread/resume") {
-          return {
-            thread: {
+          return paginatedThreadListResponse([
+            {
               id: "thread-empty-todos",
               cwd: "/repo",
               createdAt: 1,
               status: { type: "idle" },
-              turns: [],
             },
+          ]) as Response;
+        }
+        if (request.method === "thread/resume") {
+          return {
+            ...codexThreadStartResultFixture("thread-empty-todos"),
+            thread: codexThreadFixture({
+              id: "thread-empty-todos",
+              createdAt: 1,
+              status: { type: "idle" },
+            }),
           } as Response;
         }
         if (request.method === "thread/turns/list") {
@@ -1451,16 +1481,16 @@ describe("CodexAppServerAdapter history loading", () => {
     });
     calls.length = 0;
 
-    await expect(
-      adapter.loadSessionTodos({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-empty-todos",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      }),
-    ).resolves.toEqual([]);
+    const todos = await adapter.loadSessionTodos({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-empty-todos",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+    });
+
+    expect(todos).toEqual([]);
     expect(calls.some((call) => call.method === "thread/read")).toBe(true);
   });
 
@@ -1555,12 +1585,9 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-plan-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              { id: "thread-plan-todos", cwd: "/repo", createdAt: 1, status: { type: "active" } },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            { id: "thread-plan-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1618,17 +1645,14 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-plan-text-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              {
-                id: "thread-plan-text-todos",
-                cwd: "/repo",
-                createdAt: 1,
-                status: { type: "idle" },
-              },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            {
+              id: "thread-plan-text-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+            },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1659,7 +1683,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("loads Codex session todos from paginated named todo tool inputs", async () => {
+  test("loads Codex session todos from paginated named todo tool calls", async () => {
     const thread = {
       id: "thread-named-todos",
       cwd: "/repo",
@@ -1672,13 +1696,13 @@ describe("CodexAppServerAdapter history loading", () => {
               id: "todo-call-1",
               type: "dynamicToolCall",
               namespace: "functions",
-              name: "update_plan",
-              input: JSON.stringify({
+              tool: "update_plan",
+              arguments: {
                 plan: [
                   { step: "Inspect", status: "completed" },
                   { step: "Fix latest todo", status: "in_progress" },
                 ],
-              }),
+              },
             },
           ],
         },
@@ -1690,12 +1714,9 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-named-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              { id: "thread-named-todos", cwd: "/repo", createdAt: 1, status: { type: "active" } },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            { id: "thread-named-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1756,12 +1777,9 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-json-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              { id: "thread-json-todos", cwd: "/repo", createdAt: 1, status: { type: "active" } },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            { id: "thread-json-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;
@@ -1825,12 +1843,9 @@ describe("CodexAppServerAdapter history loading", () => {
           return { data: ["thread-bad-todos"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
-          return {
-            data: [
-              { id: "thread-bad-todos", cwd: "/repo", createdAt: 1, status: { type: "active" } },
-            ],
-            nextCursor: null,
-          } as Response;
+          return paginatedThreadListResponse([
+            { id: "thread-bad-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
+          ]) as Response;
         }
         if (request.method === "thread/turns/list") {
           return paginatedTurnsListResponse(thread) as Response;

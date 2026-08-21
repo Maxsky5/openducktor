@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   type WorkspaceFileGitStatus,
   type WorkspaceFileTree,
   type WorkspaceFileTreeEntry,
@@ -31,7 +32,7 @@ export type WorkspaceFilesService = {
     relativePath: string;
   }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
   writeTextFile(
-    input: unknown,
+    input: JsonValue | undefined,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 

@@ -24,13 +24,25 @@ import {
   childSessionCreatedEvent,
   childSessionCreatedEventWithParentAlias,
   childSessionInfo,
+  malformedControlEvent,
   makeClientWithEvents,
   makeSessionInput,
   makeSessionRecord,
+  permissionAskedEvent,
+  permissionRepliedEvent,
+  permissionV2AskedEvent,
+  permissionV2RepliedEvent,
+  questionAskedEvent,
+  questionRejectedEvent,
+  questionRepliedEvent,
+  questionV2AskedEvent,
+  questionV2RejectedEvent,
+  questionV2RepliedEvent,
   runEventStream,
   runEventStreamWithSession,
   runtimeSourceSyncChildSessionCreatedEvent,
   type TestGlobalEventPayload,
+  sessionStatusEvent,
 } from "./event-stream.test-support";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -146,13 +158,7 @@ test("keeps session observation alive across OpenCode server heartbeats", async 
   } as unknown as TestGlobalEventPayload;
   const emitted = await runEventStream([
     heartbeat,
-    {
-      type: "session.status",
-      properties: {
-        sessionID: "external-session-1",
-        status: { type: "busy" },
-      },
-    } as unknown as Event,
+    sessionStatusEvent({ type: "busy" }),
   ]);
 
   expect(emitted).toEqual([
@@ -369,15 +375,9 @@ test("readSessionLifecycleEvent ignores parent aliases and non-lifecycle events"
 test("runEventStreamWithSession uses the configured session input", async () => {
   const { emitted } = await runEventStreamWithSession(
     [
-      {
-        type: "session.status",
-        properties: {
-          directory: "/workspace",
-          status: {
-            type: "busy",
-          },
-        },
-      } as unknown as Event,
+      sessionStatusEvent({ type: "busy" }, "external-session-1", {
+        directory: "/workspace",
+      }),
     ],
     (session) => {
       session.input = {
@@ -397,19 +397,16 @@ test("runEventStreamWithSession uses the configured session input", async () => 
 
 test("runEventStreamWithSession emits permission v2 approval events", async () => {
   const { emitted } = await runEventStreamWithSession([
-    {
-      type: "permission.v2.asked",
-      properties: {
-        sessionID: "external-session-1",
-        id: "perm-v2-1",
-        permission: "edit",
-        patterns: ["src/**"],
-        metadata: {
-          filepath: "/repo/src/app.ts",
-          diff: "--- /repo/src/app.ts\n+++ /repo/src/app.ts\n@@\n-old\n+new",
-        },
+    permissionV2AskedEvent({
+      requestId: "perm-v2-1",
+      action: "edit",
+      resources: ["/repo/src/app.ts"],
+      save: ["/repo/src/**"],
+      metadata: {
+        filepath: "/repo/src/app.ts",
+        diff: "--- /repo/src/app.ts\n+++ /repo/src/app.ts\n@@\n-old\n+new",
       },
-    } as unknown as Event,
+    }),
   ]);
 
   expect(emitted).toContainEqual(
@@ -418,9 +415,10 @@ test("runEventStreamWithSession emits permission v2 approval events", async () =
       externalSessionId: "external-session-1",
       requestId: "perm-v2-1",
       action: { name: "edit" },
-      affectedPaths: ["src/**"],
+      affectedPaths: ["/repo/src/app.ts"],
       metadata: expect.objectContaining({
         opencode: expect.objectContaining({
+          save: ["/repo/src/**"],
           metadata: expect.objectContaining({
             filepath: "/repo/src/app.ts",
             diff: "--- /repo/src/app.ts\n+++ /repo/src/app.ts\n@@\n-old\n+new",
@@ -537,16 +535,7 @@ const makeSessionIdleEvent = (): Event =>
     },
   }) as unknown as Event;
 
-const makeSessionStatusIdleEvent = (): Event =>
-  ({
-    type: "session.status",
-    properties: {
-      sessionID: "external-session-1",
-      status: {
-        type: "idle",
-      },
-    },
-  }) as unknown as Event;
+const makeSessionStatusIdleEvent = (): Event => sessionStatusEvent({ type: "idle" });
 
 const makeAssistantTextPart = (input: {
   messageId: string;
@@ -635,6 +624,8 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
         messageID: input.messageId,
         type: "step-finish",
         reason: input.reason ?? "stop",
+        cost: 0,
+        tokens: {},
       },
     },
   }) as unknown as Event;
@@ -1711,6 +1702,8 @@ describe("event-stream", () => {
               messageID: "assistant-message-stop-only",
               type: "step-finish",
               reason: "stop",
+              cost: 0,
+              tokens: {},
             },
           ],
         },
@@ -2363,15 +2356,11 @@ describe("event-stream", () => {
   });
 
   test("treats known child-session events as relevant to the parent subscriber", () => {
-    const childPermissionEvent = {
-      type: "permission.asked",
-      properties: {
-        sessionID: "external-child-session",
-        id: "perm-child-1",
-        permission: "read",
-        patterns: ["src/**"],
-      },
-    } as unknown as Event;
+    const childPermissionEvent = permissionAskedEvent({
+      requestId: "perm-child-1",
+      sessionId: "external-child-session",
+      permission: "read",
+    });
     const childMessageEvent = {
       type: "message.updated",
       properties: {
@@ -2521,16 +2510,12 @@ describe("event-stream", () => {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
     };
-    const childPermissionEvent = {
-      type: "permission.asked",
-      properties: {
-        sessionID: "external-child-session",
-        directory: "/repo",
-        id: "perm-child-1",
-        permission: "read",
-        patterns: ["src/**"],
-      },
-    } as unknown as Event;
+    const childPermissionEvent = permissionAskedEvent({
+      requestId: "perm-child-1",
+      sessionId: "external-child-session",
+      permission: "read",
+      properties: { directory: "/repo" },
+    });
 
     expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
   });
@@ -2775,18 +2760,12 @@ describe("event-stream", () => {
 
   test("emits retry session_status payload", async () => {
     const emitted = await runEventStream([
-      {
-        type: "session.status",
-        properties: {
-          sessionID: "external-session-1",
-          status: {
-            type: "retry",
-            attempt: 2,
-            message: "Retrying request",
-            next: 250,
-          },
-        },
-      } as unknown as Event,
+      sessionStatusEvent({
+        type: "retry",
+        attempt: 2,
+        message: "Retrying request",
+        next: 250,
+      }),
     ]);
 
     const statusEvents = emitted.filter((event) => event.type === "session_status");
@@ -2802,57 +2781,117 @@ describe("event-stream", () => {
     });
   });
 
-  test("reports unsupported session.status types", async () => {
+  test("routes malformed session.status events to a stream fault", async () => {
     const emitted = await runEventStream([
-      {
-        type: "session.status",
-        properties: {
-          sessionID: "external-session-1",
-          status: {
-            type: "reconnect",
-            attempt: 3,
-            message: "Reconnecting",
-            next: 500,
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    expect(emitted).toEqual([
-      expect.objectContaining({
-        type: "session_error",
-        message: "OpenCode session.status event has unsupported status type 'reconnect'.",
+      malformedControlEvent("session.status", {
+        sessionID: "external-session-1",
+        status: { type: "reconnect", attempt: 3, message: "Reconnecting", next: 500 },
       }),
     ]);
+
+    expect(emitted.filter((event) => event.type === "session_status")).toHaveLength(0);
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        externalSessionId: "external-session-1",
+        message: expect.stringContaining("session.status"),
+      }),
+    );
+  });
+
+  test("routes a malformed question option to a stream fault without partial consumption", async () => {
+    for (const type of ["question.asked", "question.v2.asked"] as const) {
+      const emitted = await runEventStream([
+        malformedControlEvent(type, {
+          sessionID: "external-session-1",
+          id: `q-malformed-${type}`,
+          questions: [
+            {
+              header: "Valid",
+              question: "This entry must not be emitted",
+              options: [{ label: "A", description: "Option A" }],
+            },
+            {
+              header: "Malformed",
+              question: "Pick target",
+              options: [{ label: "B" }],
+            },
+          ],
+        }),
+      ]);
+
+      expect(emitted.filter((event) => event.type === "question_required")).toHaveLength(0);
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0]).toEqual(
+        expect.objectContaining({
+          type: "session_error",
+          externalSessionId: "external-session-1",
+          message: expect.stringContaining(type),
+        }),
+      );
+    }
+  });
+
+  test("routes malformed replied and rejected variants to one stream fault without resolution", async () => {
+    const malformedEvents = [
+      malformedControlEvent("permission.v2.replied", {
+        sessionID: "external-session-1",
+        requestID: "perm-v2-malformed",
+      }),
+      malformedControlEvent("question.replied", {
+        sessionID: "external-session-1",
+        requestID: "question-legacy-replied-malformed",
+      }),
+      malformedControlEvent("question.v2.replied", {
+        sessionID: "external-session-1",
+        requestID: "question-v2-replied-malformed",
+      }),
+      malformedControlEvent("question.rejected", {
+        sessionID: "external-session-1",
+      }),
+      malformedControlEvent("question.v2.rejected", {
+        sessionID: "external-session-1",
+      }),
+    ];
+
+    for (const malformedEvent of malformedEvents) {
+      const emitted = await runEventStream([malformedEvent]);
+
+      expect(
+        emitted.filter(
+          (event) => event.type === "approval_resolved" || event.type === "question_resolved",
+        ),
+      ).toHaveLength(0);
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0]).toEqual(
+        expect.objectContaining({
+          type: "session_error",
+          externalSessionId: "external-session-1",
+          message: expect.stringContaining(malformedEvent.type),
+        }),
+      );
+    }
   });
 
   test("forwards permission and question events", async () => {
     const emitted = await runEventStream([
-      {
-        type: "permission.asked",
-        properties: {
-          sessionID: "external-session-1",
-          id: "perm-1",
-          permission: "write",
-          patterns: ["src/**"],
-          metadata: { reason: "Need file write" },
-        },
-      } as unknown as Event,
-      {
-        type: "question.asked",
-        properties: {
-          sessionID: "external-session-1",
-          id: "q-1",
-          questions: [
-            {
-              header: "Scope",
-              question: "Pick target",
-              options: [{ label: "A", description: "Option A" }],
-              custom: true,
-            },
-          ],
-        },
-      } as unknown as Event,
+      permissionAskedEvent({
+        requestId: "perm-1",
+        permission: "write",
+        patterns: ["src/**"],
+        metadata: { reason: "Need file write" },
+      }),
+      questionAskedEvent({
+        requestId: "q-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Pick target",
+            options: [{ label: "A", description: "Option A" }],
+            custom: true,
+          },
+        ],
+      }),
     ]);
 
     const permissionEvents = emitted.filter((event) => event.type === "approval_required");
@@ -2890,24 +2929,104 @@ describe("event-stream", () => {
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
   });
 
+  test("emits one approval_resolved event for permission.v2.replied", async () => {
+    const emitted = await runEventStream([
+      permissionV2RepliedEvent({ requestId: "perm-v2-resolved", reply: "always" }),
+    ]);
+
+    expect(emitted).toEqual([
+      {
+        type: "approval_resolved",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        requestId: "perm-v2-resolved",
+        childExternalSessionId: "external-session-1",
+      },
+    ]);
+  });
+
+  test("emits one required and one resolved event for question.v2 asked and replied", async () => {
+    const emitted = await runEventStream([
+      questionV2AskedEvent({
+        requestId: "question-v2-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Pick targets",
+            options: [
+              { label: "A", description: "Option A" },
+              { label: "B", description: "Option B" },
+            ],
+            multiple: true,
+          },
+        ],
+      }),
+      questionV2RepliedEvent({
+        requestId: "question-v2-1",
+        answers: [["A", "B"]],
+      }),
+    ]);
+
+    expect(emitted).toEqual([
+      {
+        type: "question_required",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        requestId: "question-v2-1",
+        childExternalSessionId: "external-session-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Pick targets",
+            options: [
+              { label: "A", description: "Option A" },
+              { label: "B", description: "Option B" },
+            ],
+            multiple: true,
+          },
+        ],
+      },
+      {
+        type: "question_resolved",
+        externalSessionId: "external-session-1",
+        timestamp: "2026-02-22T12:00:00.000Z",
+        requestId: "question-v2-1",
+        childExternalSessionId: "external-session-1",
+      },
+    ]);
+  });
+
+  test("maps legacy and v2 question replies and rejections to one question_resolved event", async () => {
+    const variants = [
+      questionRepliedEvent({ requestId: "question-legacy-replied", answers: [["A"]] }),
+      questionRejectedEvent({ requestId: "question-legacy-rejected" }),
+      questionV2RepliedEvent({ requestId: "question-v2-replied", answers: [["A"]] }),
+      questionV2RejectedEvent({ requestId: "question-v2-rejected" }),
+    ];
+
+    for (const variant of variants) {
+      const emitted = await runEventStream([variant]);
+
+      expect(emitted).toEqual([
+        {
+          type: "question_resolved",
+          externalSessionId: "external-session-1",
+          timestamp: "2026-02-22T12:00:00.000Z",
+          requestId: variant.properties.requestID,
+          childExternalSessionId: "external-session-1",
+        },
+      ]);
+    }
+  });
+
   test("runtime event transport forwards known child question events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         childSessionCreatedEvent("external-child-session"),
-        {
-          type: "question.asked",
-          properties: {
-            sessionID: "external-child-session",
-            id: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-          },
-        } as unknown as Event,
+        questionAskedEvent({
+          requestId: "question-child-1",
+          sessionId: "external-child-session",
+        }),
       ],
       (session) => {
         session.subagentCorrelationKeyByExternalSessionId.set(
@@ -2932,21 +3051,11 @@ describe("event-stream", () => {
   test("forwards child question events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        {
-          type: "question.asked",
-          properties: {
-            sessionID: "external-child-session",
-            parentID: "external-session-1",
-            id: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-          },
-        } as unknown as Event,
+        questionAskedEvent({
+          requestId: "question-child-1",
+          sessionId: "external-child-session",
+          properties: { parentID: "external-session-1" },
+        }),
       ],
       undefined,
     );
@@ -2966,23 +3075,11 @@ describe("event-stream", () => {
   test("correlates child question events immediately when a pending subagent key exists", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        {
-          type: "question.asked",
-          properties: {
-            sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
-            id: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
-          },
-        } as unknown as Event,
+        questionAskedEvent({
+          requestId: "question-child-1",
+          sessionId: "external-child-session",
+          properties: { info: { parentID: "external-session-1" } },
+        }),
         {
           id: "event-child-session-updated",
           type: "session.updated",
@@ -3010,24 +3107,14 @@ describe("event-stream", () => {
   test("does not consume a pending subagent key for child input events from another directory", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
-          type: "question.asked",
+        questionAskedEvent({
+          requestId: "question-child-1",
+          sessionId: "external-child-session",
           properties: {
             directory: "/other",
-            sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
-            id: "question-child-1",
-            questions: [
-              {
-                header: "Scope",
-                question: "Pick target",
-                options: [{ label: "A", description: "Option A" }],
-              },
-            ],
+            info: { parentID: "external-session-1" },
           },
-        } as unknown as Event,
+        }),
       ],
       (session) => {
         session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
@@ -3058,23 +3145,11 @@ describe("event-stream", () => {
         prompt: "Inspect repo",
         description: "Starting A",
       }),
-      {
-        type: "question.asked",
-        properties: {
-          sessionID: "external-child-session",
-          info: {
-            parentID: "external-session-1",
-          },
-          id: "question-child-1",
-          questions: [
-            {
-              header: "Scope",
-              question: "Pick target",
-              options: [{ label: "A", description: "Option A" }],
-            },
-          ],
-        },
-      } as unknown as Event,
+      questionAskedEvent({
+        requestId: "question-child-1",
+        sessionId: "external-child-session",
+        properties: { info: { parentID: "external-session-1" } },
+      }),
       {
         type: "message.part.updated",
         properties: {
@@ -3083,6 +3158,7 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
             messageID: "assistant-subagent-question-bind",
             type: "tool",
+            callID: "call-subtask-a",
             tool: "delegate",
             state: {
               status: "completed",
@@ -3123,15 +3199,11 @@ describe("event-stream", () => {
     const { emitted } = await runEventStreamWithSession(
       [
         childSessionCreatedEvent("external-child-session"),
-        {
-          type: "permission.asked",
-          properties: {
-            sessionID: "external-child-session",
-            id: "perm-child-1",
-            permission: "read",
-            patterns: ["src/**"],
-          },
-        } as unknown as Event,
+        permissionAskedEvent({
+          requestId: "perm-child-1",
+          sessionId: "external-child-session",
+          permission: "read",
+        }),
       ],
       (session) => {
         session.subagentCorrelationKeyByExternalSessionId.set(
@@ -3157,15 +3229,11 @@ describe("event-stream", () => {
     const { emitted } = await runEventStreamWithSession(
       [
         childSessionCreatedEvent("external-child-session"),
-        {
-          type: "permission.v2.asked",
-          properties: {
-            sessionID: "external-child-session",
-            id: "perm-child-v2-1",
-            permission: "edit",
-            patterns: ["src/**"],
-          },
-        } as unknown as Event,
+        permissionV2AskedEvent({
+          requestId: "perm-child-v2-1",
+          sessionId: "external-child-session",
+          action: "edit",
+        }),
       ],
       (session) => {
         session.subagentCorrelationKeyByExternalSessionId.set(
@@ -3191,14 +3259,10 @@ describe("event-stream", () => {
     const { emitted } = await runEventStreamWithSession(
       [
         childSessionCreatedEvent("external-child-session"),
-        {
-          type: "permission.replied",
-          properties: {
-            sessionID: "external-child-session",
-            requestID: "perm-child-1",
-            reply: "once",
-          },
-        } as unknown as Event,
+        permissionRepliedEvent({
+          requestId: "perm-child-1",
+          sessionId: "external-child-session",
+        }),
       ],
       (session) => {
         session.subagentCorrelationKeyByExternalSessionId.set(
@@ -3255,16 +3319,12 @@ describe("event-stream", () => {
   test("forwards child permission events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        {
-          type: "permission.asked",
-          properties: {
-            sessionID: "external-child-session",
-            parentID: "external-session-1",
-            id: "perm-child-1",
-            permission: "read",
-            patterns: ["src/**"],
-          },
-        } as unknown as Event,
+        permissionAskedEvent({
+          requestId: "perm-child-1",
+          sessionId: "external-child-session",
+          permission: "read",
+          properties: { parentID: "external-session-1" },
+        }),
       ],
       undefined,
     );
@@ -3284,15 +3344,11 @@ describe("event-stream", () => {
   test("runtime event transport ignores child permission links for other parents", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        {
-          type: "permission.asked",
-          properties: {
-            sessionID: "external-child-session",
-            id: "perm-child-1",
-            permission: "read",
-            patterns: ["src/**"],
-          },
-        } as unknown as Event,
+        permissionAskedEvent({
+          requestId: "perm-child-1",
+          sessionId: "external-child-session",
+          permission: "read",
+        }),
       ],
       undefined,
     );
@@ -3309,15 +3365,11 @@ describe("event-stream", () => {
       externalSessionId: "external-child-session",
       input: makeSessionInput(),
       session: sessionRecord,
-      event: {
-        type: "permission.asked",
-        properties: {
-          sessionID: "external-child-session",
-          id: "perm-child-1",
-          permission: "read",
-          patterns: ["src/**"],
-        },
-      } as unknown as Event,
+      event: permissionAskedEvent({
+        requestId: "perm-child-1",
+        sessionId: "external-child-session",
+        permission: "read",
+      }),
       now: () => "2026-02-22T12:00:00.000Z",
       emit: (_sessionId, event) => emitted.push(event),
       resolveSubagentSessionLink: (childExternalSessionId) =>

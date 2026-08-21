@@ -134,7 +134,10 @@ export const createNodeEffectHostCommandRouter = (
           message: "Live agent-session events require a configured host event bus.",
         });
       }
-      eventBus.publish("openducktor://agent-session-live-event", envelope);
+      eventBus.publish({
+        channel: "openducktor://agent-session-live-event",
+        payload: envelope,
+      });
     },
   });
   const filesystemService = createFilesystemService(filesystem);

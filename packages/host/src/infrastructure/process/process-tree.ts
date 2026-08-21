@@ -179,8 +179,8 @@ export const processTreeHasChildren = (
       .some((parentPid) => Number(parentPid) === pid);
   });
 
-const isAlreadyExitedError = (error: unknown): boolean =>
-  error instanceof Error && "code" in error && error.code === "ESRCH";
+const isAlreadyExitedError = (cause: unknown): boolean =>
+  cause instanceof Error && "code" in cause && cause.code === "ESRCH";
 
 const assertValidPid = (pid: number, label: string): void => {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -279,9 +279,9 @@ const signalProcessTree = (
         try: () => {
           try {
             kill(-processGroupId, signal);
-          } catch (error) {
-            if (isAlreadyExitedError(error) || !isAlive(-processGroupId)) return;
-            throw error;
+          } catch (cause) {
+            if (isAlreadyExitedError(cause) || !isAlive(-processGroupId)) return;
+            throw cause;
           }
         },
         catch: (cause) =>

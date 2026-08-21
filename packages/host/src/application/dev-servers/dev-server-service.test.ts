@@ -1,4 +1,4 @@
-import type { RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
+import type { HostEventEnvelope, RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
@@ -38,7 +38,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
   ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+    getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
           if (repoPath !== "/repo") {
@@ -55,7 +55,7 @@ const createWorkspaceSettingsServiceByRepoPath = (
   configs: Record<string, RepoConfig>,
 ): WorkspaceSettingsService =>
   ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+    getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
           const config = configs[String(repoPath)];
@@ -75,10 +75,10 @@ const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWo
   },
 });
 const createEventBus = () => {
-  const events: unknown[] = [];
+  const events: HostEventEnvelope[] = [];
   const eventBus: HostEventBusPort = {
-    publish(channel, payload) {
-      events.push({ channel, payload });
+    publish(envelope) {
+      events.push(envelope);
     },
     subscribe() {
       return () => {};
@@ -314,7 +314,7 @@ describe("createDevServerService", () => {
 
     const state = await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
     const terminalChunks = events
-      .map((event) => (event as { payload?: unknown }).payload)
+      .map((event) => event.payload)
       .filter(
         (payload): payload is { terminalChunk: { data: string; sequence: number }; type: string } =>
           typeof payload === "object" &&
@@ -648,11 +648,7 @@ describe("createDevServerService", () => {
     expect(
       state.scripts[0]?.bufferedTerminalChunks.some((chunk) => chunk.data.includes("LATE-OLD")),
     ).toBe(false);
-    expect(
-      events.some((event) =>
-        JSON.stringify((event as { payload?: unknown }).payload).includes("LATE-OLD"),
-      ),
-    ).toBe(false);
+    expect(events.some((event) => JSON.stringify(event.payload).includes("LATE-OLD"))).toBe(false);
     expect(state.scripts[0]).toMatchObject({ status: "running", pid: 700 });
   });
   test("uses a distinct run epoch after the host service is replaced", async () => {

@@ -296,7 +296,7 @@ describe("electron dev script", () => {
 
     const error = await runElectronEffect(
       stopElectronEffect(electron, async () => undefined),
-    ).catch((caught: unknown) => caught);
+    ).catch((cause: unknown) => cause);
 
     expect(signals).toEqual([electronGracefulShutdownSignal(process.platform), 9]);
     expect(error).toMatchObject({

@@ -6,7 +6,7 @@ export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
 };
 
-export const isPlainObject = (value: unknown): value is Record<string, JsonValue> => {
+export const isPlainObject = (value: JsonValue | undefined): value is Record<string, JsonValue> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
@@ -43,7 +43,7 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
     map.delete(oldestKey);
   }
 };
-export const extractText = (value: unknown): string | null => {
+export const extractText = (value: JsonValue | undefined): string | null => {
   if (typeof value === "string") {
     return value;
   }
@@ -59,8 +59,8 @@ export const extractText = (value: unknown): string | null => {
   return null;
 };
 
-export const isCodexUnmaterializedThreadError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
+export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   const inlineTurnsUnavailable =
     message.includes("is not materialized yet") &&
     message.includes("includeTurns is unavailable before first user message");
@@ -70,12 +70,12 @@ export const isCodexUnmaterializedThreadError = (error: unknown): boolean => {
   return inlineTurnsUnavailable || paginatedTurnsUnavailable;
 };
 
-export const isCodexThreadNotLoadedError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
+export const isCodexThreadNotLoadedError = (cause: unknown): boolean => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   return message.includes("thread not loaded:");
 };
 
-export const extractStringField = (value: unknown, keys: string[]): string | null => {
+export const extractStringField = (value: JsonValue | undefined, keys: string[]): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -88,7 +88,7 @@ export const extractStringField = (value: unknown, keys: string[]): string | nul
   return null;
 };
 
-export const extractNumberField = (value: unknown, keys: string[]): number | null => {
+export const extractNumberField = (value: JsonValue | undefined, keys: string[]): number | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -101,7 +101,7 @@ export const extractNumberField = (value: unknown, keys: string[]): number | nul
   return null;
 };
 
-export const arrayFromUnknown = (value: unknown): unknown[] => {
+export const arrayFromUnknown = (value: JsonValue | undefined): JsonValue[] => {
   if (Array.isArray(value)) {
     return value;
   }
@@ -117,7 +117,7 @@ export const arrayFromUnknown = (value: unknown): unknown[] => {
   return [];
 };
 
-export const stringifyJsonValue = (value: unknown): string | null => {
+export const stringifyJsonValue = (value: JsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -132,7 +132,7 @@ export const stringifyJsonValue = (value: unknown): string | null => {
 };
 
 export const extractOptionalObject = (
-  value: unknown,
+  value: JsonValue | undefined,
   key: string,
 ): Record<string, JsonValue> | undefined => {
   if (!isPlainObject(value)) {

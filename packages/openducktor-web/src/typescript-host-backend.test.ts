@@ -7,6 +7,7 @@ import {
   type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
+import type { HostEventEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import type { WebLogger } from "./logger";
@@ -16,7 +17,7 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 } from "./typescript-host-backend-support";
-import type { JsonValue } from "@openducktor/contracts";
+import type { JsonValue, TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
@@ -197,6 +198,30 @@ describe("TypeScript web host backend", () => {
       error: "Failed to invoke runtime_ensure.",
       failureKind: "timeout",
       message: "Failed to invoke runtime_ensure.",
+    });
+  });
+
+  test("rejects malformed successful command results before JSON serialization", async () => {
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/runtime_ensure", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      }),
+      {
+        hostCommandRouter: createTestHostCommandRouter(() =>
+          Effect.succeed({ runtimeId: "runtime-1" }),
+        ),
+      },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "Host command 'runtime_ensure' returned an invalid response.",
+      message: "Host command 'runtime_ensure' returned an invalid response.",
     });
   });
 
@@ -407,7 +432,7 @@ describe("TypeScript web host backend", () => {
   });
 
   test("uses task leases instead of generic event replay and ignores Last-Event-ID", async () => {
-    let sink: ((frame: unknown) => void) | null = null;
+    let sink: ((frame: TaskEventStreamFrame) => void) | null = null;
     const subscribeCalls: unknown[] = [];
     const acknowledged: unknown[] = [];
     const taskEventLeaseManager = createTaskEventLeaseManager({
@@ -421,7 +446,7 @@ describe("TypeScript web host backend", () => {
         publish: () => {},
         subscribe: (input, nextSink) => {
           subscribeCalls.push(input);
-          sink = nextSink as (frame: unknown) => void;
+          sink = nextSink as (frame: TaskEventStreamFrame) => void;
           return { subscriptionId: "host-subscription", unsubscribe: () => {} };
         },
       },
@@ -524,19 +549,31 @@ describe("TypeScript web host backend", () => {
   test("multiplexes non-task host event channels through the shared SSE endpoint", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     const events = [
-      ["openducktor://run-event", { type: "run" }],
-      ["openducktor://dev-server-event", { type: "dev-server" }],
-      [
-        "openducktor://agent-session-live-event",
-        {
+      { channel: "openducktor://run-event", payload: { type: "run" } },
+      {
+        channel: "openducktor://dev-server-event",
+        payload: {
+          type: "snapshot",
+          state: {
+            repoPath: "/repo",
+            taskId: "task-1",
+            worktreePath: null,
+            scripts: [],
+            updatedAt: "2026-03-19T15:30:00.000Z",
+          },
+        },
+      },
+      {
+        channel: "openducktor://agent-session-live-event",
+        payload: {
           type: "snapshot",
           repoPath: "/repo",
           sessions: [],
         },
-      ],
-    ] as const;
-    for (const [channel, payload] of events) {
-      eventBus.publish(channel, payload);
+      },
+    ] as const satisfies readonly HostEventEnvelope[];
+    for (const event of events) {
+      eventBus.publish(event);
     }
 
     const response = await handleTestRequest(
@@ -563,8 +600,8 @@ describe("TypeScript web host backend", () => {
       for (const _event of events) {
         replay += new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
       }
-      for (const [channel, payload] of events) {
-        expect(replay).toContain(JSON.stringify({ channel, payload }));
+      for (const event of events) {
+        expect(replay).toContain(JSON.stringify(event));
       }
     } finally {
       await reader.cancel();
@@ -586,8 +623,13 @@ describe("TypeScript web host backend", () => {
     eventBus.subscribe("openducktor://run-event", () => unsubscribeDuringDelivery());
     unsubscribeDuringDelivery = unsubscribeReceived;
 
-    expect(() => eventBus.publish("openducktor://run-event", { type: "run" })).not.toThrow();
-    expect(received).toHaveBeenCalledWith({ type: "run" });
+    expect(() =>
+      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } }),
+    ).not.toThrow();
+    expect(received).toHaveBeenCalledWith({
+      channel: "openducktor://run-event",
+      payload: { type: "run" },
+    });
     expect(reported).toEqual([failure]);
     expect(eventBus.stream().replayAfter(0)).toHaveLength(1);
   });
@@ -595,15 +637,22 @@ describe("TypeScript web host backend", () => {
   test("emits a stream warning when shared SSE replay cannot cover the reconnect gap", async () => {
     const eventBus = new BufferedHostEventBus({ report: () => {} });
     for (let index = 0; index < 258; index += 1) {
-      eventBus.publish("openducktor://dev-server-event", {
-        type: "terminal_chunk",
-        repoPath: "/repo",
-        taskId: "task-1",
-        terminalChunk: {
-          scriptId: "web",
-          sequence: index,
-          data: `line-${index}\r\n`,
-          timestamp: "2026-03-19T15:30:00.000Z",
+      eventBus.publish({
+        channel: "openducktor://dev-server-event",
+        payload: {
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-1",
+          terminalChunk: {
+            scriptId: "web",
+            runIdentity: {
+              runId: "run-1",
+              runOrder: { hostInstanceId: "host-1", generation: 1 },
+            },
+            sequence: index,
+            data: `line-${index}\r\n`,
+            timestamp: "2026-03-19T15:30:00.000Z",
+          },
         },
       });
     }
@@ -1043,14 +1092,14 @@ describe("TypeScript web host backend", () => {
 
       const shutdown = stop();
       await disposeStarted.promise;
-      eventBus.publish("openducktor://run-event", { type: "run" });
+      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } });
       expect(new TextDecoder().decode((await reader.read()).value)).toContain('"type":"run"');
 
       disposeReleased.resolve();
       await shutdown;
       const terminalRead = await reader.read().then(
         (result) => ({ result }),
-        (error: unknown) => ({ error }),
+        (cause: unknown) => ({ error: cause }),
       );
       if ("error" in terminalRead) {
         expect(terminalRead.error).toBeInstanceOf(Error);

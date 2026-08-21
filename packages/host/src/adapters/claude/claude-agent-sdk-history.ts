@@ -18,6 +18,7 @@ import {
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import {
   appendUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
@@ -193,12 +194,13 @@ export const toClaudeHistoryMessages = (
     if (!entry) {
       continue;
     }
-    removeRetractedMessages(retractedHistoryMessageIds(entry));
+    const entryValue = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+    removeRetractedMessages(retractedHistoryMessageIds(entryValue));
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
     if (entry.type === "user") {
-      const originKind = readClaudeTurnOriginKind(entry);
+      const originKind = readClaudeTurnOriginKind(entryValue);
       if (originKind !== undefined) {
         if (originKind !== "human" && lastAutonomousFinalAssistantMessage) {
           removeClaudeHistoryFinishStep(lastAutonomousFinalAssistantMessage);
@@ -210,7 +212,7 @@ export const toClaudeHistoryMessages = (
       }
     }
     const timestamp = readHistoryTimestamp(entry, now);
-    const taskNotifications = readClaudeTaskNotifications(entry);
+    const taskNotifications = readClaudeTaskNotifications(entryValue);
     if (taskNotifications.length > 0) {
       for (const taskNotification of taskNotifications) {
         appendClaudeHistorySubagentSystemMessage({
@@ -275,8 +277,9 @@ export const toClaudeHistoryMessages = (
       if (pendingManualCompaction) {
         manualCompactionBoundaryReceived = true;
       } else if (
-        isRecord(entry.compact_metadata) &&
-        readStringProp(entry.compact_metadata, "trigger") === "manual"
+        isRecord(entryValue) &&
+        isRecord(entryValue.compact_metadata) &&
+        readStringProp(entryValue.compact_metadata, "trigger") === "manual"
       ) {
         unclaimedManualCompactionBoundary = true;
       }
@@ -376,7 +379,7 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "result") {
-      const resultOriginKind = readClaudeTurnOriginKind(entry) ?? assistantTurnOriginKind;
+      const resultOriginKind = readClaudeTurnOriginKind(entryValue) ?? assistantTurnOriginKind;
       const shouldFinalize = shouldFinalizeClaudeTurn(
         resultOriginKind,
         activeBackgroundSubagentTaskIds.size,

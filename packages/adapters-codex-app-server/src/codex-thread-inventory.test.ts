@@ -473,11 +473,11 @@ describe("CodexThreadInventoryReader", () => {
       },
     ];
     const client = {
-      threadRead: async (params: unknown) => {
+      threadRead: async (params: Parameters<CodexAppServerClient["threadRead"]>[0]) => {
         calls.push({ method: "thread/read", params });
         return threadReadResponse("thread-idle", "/repo", { type: "idle" }, []);
       },
-      threadTurnsList: async (params: unknown) => {
+      threadTurnsList: async (params: Parameters<CodexAppServerClient["threadTurnsList"]>[0]) => {
         calls.push({ method: "thread/turns/list", params });
         return { data: pagedTurns, nextCursor: null };
       },

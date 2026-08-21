@@ -24,7 +24,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
   ({
-    getRepoConfigByRepoPath(repoPath: unknown) {
+    getRepoConfigByRepoPath(repoPath: string) {
       if (repoPath !== "/repo") {
         return Effect.fail(
           new HostOperationError({

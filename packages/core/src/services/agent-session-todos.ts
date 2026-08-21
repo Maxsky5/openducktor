@@ -5,23 +5,25 @@ const TODO_PRIORITIES = ["high", "medium", "low"] as const;
 const TODO_STATUS_SET = new Set<AgentSessionTodoItem["status"]>(TODO_STATUSES);
 const TODO_PRIORITY_SET = new Set<AgentSessionTodoItem["priority"]>(TODO_PRIORITIES);
 
-const isAgentSessionTodoStatus = (value: unknown): value is AgentSessionTodoItem["status"] => {
+const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] => {
   return TODO_STATUS_SET.has(value as AgentSessionTodoItem["status"]);
 };
 
-const isAgentSessionTodoPriority = (value: unknown): value is AgentSessionTodoItem["priority"] => {
+const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] => {
   return TODO_PRIORITY_SET.has(value as AgentSessionTodoItem["priority"]);
 };
 
 export type NormalizeAgentSessionTodoInput = {
   id: string;
   content: string;
-  status?: unknown;
-  priority?: unknown;
-  completed?: boolean;
+  status?: string | undefined;
+  priority?: string | undefined;
+  completed?: boolean | undefined;
 };
 
-export const normalizeAgentSessionTodoStatus = (value: unknown): AgentSessionTodoItem["status"] => {
+export const normalizeAgentSessionTodoStatus = (
+  value: string | undefined,
+): AgentSessionTodoItem["status"] => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (!normalized) {
     return "pending";
@@ -47,7 +49,7 @@ export const normalizeAgentSessionTodoStatus = (value: unknown): AgentSessionTod
 };
 
 export const normalizeAgentSessionTodoPriority = (
-  value: unknown,
+  value: string | undefined,
 ): AgentSessionTodoItem["priority"] => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return isAgentSessionTodoPriority(normalized) ? normalized : "medium";

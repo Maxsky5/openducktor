@@ -1,4 +1,5 @@
 import {
+  type JsonValue,
   type TaskEventStreamAcknowledge,
   type TaskEventStreamFrame,
   taskEventStreamAcknowledgeSchema,
@@ -23,7 +24,6 @@ import {
   electronTaskStreamTerminalFailureEnvelopeSchema,
   electronTaskStreamUnsubscribeSchema,
 } from "../shared/electron-bridge-contract";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ElectronTaskStreamSender = {
   readonly mainFrame: ElectronTaskStreamFrame;
@@ -44,7 +44,7 @@ type ElectronTaskStreamFrame = {
   readonly processId: number;
   readonly routingId: number;
   isDestroyed(): boolean;
-  send(channel: string, frame: unknown): void;
+  send(channel: string, frame: JsonValue | undefined): void;
 };
 
 type ElectronTaskStreamNavigationDetails = Electron.Event<WebContentsDidStartNavigationEventParams>;
@@ -59,7 +59,7 @@ type ElectronTaskStreamEvent = {
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (event: ElectronTaskStreamEvent, value: unknown) => unknown,
+    listener: (event: ElectronTaskStreamEvent, value: JsonValue | undefined) => unknown,
   ): void;
 };
 
@@ -117,10 +117,10 @@ const readTrustedSender = (
 const parseOrThrow = <Value>(
   schema: {
     safeParse(
-      value: unknown,
+      value: JsonValue | undefined,
     ): { success: true; data: Value } | { success: false; error: Error & { issues: unknown } };
   },
-  value: unknown,
+  value: JsonValue | undefined,
   operation: string,
   field: string,
 ): Value => {

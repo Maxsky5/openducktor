@@ -156,8 +156,8 @@ const requireSourceSession = (
   );
 };
 
-const toError = (error: unknown): Error => {
-  return error instanceof Error ? error : new Error(String(error));
+const toError = (cause: unknown): Error => {
+  return cause instanceof Error ? cause : new Error(String(cause));
 };
 
 const buildPostStartMessage = async ({

@@ -1,5 +1,5 @@
 import type { JsonValue } from "@openducktor/contracts";
-import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
@@ -8,6 +8,7 @@ import type {
 } from "@openducktor/core";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { asUnknownRecord } from "./guards";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
@@ -20,19 +21,15 @@ import {
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
+import { opencodeSessionMessagesPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory } from "./types";
 
-const asRecord = (value: unknown): Record<string, JsonValue> | null => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  // SAFETY: message payloads arrive over the SDK JSON-RPC transport, which serializes
-  // payloads to JSON-compatible values before they reach this layer.
-  return value as Record<string, JsonValue>;
+const asRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
+  return asUnknownRecord(value) ?? null;
 };
 
 const readString = (record: Record<string, JsonValue>, keys: string[]): string | undefined => {
@@ -45,14 +42,14 @@ const readString = (record: Record<string, JsonValue>, keys: string[]): string |
   return undefined;
 };
 
-const hasCompletedAssistantMessage = (value: unknown): boolean => {
+const hasCompletedAssistantMessage = (value: JsonValue | undefined): boolean => {
   const record = asRecord(value);
   const time = record ? asRecord(record.time) : null;
   return typeof time?.completed === "number";
 };
 
-const isCompactionMarkerEntry = (entry: { parts: Part[] }): boolean =>
-  entry.parts.some((part) => asRecord(part)?.type === "compaction");
+const isCompactionMarkerEntry = (entry: { parts: ParsedOpencodePart[] }): boolean =>
+  entry.parts.some((part) => part.type === "compaction");
 
 type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ChildSessionLink = {
@@ -85,12 +82,7 @@ const buildPartScopedSubagentCorrelationKey = (
   return ["part", part.messageId, rawPartId].join(":");
 };
 
-const readChildSessionCreatedAt = (session: Session): number | undefined => {
-  const record = asRecord(session);
-  const time = record ? asRecord(record.time) : null;
-  const created = time?.created;
-  return typeof created === "number" ? created : undefined;
-};
+const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
   if (typeof session.id !== "string" || session.id.trim().length === 0) {
@@ -263,7 +255,7 @@ const createHistoryStreamPartNormalizationState = (
 });
 
 const normalizeHistoryStreamParts = (
-  parts: Part[],
+  parts: ParsedOpencodePart[],
   state: HistoryStreamPartNormalizationState,
   timestamp?: string,
 ): AgentStreamPart[] => {
@@ -392,12 +384,15 @@ export const loadSessionHistory = async (
     directory: input.workingDirectory,
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
   });
-  const data = unwrapData(response, "load session messages");
+  const data = opencodeSessionMessagesPayloadSchema.parse(
+    unwrapData(response, "load session messages"),
+  );
   const childSessionLinks = await listChildSessionLinks(client, input);
   const normalizedEntries = data
     .filter((entry) => !isCompactionMarkerEntry(entry))
     .map((entry) => {
-      const infoText = readTextFromMessageInfo(entry.info);
+      const info = entry.info;
+      const infoText = readTextFromMessageInfo(info);
       const displayParts =
         entry.info.role === "user"
           ? ensureVisibleUserTextDisplayParts(
@@ -419,10 +414,11 @@ export const loadSessionHistory = async (
           : readTextFromParts(entry.parts);
       const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
-      const totalTokens = extractMessageTotalTokens(entry.info, entry.parts);
-      const timestamp = toIsoFromEpoch(entry.info.time.created, now);
-      const model = readMessageModelSelection(entry.info);
-      const infoRecord = asRecord(entry.info);
+      const totalTokens = extractMessageTotalTokens(info, entry.parts);
+      const infoRecord = asRecord(info);
+      const infoTime = asRecord(infoRecord?.time);
+      const timestamp = toIsoFromEpoch(infoTime?.created, now);
+      const model = readMessageModelSelection(info);
       const parentId = infoRecord
         ? readString(infoRecord, ["parentID", "parentId", "parent_id"])
         : undefined;
@@ -538,8 +534,7 @@ export const loadSessionTodos = async (
         (response as { response?: { status?: unknown; statusText?: unknown } }).response,
       );
     }
-    const payload = response.data;
-    return normalizeTodoList(payload);
+    return normalizeTodoList(response.data);
   } catch (error) {
     throw toOpenCodeRequestError("load session todos", error);
   }

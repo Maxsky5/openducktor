@@ -15,6 +15,7 @@ import {
 } from "./claude-agent-sdk-transcript-parts";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 export type MutableAssistantHistoryMessage = Extract<
   AgentSessionHistoryMessage,
@@ -71,15 +72,25 @@ type ClaudeHistoryAssistantProjection = {
   stopReason: string | undefined;
 };
 
-const claudeAssistantResponseId = (entry: ClaudeHistoryMessage): string | undefined =>
-  entry?.type === "assistant" && isRecord(entry.message)
-    ? readStringProp(entry.message, "id")
-    : undefined;
+const claudeHistoryValue = (entry: ClaudeHistoryMessage): JsonValue | undefined => {
+  return parseClaudeJsonValue(entry, "claudeHistoryMessage");
+};
 
-const claudeAssistantContent = (entry: ClaudeHistoryMessage): unknown[] =>
-  entry?.type === "assistant" && isRecord(entry.message) && Array.isArray(entry.message.content)
-    ? entry.message.content
+const claudeAssistantResponseId = (entry: ClaudeHistoryMessage): string | undefined => {
+  const value = claudeHistoryValue(entry);
+  return entry.type === "assistant" && isRecord(value)
+    ? readStringProp(value.message, "id")
+    : undefined;
+};
+
+const claudeAssistantContent = (entry: ClaudeHistoryMessage): JsonValue[] => {
+  const value = claudeHistoryValue(entry);
+  return entry.type === "assistant" && isRecord(value) && isRecord(value.message)
+    ? Array.isArray(value.message.content)
+      ? value.message.content
+      : []
     : [];
+};
 
 export const projectClaudeHistoryAssistantMessage = ({
   entry,
@@ -91,16 +102,15 @@ export const projectClaudeHistoryAssistantMessage = ({
   if (entry.type !== "assistant") {
     return null;
   }
-  if (isClaudeSyntheticAssistantMessage(entry)) {
+  const value = claudeHistoryValue(entry);
+  if (isClaudeSyntheticAssistantMessage(value)) {
     return null;
   }
   const responseId = claudeAssistantResponseId(entry);
   const content = claudeAssistantContent(entry);
-  const text = historyMessageText(entry.message);
+  const text = historyMessageText(isRecord(value) ? value.message : undefined);
   const parts: AgentStreamPart[] = [];
-  const stopReason = isRecord(entry.message)
-    ? readStringProp(entry.message, "stop_reason")
-    : undefined;
+  const stopReason = isRecord(value) ? readStringProp(value.message, "stop_reason") : undefined;
   const messageId = responseId ?? entry.uuid;
   const preservesBlockOrder =
     stopReason === "tool_use" &&

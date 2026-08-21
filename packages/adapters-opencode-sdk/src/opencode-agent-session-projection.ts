@@ -1,10 +1,13 @@
-import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2/client";
+import type { Event as SdkEvent, GlobalEvent } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emitter";
 import { handleSessionEvent } from "./event-stream/session-events";
 import type { EventStreamRuntime, SubagentSessionLink } from "./event-stream/shared";
-import { asUnknownRecord } from "./guards";
+import {
+  parseOpencodeGlobalEventPayload,
+  type ParsedOpencodeEvent as Event,
+} from "./opencode-ingress";
 import {
   clearAwaitingRuntimeTurnStart,
   finishUserMessageSend,
@@ -80,7 +83,7 @@ const NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE = {
   "session.next.revert.staged.1": "session.next.revert.staged",
   "session.next.revert.cleared.1": "session.next.revert.cleared",
   "session.next.revert.committed.1": "session.next.revert.committed",
-} as const satisfies Record<SyncEventType, Event["type"]>;
+} as const satisfies Record<SyncEventType, SdkEvent["type"]>;
 
 type OpencodeEventProjectionRoute = "message" | "session" | "ignore";
 type OpencodeEventPolicy = {
@@ -210,65 +213,61 @@ const OPENCODE_EVENT_POLICY_BY_TYPE = {
   "server.connected": IGNORE_EVENT,
   "global.disposed": IGNORE_EVENT,
   "server.instance.disposed": IGNORE_EVENT,
-} as const satisfies Record<Event["type"], OpencodeEventPolicy>;
+} as const satisfies Record<SdkEvent["type"], OpencodeEventPolicy>;
+
+const isKnownSyncEventType = (
+  value: string,
+): value is keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE =>
+  Object.hasOwn(NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE, value);
+
+const isKnownEventType = (value: string): value is keyof typeof OPENCODE_EVENT_POLICY_BY_TYPE =>
+  Object.hasOwn(OPENCODE_EVENT_POLICY_BY_TYPE, value);
 
 export const normalizeOpencodeGlobalEventPayload = (
   payload: OpencodeGlobalEventPayload,
 ): OpencodeGlobalEventPayloadDecision => {
-  const payloadRecord = asUnknownRecord(payload);
-  if (payloadRecord?.type === "server.heartbeat") {
+  const parsed = parseOpencodeGlobalEventPayload(payload);
+  if (parsed.type === "server.heartbeat") {
     return { kind: "heartbeat" };
   }
-  if (payloadRecord?.type !== "sync") {
-    return { kind: "event", event: payload as Event };
+  if (!("syncEvent" in parsed)) {
+    return {
+      kind: "event",
+      event: {
+        ...(parsed.id ? { id: parsed.id } : {}),
+        type: parsed.type,
+        properties: parsed.properties,
+      },
+    };
   }
 
-  const syncEvent = asUnknownRecord(payloadRecord.syncEvent);
-  if (!syncEvent) {
-    throw new Error(
-      "OpenCode sync event is missing its syncEvent envelope; update the runtime or adapter to a supported event contract.",
-    );
-  }
+  const syncEvent = parsed.syncEvent;
   const syncEventType = syncEvent.type;
-  if (typeof syncEventType !== "string") {
-    throw new Error(
-      "OpenCode sync event is missing syncEvent.type; update the runtime or adapter to a supported event contract.",
-    );
-  }
-  if (!Object.hasOwn(NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE, syncEventType)) {
+  if (!isKnownSyncEventType(syncEventType)) {
     throw new Error(
       `OpenCode sync event '${syncEventType}' has no normalization decision; update the adapter for this SDK event.`,
     );
   }
 
-  const data = asUnknownRecord(syncEvent.data);
-  if (!data) {
-    throw new Error(
-      `OpenCode ${syncEventType} event is missing object syncEvent.data; update the runtime or adapter to a supported event contract.`,
-    );
-  }
-  const eventType =
-    NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[
-      syncEventType as keyof typeof NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE
-    ];
+  const eventType = NORMALIZED_EVENT_TYPE_BY_SYNC_TYPE[syncEventType];
   return {
     kind: "event",
     event: {
-      ...(typeof syncEvent.id === "string" ? { id: syncEvent.id } : {}),
+      ...(syncEvent.id ? { id: syncEvent.id } : {}),
       type: eventType,
-      properties: data,
-    } as Event,
+      properties: syncEvent.data,
+    },
   };
 };
 
 const readOpencodeEventPolicy = (event: Event): OpencodeEventPolicy => {
-  const eventType = String(event.type);
-  if (!Object.hasOwn(OPENCODE_EVENT_POLICY_BY_TYPE, eventType)) {
+  const eventType = event.type;
+  if (!isKnownEventType(eventType)) {
     throw new Error(
       `OpenCode event '${eventType}' has no projection decision; update the adapter for this SDK event.`,
     );
   }
-  return OPENCODE_EVENT_POLICY_BY_TYPE[eventType as keyof typeof OPENCODE_EVENT_POLICY_BY_TYPE];
+  return OPENCODE_EVENT_POLICY_BY_TYPE[eventType];
 };
 
 export const opencodeEventInvalidatesSessions = (event: Event): boolean =>

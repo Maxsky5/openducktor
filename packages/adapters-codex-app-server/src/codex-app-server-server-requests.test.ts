@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type AgentRole, CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
@@ -54,7 +55,7 @@ const createRequestContext = ({
   sessionForThreadId: (threadId) => sessions.get(threadId),
   bindActiveTurnId,
   flushQueuedUserMessagesLater,
-  emitSessionEvent: (externalSessionId: string, event: unknown) =>
+  emitSessionEvent: (externalSessionId: string, event: AgentEvent) =>
     events.push({
       ...(event as Record<string, JsonValue>),
       emittedExternalSessionId: externalSessionId,

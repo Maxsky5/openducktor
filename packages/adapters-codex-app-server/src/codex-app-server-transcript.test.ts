@@ -174,7 +174,7 @@ describe("Codex App Server transcript parsing", () => {
         { kind: "text", text: " please" },
       ]),
     ).toEqual([
-      { type: "text", text: "Tell me about " },
+      { type: "text", text: "Tell me about ", text_elements: [] },
       {
         type: "text",
         text: "@src/main.ts",
@@ -186,7 +186,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "mention", name: "main.ts", path: "src/main.ts" },
-      { type: "text", text: " please" },
+      { type: "text", text: " please", text_elements: [] },
     ]);
   });
 
@@ -206,7 +206,7 @@ describe("Codex App Server transcript parsing", () => {
     ]);
 
     expect(input).toEqual([
-      { type: "text", text: "Tell me what's in " },
+      { type: "text", text: "Tell me what's in ", text_elements: [] },
       {
         type: "text",
         text: "@apps/api/src/routes/auth.ts ",
@@ -218,7 +218,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "mention", name: "auth.ts", path: "apps/api/src/routes/auth.ts" },
-      { type: "text", text: "please" },
+      { type: "text", text: "please", text_elements: [] },
     ]);
     expect(codexUserInputListToText(input)).toBe(
       "Tell me what's in @apps/api/src/routes/auth.ts please",
@@ -269,7 +269,7 @@ describe("Codex App Server transcript parsing", () => {
         { kind: "text", text: " please" },
       ]),
     ).toEqual([
-      { type: "text", text: "Use " },
+      { type: "text", text: "Use ", text_elements: [] },
       {
         type: "text",
         text: "$review",
@@ -281,7 +281,7 @@ describe("Codex App Server transcript parsing", () => {
         ],
       },
       { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
-      { type: "text", text: " please" },
+      { type: "text", text: " please", text_elements: [] },
     ]);
   });
 

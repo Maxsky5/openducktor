@@ -1,10 +1,7 @@
 import type { Writable } from "node:stream";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type {
-  CodexAppServerRequestMethod,
-  CodexAppServerRequestParams,
-} from "@openducktor/contracts";
+import type { CodexAppServerClientRequest } from "@openducktor/contracts";
 
 const createWriteError = (runtimeId: string, cause: unknown) =>
   new HostOperationError({
@@ -14,11 +11,9 @@ const createWriteError = (runtimeId: string, cause: unknown) =>
     details: { runtimeId },
   });
 
-export type CodexAppServerRequestLineMessage = {
+export type CodexAppServerRequestLineMessage = CodexAppServerClientRequest & {
   jsonrpc: "2.0";
   id: number;
-  method: CodexAppServerRequestMethod;
-  params?: CodexAppServerRequestParams;
 };
 
 type WriteCodexAppServerRequestInput = {

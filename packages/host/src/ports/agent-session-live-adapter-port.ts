@@ -10,12 +10,14 @@ import type {
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionLiveLoadContextInput,
+  AgentSessionLiveLoadDiffInput,
   AgentSessionLiveReadResult,
   AgentSessionLiveRef,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
+  FileDiff,
   RuntimeKind,
   SlashCommandCatalog,
 } from "@openducktor/contracts";
@@ -83,6 +85,9 @@ export type AgentSessionLiveAdapterPort = {
   readonly loadContext: (
     input: AgentSessionLiveLoadContextInput,
   ) => Effect.Effect<AgentSessionContextUsage | null, HostError>;
+  readonly loadSessionDiff?: (
+    input: AgentSessionLiveLoadDiffInput,
+  ) => Effect.Effect<ReadonlyArray<FileDiff>, HostError>;
   readonly replyApproval: (
     input: AgentSessionLiveReplyApprovalInput,
   ) => Effect.Effect<void, HostError>;

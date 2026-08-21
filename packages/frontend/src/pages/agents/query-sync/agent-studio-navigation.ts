@@ -61,7 +61,7 @@ const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
 const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
 
-const readOptionalString = (value: unknown): string | undefined => {
+const readOptionalString = (value: string | null | undefined): string | undefined => {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -186,9 +186,9 @@ export const hasAgentStudioNavigationSelection = (
 };
 
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; persisted context is JSON
   } catch (cause) {
     throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
       cause,

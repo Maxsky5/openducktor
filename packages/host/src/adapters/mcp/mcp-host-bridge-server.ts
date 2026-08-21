@@ -9,13 +9,13 @@ import { Deferred, Effect, FiberId } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { parseJson } from "../../effect/json";
 import type { OpenCodeMcpBridgeConnection } from "../opencode/opencode-workspace-runtime-starter";
 import {
   type McpBridgeDiscoveryFile,
   removeMcpBridgeDiscoveryFile,
   writeMcpBridgeDiscoveryFile,
 } from "./mcp-bridge-discovery-file";
+import { readMcpBridgeRequestBody } from "./mcp-bridge-request-body";
 import { bridgeErrorPayload, bridgeMessagePayload } from "./mcp-host-bridge-errors";
 
 export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
@@ -61,99 +61,15 @@ type BridgeHttpResponse = {
 };
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const MAX_BODY_BYTES = 1024 * 1024;
 const workspaceScopedToolNames = new Set<string>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
-
-const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostOperationError> =>
-  Effect.async<unknown, HostOperationError>((resume, signal) => {
-    let body = "";
-    let receivedBytes = 0;
-    let settled = false;
-    const finish = (effect: Effect.Effect<unknown, HostOperationError>): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      signal.removeEventListener("abort", abort);
-      request.off("data", onData);
-      request.off("end", onEnd);
-      request.off("error", onError);
-      resume(effect);
-    };
-    const abort = (): void => {
-      finish(
-        Effect.fail(
-          new HostOperationError({
-            operation: "mcpHostBridge.readRequestBody",
-            message: "MCP host bridge request body read was aborted.",
-          }),
-        ),
-      );
-      request.destroy();
-    };
-    const onData = (chunk: string): void => {
-      receivedBytes += Buffer.byteLength(chunk);
-      if (receivedBytes > MAX_BODY_BYTES) {
-        finish(
-          Effect.fail(
-            new HostOperationError({
-              operation: "mcpHostBridge.readRequestBody",
-              message: "MCP host bridge request body exceeds 1 MiB.",
-              details: { maxBodyBytes: MAX_BODY_BYTES },
-            }),
-          ),
-        );
-        request.destroy();
-        return;
-      }
-      body += chunk;
-    };
-    const onEnd = (): void => {
-      if (!body.trim()) {
-        finish(Effect.succeed({}));
-        return;
-      }
-      finish(
-        Effect.try({
-          try: () => parseJson(body),
-          catch: (error) =>
-            new HostOperationError({
-              operation: "mcpHostBridge.readRequestBody",
-              message: `Invalid JSON request body: ${error instanceof Error ? error.message : error}`,
-              cause: error,
-            }),
-        }),
-      );
-    };
-    const onError = (error: Error): void =>
-      finish(
-        Effect.fail(
-          new HostOperationError({
-            operation: "mcpHostBridge.readRequestBody",
-            message: errorMessage(error),
-            cause: error,
-          }),
-        ),
-      );
-
-    request.setEncoding("utf8");
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    request.on("data", onData);
-    request.on("end", onEnd);
-    request.on("error", onError);
-  });
 
 const bridgeHttpResponse = (statusCode: number, payload: unknown): BridgeHttpResponse => ({
   statusCode,
   payload,
 });
 
-const bridgeErrorResponse = (error: unknown): BridgeHttpResponse =>
-  bridgeHttpResponse(400, bridgeErrorPayload(error, errorMessage(error)));
+const bridgeErrorResponse = (cause: unknown): BridgeHttpResponse =>
+  bridgeHttpResponse(400, bridgeErrorPayload(cause, errorMessage(cause)));
 
 const sendJson = (response: ServerResponse, { statusCode, payload }: BridgeHttpResponse): void => {
   if (response.headersSent || response.writableEnded || response.destroyed) {
@@ -170,8 +86,8 @@ const sendJson = (response: ServerResponse, { statusCode, payload }: BridgeHttpR
   response.end(body);
 };
 
-const errorMessage = (error: unknown): string =>
-  error instanceof Error && error.message.trim() ? error.message : String(error);
+const errorMessage = (cause: unknown): string =>
+  cause instanceof Error && cause.message.trim() ? cause.message : String(cause);
 
 const toMcpHostBridgeError = (cause: unknown, operation: string): HostOperationError =>
   cause instanceof HostOperationError
@@ -295,7 +211,7 @@ const createBridgeRequestHandler =
       }
 
       const command = decodeURIComponent(request.url.slice("/invoke/".length));
-      const body = yield* readRequestBody(request);
+      const body = yield* readMcpBridgeRequestBody(request);
       if (command === "odt_mcp_ready") {
         return bridgeHttpResponse(200, yield* bridgeService.ready(body));
       }

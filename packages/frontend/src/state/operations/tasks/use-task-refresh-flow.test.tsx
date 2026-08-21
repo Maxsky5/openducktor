@@ -7,12 +7,12 @@ import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 type Deferred = {
   promise: Promise<void>;
   resolve: () => void;
-  reject: (reason: unknown) => void;
+  reject: (cause: unknown) => void;
 };
 
 const createDeferred = (): Deferred => {
   let resolve: (() => void) | undefined;
-  let reject: ((reason: unknown) => void) | undefined;
+  let reject: ((cause: unknown) => void) | undefined;
   const promise = new Promise<void>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;

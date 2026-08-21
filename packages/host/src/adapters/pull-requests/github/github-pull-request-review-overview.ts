@@ -4,6 +4,7 @@ import type {
   PullRequestReviewOutcome,
   PullRequestReviewPullRequest,
   PullRequestReviewState,
+  JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -106,7 +107,7 @@ query PullRequestReviewOverview(
 }
 `;
 
-const requirePositiveNumber = (value: unknown, field: string): number => {
+const requirePositiveNumber = (value: JsonValue | undefined, field: string): number => {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
     return value;
   }
@@ -116,7 +117,10 @@ const requirePositiveNumber = (value: unknown, field: string): number => {
   });
 };
 
-const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestReviewState => {
+const normalizeReviewState = (
+  state: JsonValue | undefined,
+  isDraft: JsonValue | undefined,
+): PullRequestReviewState => {
   const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
   if (isDraft === true && normalized === "open") {
     return "draft";
@@ -130,7 +134,10 @@ const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestRevi
   return "open";
 };
 
-const parseComment = (payloadValue: unknown, field: string): PullRequestReviewActivity | null => {
+const parseComment = (
+  payloadValue: JsonValue | undefined,
+  field: string,
+): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
   const body = typeof payload.body === "string" ? payload.body : "";
   if (!body.trim()) {
@@ -156,7 +163,10 @@ const parseComment = (payloadValue: unknown, field: string): PullRequestReviewAc
   };
 };
 
-const parseReviewOutcome = (state: unknown, field: string): PullRequestReviewOutcome | null => {
+const parseReviewOutcome = (
+  state: JsonValue | undefined,
+  field: string,
+): PullRequestReviewOutcome | null => {
   if (typeof state !== "string") {
     throw new HostValidationError({
       field,
@@ -184,7 +194,10 @@ const parseReviewOutcome = (state: unknown, field: string): PullRequestReviewOut
   }
 };
 
-const parseReview = (payloadValue: unknown, field: string): PullRequestReviewActivity | null => {
+const parseReview = (
+  payloadValue: JsonValue | undefined,
+  field: string,
+): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
   const reviewOutcome = parseReviewOutcome(payload.state, `${field}.state`);
   if (!reviewOutcome) {
@@ -220,9 +233,9 @@ const parseReview = (payloadValue: unknown, field: string): PullRequestReviewAct
 };
 
 const parseConnection = (
-  connectionValue: unknown,
+  connectionValue: JsonValue | undefined,
   field: string,
-  parseItem: (payload: unknown, field: string) => PullRequestReviewActivity | null,
+  parseItem: (payload: JsonValue | undefined, field: string) => PullRequestReviewActivity | null,
   included: boolean,
 ): ParsedConnection => {
   if (!included) {

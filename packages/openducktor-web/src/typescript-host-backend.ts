@@ -4,7 +4,9 @@ import path from "node:path";
 import {
   failureKindSchema,
   type HostInvokeFailure,
+  hostErrorResponseSchema,
   hostInvokeFailureSchema,
+  type JsonValue,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
 import {
@@ -14,6 +16,7 @@ import {
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
+  parseHostCommandResponse,
   type McpBridgeDiscoveryMode,
   resolveDevelopmentInstanceIdFromEnvironment,
   type TaskAssetReadService,
@@ -49,7 +52,6 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOriginEffect,
 } from "./typescript-host-backend-support";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -58,7 +60,7 @@ export type TypescriptHostBackendOptions = {
   appToken: string;
   logger: WebLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
-  onBackgroundFailure(failure: unknown): void;
+  onBackgroundFailure(cause: unknown): void;
   processEnv?: NodeJS.ProcessEnv;
   runtimeDistribution: HostRuntimeDistribution;
   providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
@@ -71,9 +73,9 @@ const scheduleNonFatalWebEventFailure = (
 ): void => {
   void runWebBoundary(
     writeWebLogEffect(logger, "error", `${message} ${errorMessage(cause)}`),
-  ).catch((loggingCause: unknown) => {
+  ).catch((cause: unknown) => {
     console.error(
-      `OpenDucktor web non-fatal event delivery reporting failed: ${errorMessage(loggingCause)}`,
+      `OpenDucktor web non-fatal event delivery reporting failed: ${errorMessage(cause)}`,
     );
   });
 };
@@ -124,7 +126,7 @@ const tryUpgradeTerminalWebSocket = ({
   appToken: string;
   hostCommandRouter: EffectNodeHostCommandRouter;
   logger: WebLogger;
-  onBackgroundFailure(failure: unknown): void;
+  onBackgroundFailure(cause: unknown): void;
   request: Request;
   server: Bun.Server<TerminalWebSocketData>;
   shutdownStarted: boolean;
@@ -174,13 +176,13 @@ const tryUpgradeTerminalWebSocket = ({
   };
 };
 
-const jsonResponseBody = (payload: unknown): string => {
+const jsonResponseBody = (payload: JsonValue | undefined): string => {
   const serialized = JSON.stringify(payload);
   return serialized === undefined ? "null" : serialized;
 };
 
 const jsonResponse = (
-  payload: unknown,
+  payload: JsonValue | undefined,
   init: ResponseInit = {},
   corsHeaders?: HeadersInit,
 ): Response =>
@@ -199,17 +201,18 @@ const errorResponse = (
   corsHeaders?: HeadersInit,
   failureKind?: string,
   failure?: HostInvokeFailure,
-): Response =>
-  jsonResponse(
-    {
+): Response => {
+  return jsonResponse(
+    hostErrorResponseSchema.parse({
       error: message,
       message,
       ...(failureKind ? { failureKind } : {}),
       ...(failure ? { failure } : {}),
-    },
+    }),
     { status },
     corsHeaders,
   );
+};
 
 const corsHeadersForRequest = (
   request: Request,
@@ -251,56 +254,59 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
+const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const readUnknownProperty = (value: unknown, property: string): unknown =>
-  isRecord(value) ? value[property] : undefined;
+const isCauseRecord = (cause: unknown): cause is Record<string, JsonValue> =>
+  typeof cause === "object" && cause !== null && !Array.isArray(cause);
 
-const readValidFailureKind = (value: unknown): string | undefined => {
+const readCauseProperty = (cause: unknown, property: string): JsonValue | undefined =>
+  isCauseRecord(cause) ? cause[property] : undefined;
+
+const readValidFailureKind = (value: JsonValue | undefined): string | undefined => {
   const parsed = failureKindSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 };
 
-const readStructuredDetails = (value: unknown): Record<string, JsonValue> | undefined => {
-  const details = readUnknownProperty(value, "details");
-  return isRecord(details) ? details : undefined;
+const readCauseStructuredDetails = (cause: unknown): Record<string, JsonValue> | undefined => {
+  const details = readCauseProperty(cause, "details");
+  return isJsonRecord(details) ? details : undefined;
 };
 
 const extractHostCommandFailureKind = (
-  value: unknown,
+  cause: unknown,
   visited = new Set<object>(),
 ): string | undefined => {
-  if (!isRecord(value)) {
+  if (!isCauseRecord(cause)) {
     return undefined;
   }
-  if (visited.has(value)) {
+  if (visited.has(cause)) {
     return undefined;
   }
-  visited.add(value);
+  visited.add(cause);
 
-  const direct = readValidFailureKind(readUnknownProperty(value, "failureKind"));
+  const direct = readValidFailureKind(readCauseProperty(cause, "failureKind"));
   if (direct) {
     return direct;
   }
 
-  const details = readStructuredDetails(value);
-  const detailsFailureKind = readValidFailureKind(readUnknownProperty(details, "failureKind"));
+  const details = readCauseStructuredDetails(cause);
+  const detailsFailureKind = readValidFailureKind(readCauseProperty(details, "failureKind"));
   if (detailsFailureKind) {
     return detailsFailureKind;
   }
 
-  return extractHostCommandFailureKind(readUnknownProperty(value, "cause"), visited);
+  return extractHostCommandFailureKind(readCauseProperty(cause, "cause"), visited);
 };
 
-const hostCommandFailureToWebError = (command: string, error: unknown): WebHostRequestError => {
-  const failureKind = extractHostCommandFailureKind(error);
-  const details = readStructuredDetails(error);
-  const hostInvokeFailure = hostInvokeFailureFromError(error);
+const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostRequestError => {
+  const failureKind = extractHostCommandFailureKind(cause);
+  const details = readCauseStructuredDetails(cause);
+  const hostInvokeFailure = hostInvokeFailureFromError(cause);
   return new WebHostRequestError({
-    message: errorMessage(error),
+    message: errorMessage(cause),
     status: 500,
-    cause: error,
+    cause,
     details: {
       command,
       ...(details ? { hostDetails: details } : {}),
@@ -488,14 +494,18 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const isJsonObject = (value: unknown): value is Record<string, JsonValue> => isRecord(value);
+const isJsonObject = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  isJsonRecord(value);
 
 const parseJsonObjectBody = (
   request: Request,
 ): Effect.Effect<Record<string, JsonValue>, WebHostRequestError> =>
   Effect.gen(function* () {
-    const parsed: unknown = yield* Effect.tryPromise({
-      try: () => request.json(),
+    const parsed: JsonValue = yield* Effect.tryPromise({
+      try: async () => {
+        // SAFETY: Request.json() parses a JSON-compatible request body.
+        return (await request.json()) as JsonValue;
+      },
       catch: (error) =>
         new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",
@@ -647,10 +657,10 @@ const routeCorsRequest = ({
       yield* Effect.sync(() => {
         beginShutdown();
         setTimeout(() => {
-          void stop().catch((error: unknown) => {
-            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(error))).catch(
-              (logError: unknown) => {
-                console.error(errorMessage(logError));
+          void stop().catch((cause: unknown) => {
+            void runWebBoundary(writeWebLogEffect(logger, "error", errorMessage(cause))).catch(
+              (cause: unknown) => {
+                console.error(errorMessage(cause));
                 process.exitCode = 1;
               },
             );
@@ -745,7 +755,11 @@ const routeCorsRequest = ({
               : hostCommandFailureToWebError(decodedCommand, error),
           ),
         );
-      return jsonResponse(result, undefined, corsHeaders);
+      const response = yield* Effect.try({
+        try: () => parseHostCommandResponse(decodedCommand, result),
+        catch: (cause) => hostCommandFailureToWebError(decodedCommand, cause),
+      });
+      return jsonResponse(response, undefined, corsHeaders);
     }
 
     return yield* rejectWebHostRequest("Not found", 404);
@@ -847,7 +861,7 @@ export const startTypescriptHostBackendEffect = ({
       shutdownStarted = true;
     };
     let stopPromise: Promise<void> | null = null;
-    let rejectExited: (failure: unknown) => void = () => {};
+    let rejectExited: (cause: unknown) => void = () => {};
     let resolveExited: (exitCode: number) => void = () => {};
     let server: TypescriptHostBackendServer;
     const exited = new Promise<number>((resolve, reject) => {

@@ -15,7 +15,7 @@ export const normalizeToolInput = (
   return Object.keys(input).length > 0 ? input : undefined;
 };
 
-export const normalizeToolText = (value: unknown): string | undefined => {
+export const normalizeToolText = (value: JsonValue | undefined): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -105,7 +105,7 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
-    const parsed = JSON.parse(withoutQuotes) as unknown;
+    const parsed = JSON.parse(withoutQuotes) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
     if (!parsed || typeof parsed !== "object") {
       return withoutQuotes;
     }

@@ -17,7 +17,7 @@ const normalizeReferencePath = (rawPath: string, root: string, index: number): s
   return toProjectRelativePath(trimmedPath, root);
 };
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> => {
+const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> => {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
@@ -57,7 +57,7 @@ const requireFiniteNumberField = (
   return value;
 };
 
-const requireIndices = (value: unknown, index: number): number[] | null => {
+const requireIndices = (value: JsonValue | undefined, index: number): number[] | null => {
   if (value === null) {
     return null;
   }
@@ -67,11 +67,12 @@ const requireIndices = (value: unknown, index: number): number[] | null => {
   ) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has invalid indices.`);
   }
-  return value;
+  // SAFETY: The guard above verifies every entry is a finite number.
+  return value as number[];
 };
 
 const requireCodexFileSearchResult = (
-  entry: unknown,
+  entry: JsonValue | undefined,
   index: number,
 ): CodexAppServerFuzzyFileSearchResult => {
   if (!isRecord(entry)) {
@@ -113,7 +114,7 @@ const mapCodexFileSearchResult = (
   };
 };
 
-const toCodexFileSearchResults = (response: unknown): AgentFileSearchResult[] => {
+const toCodexFileSearchResults = (response: JsonValue | undefined): AgentFileSearchResult[] => {
   if (!isRecord(response) || !Array.isArray(response.files)) {
     throw new Error("Codex fuzzyFileSearch response must include a files array.");
   }

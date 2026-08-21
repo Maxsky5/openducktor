@@ -1,11 +1,15 @@
 import { expect, mock } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
+  type CodexAppServerProtocolMessage,
+  type CodexAppServerThread,
+  type CodexAppServerTurn,
   type CodexEffectivePolicy,
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
+import type { JsonValue } from "@openducktor/contracts";
 import type {
   PolicyBoundSessionRef,
   SendAgentUserMessageInput,
@@ -13,12 +17,14 @@ import type {
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import type { CodexAppServerStreamEvent } from "./types";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
   type CodexJsonRpcRequest,
   type CodexJsonRpcTransport,
 } from "./index";
+import { isPlainObject } from "./codex-app-server-shared";
 
 export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary => ({
   kind: "codex",
@@ -82,12 +88,8 @@ export const codexUserMessageInput = (
   };
 };
 
-type TestRuntimeStreamListener = (event: {
-  runtimeId: string;
-  kind: "notification" | "server_request";
-  receivedAt: string;
-  message: unknown;
-}) => void;
+type TestRuntimeStreamMessage = CodexAppServerProtocolMessage;
+type TestRuntimeStreamListener = (event: CodexAppServerStreamEvent) => void;
 
 type TestRuntimeStreamSubscription = {
   runtimeId: string;
@@ -107,7 +109,7 @@ export const createRuntimeStreamSubscription = () => {
   const emitEvent = (
     subscription: TestRuntimeStreamSubscription,
     kind: "notification" | "server_request",
-    message: unknown,
+    message: TestRuntimeStreamMessage,
     receivedAt = new Date().toISOString(),
   ) => {
     subscription.listener({
@@ -126,12 +128,12 @@ export const createRuntimeStreamSubscription = () => {
     return subscription;
   };
   const capturedSubscription = (subscription: TestRuntimeStreamSubscription) => ({
-    emitNotification: (message: unknown, receivedAt?: string) =>
+    emitNotification: (message: TestRuntimeStreamMessage, receivedAt?: string) =>
       emitEvent(subscription, "notification", message, receivedAt),
   });
-  const emitNotification = (message: unknown, receivedAt?: string) =>
+  const emitNotification = (message: TestRuntimeStreamMessage, receivedAt?: string) =>
     emitEvent(latestActiveSubscription(), "notification", message, receivedAt);
-  const emitServerRequest = (message: unknown, receivedAt?: string) =>
+  const emitServerRequest = (message: TestRuntimeStreamMessage, receivedAt?: string) =>
     emitEvent(latestActiveSubscription(), "server_request", message, receivedAt);
   const captureLatestSubscription = () => capturedSubscription(latestActiveSubscription());
   return {
@@ -145,8 +147,19 @@ export const createRuntimeStreamSubscription = () => {
 
 export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
+export const codexTurnFixture = (
+  input: Pick<CodexAppServerTurn, "id" | "items" | "status"> & Partial<CodexAppServerTurn>,
+): CodexAppServerTurn => ({
+  completedAt: null,
+  durationMs: null,
+  error: null,
+  itemsView: "full",
+  startedAt: null,
+  ...input,
+});
+
 const recordingTransportHistoryTurns = () => [
-  {
+  codexTurnFixture({
     id: "turn-1",
     startedAt: 1_778_112_001,
     completedAt: 1_778_112_031,
@@ -270,8 +283,67 @@ const recordingTransportHistoryTurns = () => [
         text: "Later commentary",
       },
     ],
-  },
+  }),
 ];
+
+export const codexThreadFixture = (
+  input: Pick<CodexAppServerThread, "id" | "status"> & Partial<CodexAppServerThread>,
+): CodexAppServerThread => ({
+  id: input.id,
+  extra: null,
+  sessionId: input.id,
+  forkedFromId: null,
+  parentThreadId: null,
+  preview: "Live Codex session",
+  ephemeral: false,
+  section: null,
+  sectionEnteredAt: null,
+  projectId: null,
+  historyMode: "paginated",
+  modelProvider: "openai",
+  createdAt: 1_778_112_000,
+  updatedAt: 1_778_112_000,
+  recencyAt: 1_778_112_000,
+  status: input.status,
+  path: null,
+  cwd: "/repo",
+  cliVersion: "0.149.0-test",
+  source: "appServer",
+  canAcceptDirectInput: true,
+  threadSource: null,
+  agentNickname: null,
+  agentRole: null,
+  gitInfo: null,
+  name: null,
+  turns: [],
+  ...input,
+});
+
+export const codexThreadStartResultFixture = (threadId: string) => ({
+  approvalPolicy: "on-request",
+  approvalsReviewer: "user",
+  cwd: "/repo",
+  instructionSources: [],
+  model: "gpt-5",
+  modelProvider: "openai",
+  reasoningEffort: "medium",
+  sandbox: {
+    type: "workspaceWrite",
+    excludeSlashTmp: false,
+    excludeTmpdirEnvVar: false,
+    networkAccess: false,
+    writableRoots: ["/repo"],
+  },
+  serviceTier: null,
+  thread: codexThreadFixture({ id: threadId, status: { type: "active", activeFlags: [] } }),
+});
+
+const requestThreadId = (params: JsonValue | undefined): string => {
+  if (!isPlainObject(params) || typeof params.threadId !== "string") {
+    throw new Error("Expected request params.threadId.");
+  }
+  return params.threadId;
+};
 
 export class RecordingTransport implements CodexJsonRpcTransport {
   readonly calls: CodexJsonRpcRequest[] = [];
@@ -287,16 +359,23 @@ export class RecordingTransport implements CodexJsonRpcTransport {
     }
   }
 
-  async request<Response>({ method, params }: CodexJsonRpcRequest): Promise<Response> {
+  async request({ method, params }: CodexJsonRpcRequest): Promise<JsonValue> {
     this.calls.push({ method, params });
     switch (method) {
       case "initialize":
-        return {} as Response;
+        return {
+          codexHome: "/tmp/codex-home",
+          platformFamily: "unix",
+          platformOs: "macos",
+          userAgent: "codex_cli_rs/0.149.0-test",
+        };
       case "model/list":
         return {
           data: [
             {
               id: "gpt-5",
+              additionalSpeedTiers: [],
+              availabilityNux: null,
               model: "gpt-5",
               displayName: "GPT-5",
               description: "GPT-5 model",
@@ -305,57 +384,60 @@ export class RecordingTransport implements CodexJsonRpcTransport {
                 { reasoningEffort: "medium", description: "Balanced reasoning" },
                 { reasoningEffort: "high", description: "Deep reasoning" },
               ],
-              defaultReasoningEffort: {
-                reasoningEffort: "medium",
-                description: "Balanced reasoning",
-              },
+              defaultReasoningEffort: "medium",
               inputModalities: ["text"],
+              serviceTiers: [],
               supportsPersonality: true,
               isDefault: true,
+              upgrade: null,
+              upgradeInfo: null,
             },
           ],
           nextCursor: null,
-        } as Response;
+        };
       case "thread/start":
       case "thread/resume":
       case "thread/fork": {
         const threadId =
-          method === "thread/resume"
-            ? (params as { threadId: string }).threadId
-            : `${method}-${this.runtimeId}`;
-        return {
-          thread: {
-            id: threadId,
-            cwd: "/repo",
-            createdAt: 1_778_112_000,
-            preview: "Live Codex session",
-            status:
-              threadId === "thread-idle" ? { type: "idle" } : { type: "active", activeFlags: [] },
-            turns: [],
-          },
-          startedAt: "2026-05-07T00:00:00.000Z",
-        } as Response;
+          method === "thread/resume" ? requestThreadId(params) : `${method}-${this.runtimeId}`;
+        const result = codexThreadStartResultFixture(threadId);
+        return threadId === "thread-idle"
+          ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
+          : result;
       }
       case "thread/name/set":
-        return {} as Response;
+      case "thread/compact/start":
+      case "turn/interrupt":
+        return {};
       case "turn/start": {
-        if (
-          !Array.isArray((params as { input?: unknown })?.input) ||
-          (params as { input: Array<{ type?: unknown }> }).input.some(
-            (part) => typeof part.type !== "string",
-          )
-        ) {
+        if (!isPlainObject(params) || !Array.isArray(params.input)) {
           throw new Error("Invalid request: missing field `type`");
         }
+        for (const part of params.input) {
+          if (!isPlainObject(part) || typeof part.type !== "string") {
+            throw new Error("Invalid request: missing field `type`");
+          }
+        }
         const deferred = await this.turnStartDeferred.promise;
-        if (typeof deferred === "object" && deferred !== null && "turn" in deferred) {
-          return deferred as Response;
+        if (isPlainObject(deferred) && "turn" in deferred) {
+          return deferred;
         }
         this.turnStartCount += 1;
-        return { turn: { id: `turn-${this.turnStartCount}`, status: "completed" } } as Response;
+        return {
+          turn: {
+            completedAt: 1_778_112_031,
+            durationMs: 1_000,
+            error: null,
+            id: `turn-${this.turnStartCount}`,
+            items: [],
+            itemsView: "full",
+            startedAt: 1_778_112_030,
+            status: "completed",
+          },
+        };
       }
       case "turn/steer":
-        return { turnId: "turn-steered" } as Response;
+        return { turnId: "turn-steered" };
       case "skills/list":
         return {
           data: [
@@ -373,66 +455,41 @@ export class RecordingTransport implements CodexJsonRpcTransport {
               errors: [],
             },
           ],
-        } as Response;
+        };
       case "thread/read":
         return {
-          thread: {
-            id: (params as { threadId: string }).threadId,
-            cwd: "/repo",
-            createdAt: 1_778_112_000,
-            preview: "Live Codex session",
+          thread: codexThreadFixture({
+            id: requestThreadId(params),
             status: { type: "active", activeFlags: [] },
-            turns: [],
-          },
-        } as Response;
+          }),
+        };
       case "thread/loaded/list":
-        return { data: ["thread-saved", { id: "thread-idle" }], nextCursor: null } as Response;
+        return { data: ["thread-saved", "thread-idle"], nextCursor: null };
       case "thread/list":
         return {
           data: [
-            {
-              id: "thread/start-runtime-live",
-              cwd: "/repo",
-              createdAt: 1_778_112_000,
-              preview: "Live Codex session",
-              status: { type: "idle" },
-            },
-            {
+            codexThreadFixture({ id: "thread/start-runtime-live", status: { type: "idle" } }),
+            codexThreadFixture({
               id: "thread-saved",
-              cwd: "/repo",
-              createdAt: 1_778_112_000,
-              preview: "Saved running session",
               status: { type: "active", activeFlags: [] },
-            },
-            {
+              preview: "Saved running session",
+            }),
+            codexThreadFixture({
               id: "thread-idle",
-              cwd: "/repo",
               createdAt: 1_778_112_010,
-              preview: "Saved idle session",
               status: { type: "idle" },
-            },
+              preview: "Saved idle session",
+            }),
           ],
           nextCursor: null,
           backwardsCursor: null,
-        } as Response;
+        };
       case "thread/turns/list":
-        return { data: recordingTransportHistoryTurns(), nextCursor: null } as Response;
-      case "turn/diff":
         return {
-          data: [
-            {
-              fileChanges: [
-                {
-                  file: "src/app.ts",
-                  type: "modified",
-                  additions: 1,
-                  deletions: 0,
-                  diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n",
-                },
-              ],
-            },
-          ],
-        } as Response;
+          data: recordingTransportHistoryTurns(),
+          nextCursor: null,
+          backwardsCursor: null,
+        };
       default:
         throw new Error(`Unexpected method '${method}'.`);
     }
@@ -450,36 +507,6 @@ export const defaultCodexEffectivePolicy = (): CodexEffectivePolicy => ({
   approvalsReviewerApplies: true,
 });
 
-const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
-  const threadId = (request.params as { threadId: string }).threadId;
-  return {
-    thread: {
-      id: threadId,
-      cwd: "/repo",
-      createdAt: 1,
-      status: { type: "idle" },
-      turns: [],
-    },
-  };
-};
-
-const withDefaultThreadResume = (transport: CodexJsonRpcTransport): CodexJsonRpcTransport => ({
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
-    if (request.method === "thread/resume") {
-      try {
-        return await transport.request<Response>(request);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!message.startsWith("Unexpected method 'thread/resume'")) {
-          throw error;
-        }
-        return defaultThreadResumeResponse(request) as Response;
-      }
-    }
-    return transport.request<Response>(request);
-  },
-});
-
 export const createAdapterWithTransport = (
   transport: CodexJsonRpcTransport,
   overrides: Partial<CodexAppServerAdapterOptions> = {},
@@ -488,7 +515,7 @@ export const createAdapterWithTransport = (
     repoRuntimeResolver: {
       requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
     },
-    transportFactory: () => withDefaultThreadResume(transport),
+    transportFactory: () => transport,
     onRuntimeEventQueueFailure: () => {
       return undefined;
     },
@@ -577,10 +604,18 @@ export const codexRuntimeTeardownCountsForTest = (
   };
 };
 
-export const waitForEvent = async (
-  events: unknown[],
-  predicate: (event: unknown) => boolean,
-): Promise<unknown> => {
+export function waitForEvent<Event, Match extends Event>(
+  events: Event[],
+  predicate: (event: Event) => event is Match,
+): Promise<Match>;
+export function waitForEvent<Event>(
+  events: Event[],
+  predicate: (event: Event) => boolean,
+): Promise<Event>;
+export async function waitForEvent<Event>(
+  events: Event[],
+  predicate: (event: Event) => boolean,
+): Promise<Event> {
   const deadline = Date.now() + 1_000;
   while (Date.now() < deadline) {
     const event = events.find(predicate);
@@ -590,7 +625,7 @@ export const waitForEvent = async (
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for Codex event.");
-};
+}
 
 export const flushCodexAdapterWork = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 0));

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState } from "@openducktor/contracts";
+import type { DevServerGroupState, JsonValue } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
@@ -29,10 +29,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: unknown) => void) | null = null;
+let devServerEventListener: ((payload: JsonValue | undefined) => void) | null = null;
 let nextSubscriptionTransportEpoch = 0;
 let subscribeDevServerEventsMock = async (
-  listener: (payload: unknown) => void,
+  listener: (payload: JsonValue | undefined) => void,
 ): Promise<{ transportEpoch: string; unsubscribe: () => void }> => {
   devServerEventListener = listener;
   const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
@@ -53,7 +53,7 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
+    subscribeDevServerEvents: (listener: (payload: JsonValue | undefined) => void) =>
       subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -66,7 +66,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   nextSubscriptionTransportEpoch = 0;
-  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+  subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
     devServerEventListener = listener;
     const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
     nextSubscriptionTransportEpoch += 1;

@@ -14,8 +14,14 @@ import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { basename, toProjectRelativePath } from "./path-utils";
+import {
+  opencodeAgentListPayloadSchema,
+  opencodeFileSearchPayloadSchema,
+  opencodeSlashCommandListPayloadSchema,
+} from "./opencode-ingress";
 import { mapProviderListToCatalog } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
+import type { JsonValue } from "@openducktor/contracts";
 import type { OpencodeRuntimeClientInput } from "./runtime-connection";
 import type { ClientFactory } from "./types";
 
@@ -58,9 +64,9 @@ const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"
   value === "subagent" || value === "primary" || value === "all";
 
 const resolveAgentColor = (
-  agentName: unknown,
-  explicitColor: unknown,
-  isNative: unknown,
+  agentName: JsonValue | undefined,
+  explicitColor: JsonValue | undefined,
+  isNative: JsonValue | undefined,
 ): string | undefined => {
   if (typeof explicitColor === "string" && explicitColor.trim().length > 0) {
     return explicitColor;
@@ -77,33 +83,27 @@ const resolveAgentColor = (
 const readAgentList = async (
   client: AgentsClient,
   workingDirectory: string,
-): Promise<unknown[]> => {
+): Promise<JsonValue[]> => {
   const app = client.app;
   if (!app || typeof app.agents !== "function") {
     throw new Error("OpenCode runtime does not expose the agent listing API.");
   }
 
   const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
-  if (!Array.isArray(payload)) {
-    throw new Error("Invalid agent payload: expected an array.");
-  }
-  return payload;
+  return opencodeAgentListPayloadSchema.parse(payload);
 };
 
 const readOptionalAgentList = async (
   client: AgentsClient,
   workingDirectory: string,
-): Promise<unknown[]> => {
+): Promise<JsonValue[]> => {
   const app = client.app;
   if (!app || typeof app.agents !== "function") {
     return [];
   }
 
   const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
-  if (!Array.isArray(payload)) {
-    throw new Error("Invalid agent payload: expected an array.");
-  }
-  return payload;
+  return opencodeAgentListPayloadSchema.parse(payload);
 };
 
 const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
@@ -133,16 +133,12 @@ const toFileSearchResults = (
   payload: unknown,
   workingDirectory: string,
 ): AgentFileSearchResult[] => {
-  if (!Array.isArray(payload)) {
+  const paths = opencodeFileSearchPayloadSchema.safeParse(payload);
+  if (!paths.success) {
     throw new Error("Invalid file search payload: expected an array of file paths.");
   }
 
-  return payload.map((entry) => {
-    if (typeof entry !== "string") {
-      throw new Error("Invalid file search payload: expected an array of file paths.");
-    }
-    return toFileSearchResult(entry, workingDirectory);
-  });
+  return paths.data.map((entry) => toFileSearchResult(entry, workingDirectory));
 };
 
 export const listAvailableModels = async (
@@ -266,13 +262,16 @@ export const listAvailableSlashCommands = async (
       throw new Error("OpenCode runtime does not expose the command listing API.");
     }
 
-    const payload = unwrapData(
-      await commandClient.list({ directory: input.workingDirectory }),
-      "list slash commands",
+    const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(
+      unwrapData(
+        await commandClient.list({ directory: input.workingDirectory }),
+        "list slash commands",
+      ),
     );
-    if (!Array.isArray(payload)) {
+    if (!parsedPayload.success) {
       throw new Error("Invalid slash command payload: expected an array.");
     }
+    const payload = parsedPayload.data;
 
     const commands = payload
       .flatMap((rawEntry) => {

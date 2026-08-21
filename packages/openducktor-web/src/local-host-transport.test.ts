@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope, JsonValue } from "@openducktor/contracts";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 
 type FakeEventSourceListener = (event: MessageEvent<string>) => void;
@@ -161,6 +161,19 @@ describe("readLocalHostErrorPayload", () => {
     });
   });
 
+  test("returns the parsed structured payload without reparsing its message", async () => {
+    const { readLocalHostErrorPayload } = await import("./local-host-errors");
+    const response = new Response(JSON.stringify({ error: "  Structured backend error  " }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+
+    await expect(readLocalHostErrorPayload(response)).resolves.toEqual({
+      message: "Structured backend error",
+      payload: { error: "Structured backend error" },
+    });
+  });
+
   test("returns the host status message when the body is empty", async () => {
     const { readLocalHostErrorPayload } = await import("./local-host-errors");
     const response = new Response("", {
@@ -219,7 +232,7 @@ describe("createLocalHostClient", () => {
     const client = createLocalHostClient();
     const result = await client.runtimeEnsure("/repo", "opencode").then(
       () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
+      (cause: unknown) => ({ ok: false as const, error: cause }),
     );
 
     if (result.ok) {
@@ -329,6 +342,31 @@ describe("createLocalHostClient", () => {
       },
     });
   });
+
+  test("keeps invalid invoke failure envelopes as typed dependency errors", async () => {
+    const { createLocalHostClient } = await loadLocalHostTransport();
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/session")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "Invalid terminal failure",
+          failure: { kind: "terminal", terminalFailure: { code: "missing_code" } },
+        }),
+        { status: 500 },
+      );
+    });
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
+
+    await expect(
+      createLocalHostClient().terminalCreate({ workingDir: "/repo", context: {} }),
+    ).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      message: "The local host returned an invalid invoke failure envelope.",
+    });
+  });
 });
 
 describe("local host SSE subscriptions", () => {
@@ -359,11 +397,20 @@ describe("local host SSE subscriptions", () => {
     const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
 
-    const emitHostEvent = (channel: string, payload: unknown): void => {
+    const emitHostEvent = (channel: string, payload: JsonValue | undefined): void => {
       FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
     };
     emitHostEvent("openducktor://run-event", { type: "run" });
-    emitHostEvent("openducktor://dev-server-event", { type: "dev-server" });
+    emitHostEvent("openducktor://dev-server-event", {
+      type: "snapshot",
+      state: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-03-19T15:30:00.000Z",
+      },
+    });
     emitHostEvent("openducktor://agent-session-live-event", {
       type: "snapshot",
       repoPath: "/repo",
@@ -371,12 +418,25 @@ describe("local host SSE subscriptions", () => {
     });
 
     expect(runListener).toHaveBeenCalledWith({ type: "run" });
-    expect(devServerListener).toHaveBeenCalledWith({ type: "dev-server" });
+    expect(devServerListener).toHaveBeenCalledWith({
+      type: "snapshot",
+      state: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-03-19T15:30:00.000Z",
+      },
+    });
     expect(liveSessionListener).toHaveBeenCalledWith({
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
     });
+    expect(() => emitHostEvent("openducktor://dev-server-event", { type: "dev-server" })).toThrow(
+      "Invalid OpenDucktor host event envelope.",
+    );
+    expect(devServerListener).toHaveBeenCalledTimes(1);
 
     unsubscribeRun();
     unsubscribeDevServer();

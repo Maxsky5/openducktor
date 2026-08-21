@@ -2,9 +2,9 @@ import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCommandAction,
   type CodexAppServerLegacyParsedCommand,
-  isCodexAppServerCommandAction,
-  isCodexAppServerLegacyParsedCommand,
-  isCodexAppServerRequestPermissionProfile,
+  codexAppServerCommandActionSchema,
+  codexAppServerLegacyParsedCommandSchema,
+  codexAppServerRequestPermissionProfileSchema,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
@@ -31,48 +31,44 @@ const hasEntries = <T>(value: readonly T[] | null | undefined): boolean =>
 const hasNetworkApprovalContext = (value: Record<string, JsonValue>): boolean =>
   value.networkApprovalContext !== undefined && value.networkApprovalContext !== null;
 
-const hasAdditionalNetworkPermissions = (value: unknown): boolean =>
-  isCodexAppServerRequestPermissionProfile(value) && value.network !== null;
+const hasAdditionalNetworkPermissions = (value: JsonValue | undefined): boolean => {
+  const parsed = codexAppServerRequestPermissionProfileSchema.safeParse(value);
+  return parsed.success && parsed.data.network !== null;
+};
 
-const classifyAdditionalPermissions = (value: unknown): AgentApprovalMutation => {
-  if (value === undefined || value === null) {
+const classifyAdditionalPermissions = (value: JsonValue | undefined): AgentApprovalMutation => {
+  const parsed = codexAppServerRequestPermissionProfileSchema.safeParse(value);
+  if (!parsed.success) {
     return "unknown";
   }
-  if (!isCodexAppServerRequestPermissionProfile(value)) {
-    return "unknown";
-  }
-  if (hasEntries(value.fileSystem?.write)) {
+  const profile = parsed.data;
+  if (hasEntries(profile.fileSystem?.write)) {
     return "mutating";
   }
-  if (value.fileSystem?.entries?.some((entry) => entry.access === "write")) {
+  if (profile.fileSystem?.entries?.some((entry) => entry.access === "write")) {
     return "mutating";
   }
   return "unknown";
 };
 
 const classifyCommandAction = (
-  action: unknown,
-  isAction: (
-    action: unknown,
-  ) => action is CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
+  action: CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
 ): AgentApprovalMutation => {
-  if (!isAction(action)) {
-    return "unknown";
-  }
   return isReadOnlyCommandActionType(action.type) ? "read_only" : "unknown";
 };
 
 const classifyCommandActions = (
-  value: unknown,
-  isAction: (
-    action: unknown,
-  ) => action is CodexAppServerCommandAction | CodexAppServerLegacyParsedCommand,
+  value: JsonValue | undefined,
+  schema: typeof codexAppServerCommandActionSchema | typeof codexAppServerLegacyParsedCommandSchema,
 ): AgentApprovalMutation => {
   if (!Array.isArray(value) || value.length === 0) {
     return "unknown";
   }
 
-  const actionMutations = value.map((action) => classifyCommandAction(action, isAction));
+  const actionMutations = value.map((action) => {
+    const parsed = schema.safeParse(action);
+    return parsed.success ? classifyCommandAction(parsed.data) : "unknown";
+  });
   if (actionMutations.some((mutation) => mutation === "mutating")) {
     return "mutating";
   }
@@ -85,28 +81,29 @@ export const classifyCodexCommandRequestMutation = (
   if (!isPlainObject(request.params)) {
     return "unknown";
   }
-  const additionalPermissions = classifyAdditionalPermissions(request.params.additionalPermissions);
+  const params: Record<string, JsonValue> = request.params;
+  const additionalPermissions = classifyAdditionalPermissions(params.additionalPermissions);
   if (additionalPermissions === "mutating") {
     return additionalPermissions;
   }
   if (
-    hasNetworkApprovalContext(request.params) ||
-    hasAdditionalNetworkPermissions(request.params.additionalPermissions)
+    hasNetworkApprovalContext(params) ||
+    hasAdditionalNetworkPermissions(params.additionalPermissions)
   ) {
     return "unknown";
   }
 
   if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {
-    return classifyCommandActions(request.params.parsedCmd, isCodexAppServerLegacyParsedCommand);
+    return classifyCommandActions(params.parsedCmd, codexAppServerLegacyParsedCommandSchema);
   }
 
   if (
-    Array.isArray(request.params.commandActions) &&
-    request.params.commandActions.length === 0 &&
-    !hasNetworkApprovalContext(request.params)
+    Array.isArray(params.commandActions) &&
+    params.commandActions.length === 0 &&
+    !hasNetworkApprovalContext(params)
   ) {
     return "mutating";
   }
 
-  return classifyCommandActions(request.params.commandActions, isCodexAppServerCommandAction);
+  return classifyCommandActions(params.commandActions, codexAppServerCommandActionSchema);
 };

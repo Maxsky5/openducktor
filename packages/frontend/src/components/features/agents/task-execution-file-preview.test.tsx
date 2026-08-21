@@ -1,10 +1,17 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteResult,
 } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
-import { getFiletypeFromFileName } from "@pierre/diffs";
+import {
+  File,
+  type CodeViewFileItem,
+  type CodeViewItem,
+  type FileContents,
+  getFiletypeFromFileName,
+} from "@pierre/diffs";
+import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren, type ReactElement, useEffect } from "react";
@@ -30,16 +37,34 @@ let writeTextFileMock: ReturnType<typeof mock>;
 let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 let latestCodeViewProps: {
-  editorOptions?: unknown;
-  items: Array<{
-    edit?: boolean;
-    file: { cacheKey?: string; contents: string; name: string };
-    id: string;
-    version?: number;
-  }>;
-  onItemEditChange?: (item: unknown, file: unknown) => void;
+  editorOptions?: EditorOptions<undefined>;
+  items: CodeViewFileItem[];
+  onItemEditChange?: (
+    item: CodeViewItem<undefined> | undefined,
+    file: Pick<FileContents, "contents">,
+  ) => void;
 } | null = null;
-const editProviderFactories: unknown[] = [];
+const editProviderFactories: Array<(options: EditorOptions<undefined>) => Editor<undefined>> = [];
+
+const createAttachedEditor = (options: EditorOptions<undefined> | undefined): Editor<undefined> => {
+  const createEditor = editProviderFactories.at(-1);
+  if (!options || !createEditor) {
+    throw new Error("Expected an editor factory and options.");
+  }
+
+  return createEditor(options);
+};
+
+const attachEditor = (
+  options: EditorOptions<undefined> | undefined,
+  editor: Editor<undefined>,
+): void => {
+  if (!options) {
+    throw new Error("Expected editor options.");
+  }
+
+  options.onAttach?.(editor, new File<undefined>());
+};
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
 let highlightCompletionMode: "auto" | "manual" = "auto";
@@ -247,7 +272,12 @@ beforeEach(async () => {
 
   mock.module("./task-execution-file-preview-pierre", () => ({
     useWorkerPool: () => previewWorkerPool,
-    EditProvider: ({ children, createEditor }: PropsWithChildren<{ createEditor: unknown }>) => {
+    EditProvider: ({
+      children,
+      createEditor,
+    }: PropsWithChildren<{
+      createEditor: (options: EditorOptions<undefined>) => Editor<undefined>;
+    }>) => {
       editProviderFactories.push(createEditor);
       return children;
     },
@@ -673,12 +703,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
     );
     const providerFactory = editProviderFactories.at(-1);
     const editorOptions = latestCodeViewProps?.editorOptions;
-    const attachedEditor = { focus: mock(() => {}) };
-    (
-      editorOptions as
-        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-        | undefined
-    )?.onAttach?.(attachedEditor);
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => {});
+    attachEditor(editorOptions, attachedEditor);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     highlightCompletionMode = "manual";
@@ -715,7 +742,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     });
     expect(editProviderFactories.at(-1)).toBe(providerFactory);
     expect(latestCodeViewProps?.editorOptions).toBe(editorOptions);
-    expect(attachedEditor.focus).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(codeViewMountCount).toBe(1);
     expect(onLeavePolicyChange).toHaveBeenCalledWith("confirm");
     expect(onLeavePolicyChange).toHaveBeenCalledWith("defer");
@@ -729,11 +756,9 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByText("const first = true;");
     const firstItem = latestCodeViewProps?.items[0];
     const firstCacheKey = firstItem?.file.cacheKey;
-    (
-      latestCodeViewProps?.editorOptions as
-        | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-        | undefined
-    )?.onAttach?.({ focus: mock(() => {}) });
+    const attachedEditor = createAttachedEditor(latestCodeViewProps?.editorOptions);
+    spyOn(attachedEditor, "focus").mockImplementation(() => {});
+    attachEditor(latestCodeViewProps?.editorOptions, attachedEditor);
 
     act(() => {
       latestCodeViewProps?.onItemEditChange?.(firstItem, {
@@ -1243,13 +1268,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
     render(renderPreview({ selectedFile: firstFile, onClose }));
     await screen.findByText("const first = true;");
     await waitFor(() => expect(latestCodeViewProps?.items[0]?.edit).toBe(true));
-    const editorOptions = latestCodeViewProps?.editorOptions as
-      | { onAttach?: (editor: { focus(options: unknown): void }) => void }
-      | undefined;
-    const focus = mock(() => {});
+    const editorOptions = latestCodeViewProps?.editorOptions;
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => {});
 
     expect(editorOptions?.onAttach).toBeFunction();
-    editorOptions?.onAttach?.({ focus });
+    attachEditor(editorOptions, attachedEditor);
     expect(focus).toHaveBeenCalledWith({ lineNumber: "first-visible", preventScroll: true });
   });
 
@@ -1270,11 +1294,10 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await screen.findByRole("dialog");
     await screen.findByText("const first = true;");
     const editorSurface = screen.getByLabelText("Code editor");
-    const focus = mock(() => editorSurface.focus());
-    const editorOptions = latestCodeViewProps?.editorOptions as
-      | { onAttach?: (editor: { focus(options?: unknown): void }) => void }
-      | undefined;
-    editorOptions?.onAttach?.({ focus });
+    const editorOptions = latestCodeViewProps?.editorOptions;
+    const attachedEditor = createAttachedEditor(editorOptions);
+    const focus = spyOn(attachedEditor, "focus").mockImplementation(() => editorSurface.focus());
+    attachEditor(editorOptions, attachedEditor);
     fireEvent.keyDown(screen.getByLabelText("Selected file preview"), { key: "Escape" });
     expect(onClose).not.toHaveBeenCalled();
     expect(onKeepEditing).toHaveBeenCalledTimes(1);

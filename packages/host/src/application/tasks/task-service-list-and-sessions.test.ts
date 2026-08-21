@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { JsonValue } from "@openducktor/contracts";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskService } from "./task-service";
@@ -861,7 +862,7 @@ describe("createTaskService list and session reads", () => {
   test("deletes one exact durable agent session identity", async () => {
     const calls: unknown[] = [];
     const taskStore = {
-      deleteAgentSession(input: unknown) {
+      deleteAgentSession(input: JsonValue | undefined) {
         return Effect.sync(() => {
           calls.push(input);
           return true;

@@ -110,9 +110,9 @@ export type MockSession = {
 };
 
 export type SessionUpdateMockResult = {
-  data?: unknown;
-  error?: unknown;
-  response?: unknown;
+  data?: JsonValue;
+  error?: JsonValue | undefined;
+  response?: JsonValue | undefined;
 };
 
 export type MockTool = {
@@ -140,11 +140,11 @@ export type MockEventStream = {
 export type TodoMockResult =
   | {
       mode: "success";
-      data: unknown;
+      data: JsonValue;
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: JsonValue | undefined;
       status?: number;
       statusText?: string;
     }
@@ -156,11 +156,11 @@ export type TodoMockResult =
 export type AgentsMockResult =
   | {
       mode: "success";
-      data: unknown;
+      data: JsonValue;
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: JsonValue | undefined;
     }
   | {
       mode: "throw";
@@ -170,11 +170,11 @@ export type AgentsMockResult =
 export type PromptAsyncMockResult =
   | {
       mode: "success";
-      data?: unknown;
+      data?: JsonValue;
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: JsonValue | undefined;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -185,11 +185,11 @@ export type PromptAsyncMockResult =
 export type CommandMockResult =
   | {
       mode: "success";
-      data?: unknown;
+      data?: JsonValue;
     }
   | {
       mode: "api_error";
-      error: unknown;
+      error: JsonValue | undefined;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -216,12 +216,12 @@ export type MakeMockClientInput = {
   }>;
   childrenResponse?: unknown[];
   todoResult?: TodoMockResult;
-  providerResponse?: unknown;
-  agentsResponse?: unknown;
+  providerResponse?: JsonValue | undefined;
+  agentsResponse?: JsonValue | undefined;
   agentsResult?: AgentsMockResult;
-  toolIdsResponse?: unknown;
-  modelToolsResponse?: unknown;
-  mcpStatusResponse?: unknown;
+  toolIdsResponse?: JsonValue | undefined;
+  modelToolsResponse?: JsonValue | undefined;
+  mcpStatusResponse?: JsonValue | undefined;
 };
 
 export const makeMockClient = ({
@@ -314,11 +314,11 @@ export const makeMockClient = ({
 
   const client = {
     session: {
-      create: async (input: unknown) => {
+      create: async (input: JsonValue | undefined) => {
         session.createCalls.push(input);
         return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
       },
-      promptAsync: async (input: unknown) => {
+      promptAsync: async (input: JsonValue | undefined) => {
         session.promptAsyncCalls.push(input);
         if (promptAsyncResult.mode === "throw") {
           throw promptAsyncResult.error;
@@ -332,7 +332,7 @@ export const makeMockClient = ({
         }
         return { data: promptAsyncResult.data, error: undefined };
       },
-      command: async (input: unknown) => {
+      command: async (input: JsonValue | undefined) => {
         session.commandCalls.push(input);
         if (commandResult.mode === "throw") {
           throw commandResult.error;
@@ -346,15 +346,15 @@ export const makeMockClient = ({
         }
         return { data: commandResult.data, error: undefined };
       },
-      prompt: async (input: unknown) => {
+      prompt: async (input: JsonValue | undefined) => {
         session.promptCalls.push(input);
         return { data: undefined, error: undefined };
       },
-      abort: async (input: unknown) => {
+      abort: async (input: JsonValue | undefined) => {
         session.abortCalls.push(input);
         return { data: true, error: undefined };
       },
-      get: async (input: unknown) => {
+      get: async (input: JsonValue | undefined) => {
         session.getCalls.push(input);
         return {
           data: {
@@ -365,33 +365,33 @@ export const makeMockClient = ({
           error: undefined,
         };
       },
-      update: async (input: unknown) => {
+      update: async (input: JsonValue | undefined) => {
         session.updateCalls.push(input);
         return session.updateResult;
       },
-      fork: async (input: unknown) => {
+      fork: async (input: JsonValue | undefined) => {
         session.forkCalls.push(input);
         return { data: { id: forkSessionId }, error: undefined };
       },
-      delete: async (input: unknown) => {
+      delete: async (input: JsonValue | undefined) => {
         session.deleteCalls.push(input);
         return { data: true, error: undefined };
       },
-      messages: async (input: unknown) => {
+      messages: async (input: JsonValue | undefined) => {
         session.messagesCalls.push(input);
         return {
           data: session.messagesResponse,
           error: undefined,
         };
       },
-      children: async (input: unknown) => {
+      children: async (input: JsonValue | undefined) => {
         session.childrenCalls.push(input);
         return {
           data: childrenResponse,
           error: undefined,
         };
       },
-      todo: async (input: unknown) => {
+      todo: async (input: JsonValue | undefined) => {
         session.todoCalls.push(input);
         if (session.todoResult.mode === "throw") {
           throw session.todoResult.error;
@@ -417,13 +417,13 @@ export const makeMockClient = ({
       },
     },
     permission: {
-      reply: async (input: unknown) => {
+      reply: async (input: JsonValue | undefined) => {
         permission.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     question: {
-      reply: async (input: unknown) => {
+      reply: async (input: JsonValue | undefined) => {
         question.replyCalls.push(input);
         return { data: true, error: undefined };
       },
@@ -453,14 +453,14 @@ export const makeMockClient = ({
       },
     },
     tool: {
-      ids: async (input: unknown) => {
+      ids: async (input: JsonValue | undefined) => {
         tool.idsCalls.push(input);
         return {
           data: toolIdsResponse,
           error: undefined,
         };
       },
-      list: async (input: unknown) => {
+      list: async (input: JsonValue | undefined) => {
         tool.listCalls.push(input);
         return {
           data: modelToolsResponse,
@@ -469,14 +469,14 @@ export const makeMockClient = ({
       },
     },
     mcp: {
-      status: async (input: unknown) => {
+      status: async (input: JsonValue | undefined) => {
         mcp.statusCalls.push(input);
         return {
           data: mcpStatusResponse,
           error: undefined,
         };
       },
-      connect: async (input: unknown) => {
+      connect: async (input: JsonValue | undefined) => {
         mcp.connectCalls.push(input);
         return {
           data: true,

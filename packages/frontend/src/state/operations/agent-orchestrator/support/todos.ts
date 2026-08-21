@@ -1,4 +1,4 @@
-import { parseAgentSessionTodoPayloadList } from "@openducktor/contracts";
+import { agentSessionTodoPayloadListSchema } from "@openducktor/contracts";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -9,14 +9,15 @@ export const parseTodosFromToolOutput = (
     return null;
   }
   try {
-    const parsed = JSON.parse(output) as unknown;
+    const parsed: JsonValue = JSON.parse(output);
     if (Array.isArray(parsed)) {
-      return normalizeAgentSessionTodoList(parseAgentSessionTodoPayloadList(parsed));
+      return normalizeAgentSessionTodoList(agentSessionTodoPayloadListSchema().parse(parsed));
     }
     if (parsed && typeof parsed === "object") {
-      const record = parsed as Record<string, JsonValue>;
-      if (Array.isArray(record.todos)) {
-        return normalizeAgentSessionTodoList(parseAgentSessionTodoPayloadList(record.todos));
+      if (Array.isArray(parsed.todos)) {
+        return normalizeAgentSessionTodoList(
+          agentSessionTodoPayloadListSchema().parse(parsed.todos),
+        );
       }
     }
     return null;
@@ -40,9 +41,9 @@ export const parseTodosFromToolInput = (
     return null;
   }
 
-  const parsed = parseAgentSessionTodoPayloadList(rawTodos, {
+  const parsed = agentSessionTodoPayloadListSchema({
     allowStringEntries: true,
-  });
+  }).parse(rawTodos);
   const normalized = normalizeAgentSessionTodoList(parsed);
 
   return normalized.length > 0 ? normalized : null;

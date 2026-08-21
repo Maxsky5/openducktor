@@ -248,7 +248,7 @@ describe("launcher internals", () => {
 
     const result = await closeFrontendServer(frontendServer).then(
       () => ({ ok: true as const }),
-      (error: unknown) => ({ ok: false as const, error }),
+      (cause: unknown) => ({ ok: false as const, error: cause }),
     );
 
     if (result.ok) {

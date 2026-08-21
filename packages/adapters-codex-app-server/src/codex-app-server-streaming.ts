@@ -476,7 +476,7 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
   return notification.receivedAt;
 };
 
-const isCodexIdleThreadStatus = (status: unknown): boolean => {
+const isCodexIdleThreadStatus = (status: JsonValue | undefined): boolean => {
   const type = isPlainObject(status)
     ? extractStringField(status, ["type"])
     : typeof status === "string"

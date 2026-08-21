@@ -11,7 +11,7 @@ import { emptyMapper } from "./empty";
 const streamPartEvents = (
   name: string,
   ctx: CodexMappingContext,
-  raw: unknown,
+  raw: JsonValue | undefined,
   item: Record<string, JsonValue>,
   messageId: string,
   partId: string,
@@ -82,7 +82,7 @@ export const fileChangeMapper: CodexEventMapper = {
     return streamPartEvents(
       this.name,
       ctx,
-      input.notification,
+      params,
       {
         type: "fileChange",
         id: itemId,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { SelectedLineRange } from "@pierre/diffs";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import {
@@ -85,13 +86,13 @@ beforeEach(async () => {
               diffStyle?: string;
               hunkSeparators?: string;
               lineDiffType?: string;
-              onGutterUtilityClick?: (range: unknown) => void;
-              onLineSelectionChange?: (range: unknown) => void;
-              onLineSelectionStart?: (range: unknown) => void;
+              onGutterUtilityClick?: (range: SelectedLineRange) => void;
+              onLineSelectionChange?: (range: SelectedLineRange | null) => void;
+              onLineSelectionStart?: (range: SelectedLineRange | null) => void;
               overflow?: string;
               tokenizeMaxLength?: number;
             };
-            selectedLines?: unknown;
+            selectedLines?: SelectedLineRange | null;
           }) => {
             const { options } = props;
             const [mountId] = useState(() => {

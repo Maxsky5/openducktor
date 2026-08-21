@@ -1,10 +1,10 @@
 import {
-  type HostEventBusPort,
   type HostEventChannel,
-  type HostEventListener,
-  type HostEventUnsubscribe,
+  type HostEventEnvelope,
+  parseHostEventEnvelope,
   parseHostEventChannel,
-} from "@openducktor/host";
+} from "@openducktor/contracts";
+import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
   causeToWebBoundaryError,
@@ -47,11 +47,11 @@ export class BufferedHostEventStream {
 
   constructor(private readonly capacity: number) {}
 
-  emit(payload: unknown, reportDeliveryFailure: (cause: unknown) => void): void {
+  emit(envelope: HostEventEnvelope, reportDeliveryFailure: (cause: unknown) => void): void {
     this.nextId += 1;
     const event = {
       id: this.nextId,
-      payload: JSON.stringify(payload) ?? "null",
+      payload: JSON.stringify(envelope),
     };
     this.recent.push(event);
     if (this.recent.length > this.capacity) {
@@ -105,21 +105,21 @@ export class BufferedHostEventBus implements HostEventBusPort {
 
   constructor(private readonly deliveryReporter: BufferedHostEventDeliveryReporter) {}
 
-  publish(channel: string, payload: unknown): void {
-    const hostChannel = this.requireChannel(channel);
-    this.eventStream.emit({ channel: hostChannel, payload }, (cause) =>
-      this.deliveryReporter.report({ channel: hostChannel, cause }),
+  publish(envelope: HostEventEnvelope): void {
+    const validatedEnvelope = parseHostEventEnvelope(envelope);
+    this.eventStream.emit(validatedEnvelope, (cause) =>
+      this.deliveryReporter.report({ channel: validatedEnvelope.channel, cause }),
     );
-    const listeners = this.listenersByChannel.get(hostChannel);
+    const listeners = this.listenersByChannel.get(validatedEnvelope.channel);
     if (!listeners) {
       return;
     }
     // oxlint-disable-next-line unicorn/no-useless-spread -- listeners can unsubscribe during delivery
     for (const listener of [...listeners]) {
       try {
-        listener(payload);
+        listener(validatedEnvelope);
       } catch (cause) {
-        this.deliveryReporter.report({ channel: hostChannel, cause });
+        this.deliveryReporter.report({ channel: validatedEnvelope.channel, cause });
       }
     }
   }

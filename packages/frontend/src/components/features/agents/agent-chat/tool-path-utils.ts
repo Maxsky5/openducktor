@@ -1,4 +1,5 @@
 import { toDisplayRelativePath } from "@openducktor/path-support";
+import type { JsonValue } from "@openducktor/contracts";
 
 const DISPLAY_PATH_KEYS = new Set([
   "filePath",
@@ -35,17 +36,19 @@ export const relativizeSearchSummary = (
 };
 
 export const relativizeDisplayPathsInValue = (
-  value: unknown,
+  value: JsonValue | undefined,
   workingDirectory?: string | null,
   key?: string,
-): unknown => {
+): JsonValue | undefined => {
   if (typeof value === "string") {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
       : value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
+    return value.map((entry) =>
+      relativizeDisplayPathsInValue(entry, workingDirectory, key),
+    ) as JsonValue;
   }
   if (!value || typeof value !== "object") {
     return value;
@@ -56,5 +59,5 @@ export const relativizeDisplayPathsInValue = (
       entryKey,
       relativizeDisplayPathsInValue(entryValue, workingDirectory, entryKey),
     ]),
-  );
+  ) as JsonValue;
 };

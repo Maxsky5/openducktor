@@ -2,14 +2,11 @@ import type { CodexAppServerRequestId } from "@openducktor/contracts";
 import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
+import type { CodexRuntimeServerRequest } from "./codex-runtime-event-schema";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { JsonValue } from "@openducktor/contracts";
 
-export type CodexNativeServerRequest = {
-  id: CodexAppServerRequestId;
-  method: string;
-  params?: unknown;
-};
+export type CodexNativeServerRequest = CodexRuntimeServerRequest;
 
 type PendingApprovalRequestProjection = Omit<
   AgentPendingApprovalRequest,

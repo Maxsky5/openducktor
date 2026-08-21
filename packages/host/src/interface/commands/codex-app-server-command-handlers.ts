@@ -10,14 +10,14 @@ import type {
   CodexAppServerRequestMethod,
 } from "../../ports/codex-app-server-port";
 import { CODEX_APP_SERVER_REQUEST_METHODS } from "../../ports/codex-app-server-port";
-import {
-  type CodexAppServerRequestParams,
-  type CodexAppServerRequestResult,
-  isCodexAppServerJsonValue,
-} from "../../ports/codex-app-server-protocol";
+import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-protocol";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
-import type { JsonValue } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  parseCodexAppServerClientRequest,
+  type JsonValue,
+} from "@openducktor/contracts";
 
 type CodexAppServerCommandHandlerOptions = {
   logger?: HostLifecycleLogger;
@@ -35,18 +35,20 @@ const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
   "turn/start",
 ]);
 
-const isRecordValue = (value: unknown): value is Record<string, JsonValue> =>
+const isRecordValue = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const recordFromValue = (value: unknown): Record<string, JsonValue> =>
-  isRecordValue(value) ? value : {};
+const recordFromValue = (value: unknown): Record<string, JsonValue> => {
+  const parsed = jsonValueSchema.safeParse(value);
+  return parsed.success && isRecordValue(parsed.data) ? parsed.data : {};
+};
 
 const stringField = (record: Record<string, JsonValue>, field: string): string | undefined => {
   const value = record[field];
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 };
 
-const logValue = (value: unknown): string | undefined => {
+const logValue = (value: JsonValue | undefined): string | undefined => {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
@@ -59,7 +61,7 @@ const logValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const sandboxModeFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
+const sandboxModeFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | undefined => {
   if (!isRecordValue(sandboxPolicy)) {
     return undefined;
   }
@@ -77,7 +79,9 @@ const sandboxModeFromSandboxPolicy = (sandboxPolicy: unknown): string | undefine
   }
 };
 
-const networkAccessFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
+const networkAccessFromSandboxPolicy = (
+  sandboxPolicy: JsonValue | undefined,
+): string | undefined => {
   if (!isRecordValue(sandboxPolicy)) {
     return undefined;
   }
@@ -87,7 +91,7 @@ const networkAccessFromSandboxPolicy = (sandboxPolicy: unknown): string | undefi
   return logValue(sandboxPolicy.networkAccess);
 };
 
-const cwdFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
+const cwdFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | undefined => {
   if (!isRecordValue(sandboxPolicy) || !Array.isArray(sandboxPolicy.writableRoots)) {
     return undefined;
   }
@@ -154,23 +158,7 @@ const logCodexPolicyRequest = (
 const isCodexRequestMethod = (method: string): method is CodexAppServerRequestMethod =>
   CODEX_APP_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
-const requireCodexJsonObject = (value: unknown, context: string) => {
-  if (!isRecordValue(value)) {
-    throw new HostValidationError({
-      message: `${context} must be a JSON object.`,
-      details: { context },
-    });
-  }
-  if (!isCodexAppServerJsonValue(value)) {
-    throw new HostValidationError({
-      message: `${context} must be JSON-serializable.`,
-      details: { context },
-    });
-  }
-  return value;
-};
-
-const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod => {
+const requireCodexRequestMethod = (value: JsonValue | undefined): CodexAppServerRequestMethod => {
   const method = requireString(value, "method");
   if (!isCodexRequestMethod(method)) {
     throw new HostValidationError({
@@ -186,16 +174,38 @@ const parseRequestInput = (
   args: Record<string, JsonValue> | undefined,
 ): CodexAppServerRequestInput => {
   const record = requireRecord(args, "codex_app_server_request input");
-  const params =
-    record.params === undefined ? undefined : requireCodexJsonObject(record.params, "params");
+  const runtimeId = requireString(record.runtimeId, "runtimeId");
+  const method = requireCodexRequestMethod(record.method);
+  const parsedParams = jsonValueSchema.safeParse(record.params);
+  if (!parsedParams.success) {
+    throw new HostValidationError({
+      message: "params must be JSON-serializable.",
+      field: "params",
+      cause: parsedParams.error,
+      details: { method },
+    });
+  }
+  let request;
+  try {
+    request = parseCodexAppServerClientRequest({ method, params: parsedParams.data });
+  } catch (cause) {
+    throw new HostValidationError({
+      message: `Invalid Codex app-server request params for method ${method}`,
+      field: "params",
+      cause,
+      details: { method },
+    });
+  }
   return {
-    runtimeId: requireString(record.runtimeId, "runtimeId"),
-    method: requireCodexRequestMethod(record.method),
-    ...(params !== undefined ? { params: params as CodexAppServerRequestParams } : {}),
+    runtimeId,
+    ...request,
   };
 };
 
-const optionalNullableString = (value: unknown, field: string): string | null | undefined => {
+const optionalNullableString = (
+  value: JsonValue | undefined,
+  field: string,
+): string | null | undefined => {
   if (value === undefined || value === null) {
     return value;
   }
@@ -203,7 +213,7 @@ const optionalNullableString = (value: unknown, field: string): string | null | 
 };
 
 const optionalNullablePositiveInteger = (
-  value: unknown,
+  value: JsonValue | undefined,
   field: string,
 ): number | null | undefined => {
   if (value === undefined || value === null) {
@@ -219,7 +229,7 @@ const optionalNullablePositiveInteger = (
 };
 
 const optionalNullableLiteral = <Value extends string>(
-  value: unknown,
+  value: JsonValue | undefined,
   field: string,
   allowed: readonly Value[],
 ): Value | null | undefined => {

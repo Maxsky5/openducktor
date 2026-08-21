@@ -132,8 +132,8 @@ export const readElectronLocalAttachmentPreviewRequestPathEffect = (
           }),
   });
 
-const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 | 500): Response =>
-  new Response(errorMessage(error) || "Local attachment preview failed.", {
+const createLocalAttachmentPreviewErrorResponse = (cause: unknown, status: 400 | 500): Response =>
+  new Response(errorMessage(cause) || "Local attachment preview failed.", {
     status,
   });
 

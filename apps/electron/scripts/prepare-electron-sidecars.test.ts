@@ -113,7 +113,7 @@ describe("prepareElectronSidecars", () => {
       platform: "linux",
       workspaceRoot,
       ...makeSideEffectingHooks(sideEffects),
-    }).catch((caught: unknown) => caught);
+    }).catch((cause: unknown) => cause);
 
     expect(error).toMatchObject({
       _tag: "ElectronValidationError",

@@ -221,8 +221,8 @@ export class CodexThreadInventoryReader {
       workingDirectory: string;
       allowUnmaterialized?: boolean;
     },
-  ): Promise<unknown | null> {
-    let response: unknown;
+  ): Promise<JsonValue | null> {
+    let response: JsonValue | undefined;
     try {
       response = await this.readThreadWithTurns(
         client,
@@ -236,7 +236,7 @@ export class CodexThreadInventoryReader {
       throw error;
     }
     const thread = threadSnapshotFromReadResponse(response);
-    if (!thread || thread.cwd !== input.workingDirectory) {
+    if (!response || !thread || thread.cwd !== input.workingDirectory) {
       return null;
     }
     return response;
@@ -246,8 +246,8 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     unmaterializedWorkingDirectory?: string,
-  ): Promise<unknown> {
-    let response: unknown;
+  ): Promise<JsonValue | undefined> {
+    let response: JsonValue | undefined;
     let pagedTurns: Record<string, JsonValue>[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });

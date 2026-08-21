@@ -1,4 +1,7 @@
-import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  codexAppServerReasoningEffortSchema,
+} from "@openducktor/contracts";
 import type {
   AgentModelAttachmentSupport,
   AgentModelCatalog,
@@ -43,7 +46,7 @@ const validateModelSelection = (
 
 export const toTransportModelSelection = (model: AgentModelSelection) => ({
   model: model.modelId,
-  effort: model.variant as string,
+  effort: codexAppServerReasoningEffortSchema.parse(model.variant),
 });
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {

@@ -7,12 +7,12 @@ export type RefreshGitDiffData = GitDiffRefresh;
 
 export const CONFLICT_LOCK_REASON = "Git actions are disabled while git conflicts are unresolved.";
 
-export const toErrorMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
+export const toErrorMessage = (cause: unknown, fallback: string): string => {
+  if (cause instanceof Error && cause.message.trim().length > 0) {
+    return cause.message;
   }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
+  if (typeof cause === "string" && cause.trim().length > 0) {
+    return cause;
   }
   return fallback;
 };

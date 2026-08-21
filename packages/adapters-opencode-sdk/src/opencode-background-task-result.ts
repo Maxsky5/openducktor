@@ -1,8 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
-type TextPart = Extract<Part, { type: "text" }>;
+type OpenCodePart = Part | ParsedOpencodePart;
+type TextPart = Extract<OpenCodePart, { type: "text" }>;
 
 type ParsedTaskResult = {
   externalSessionId: string;
@@ -139,7 +141,7 @@ const readEndedAtMs = (part: TextPart, timestamp: string | undefined): number | 
 };
 
 export const mapOpenCodeBackgroundTaskResultPart = (
-  part: Part,
+  part: OpenCodePart,
   options: {
     correlationKey?: string;
     timestamp?: string;

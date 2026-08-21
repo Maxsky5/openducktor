@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   DirectoryListing,
+  JsonValue,
   WorkspaceFileTree,
   WorkspaceTextFileReadResult,
   WorkspaceTextFileWriteInput,
@@ -29,7 +30,7 @@ const unusedTextFile = async (): Promise<WorkspaceTextFileReadResult> => {
 
 describe("workspaceFileTreeQueryOptions", () => {
   test("passes the target branch to the filesystem tree host read", async () => {
-    const inputs: unknown[] = [];
+    const inputs: Array<JsonValue | undefined> = [];
     const hostClient = {
       filesystemListDirectory: async (): Promise<DirectoryListing> => ({
         currentPath: "/repo",
@@ -38,7 +39,7 @@ describe("workspaceFileTreeQueryOptions", () => {
         homePath: "/home/dev",
         entries: [],
       }),
-      filesystemListTree: async (input: unknown): Promise<WorkspaceFileTree> => {
+      filesystemListTree: async (input: JsonValue | undefined): Promise<WorkspaceFileTree> => {
         inputs.push(input);
         return {
           rootPath: "/repo",

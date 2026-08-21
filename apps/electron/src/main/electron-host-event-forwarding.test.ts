@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { HOST_EVENT_CHANNELS } from "@openducktor/host";
+import { HOST_EVENT_CHANNELS } from "@openducktor/contracts";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
 
 describe("forwardElectronHostEvent", () => {

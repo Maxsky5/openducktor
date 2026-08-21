@@ -118,7 +118,8 @@ export const readClaudeTaskStopTaskId = (
     return structuredTaskId;
   }
   try {
-    const parsed = JSON.parse(resultText) as unknown;
+    // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
+    const parsed = JSON.parse(resultText) as JsonValue;
     return isRecord(parsed) ? readStringProp(parsed, "task_id") : undefined;
   } catch {
     return undefined;

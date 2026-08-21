@@ -1,4 +1,3 @@
-import type { JsonValue } from "@openducktor/contracts";
 import {
   type FileDiff,
   type FileStatus,
@@ -70,6 +69,9 @@ const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<u
   return response.json();
 };
 
+const isResponseRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 function parseFileDiffArray(body: unknown): FileDiff[] {
   const payload = readArrayPayload("load session diff", body);
   const standardPayload = fileDiffSchema.array().safeParse(payload);
@@ -89,10 +91,10 @@ function readArrayPayload(action: string, body: unknown): unknown[] {
     return body;
   }
 
-  if (body && typeof body === "object") {
-    const wrapped = body as { data?: unknown };
-    if (Array.isArray(wrapped.data)) {
-      return wrapped.data;
+  if (isResponseRecord(body)) {
+    const data = body.data;
+    if (Array.isArray(data)) {
+      return data;
     }
   }
 
@@ -100,18 +102,15 @@ function readArrayPayload(action: string, body: unknown): unknown[] {
 }
 
 function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+  if (!isResponseRecord(entry)) {
     throw new Error(`unexpected OpenCode diff entry at index ${index}: expected an object`);
   }
 
-  // SAFETY: snapshot diff entries come from parsed snapshot JSON files, so their values
-  // are JSON-compatible at runtime.
-  const record = entry as Record<string, JsonValue>;
-  const file = record.file;
-  const patch = record.patch;
-  const additions = record.additions;
-  const deletions = record.deletions;
-  const status = record.status;
+  const file = entry.file;
+  const patch = entry.patch;
+  const additions = entry.additions;
+  const deletions = entry.deletions;
+  const status = entry.status;
   const parsedFile = typeof file === "string" ? file : null;
   const parsedPatch = typeof patch === "string" ? patch : null;
   const parsedAdditions =

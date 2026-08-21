@@ -257,7 +257,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch((cause: unknown) => cause);
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).not.toContain("Electron release directory is missing");
@@ -276,7 +276,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch((cause: unknown) => cause);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -303,7 +303,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "macos",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch((cause: unknown) => cause);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",
@@ -332,7 +332,7 @@ describe("build Electron release artifact", () => {
         outputDirectory,
         platform: "windows",
         releaseDirectory,
-      }).catch((caught: unknown) => caught);
+      }).catch((cause: unknown) => cause);
 
       expect(error).toMatchObject({
         _tag: "ElectronOperationError",

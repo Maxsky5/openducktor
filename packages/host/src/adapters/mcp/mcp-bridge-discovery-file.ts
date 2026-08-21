@@ -19,8 +19,8 @@ export type McpBridgeDiscoveryFile = {
   pid: number;
 };
 
-const isFsErrorCode = (error: unknown, code: string): boolean =>
-  typeof error === "object" && error !== null && "code" in error && error.code === code;
+const isFsErrorCode = (cause: unknown, code: string): boolean =>
+  typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
 
 export const resolveMcpBridgeDiscoveryPath = (
   mode: McpBridgeDiscoveryMode,

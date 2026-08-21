@@ -18,6 +18,7 @@ import {
   isClaudeAskUserQuestionTool,
   requestClaudeAskUserQuestion,
 } from "./claude-agent-sdk-questions";
+import { parseClaudeJsonRecord } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import {
   canonicalOdtToolName,
@@ -420,8 +421,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
     const authorization = authorizeClaudeToolUse({
       session,
       toolName,
-      // SAFETY: the Claude Agent SDK delivers tool inputs as JSON over its message transport.
-      toolInput: toolInput as Record<string, JsonValue>,
+      toolInput: parseClaudeJsonRecord(toolInput, "claudeToolInput"),
       ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
       canonicalizePath,
     });

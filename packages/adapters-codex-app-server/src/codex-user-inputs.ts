@@ -4,7 +4,7 @@ import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
 import { utf8ByteLength } from "./codex-user-input-display";
 import type { CodexTextElement, CodexUserInput } from "./types";
 
-const codexTextElementFromUnknown = (entry: unknown): CodexTextElement | null => {
+const codexTextElementFromUnknown = (entry: JsonValue | undefined): CodexTextElement | null => {
   if (!isPlainObject(entry)) {
     return null;
   }
@@ -29,12 +29,12 @@ const codexTextElementFromUnknown = (entry: unknown): CodexTextElement | null =>
   };
 };
 
-const codexTextElementsFromUnknown = (value: unknown): CodexTextElement[] =>
+const codexTextElementsFromUnknown = (value: JsonValue | undefined): CodexTextElement[] =>
   arrayFromUnknown(value)
     .map(codexTextElementFromUnknown)
     .filter((entry): entry is CodexTextElement => Boolean(entry));
 
-const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null => {
+const codexUserInputFromUnknown = (entry: JsonValue | undefined): CodexUserInput | null => {
   if (!isPlainObject(entry)) {
     return null;
   }
@@ -69,7 +69,7 @@ export const codexUserInputsFromItem = (item: Record<string, JsonValue>): CodexU
 
 const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "text") {
-    return { type: "text", text: part.text };
+    return { type: "text", text: part.text, text_elements: [] };
   }
   if (part.kind === "file_reference") {
     return { type: "mention", name: part.file.name, path: part.file.path };

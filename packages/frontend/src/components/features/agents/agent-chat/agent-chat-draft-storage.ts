@@ -70,19 +70,19 @@ const ATTACHMENT_KINDS = new Set<AgentAttachmentKind>(["image", "audio", "video"
 const FILE_REFERENCE_KINDS = new Set(["directory", "css", "code", "image", "video", "default"]);
 const SLASH_COMMAND_SOURCES = new Set(["command", "mcp", "skill", "custom"]);
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
+const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isNonEmptyString = (value: unknown): value is string =>
+const isNonEmptyString = (value: JsonValue | undefined): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const optionalString = (value: unknown): value is string | undefined =>
+const optionalString = (value: JsonValue | undefined): value is string | undefined =>
   typeof value === "undefined" || typeof value === "string";
 
-const optionalNonEmptyString = (value: unknown): value is string | undefined =>
+const optionalNonEmptyString = (value: JsonValue | undefined): value is string | undefined =>
   typeof value === "undefined" || isNonEmptyString(value);
 
-const isStringArray = (value: unknown): value is string[] =>
+const isStringArray = (value: JsonValue | undefined): value is string[] =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string");
 
 export const toAgentChatDraftStorageKey = (identity: AgentChatDraftSessionIdentity): string =>
@@ -97,7 +97,7 @@ export const isAgentChatDraftStorageKey = (key: string): boolean =>
 export const measureAgentChatDraftPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
 
-const isValidSlashCommand = (value: unknown): boolean => {
+const isValidSlashCommand = (value: JsonValue | undefined): boolean => {
   if (!isRecord(value)) {
     return false;
   }
@@ -112,7 +112,7 @@ const isValidSlashCommand = (value: unknown): boolean => {
   );
 };
 
-const isValidFileReference = (value: unknown): boolean => {
+const isValidFileReference = (value: JsonValue | undefined): boolean => {
   if (!isRecord(value)) {
     return false;
   }
@@ -125,7 +125,7 @@ const isValidFileReference = (value: unknown): boolean => {
   );
 };
 
-const isValidSkillReference = (value: unknown): boolean => {
+const isValidSkillReference = (value: JsonValue | undefined): boolean => {
   if (!isRecord(value)) {
     return false;
   }
@@ -140,7 +140,7 @@ const isValidSkillReference = (value: unknown): boolean => {
   );
 };
 
-const isValidSubagentReference = (value: unknown): boolean => {
+const isValidSubagentReference = (value: JsonValue | undefined): boolean => {
   if (!isRecord(value)) {
     return false;
   }
@@ -214,7 +214,9 @@ export const serializeAgentChatDraftPayload = ({
   return { status: "serialized", payload: serialized, byteLength };
 };
 
-const isValidSegment = (segment: unknown): segment is AgentChatComposerSegment => {
+const isValidSegment = (
+  segment: JsonValue | undefined,
+): segment is JsonValue & AgentChatComposerSegment => {
   if (!isRecord(segment) || !isNonEmptyString(segment.id)) {
     return false;
   }
@@ -235,7 +237,7 @@ const isValidSegment = (segment: unknown): segment is AgentChatComposerSegment =
   }
 };
 
-const parseAttachment = (value: unknown): AgentChatComposerAttachment | null => {
+const parseAttachment = (value: JsonValue | undefined): AgentChatComposerAttachment | null => {
   if (!isRecord(value)) {
     return null;
   }
@@ -276,9 +278,9 @@ export const parseAgentChatDraftPayload = ({
     return { status: "oversized", byteLength };
   }
 
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored wire data is JSON
   } catch {
     return { status: "invalid", reason: "Stored chat draft is not valid JSON." };
   }

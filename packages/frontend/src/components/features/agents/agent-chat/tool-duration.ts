@@ -1,7 +1,7 @@
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { getToolLifecyclePhase } from "./tool-lifecycle";
 
-const isFiniteTimestamp = (value: unknown): value is number =>
+const isFiniteTimestamp = (value: number | string | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
 const parseFiniteTimestamp = (timestamp: string): number | null => {

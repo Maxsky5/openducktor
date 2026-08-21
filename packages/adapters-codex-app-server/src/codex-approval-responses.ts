@@ -5,7 +5,7 @@ import {
   type CodexAppServerGrantedPermissionProfile,
   type CodexAppServerMcpServerElicitationRequestResponse,
   type CodexAppServerPermissionsApprovalResponse,
-  isCodexAppServerRequestPermissionProfile,
+  codexAppServerRequestPermissionProfileSchema,
   type RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
 import { isPlainObject } from "./codex-app-server-shared";
@@ -32,16 +32,27 @@ const permissionsResponse = (
 ): CodexAppServerPermissionsApprovalResponse => {
   const approved = outcome !== "reject";
   const params = isPlainObject(request.params) ? request.params : {};
-  if (!approved || !isCodexAppServerRequestPermissionProfile(params.permissions)) {
+  const parsed = approved
+    ? codexAppServerRequestPermissionProfileSchema.safeParse(params.permissions)
+    : { success: false as const };
+  if (!parsed.success) {
     return { permissions: {}, scope: "turn" };
   }
+  const profile = parsed.data;
 
   const permissions: CodexAppServerGrantedPermissionProfile = {};
-  if (params.permissions.network) {
-    permissions.network = params.permissions.network;
+  if (profile.network) {
+    permissions.network = profile.network;
   }
-  if (params.permissions.fileSystem) {
-    permissions.fileSystem = params.permissions.fileSystem;
+  if (profile.fileSystem) {
+    permissions.fileSystem = {
+      read: profile.fileSystem.read,
+      write: profile.fileSystem.write,
+      ...(profile.fileSystem.globScanMaxDepth !== undefined
+        ? { globScanMaxDepth: profile.fileSystem.globScanMaxDepth }
+        : {}),
+      ...(profile.fileSystem.entries !== undefined ? { entries: profile.fileSystem.entries } : {}),
+    };
   }
   return { permissions, scope: outcome === "approve_session" ? "session" : "turn" };
 };

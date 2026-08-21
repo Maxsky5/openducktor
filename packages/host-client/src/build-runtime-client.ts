@@ -7,7 +7,6 @@ import {
   type DevServerGroupState,
   devServerGroupStateSchema,
   type FailureKind,
-  failureKindSchema,
   type PullRequest,
   pullRequestSchema,
   type RepoRuntimeHealthCheck,
@@ -17,6 +16,8 @@ import {
   type RuntimeExecutableCheckInput,
   type RuntimeInstanceSummary,
   type RuntimeKind,
+  runtimeEnsureFailureSourceSchema,
+  type RuntimeEnsureFailureSource,
   repoRuntimeHealthCheckSchema,
   runtimeCheckSchema,
   runtimeDescriptorSchema,
@@ -68,61 +69,46 @@ class RuntimeEnsureError extends Error {
   }
 }
 
-const readUnknownProp = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-
-  return (value as Record<string, JsonValue>)[key];
-};
-
-const readStringProp = (value: unknown, key: string): string | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
-};
-
-const readFailureKind = (value: unknown): RuntimeEnsureFailureKind | undefined => {
-  const candidate = readUnknownProp(value, "failureKind");
-  const result = failureKindSchema.safeParse(candidate);
-  return result.success ? result.data : undefined;
-};
-
 type RuntimeEnsureFailureEnvelope = {
   message?: string;
   error?: string;
   failureKind: RuntimeEnsureFailureKind;
 };
 
-const readRuntimeEnsureFailureEnvelope = (value: unknown): RuntimeEnsureFailureEnvelope | null => {
-  const failureKind = readFailureKind(value);
-  if (!failureKind) {
+const readRuntimeEnsureFailureEnvelope = (
+  value: RuntimeEnsureFailureSource,
+): RuntimeEnsureFailureEnvelope | null => {
+  if (!value.failureKind) {
     return null;
   }
 
-  const message = readStringProp(value, "message");
-  const error = readStringProp(value, "error");
-
   return {
-    failureKind,
-    ...(message !== undefined ? { message } : {}),
-    ...(error !== undefined ? { error } : {}),
+    failureKind: value.failureKind,
+    ...(value.message !== undefined ? { message: value.message } : {}),
+    ...(value.error !== undefined ? { error: value.error } : {}),
   };
 };
 
-const buildRuntimeEnsureFailureSources = (error: unknown): unknown[] => {
-  return [error, readUnknownProp(error, "cause")];
+const buildRuntimeEnsureFailureSources = (cause: unknown): RuntimeEnsureFailureSource[] => {
+  const source = runtimeEnsureFailureSourceSchema.safeParse(cause);
+  if (!source.success) {
+    return [];
+  }
+
+  const nestedSource = runtimeEnsureFailureSourceSchema.safeParse(source.data.cause);
+  return nestedSource.success ? [source.data, nestedSource.data] : [source.data];
 };
 
-const extractRuntimeEnsureFailure = (error: unknown): NormalizedRuntimeEnsureFailure | null => {
-  if (error instanceof RuntimeEnsureError) {
+const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFailure | null => {
+  if (cause instanceof RuntimeEnsureError) {
     return {
-      message: error.message,
-      failureKind: error.failureKind,
-      ...(error.cause !== undefined ? { cause: error.cause } : {}),
+      message: cause.message,
+      failureKind: cause.failureKind,
+      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
     };
   }
 
-  const sources = buildRuntimeEnsureFailureSources(error);
+  const sources = buildRuntimeEnsureFailureSources(cause);
   const failureEnvelope = sources
     .map((source) => readRuntimeEnsureFailureEnvelope(source))
     .find((source): source is RuntimeEnsureFailureEnvelope => source !== null);
@@ -133,18 +119,18 @@ const extractRuntimeEnsureFailure = (error: unknown): NormalizedRuntimeEnsureFai
   const message =
     failureEnvelope.message ??
     failureEnvelope.error ??
-    (error instanceof Error && error.message.trim().length > 0 ? error.message : undefined) ??
+    (cause instanceof Error && cause.message.trim().length > 0 ? cause.message : undefined) ??
     "Failed to ensure runtime.";
 
   return {
     message,
     failureKind: failureEnvelope.failureKind,
-    ...(error !== undefined ? { cause: error } : {}),
+    ...(cause !== undefined ? { cause } : {}),
   };
 };
 
-const toRuntimeEnsureError = (error: unknown): RuntimeEnsureError | null => {
-  const failure = extractRuntimeEnsureFailure(error);
+const toRuntimeEnsureError = (cause: unknown): RuntimeEnsureError | null => {
+  const failure = extractRuntimeEnsureFailure(cause);
   if (!failure) {
     return null;
   }
@@ -269,8 +255,8 @@ const codexAppServerRequest = async (
   invokeFn: InvokeFn,
   runtimeId: string,
   method: string,
-  params?: unknown,
-): Promise<unknown> => {
+  params?: JsonValue | undefined,
+): Promise<JsonValue> => {
   return invokeFn(
     "codex_app_server_request",
     toCommandArgs({
@@ -627,8 +613,8 @@ export class HostAgentClient {
   async codexAppServerRequest(
     runtimeId: string,
     method: string,
-    params?: unknown,
-  ): Promise<unknown> {
+    params?: JsonValue | undefined,
+  ): Promise<JsonValue> {
     return codexAppServerRequest(this.invokeFn, runtimeId, method, params);
   }
 

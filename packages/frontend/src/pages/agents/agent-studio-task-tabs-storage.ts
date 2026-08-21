@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { JsonValue, TaskCard } from "@openducktor/contracts";
 import { isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
@@ -18,7 +18,7 @@ const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
   activeTaskId: null,
 };
 
-const normalizeTaskTabs = (entries: unknown): string[] => {
+const normalizeTaskTabs = (entries: JsonValue | undefined): string[] => {
   if (!Array.isArray(entries)) {
     return [];
   }
@@ -37,7 +37,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
   }
 
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored tabs are JSON
 
     if (Array.isArray(parsed)) {
       return {

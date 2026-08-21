@@ -2,6 +2,9 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
+  codexThreadFixture,
+  codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createDeferred,
   createHarness,
@@ -29,6 +32,33 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter streaming", () => {
+  test("ignores known unconsumed notifications without emitting a session error", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+
+    await adapter.startSession(codexStartSessionInput());
+    const events: Array<{ type?: string }> = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "item/commandExecution/outputDelta",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-live",
+        itemId: "command-1",
+        delta: "command output",
+      },
+    });
+    await flushCodexAdapterWork();
+
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+    unsubscribe();
+  });
+
   test("rejects subagent reference sends before emitting an accepted user message", async () => {
     const { adapter, transports } = createHarness();
 
@@ -107,7 +137,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -164,7 +194,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -258,35 +288,29 @@ describe("CodexAppServerAdapter streaming", () => {
             data: [
               {
                 id: "gpt-5",
+                additionalSpeedTiers: [],
+                availabilityNux: null,
                 model: "gpt-5",
                 displayName: "GPT-5",
+                description: "GPT-5 model",
                 hidden: false,
                 supportedReasoningEfforts: [
                   { reasoningEffort: "medium", description: "Balanced reasoning" },
                 ],
-                defaultReasoningEffort: {
-                  reasoningEffort: "medium",
-                  description: "Balanced reasoning",
-                },
+                defaultReasoningEffort: "medium",
                 inputModalities: ["text"],
+                serviceTiers: [],
                 supportsPersonality: true,
                 isDefault: true,
+                upgrade: null,
+                upgradeInfo: null,
               },
             ],
             nextCursor: null,
           } as Response;
         }
         if (request.method === "thread/start") {
-          return {
-            thread: {
-              id: "thread/start-runtime-live",
-              cwd: "/repo",
-              createdAt: 1_778_112_000,
-              status: { type: "active", activeFlags: [] },
-              turns: [],
-            },
-            startedAt: "2026-05-07T00:00:00.000Z",
-          } as Response;
+          return codexThreadStartResultFixture("thread/start-runtime-live") as Response;
         }
         if (request.method === "thread/name/set") {
           return {} as Response;
@@ -297,12 +321,11 @@ describe("CodexAppServerAdapter streaming", () => {
         if (request.method === "thread/list") {
           return {
             data: [
-              {
+              codexThreadFixture({
                 id: "thread/start-runtime-live",
-                cwd: "/repo",
                 createdAt: 1_778_112_000,
                 status: { type: "active", activeFlags: [] },
-              },
+              }),
             ],
             nextCursor: null,
             backwardsCursor: null,
@@ -310,13 +333,11 @@ describe("CodexAppServerAdapter streaming", () => {
         }
         if (request.method === "thread/read") {
           return {
-            thread: {
+            thread: codexThreadFixture({
               id: "thread/start-runtime-live",
-              cwd: "/repo",
               createdAt: 1_778_112_000,
               status: { type: "active", activeFlags: [] },
-              turns: [],
-            },
+            }),
           } as Response;
         }
         if (request.method === "turn/start") {
@@ -351,7 +372,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/started",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: { id: "turn-old" },
+        turn: codexTurnFixture({ id: "turn-old", items: [], status: "inProgress" }),
       },
     });
     emitNotification({
@@ -374,12 +395,14 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/started",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: { id: "turn-new" },
+        turn: codexTurnFixture({ id: "turn-new", items: [], status: "inProgress" }),
       },
     });
     await flushCodexAdapterWork();
 
-    firstTurnStart.resolve({ turn: { id: "turn-old", status: "completed" } });
+    firstTurnStart.resolve({
+      turn: codexTurnFixture({ id: "turn-old", items: [], status: "completed" }),
+    });
     await flushCodexAdapterWork();
 
     await expect(
@@ -404,7 +427,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Steer replacement turn" }],
+        input: [{ type: "text", text: "Steer replacement turn", text_elements: [] }],
         expectedTurnId: "turn-new",
       },
     });
@@ -436,7 +459,7 @@ describe("CodexAppServerAdapter streaming", () => {
     await flushCodexAdapterWork();
 
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-live", status: "running" },
+      turn: codexTurnFixture({ id: "turn-live", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -454,7 +477,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Keep steering" }],
+        input: [{ type: "text", text: "Keep steering", text_elements: [] }],
         expectedTurnId: "turn-live",
       },
     });
@@ -487,7 +510,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
     transports.get("runtime-live")?.turnStartDeferred.resolve({
-      turn: { id: "turn-active", status: "running" },
+      turn: codexTurnFixture({ id: "turn-active", items: [], status: "inProgress" }),
     });
     await flushCodexAdapterWork();
 
@@ -511,7 +534,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Also inspect failing tests" }],
+        input: [{ type: "text", text: "Also inspect failing tests", text_elements: [] }],
         expectedTurnId: "turn-active",
       },
     });

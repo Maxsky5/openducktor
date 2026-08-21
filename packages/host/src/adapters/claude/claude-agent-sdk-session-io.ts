@@ -18,6 +18,7 @@ import {
 } from "./claude-agent-sdk-context-usage";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import {
   assertClaudeSessionModelUpdateSupported,
   assertSupportedClaudeLiveEffort,
@@ -198,7 +199,7 @@ export const consumeClaudeSession = async (input: {
       sessionStore.close(session);
     }
   };
-  const failSession = async (error: unknown): Promise<void> => {
+  const failSession = async (cause: unknown): Promise<void> => {
     if (!isLiveSession()) {
       return;
     }
@@ -207,7 +208,7 @@ export const consumeClaudeSession = async (input: {
       type: "session_error",
       externalSessionId: session.externalSessionId,
       timestamp,
-      message: errorMessage(error),
+      message: errorMessage(cause),
     });
     session.activity = "stopped";
     await flushClaudeLiveContextUsageRefresh(session);
@@ -282,7 +283,9 @@ export const sendClaudeUserMessage = async (input: {
   const timestamp = now();
   const messageId = randomId();
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
-  const message = textFromContentBlocks(sdkMessage.message.content);
+  const message = textFromContentBlocks(
+    parseClaudeJsonValue(sdkMessage.message.content, "claudeUserMessage.content"),
+  );
   assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
   sdkMessage.uuid = messageId as NonNullable<SDKUserMessage["uuid"]>;

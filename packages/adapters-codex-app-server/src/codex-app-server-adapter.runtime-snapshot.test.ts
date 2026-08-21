@@ -1,9 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerThreadStatus, JsonValue } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexThreadFixture,
+  codexThreadStartResultFixture,
+  codexTurnFixture,
   codexUserMessageInput,
   createDeferred,
   createHarness,
@@ -60,21 +63,13 @@ class DeferredInventoryTransport extends RecordingTransport {
 }
 
 class MutableThreadListTransport extends RecordingTransport {
-  threadSavedStatus: Record<string, JsonValue> = { type: "active", activeFlags: [] };
+  threadSavedStatus: CodexAppServerThreadStatus = { type: "active", activeFlags: [] };
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
       return {
-        data: [
-          {
-            id: "thread-saved",
-            cwd: "/repo",
-            createdAt: 1_778_112_000,
-            preview: "Saved session",
-            status: this.threadSavedStatus,
-          },
-        ],
+        data: [codexThreadFixture({ id: "thread-saved", status: this.threadSavedStatus })],
         nextCursor: null,
         backwardsCursor: null,
       } as Response;
@@ -92,14 +87,11 @@ class ChildThreadListTransport extends RecordingTransport {
       return {
         data: includesSubagents
           ? [
-              {
+              codexThreadFixture({
                 id: "child-thread",
-                cwd: "/repo",
-                createdAt: 1_778_112_020,
-                preview: "Child subagent",
                 status: { type: "idle" },
                 parentThreadId: "parent-thread",
-              },
+              }),
             ]
           : [],
         nextCursor: null,
@@ -115,15 +107,7 @@ class IdleParentThreadListTransport extends RecordingTransport {
     if (request.method === "thread/list") {
       this.calls.push(request);
       return {
-        data: [
-          {
-            id: "parent-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_000,
-            preview: "Idle parent session",
-            status: { type: "idle" },
-          },
-        ],
+        data: [codexThreadFixture({ id: "parent-thread", status: { type: "idle" } })],
         nextCursor: null,
         backwardsCursor: null,
       } as Response;
@@ -138,21 +122,12 @@ class IdleParentWithActiveChildTransport extends RecordingTransport {
       this.calls.push(request);
       return {
         data: [
-          {
-            id: "parent-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_000,
-            preview: "Idle parent session",
-            status: { type: "idle" },
-          },
-          {
+          codexThreadFixture({ id: "parent-thread", status: { type: "idle" } }),
+          codexThreadFixture({
             id: "child-thread",
-            cwd: "/repo",
-            createdAt: 1_778_112_020,
-            preview: "Active child session",
             status: { type: "active", activeFlags: [] },
             parentThreadId: "parent-thread",
-          },
+          }),
         ],
         nextCursor: null,
         backwardsCursor: null,
@@ -166,16 +141,10 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
       this.calls.push(request);
+      const threadId = (request.params as { threadId: string }).threadId;
       return {
-        thread: {
-          id: (request.params as { threadId: string }).threadId,
-          cwd: "/repo",
-          createdAt: 1_778_112_000,
-          preview: "Saved session",
-          status: { type: "idle" },
-          turns: [],
-        },
-        startedAt: "2026-05-07T00:00:00.000Z",
+        ...codexThreadStartResultFixture(threadId),
+        thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }),
       } as Response;
     }
     return super.request<Response>(request);
@@ -185,7 +154,7 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
 class StoredIdleHistoryTransport extends RecordingTransport {
   includeThread = true;
   loaded = false;
-  threadStatus: Record<string, JsonValue> = { type: "idle" };
+  threadStatus: CodexAppServerThreadStatus = { type: "idle" };
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/loaded/list") {
@@ -199,15 +168,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
       this.calls.push(request);
       return {
         data: this.includeThread
-          ? [
-              {
-                id: "thread-idle",
-                cwd: "/repo",
-                createdAt: 1_778_112_010,
-                preview: "Saved idle session",
-                status: this.threadStatus,
-              },
-            ]
+          ? [codexThreadFixture({ id: "thread-idle", status: this.threadStatus })]
           : [],
         nextCursor: null,
         backwardsCursor: null,
@@ -216,14 +177,11 @@ class StoredIdleHistoryTransport extends RecordingTransport {
     if (request.method === "thread/read") {
       this.calls.push(request);
       return {
-        thread: {
+        thread: codexThreadFixture({
           id: "thread-idle",
-          cwd: "/repo",
-          createdAt: 1_778_112_010,
-          preview: "Saved idle session",
           status: { type: "idle" },
           turns: [
-            {
+            codexTurnFixture({
               id: "turn-1",
               status: "completed",
               items: [
@@ -234,27 +192,21 @@ class StoredIdleHistoryTransport extends RecordingTransport {
                   text: "Done",
                 },
               ],
-            },
+            }),
           ],
-        },
+        }),
       } as Response;
     }
     if (request.method === "thread/turns/list") {
       this.calls.push(request);
-      return { data: [], nextCursor: null } as Response;
+      return { data: [], nextCursor: null, backwardsCursor: null } as Response;
     }
     if (request.method === "thread/resume") {
       this.calls.push(request);
       this.loaded = true;
       return {
-        thread: {
-          id: "thread-idle",
-          cwd: "/repo",
-          createdAt: 1_778_112_010,
-          preview: "Saved idle session",
-          status: { type: "idle" },
-          turns: [],
-        },
+        ...codexThreadStartResultFixture("thread-idle"),
+        thread: codexThreadFixture({ id: "thread-idle", status: { type: "idle" } }),
       } as Response;
     }
     return super.request<Response>(request);
@@ -262,7 +214,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
 }
 
 class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
-  emitRestoredUsage: ((message: unknown) => void) | null = null;
+  emitRestoredUsage: ((message: JsonValue | undefined) => void) | null = null;
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
@@ -326,13 +278,10 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     transport.loadedList.resolve({ data: ["thread-saved"], nextCursor: null });
     transport.threadList.resolve({
       data: [
-        {
+        codexThreadFixture({
           id: "thread-saved",
-          cwd: "/repo",
-          createdAt: 1_778_112_000,
-          preview: "Saved running session",
           status: { type: "active", activeFlags: [] },
-        },
+        }),
       ],
       nextCursor: null,
       backwardsCursor: null,
@@ -521,6 +470,9 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         id: "idle-question",
         method: "item/tool/requestUserInput",
         params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          itemId: "idle-question-item",
           threadId: "thread-idle",
           turnId: "turn-idle",
           questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
@@ -788,8 +740,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     const { adapter } = createHarness({
       transportFactory: mock(() => transport),
     });
-    const expectedMessage =
-      "Codex thread/resume response for thread 'thread-idle' is missing thread status.";
+    const expectedMessage = "approvalPolicy";
 
     await expect(
       adapter.resumeSession({

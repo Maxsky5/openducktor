@@ -2,15 +2,26 @@ import { describe, expect, test } from "bun:test";
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
+  CodexLiveSessionLocator,
   CodexSessionContextUsage,
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveSnapshot,
   type AgentSessionScope,
   type CodexEffectivePolicy,
+  parseCodexAppServerRequestResult,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  type CodexAppServerRequestMethod,
+  type JsonValue,
   type RuntimeInstanceSummary,
+  type FileDiff,
 } from "@openducktor/contracts";
+import type {
+  ForkAgentSessionInput,
+  ResumeAgentSessionInput,
+  SendAgentUserMessageInput,
+  StartAgentSessionInput,
+} from "@openducktor/core";
 import { Effect } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
@@ -18,10 +29,7 @@ import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
-import type {
-  CodexAppServerPort,
-  CodexAppServerRequestResult,
-} from "../../ports/codex-app-server-port";
+import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
@@ -37,6 +45,42 @@ const runtime: RuntimeInstanceSummary = {
   startedAt: "2026-07-16T10:00:00.000Z",
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
 };
+
+const codexResult = (method: CodexAppServerRequestMethod, value: JsonValue) =>
+  parseCodexAppServerRequestResult(method, value);
+
+const threadReadResult = (threadId: string, cwd: string) =>
+  codexResult("thread/read", {
+    thread: {
+      id: threadId,
+      extra: null,
+      sessionId: threadId,
+      forkedFromId: null,
+      parentThreadId: null,
+      preview: "Test thread",
+      ephemeral: false,
+      section: null,
+      sectionEnteredAt: null,
+      projectId: null,
+      historyMode: "paginated",
+      modelProvider: "openai",
+      createdAt: 1,
+      updatedAt: 1,
+      recencyAt: 1,
+      status: { type: "active", activeFlags: [] },
+      path: null,
+      cwd,
+      cliVersion: "0.149.0-test",
+      source: "appServer",
+      canAcceptDirectInput: true,
+      threadSource: null,
+      agentNickname: null,
+      agentRole: null,
+      gitInfo: null,
+      name: null,
+      turns: [],
+    },
+  });
 
 const ref = {
   repoPath: "/repo",
@@ -103,6 +147,7 @@ type ControllerHarnessOptions = {
   releaseRuntime?: () => void;
   liveContextUsage?: CodexSessionContextUsage | null;
   persistedContextUsage?: CodexSessionContextUsage | null;
+  sessionDiffs?: FileDiff[];
 };
 
 const createControllerHarness = ({
@@ -110,12 +155,14 @@ const createControllerHarness = ({
   releaseRuntime = () => undefined,
   liveContextUsage = { totalTokens: 123, contextWindow: 1_000 },
   persistedContextUsage = { totalTokens: 456, contextWindow: 2_000 },
+  sessionDiffs = [],
 }: ControllerHarnessOptions = {}) => {
   let options: CodexAppServerAdapterOptions | null = null;
   let snapshots = initialSnapshots;
   const rawEvents: unknown[] = [];
   const liveContextLoads: unknown[] = [];
   const policyBoundContextLoads: unknown[] = [];
+  const sessionDiffLoads: unknown[] = [];
   const controlInputs = {
     starts: [] as unknown[],
     resumes: [] as unknown[],
@@ -139,7 +186,7 @@ const createControllerHarness = ({
           await nextOptions.subscribeEvents?.(runtimeId, (event) => rawEvents.push(event));
         },
         listLiveSessionSnapshots: () => snapshots,
-        loadLiveSessionContextUsage: async (input: unknown) => {
+        loadLiveSessionContextUsage: async (input: CodexLiveSessionLocator) => {
           liveContextLoads.push(input);
           const usage = liveContextUsage;
           const snapshot = snapshots[0];
@@ -168,6 +215,10 @@ const createControllerHarness = ({
             },
           ];
           return usage;
+        },
+        loadSessionDiff: async (input: Parameters<CodexAppServerAdapter["loadSessionDiff"]>[0]) => {
+          sessionDiffLoads.push(input);
+          return sessionDiffs;
         },
         replyLiveApproval: async () => {
           const snapshot = snapshots[0];
@@ -202,19 +253,19 @@ const createControllerHarness = ({
           snapshots = [];
           releaseRuntime();
         },
-        startSession: async (input: unknown) => {
+        startSession: async (input: StartAgentSessionInput) => {
           controlInputs.starts.push(input);
           return controlSummary;
         },
-        resumeSession: async (input: unknown) => {
+        resumeSession: async (input: ResumeAgentSessionInput) => {
           controlInputs.resumes.push(input);
           return controlSummary;
         },
-        forkSession: async (input: unknown) => {
+        forkSession: async (input: ForkAgentSessionInput) => {
           controlInputs.forks.push(input);
           return controlSummary;
         },
-        sendUserMessage: async (input: unknown) => {
+        sendUserMessage: async (input: SendAgentUserMessageInput) => {
           controlInputs.sends.push(input);
           return {
             type: "user_message" as const,
@@ -244,11 +295,44 @@ const createControllerHarness = ({
     rawEvents,
     liveContextLoads,
     policyBoundContextLoads,
+    sessionDiffLoads,
     controlInputs,
   };
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("exposes the controller's streamed session diff through the host adapter", async () => {
+    const sessionDiffs = [
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+      },
+    ];
+    const harness = createControllerHarness({ sessionDiffs });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+
+    const loadSessionDiff = prepared.adapter.loadSessionDiff;
+    expect(loadSessionDiff).toBeDefined();
+    if (!loadSessionDiff) {
+      throw new Error("Codex host adapter is missing loadSessionDiff.");
+    }
+    await expect(
+      Effect.runPromise(loadSessionDiff({ ...ref, runtimeHistoryAnchor: "turn-1" })),
+    ).resolves.toEqual(sessionDiffs);
+    expect(harness.sessionDiffLoads).toEqual([{ ...ref, runtimeHistoryAnchor: "turn-1" }]);
+  });
+
   test("interrupts an active Codex turn before releasing its live projection", async () => {
     const calls: unknown[] = [];
     const interruptingCodexAppServer = {
@@ -256,33 +340,29 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       request: (input: Parameters<CodexAppServerPort["request"]>[0]) => {
         calls.push(input);
         if (input.method === "thread/read") {
-          return Effect.succeed({
-            thread: {
-              id: "thread-1",
-              cwd: "/repo/worktree",
-              status: { type: "active", activeFlags: [] },
-            },
-          } as unknown as CodexAppServerRequestResult);
+          return Effect.succeed(threadReadResult("thread-1", "/repo/worktree"));
         }
         if (input.method === "thread/turns/list") {
-          return Effect.succeed({
-            data: [
-              {
-                id: "turn-1",
-                startedAt: 1_778_112_001,
-                completedAt: null,
-                durationMs: null,
-                error: null,
-                items: [],
-                itemsView: "summary",
-                status: "running",
-              },
-            ],
-            nextCursor: null,
-            backwardsCursor: null,
-          } as CodexAppServerRequestResult);
+          return Effect.succeed(
+            codexResult("thread/turns/list", {
+              data: [
+                {
+                  id: "turn-1",
+                  startedAt: 1_778_112_001,
+                  completedAt: null,
+                  durationMs: null,
+                  error: null,
+                  items: [],
+                  itemsView: "summary",
+                  status: "running",
+                },
+              ],
+              nextCursor: null,
+              backwardsCursor: null,
+            }),
+          );
         }
-        return Effect.succeed({} as CodexAppServerRequestResult);
+        return Effect.succeed(codexResult("turn/interrupt", {}));
       },
     } satisfies CodexAppServerPort;
     const harness = createControllerHarness();

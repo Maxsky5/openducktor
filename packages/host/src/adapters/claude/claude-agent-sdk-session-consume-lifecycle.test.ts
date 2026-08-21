@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
@@ -377,7 +378,7 @@ describe("consumeClaudeSession lifecycle", () => {
         setModel: async (model?: string) => {
           setModelCalls.push(model);
         },
-        applyFlagSettings: async (_settings: unknown) => {},
+        applyFlagSettings: async (_settings: JsonValue | undefined) => {},
       },
     );
     const session = createClaudeSession({

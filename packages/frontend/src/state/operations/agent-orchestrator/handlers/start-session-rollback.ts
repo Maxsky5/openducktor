@@ -37,12 +37,12 @@ type SessionBootstrap = NonNullable<RuntimeInfo["bootstrap"]>;
 
 const describeRollbackStep = (
   failed: boolean,
-  error: unknown,
+  cause: unknown,
   failurePrefix: string,
   successMessage: string,
 ): string => {
   if (failed) {
-    return `${failurePrefix}: ${errorMessage(error)}.`;
+    return `${failurePrefix}: ${errorMessage(cause)}.`;
   }
   return successMessage;
 };

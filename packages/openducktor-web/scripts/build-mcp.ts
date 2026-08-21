@@ -50,8 +50,8 @@ export const buildWebMcpEntrypoint = (): Promise<void> =>
   runWebBoundary(buildWebMcpEntrypointEffect());
 
 if (import.meta.main) {
-  await buildWebMcpEntrypoint().catch((error: unknown) => {
-    console.error(errorMessage(error));
+  await buildWebMcpEntrypoint().catch((cause: unknown) => {
+    console.error(errorMessage(cause));
     process.exit(1);
   });
 }

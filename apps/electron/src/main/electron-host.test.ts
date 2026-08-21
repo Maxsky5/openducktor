@@ -1,7 +1,12 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { GlobalConfig, RepoConfig, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  GlobalConfig,
+  HostEventEnvelope,
+  RepoConfig,
+  RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
@@ -633,10 +638,10 @@ const createDevServerProcesses = (): DevServerProcessPort => ({
 });
 
 const createEventBus = () => {
-  const events: unknown[] = [];
+  const events: HostEventEnvelope[] = [];
   const eventBus: HostEventBusPort = {
-    publish(channel, payload) {
-      events.push({ channel, payload });
+    publish(envelope) {
+      events.push(envelope);
     },
     subscribe() {
       return () => {};

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
+import {
+  type JsonValue,
+  taskAssetIdSchema,
+  taskAssetRenderContextSchema,
+} from "@openducktor/contracts";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
@@ -23,10 +27,12 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateManifest = (value: unknown): QuarantineManifest => {
+const validateManifest = (value: JsonValue | undefined): QuarantineManifest => {
   if (typeof value !== "object" || value === null) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
+  // SAFETY: the manifest shape is validated field-by-field below; the record is re-exported
+  // through the typed QuarantineManifest boundary only after every field passes.
   const manifest = value as Partial<QuarantineManifest>;
   if (
     manifest.version !== 1 ||

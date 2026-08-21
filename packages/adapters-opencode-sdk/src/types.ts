@@ -1,4 +1,4 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
   AgentRuntimePolicyBinding,
@@ -16,6 +16,7 @@ import type {
   PendingSubagentPartEmission,
   PendingSubagentSessionBinding,
 } from "./event-stream/shared";
+import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).

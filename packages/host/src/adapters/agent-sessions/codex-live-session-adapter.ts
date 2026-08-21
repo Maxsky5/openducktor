@@ -12,6 +12,8 @@ import {
   agentSessionControlSummarySchema,
   agentSessionLiveLoadContextResultSchema,
   type CodexEffectivePolicy,
+  jsonValueSchema,
+  parseCodexAppServerClientRequest,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -24,7 +26,6 @@ import {
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type {
   CodexAppServerPort,
-  CodexAppServerRequestInput,
   CodexAppServerRespondInput,
   CodexAppServerStreamEvent,
 } from "../../ports/codex-app-server-port";
@@ -33,6 +34,7 @@ import type {
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
 import { stopCodexSession } from "../codex/codex-session-stop";
+import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 
 type CodexSessionController = Pick<
@@ -41,6 +43,7 @@ type CodexSessionController = Pick<
   | "listLiveSessionSnapshots"
   | "loadLiveSessionContextUsage"
   | "loadSessionContextUsage"
+  | "loadSessionDiff"
   | "replyLiveApproval"
   | "replyLiveQuestion"
   | "releaseRuntime"
@@ -120,44 +123,6 @@ const requireRuntime = (
   return Effect.succeed(runtime as CodexRuntimeInstance);
 };
 
-const createEventHub = (runtimeId: string) => {
-  let listener: ((event: CodexAppServerStreamEvent) => void) | null = null;
-  return {
-    subscribe(
-      subscribedRuntimeId: string,
-      nextListener: (event: CodexAppServerStreamEvent) => void,
-    ): () => void {
-      if (subscribedRuntimeId !== runtimeId) {
-        throw new Error(
-          `Cannot subscribe Codex runtime '${subscribedRuntimeId}' through event hub '${runtimeId}'.`,
-        );
-      }
-      if (listener) {
-        throw new Error(`Codex runtime '${runtimeId}' already has a live event subscriber.`);
-      }
-      listener = nextListener;
-      return () => {
-        if (listener === nextListener) {
-          listener = null;
-        }
-      };
-    },
-    emit(event: CodexAppServerStreamEvent): void {
-      if (event.runtimeId !== runtimeId) {
-        throw new Error(
-          `Codex event for runtime '${event.runtimeId}' cannot enter event hub '${runtimeId}'.`,
-        );
-      }
-      if (!listener) {
-        throw new Error(
-          `Codex runtime '${runtimeId}' emitted an event before observation was prepared.`,
-        );
-      }
-      listener(event);
-    },
-  };
-};
-
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
   new CodexAppServerAdapter(options);
 
@@ -172,7 +137,7 @@ export const createCodexLiveSessionAdapterPreparer =
   (runtimeInput) =>
     Effect.gen(function* () {
       const runtime = yield* requireRuntime(runtimeInput);
-      const eventHub = createEventHub(runtime.runtimeId);
+      const eventHub = createCodexLiveSessionEventHub(runtime.runtimeId);
       const projection = createCodexLiveSessionProjection({
         runtime,
         liveSessionLifecycle,
@@ -185,13 +150,17 @@ export const createCodexLiveSessionAdapterPreparer =
               requireRepoRuntime: async () => runtime,
             },
             transportFactory: (runtimeId) => ({
-              request: <Response>(request: CodexJsonRpcRequest): Promise<Response> =>
-                Effect.runPromise(
+              request: (request: CodexJsonRpcRequest) => {
+                const parsedRequest = parseCodexAppServerClientRequest(
+                  jsonValueSchema.parse(request),
+                );
+                return Effect.runPromise(
                   codexAppServer.request({
                     runtimeId,
-                    ...request,
-                  } as CodexAppServerRequestInput),
-                ) as Promise<Response>,
+                    ...parsedRequest,
+                  }),
+                );
+              },
             }),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
             respondServerRequest: (runtimeId, requestId, result, error) =>
@@ -370,6 +339,20 @@ export const createCodexLiveSessionAdapterPreparer =
             );
             yield* refreshProjection();
             return normalized;
+          }),
+        loadSessionDiff: (input) =>
+          Effect.tryPromise({
+            try: () =>
+              controller.loadSessionDiff({
+                repoPath: input.repoPath,
+                runtimeKind: input.runtimeKind,
+                workingDirectory: input.workingDirectory,
+                externalSessionId: input.externalSessionId,
+                ...(input.runtimeHistoryAnchor !== undefined
+                  ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
+                  : {}),
+              }),
+            catch: sessionError("codex-live-session.load-diff", input.externalSessionId),
           }),
         replyApproval: (input) =>
           Effect.tryPromise({

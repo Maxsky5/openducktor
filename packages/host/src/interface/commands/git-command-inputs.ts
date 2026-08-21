@@ -18,9 +18,10 @@ import type {
   GitWorktreeStatusInput,
 } from "../../application/git/git-service-inputs";
 import { HostValidationError } from "../../effect/host-errors";
+import type { JsonValue } from "@openducktor/contracts";
 import { optionalBoolean, optionalString, requireRecord, requireString } from "./command-inputs";
 
-export const parseGitScopeInput = (input: unknown): GitScopeInput => {
+export const parseGitScopeInput = (input: JsonValue | undefined): GitScopeInput => {
   const record = requireRecord(input, "Git command input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const workingDir = optionalString(record.workingDir, "workingDir");
@@ -28,7 +29,7 @@ export const parseGitScopeInput = (input: unknown): GitScopeInput => {
   return workingDir ? { repoPath, workingDir } : { repoPath };
 };
 
-export const parseGitAheadBehindInput = (input: unknown): GitAheadBehindInput => {
+export const parseGitAheadBehindInput = (input: JsonValue | undefined): GitAheadBehindInput => {
   const record = requireRecord(input, "Git ahead/behind input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
@@ -37,7 +38,7 @@ export const parseGitAheadBehindInput = (input: unknown): GitAheadBehindInput =>
   return workingDir ? { repoPath, targetBranch, workingDir } : { repoPath, targetBranch };
 };
 
-export const parseGitSwitchBranchInput = (input: unknown): GitSwitchBranchInput => {
+export const parseGitSwitchBranchInput = (input: JsonValue | undefined): GitSwitchBranchInput => {
   const record = requireRecord(input, "Git switch branch input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -46,7 +47,9 @@ export const parseGitSwitchBranchInput = (input: unknown): GitSwitchBranchInput 
   };
 };
 
-export const parseGitCreateWorktreeInput = (input: unknown): GitCreateWorktreeInput => {
+export const parseGitCreateWorktreeInput = (
+  input: JsonValue | undefined,
+): GitCreateWorktreeInput => {
   const record = requireRecord(input, "Git create worktree input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -56,7 +59,9 @@ export const parseGitCreateWorktreeInput = (input: unknown): GitCreateWorktreeIn
   };
 };
 
-export const parseGitRemoveWorktreeInput = (input: unknown): GitRemoveWorktreeInput => {
+export const parseGitRemoveWorktreeInput = (
+  input: JsonValue | undefined,
+): GitRemoveWorktreeInput => {
   const record = requireRecord(input, "Git remove worktree input");
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
@@ -65,7 +70,7 @@ export const parseGitRemoveWorktreeInput = (input: unknown): GitRemoveWorktreeIn
   };
 };
 
-export const parseGitCommitAllInput = (input: unknown): GitCommitAllInput => {
+export const parseGitCommitAllInput = (input: JsonValue | undefined): GitCommitAllInput => {
   const record = requireRecord(input, "Git commit input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const message = requireString(record.message, "message");
@@ -74,7 +79,7 @@ export const parseGitCommitAllInput = (input: unknown): GitCommitAllInput => {
   return workingDir ? { repoPath, message, workingDir } : { repoPath, message };
 };
 
-export const parseGitPushBranchInput = (input: unknown): GitPushBranchInput => {
+export const parseGitPushBranchInput = (input: JsonValue | undefined): GitPushBranchInput => {
   const record = requireRecord(input, "Git push input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const branch = requireString(record.branch, "branch");
@@ -93,7 +98,7 @@ export const parseGitPushBranchInput = (input: unknown): GitPushBranchInput => {
   };
 };
 
-export const parseGitRebaseBranchInput = (input: unknown): GitRebaseBranchInput => {
+export const parseGitRebaseBranchInput = (input: JsonValue | undefined): GitRebaseBranchInput => {
   const record = requireRecord(input, "Git rebase input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
@@ -102,7 +107,7 @@ export const parseGitRebaseBranchInput = (input: unknown): GitRebaseBranchInput 
   return workingDir ? { repoPath, targetBranch, workingDir } : { repoPath, targetBranch };
 };
 
-export const parseGitAbortConflictInput = (input: unknown): GitAbortConflictInput => {
+export const parseGitAbortConflictInput = (input: JsonValue | undefined): GitAbortConflictInput => {
   const record = requireRecord(input, "Git conflict abort input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const operation = gitConflictOperationSchema.parse(record.operation);
@@ -111,7 +116,7 @@ export const parseGitAbortConflictInput = (input: unknown): GitAbortConflictInpu
   return workingDir ? { repoPath, operation, workingDir } : { repoPath, operation };
 };
 
-export const parseGitDiffInput = (input: unknown): GitDiffInput => {
+export const parseGitDiffInput = (input: JsonValue | undefined): GitDiffInput => {
   const record = requireRecord(input, "Git diff input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = optionalString(record.targetBranch, "targetBranch");
@@ -124,7 +129,9 @@ export const parseGitDiffInput = (input: unknown): GitDiffInput => {
   };
 };
 
-export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusInput => {
+export const parseGitWorktreeStatusInput = (
+  input: JsonValue | undefined,
+): GitWorktreeStatusInput => {
   const record = requireRecord(input, "Git worktree status input");
   const repoPath = requireString(record.repoPath, "repoPath");
   const targetBranch = requireString(record.targetBranch, "targetBranch");
@@ -150,5 +157,5 @@ export const parseGitWorktreeStatusInput = (input: unknown): GitWorktreeStatusIn
 };
 
 export const parseGitResetWorktreeSelectionInput = (
-  input: unknown,
+  input: JsonValue | undefined,
 ): GitResetWorktreeSelectionRequest => gitResetWorktreeSelectionRequestSchema.parse(input);

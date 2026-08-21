@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskEventStreamFrame } from "@openducktor/contracts";
+import type { JsonValue, TaskEventStreamFrame } from "@openducktor/contracts";
+import type { IpcRendererEvent } from "electron";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -16,26 +17,32 @@ const frame: TaskEventStreamFrame = {
 };
 const subscriptionId = "22222222-2222-4222-8222-222222222222";
 const secondSubscriptionId = "33333333-3333-4333-8333-333333333333";
+// SAFETY: these tests only exercise payload routing; listeners never read the Electron event.
+const ipcRendererEvent = {} as IpcRendererEvent;
 
 describe("Electron preload task stream API", () => {
   test("registers the frame listener before subscribe and delivers an early snapshot exactly once", async () => {
-    let frameListener: ((event: unknown, value: unknown) => void) | undefined;
+    let frameListener:
+      | ((event: IpcRendererEvent, value: JsonValue | undefined) => void)
+      | undefined;
     let frameListenerRegistered = false;
     const off = mock(() => {});
     const invoke = mock(async (channel: string) => {
       if (channel === ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL) {
         if (!frameListenerRegistered)
           throw new Error("Frame listener was not registered before subscribe.");
-        frameListener?.({}, { frame, subscriptionId });
+        frameListener?.(ipcRendererEvent, { frame, subscriptionId });
         return { subscriptionId };
       }
     });
-    const on = mock((channel: string, next: (event: unknown, value: unknown) => void) => {
-      if (channel === ELECTRON_TASK_STREAM_FRAME_CHANNEL) {
-        frameListener = next;
-        frameListenerRegistered = true;
-      }
-    });
+    const on = mock(
+      (channel: string, next: (event: IpcRendererEvent, value: JsonValue | undefined) => void) => {
+        if (channel === ELECTRON_TASK_STREAM_FRAME_CHANNEL) {
+          frameListener = next;
+          frameListenerRegistered = true;
+        }
+      },
+    );
     const receive = mock(() => {});
     const api = createElectronTaskStreamApi({ invoke, off, on });
 
@@ -57,7 +64,10 @@ describe("Electron preload task stream API", () => {
   });
 
   test("scopes buffered and live frames to concurrent subscriptions on one renderer channel", async () => {
-    const listeners = new Map<string, Set<(event: unknown, value: unknown) => void>>();
+    const listeners = new Map<
+      string,
+      Set<(event: IpcRendererEvent, value: JsonValue | undefined) => void>
+    >();
     const resolveSubscriptions: Array<(value: { subscriptionId: string }) => void> = [];
     const invoke = mock((channel: string) => {
       if (channel !== ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL) return Promise.resolve(undefined);
@@ -65,14 +75,24 @@ describe("Electron preload task stream API", () => {
         resolveSubscriptions.push(resolve);
       });
     });
-    const on = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      const channelListeners = listeners.get(channel) ?? new Set();
-      channelListeners.add(listener);
-      listeners.set(channel, channelListeners);
-    });
-    const off = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      listeners.get(channel)?.delete(listener);
-    });
+    const on = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        const channelListeners = listeners.get(channel) ?? new Set();
+        channelListeners.add(listener);
+        listeners.set(channel, channelListeners);
+      },
+    );
+    const off = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        listeners.get(channel)?.delete(listener);
+      },
+    );
     const firstListener = mock(() => {});
     const secondListener = mock(() => {});
     const secondFrame: TaskEventStreamFrame = {
@@ -82,9 +102,9 @@ describe("Electron preload task stream API", () => {
     const api = createElectronTaskStreamApi({ invoke, off, on });
     const firstSubscription = api.subscribe({ cursor: null }, firstListener);
     const secondSubscription = api.subscribe({ cursor: null }, secondListener);
-    const dispatch = (value: unknown): void => {
+    const dispatch = (value: JsonValue | undefined): void => {
       for (const listener of listeners.get(ELECTRON_TASK_STREAM_FRAME_CHANNEL) ?? []) {
-        listener({}, value);
+        listener(ipcRendererEvent, value);
       }
     };
 
@@ -110,23 +130,36 @@ describe("Electron preload task stream API", () => {
   });
 
   test("reports a matching terminal failure once and closes locally without main unsubscribe", async () => {
-    const listeners = new Map<string, Set<(event: unknown, value: unknown) => void>>();
+    const listeners = new Map<
+      string,
+      Set<(event: IpcRendererEvent, value: JsonValue | undefined) => void>
+    >();
     const invoke = mock(async (channel: string) =>
       channel === ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL ? { subscriptionId } : undefined,
     );
-    const on = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      const channelListeners = listeners.get(channel) ?? new Set();
-      channelListeners.add(listener);
-      listeners.set(channel, channelListeners);
-    });
-    const off = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      listeners.get(channel)?.delete(listener);
-    });
-    const onTerminalFailure = mock((_error: unknown) => {});
+    const on = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        const channelListeners = listeners.get(channel) ?? new Set();
+        channelListeners.add(listener);
+        listeners.set(channel, channelListeners);
+      },
+    );
+    const off = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        listeners.get(channel)?.delete(listener);
+      },
+    );
+    const onTerminalFailure = mock((_cause: unknown) => {});
     const api = createElectronTaskStreamApi({ invoke, off, on });
     const subscription = await api.subscribe({ cursor: null }, () => {}, onTerminalFailure);
-    const dispatch = (channel: string, value: unknown): void => {
-      for (const listener of listeners.get(channel) ?? []) listener({}, value);
+    const dispatch = (channel: string, value: JsonValue | undefined): void => {
+      for (const listener of listeners.get(channel) ?? []) listener(ipcRendererEvent, value);
     };
 
     dispatch(ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL, {
@@ -154,7 +187,10 @@ describe("Electron preload task stream API", () => {
   });
 
   test("rejects an early matching terminal failure and ignores unrelated subscriptions", async () => {
-    const listeners = new Map<string, Set<(event: unknown, value: unknown) => void>>();
+    const listeners = new Map<
+      string,
+      Set<(event: IpcRendererEvent, value: JsonValue | undefined) => void>
+    >();
     let resolveSubscribe!: (value: { subscriptionId: string }) => void;
     const invoke = mock((channel: string) => {
       if (channel !== ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL) return Promise.resolve(undefined);
@@ -162,20 +198,30 @@ describe("Electron preload task stream API", () => {
         resolveSubscribe = resolve;
       });
     });
-    const on = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      const channelListeners = listeners.get(channel) ?? new Set();
-      channelListeners.add(listener);
-      listeners.set(channel, channelListeners);
-    });
-    const off = mock((channel: string, listener: (event: unknown, value: unknown) => void) => {
-      listeners.get(channel)?.delete(listener);
-    });
-    const onTerminalFailure = mock((_error: unknown) => {});
+    const on = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        const channelListeners = listeners.get(channel) ?? new Set();
+        channelListeners.add(listener);
+        listeners.set(channel, channelListeners);
+      },
+    );
+    const off = mock(
+      (
+        channel: string,
+        listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+      ) => {
+        listeners.get(channel)?.delete(listener);
+      },
+    );
+    const onTerminalFailure = mock((_cause: unknown) => {});
     const api = createElectronTaskStreamApi({ invoke, off, on });
     const pendingSubscription = api.subscribe({ cursor: null }, () => {}, onTerminalFailure);
-    const dispatch = (value: unknown): void => {
+    const dispatch = (value: JsonValue | undefined): void => {
       for (const listener of listeners.get(ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL) ?? []) {
-        listener({}, value);
+        listener(ipcRendererEvent, value);
       }
     };
 

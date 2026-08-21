@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { JsonValue } from "@openducktor/contracts";
 import { type BrowserRuntimeConfig, configureBrowserRuntimeConfig } from "./browser-config";
 import {
   errorMessage,
@@ -9,12 +10,12 @@ import {
 
 export const RUNTIME_CONFIG_PATH = "/openducktor-config.json";
 
-const isRuntimeConfigRecord = (value: unknown): value is BrowserRuntimeConfig => {
+const isRuntimeConfigRecord = (value: JsonValue | undefined): value is BrowserRuntimeConfig => {
   if (!value || typeof value !== "object") {
     return false;
   }
 
-  const config = value as { backendUrl?: unknown; appToken?: unknown };
+  const config = value as { backendUrl?: JsonValue; appToken?: JsonValue };
   return typeof config.backendUrl === "string" && typeof config.appToken === "string";
 };
 
@@ -43,7 +44,10 @@ export const loadBrowserRuntimeConfigEffect = (
     }
 
     const config = yield* Effect.tryPromise({
-      try: () => response.json() as Promise<unknown>,
+      try: async () => {
+        // SAFETY: Response.json() parses a JSON-compatible runtime config body.
+        return (await response.json()) as JsonValue;
+      },
       catch: (cause) =>
         new WebValidationError({
           message: `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is not valid JSON.`,

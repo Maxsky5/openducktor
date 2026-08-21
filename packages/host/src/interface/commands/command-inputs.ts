@@ -7,7 +7,10 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const requireRecord = (value: unknown, label: string): Record<string, JsonValue> => {
+export const requireRecord = (
+  value: JsonValue | undefined,
+  label: string,
+): Record<string, JsonValue> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
@@ -15,7 +18,7 @@ export const requireRecord = (value: unknown, label: string): Record<string, Jso
   return value as Record<string, JsonValue>;
 };
 
-export const requireString = (value: unknown, label: string): string => {
+export const requireString = (value: JsonValue | undefined, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
@@ -23,7 +26,10 @@ export const requireString = (value: unknown, label: string): string => {
   return value.trim();
 };
 
-export const requireStringPreservingWhitespace = (value: unknown, label: string): string => {
+export const requireStringPreservingWhitespace = (
+  value: JsonValue | undefined,
+  label: string,
+): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
@@ -31,7 +37,7 @@ export const requireStringPreservingWhitespace = (value: unknown, label: string)
   return value;
 };
 
-export const optionalString = (value: unknown, label: string): string | undefined => {
+export const optionalString = (value: JsonValue | undefined, label: string): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -43,7 +49,10 @@ export const optionalString = (value: unknown, label: string): string | undefine
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-export const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
+export const optionalBoolean = (
+  value: JsonValue | undefined,
+  label: string,
+): boolean | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }

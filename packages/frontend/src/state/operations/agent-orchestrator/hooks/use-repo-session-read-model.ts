@@ -221,8 +221,8 @@ export const useRepoSessionReadModel = ({
       retryIdRef.current === retryId &&
       currentWorkspaceRepoPathRef.current === repoPath &&
       repoEpochRef.current === repoEpoch;
-    const retryFailureMessage = (error: unknown): string =>
-      `Failed to retry task session records for repo '${repoPath}': ${errorMessage(error)}`;
+    const retryFailureMessage = (cause: unknown): string =>
+      `Failed to retry task session records for repo '${repoPath}': ${errorMessage(cause)}`;
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     if (retriesApplyFailure) {
       void loadAgentSessionListsFromQuery(queryClient, repoPath, retryTaskIds, {
@@ -238,14 +238,14 @@ export const useRepoSessionReadModel = ({
             ...retryKey,
           });
         },
-        (error: unknown) => {
+        (cause: unknown) => {
           if (!isCurrentRetry()) {
             return;
           }
           setRecordRetryResult({
             kind: "failed",
             ...retryKey,
-            message: retryFailureMessage(error),
+            message: retryFailureMessage(cause),
           });
         },
       );
@@ -257,12 +257,12 @@ export const useRepoSessionReadModel = ({
           setReloadGeneration((current) => current + 1);
         }
       },
-      (error: unknown) => {
+      (cause: unknown) => {
         if (!isCurrentRetry()) {
           return;
         }
         setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(error)),
+          failedAgentSessionReadModelLoadState(repoPath, retryFailureMessage(cause)),
         );
       },
     );
@@ -538,9 +538,9 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "transcript_gap") {
-        void recoverTranscriptHistory(envelope.message).catch((error: unknown) => {
+        void recoverTranscriptHistory(envelope.message).catch((cause: unknown) => {
           failObservation(
-            `Failed to recover transcript history after a live-stream gap: ${errorMessage(error)}`,
+            `Failed to recover transcript history after a live-stream gap: ${errorMessage(cause)}`,
           );
         });
         return;
@@ -597,22 +597,22 @@ export const useRepoSessionReadModel = ({
         return;
       }
     };
-    const reportEnvelopeFailure = (envelope: AgentSessionLiveEnvelope, error: unknown): void => {
+    const reportEnvelopeFailure = (envelope: AgentSessionLiveEnvelope, cause: unknown): void => {
       if (envelope.type === "session_upsert") {
         recordSessionFault(
           envelope.session.ref,
-          `Failed to apply live-session update: ${errorMessage(error)}`,
+          `Failed to apply live-session update: ${errorMessage(cause)}`,
         );
         return;
       }
       if (envelope.type === "snapshot") {
         failObservation(
-          `Failed to apply initial live-session snapshot for repo '${repoPath}': ${errorMessage(error)}`,
+          `Failed to apply initial live-session snapshot for repo '${repoPath}': ${errorMessage(cause)}`,
         );
         return;
       }
       failObservation(
-        `Failed to apply live-session '${envelope.type}' event for repo '${repoPath}': ${errorMessage(error)}`,
+        `Failed to apply live-session '${envelope.type}' event for repo '${repoPath}': ${errorMessage(cause)}`,
       );
     };
 

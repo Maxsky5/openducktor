@@ -1,6 +1,5 @@
-import type { GitCurrentBranch } from "@openducktor/contracts";
+import type { GitCurrentBranch, JsonValue } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ProbeBranchChangeParams = {
   activeWorkspaceRepoPath: string | null;
@@ -74,14 +73,14 @@ export const shouldSkipBranchSwitch = (
   branchName: string,
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
-const toOptionalString = (value: unknown): string | null =>
+const toOptionalString = (value: JsonValue | undefined): string | null =>
   typeof value === "string" && value.trim().length > 0 ? value : null;
 
-const toRecord = (value: unknown): Record<string, JsonValue> | null =>
+const toRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null =>
   typeof value === "object" && value !== null ? (value as Record<string, JsonValue>) : null;
 
-const extractStructuredErrorHint = (error: unknown): string | null => {
-  const record = toRecord(error);
+const extractStructuredErrorHint = (cause: unknown): string | null => {
+  const record = toRecord(cause as JsonValue | undefined);
   if (!record) {
     return null;
   }
@@ -131,17 +130,17 @@ const classifyBranchProbeErrorCode = (
 };
 
 export const classifyBranchProbeError = (
-  error: unknown,
+  cause: unknown,
   stage: BranchProbeStage,
 ): BranchProbeError => {
-  const message = errorMessage(error);
-  const structuredHint = extractStructuredErrorHint(error);
+  const message = errorMessage(cause);
+  const structuredHint = extractStructuredErrorHint(cause);
 
   return {
     code: classifyBranchProbeErrorCode(message, structuredHint),
     stage,
     message,
-    cause: error,
+    cause,
   };
 };
 

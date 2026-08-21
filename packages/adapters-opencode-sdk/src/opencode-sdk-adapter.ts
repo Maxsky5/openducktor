@@ -3,6 +3,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import { asUnknownRecord } from "./guards";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -82,6 +83,7 @@ import {
   failOpencodeUserMessageSend,
   projectAdmittedOpencodeUserMessage,
 } from "./opencode-agent-session-projection";
+import { opencodeSessionDetailPayloadSchema } from "./opencode-ingress";
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
@@ -254,10 +256,8 @@ export class OpencodeSdkAdapter
       policy,
       workingDirectory: input.workingDirectory,
     });
-    const startedAt = toIsoFromEpoch(
-      (detailData as { time?: { created?: unknown } }).time?.created,
-      this.now,
-    );
+    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
+    const startedAt = toIsoFromEpoch(asUnknownRecord(detailRecord?.time)?.created, this.now);
     const sessionInput = toSessionInput(input);
     return registerSession({
       sessions: this.sessions,
@@ -332,10 +332,8 @@ export class OpencodeSdkAdapter
         workingDirectory: input.workingDirectory,
       });
     }
-    const startedAt = toIsoFromEpoch(
-      (detailData as { time?: { created?: unknown } }).time?.created,
-      this.now,
-    );
+    const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
+    const startedAt = toIsoFromEpoch(asUnknownRecord(detailRecord?.time)?.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
     const summary = registerSession({

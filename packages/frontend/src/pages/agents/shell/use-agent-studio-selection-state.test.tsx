@@ -179,9 +179,9 @@ describe("useAgentStudioSelectionState", () => {
   });
 
   test("forces the transition while a repository boundary is pending", async () => {
-    const options: unknown[] = [];
+    const options: Array<{ force: boolean } | undefined> = [];
     const requestContextTransition = mock(
-      (_apply: () => void, _cancel?: () => void, transitionOptions?: unknown) => {
+      (_apply: () => void, _cancel?: () => void, transitionOptions?: { force: boolean }) => {
         options.push(transitionOptions);
       },
     );

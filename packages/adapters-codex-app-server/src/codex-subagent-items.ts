@@ -95,7 +95,7 @@ const collabCallStatus = (item: Record<string, JsonValue>): CodexCollabCallStatu
   return status as CodexCollabCallStatus;
 };
 
-const stringArrayField = (value: unknown): string[] =>
+const stringArrayField = (value: JsonValue | undefined): string[] =>
   arrayFromUnknown(value).filter(
     (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );

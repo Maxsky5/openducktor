@@ -1,5 +1,4 @@
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;

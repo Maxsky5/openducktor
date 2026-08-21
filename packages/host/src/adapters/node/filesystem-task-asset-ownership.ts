@@ -66,6 +66,8 @@ const validateOwner = (value: unknown): TaskAssetFileOwner => {
   if (typeof value !== "object" || value === null) {
     throw new Error("Task asset owner record must be an object.");
   }
+  // SAFETY: the owner record shape is validated field-by-field below; the record is re-exported
+  // through the typed TaskAssetFileOwner boundary only after every field passes.
   const owner = value as Partial<TaskAssetFileOwner>;
   if (
     owner.version !== 1 ||

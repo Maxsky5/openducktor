@@ -53,7 +53,7 @@ export type OpenSqliteDrizzleConnectionInput<TSchema extends Record<string, AnyS
   readonly runtime?: SqliteDriverRuntime;
 };
 
-const unsupportedParameterValue = (value: unknown): HostOperationError =>
+const unsupportedParameterValue = (value: SqliteValue): HostOperationError =>
   new HostOperationError({
     operation: "sqlite.drizzleParameter",
     message: "Unsupported SQLite parameter value.",
@@ -62,7 +62,7 @@ const unsupportedParameterValue = (value: unknown): HostOperationError =>
     },
   });
 
-const toSqliteValue = (value: unknown): Effect.Effect<SqliteValue, HostOperationError> => {
+const toSqliteValue = (value: SqliteValue): Effect.Effect<SqliteValue, HostOperationError> => {
   if (
     value === null ||
     typeof value === "bigint" ||
@@ -77,14 +77,14 @@ const toSqliteValue = (value: unknown): Effect.Effect<SqliteValue, HostOperation
 };
 
 const toSqliteValues = (
-  params: ReadonlyArray<unknown>,
+  params: ReadonlyArray<SqliteValue>,
 ): Effect.Effect<SqliteValue[], HostOperationError> =>
   Effect.all(params.map((param) => toSqliteValue(param)));
 
 const executeRemoteQuery = (
   database: SqliteDatabase,
   query: string,
-  params: ReadonlyArray<unknown>,
+  params: ReadonlyArray<SqliteValue>,
   method: SqliteRemoteMethod,
 ): Effect.Effect<SqliteRemoteRows, HostOperationError> =>
   Effect.gen(function* () {
@@ -108,8 +108,12 @@ const executeRemoteQuery = (
 
 const makeRemoteCallback =
   (database: SqliteDatabase): AsyncRemoteCallback =>
-  (query, params, method) =>
-    Effect.runPromise(executeRemoteQuery(database, query, params, method));
+  (query, params, method) => {
+    // SAFETY: Drizzle supplies SQLite-native bind values; toSqliteValue preserves runtime validation.
+    return Effect.runPromise(
+      executeRemoteQuery(database, query, params as ReadonlyArray<SqliteValue>, method),
+    );
+  };
 
 const configureDatabase = (
   database: SqliteDatabase,

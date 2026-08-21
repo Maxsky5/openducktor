@@ -103,13 +103,14 @@ const validateHostConnection = async (
   }
 };
 
-const isRecord = (value: unknown): value is Record<string, JsonValue> =>
+const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {
-  let parsed: unknown;
+  let parsed: JsonValue;
   try {
-    parsed = JSON.parse(payload);
+    // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
+    parsed = JSON.parse(payload) as JsonValue;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(

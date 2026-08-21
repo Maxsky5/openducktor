@@ -2,12 +2,12 @@ import type { TaskAssetFailure } from "@openducktor/contracts";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { TaskMutationRefreshStrategy } from "./task-operations-types";
 
-export const taskAssetFailureFromError = (error: unknown): TaskAssetFailure | null => {
-  if (error instanceof HostInvokeError && error.failure?.kind === "task_asset") {
-    return error.failure.taskAssetFailure;
+export const taskAssetFailureFromError = (cause: unknown): TaskAssetFailure | null => {
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "task_asset") {
+    return cause.failure.taskAssetFailure;
   }
-  if (error instanceof AggregateError) {
-    for (const nested of error.errors) {
+  if (cause instanceof AggregateError) {
+    for (const nested of cause.errors) {
       const failure = taskAssetFailureFromError(nested);
       if (failure) {
         return failure;

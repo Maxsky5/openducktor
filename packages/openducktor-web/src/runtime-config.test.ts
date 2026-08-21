@@ -4,9 +4,10 @@ import {
   getBrowserAuthToken,
   getBrowserBackendUrl,
 } from "./browser-config";
+import type { JsonValue } from "@openducktor/contracts";
 import { loadBrowserRuntimeConfig, RUNTIME_CONFIG_PATH } from "./runtime-config";
 
-const response = (body: unknown, status = 200): Response =>
+const response = (body: JsonValue | undefined, status = 200): Response =>
   new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" },
     status,

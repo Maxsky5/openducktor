@@ -74,7 +74,7 @@ export const createOpenCodeSessionControlAdapter = ({
             runtimeId: runtime.runtimeId,
           }),
       }).pipe(
-        Effect.flatMap(toControlSummary),
+        Effect.flatMap((summary) => toControlSummary(summary)),
         Effect.flatMap((summary) =>
           commit(`${operation}.commit`, () => ({
             value: summary,

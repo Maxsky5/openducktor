@@ -25,13 +25,6 @@ type SlashCommandExecutionRequest = {
   arguments: string;
 };
 
-type SessionCommandClient = {
-  command?: (
-    input: unknown,
-    options: { fetch: typeof globalThis.fetch },
-  ) => Promise<{ error?: unknown; response?: unknown }>;
-};
-
 type PreparedUserSend = {
   execute: (args: {
     session: SessionRecord;
@@ -254,14 +247,9 @@ const prepareSlashCommandSend = (
 ): PreparedUserSend => {
   return {
     execute: async ({ session, messageId, modelInput }) => {
-      const commandClient = session.client.session as SessionCommandClient;
-      if (typeof commandClient.command !== "function") {
-        throw new Error("OpenCode runtime client does not expose slash command execution.");
-      }
-
       const commandModel = toCommandModelInput(modelInput);
 
-      const response = await commandClient.command(
+      const response = await session.client.session.command(
         {
           sessionID: session.externalSessionId,
           directory: session.input.workingDirectory,
@@ -272,19 +260,13 @@ const prepareSlashCommandSend = (
           ...(modelInput.variant ? { variant: modelInput.variant } : {}),
           ...(modelInput.agent ? { agent: modelInput.agent } : {}),
         },
-        { fetch: fetchOpenCodeCommand as typeof globalThis.fetch },
+        { fetch: fetchOpenCodeCommand },
       );
       if (response.error) {
-        throw toOpenCodeRequestError(
-          "run slash command",
-          response.error,
-          response.response as { status?: unknown; statusText?: unknown } | undefined,
-        );
+        throw toOpenCodeRequestError("run slash command", response.error, response.response);
       }
       return {
-        assistantMessageId: resolveAssistantResponseMessageId(
-          (response as { data?: unknown }).data,
-        ),
+        assistantMessageId: resolveAssistantResponseMessageId(response.data),
       };
     },
   };

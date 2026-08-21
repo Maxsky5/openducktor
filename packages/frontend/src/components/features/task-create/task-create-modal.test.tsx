@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { ComposerState } from "@/types/task-composer";
 import type { TaskCard } from "@openducktor/contracts";
 import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
@@ -48,7 +49,7 @@ const controllerMock = {
   },
   priorityComboboxOptions: [],
   knownLabels: [],
-  updateState: (_patch: unknown) => {},
+  updateState: (_patch: Partial<ComposerState>) => {},
   footerError: null as string | null,
   isEditingDocument: true,
   close: () => {},

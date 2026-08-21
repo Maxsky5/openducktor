@@ -7,7 +7,7 @@ type TaskStreamTransport = {
   subscribeTaskStream: (
     input: { cursor: TaskEventCursor | null },
     onFrame: (frame: TaskStreamFrame) => void,
-    onTerminalFailure?: (error: unknown) => void,
+    onTerminalFailure?: (cause: unknown) => void,
   ) => Promise<TaskStreamSubscription>;
 };
 
@@ -42,7 +42,7 @@ export const createTaskStreamController = ({
   metadata: TaskMetadataReconciler;
   taskViewSync: TaskViewSync;
   getActiveRepoPath: () => string | null;
-  onDegraded: (error: unknown) => void;
+  onDegraded: (cause: unknown) => void;
 }): TaskStreamController => {
   let current: OwnedSubscription | null = null;
   let acquiring: OwnedSubscription | null = null;
@@ -74,11 +74,11 @@ export const createTaskStreamController = ({
 
   const frameKey = (cursor: TaskEventCursor): string => `${cursor.epoch}:${cursor.sequence}`;
 
-  const reportDegraded = (error: unknown): void => {
+  const reportDegraded = (cause: unknown): void => {
     if (degraded) return;
     degraded = true;
     try {
-      onDegraded(error);
+      onDegraded(cause);
     } catch {
       // Reporting must not leave a controller-owned promise rejected.
     }
@@ -90,8 +90,8 @@ export const createTaskStreamController = ({
       .then(async () => {
         if (owner.subscription) await owner.subscription.unsubscribe();
       })
-      .catch((error: unknown) => {
-        reportDegraded(error);
+      .catch((cause: unknown) => {
+        reportDegraded(cause);
       });
     return owner.unsubscribePromise;
   };
@@ -265,12 +265,12 @@ export const createTaskStreamController = ({
   };
 
   const recover = async (
-    error: unknown,
+    cause: unknown,
     cursor: TaskEventCursor | null,
     awaitReplay: boolean,
   ): Promise<boolean> => {
     if (stopped) return false;
-    reportDegraded(error);
+    reportDegraded(cause);
     if (recoveryUsed) {
       paused = true;
       await closeCurrent();
@@ -302,12 +302,12 @@ export const createTaskStreamController = ({
   };
 
   const startRecovery = (
-    error: unknown,
+    cause: unknown,
     cursor: TaskEventCursor | null,
     awaitReplay: boolean,
   ): Promise<boolean> => {
     if (!recoveryPromise) {
-      recoveryPromise = recover(error, cursor, awaitReplay).finally(() => {
+      recoveryPromise = recover(cause, cursor, awaitReplay).finally(() => {
         recoveryPromise = null;
       });
     }

@@ -593,7 +593,7 @@ describe("TaskViewSync races", () => {
     const snapshotDocumentStarted = createDeferred<void>();
     const successorDocumentStarted = createDeferred<void>();
     const successorFailure = new Error("successor document unavailable");
-    let rejectSuccessorDocument!: (error: unknown) => void;
+    let rejectSuccessorDocument!: (cause: unknown) => void;
     const successorDocument = new Promise<never>((_resolve, reject) => {
       rejectSuccessorDocument = reject;
     });

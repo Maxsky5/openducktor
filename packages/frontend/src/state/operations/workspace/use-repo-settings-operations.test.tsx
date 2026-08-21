@@ -785,11 +785,13 @@ describe("use-repo-settings-operations", () => {
   test("forwards every prompt override key when saving snapshot", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    let forwardedSnapshot: unknown = null;
-    const workspaceSaveSettingsSnapshot = mock(async (snapshotArg: unknown) => {
-      forwardedSnapshot = snapshotArg;
-      return [];
-    });
+    let forwardedSnapshot: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0] | null = null;
+    const workspaceSaveSettingsSnapshot = mock(
+      async (snapshotArg: Parameters<typeof host.workspaceSaveSettingsSnapshot>[0]) => {
+        forwardedSnapshot = snapshotArg;
+        return [];
+      },
+    );
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const original = {
@@ -852,9 +854,12 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
       expect(forwardedSnapshot).toBeDefined();
+      if (!forwardedSnapshot) {
+        throw new Error("Expected settings snapshot to be forwarded.");
+      }
       const parsedForwarded = forwardedSnapshot as {
         globalPromptOverrides: Record<string, JsonValue>;
-        agentRuntimes: unknown;
+        agentRuntimes: JsonValue;
         workspaces: Record<string, { promptOverrides: Record<string, JsonValue> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(

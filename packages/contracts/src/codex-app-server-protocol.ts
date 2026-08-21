@@ -2,23 +2,28 @@
 // Reference schema:
 // https://github.com/openai/codex/tree/main/codex-rs/app-server-protocol/schema/typescript
 
-export type CodexAppServerJsonValue =
-  | boolean
-  | null
-  | number
-  | string
-  | CodexAppServerJsonValue[]
-  | { [key in string]?: CodexAppServerJsonValue };
+import { parseCodexAppServerClientRequest as parseClientRequest } from "./codex-app-server-request-schemas";
+import type {
+  CodexAppServerParsedClientRequest,
+  CodexAppServerRequestParamsMap,
+  CodexAppServerRequestReasoningEffort,
+} from "./codex-app-server-request-schemas";
+import { parseCodexAppServerRequestResultValue } from "./codex-app-server-protocol-schemas";
+import type { JsonValue } from "./json-types";
+import type { CodexAppServerWireServerRequest } from "./codex-app-server-runtime-schemas";
+
+export {
+  codexAppServerClientRequestSchema,
+  codexAppServerReasoningEffortSchema,
+  codexAppServerRequestParamsSchemas,
+} from "./codex-app-server-request-schemas";
+export { codexAppServerRequestResultSchema } from "./codex-app-server-protocol-schemas";
+
+export type CodexAppServerJsonValue = JsonValue;
 
 export type CodexAppServerRequestId = number | string;
 export type CodexAppServerAbsolutePath = string;
-export type CodexAppServerReasoningEffort =
-  | "none"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh";
+export type CodexAppServerReasoningEffort = CodexAppServerRequestReasoningEffort;
 export type CodexAppServerReasoningSummary = "auto" | "concise" | "detailed" | "none";
 export type CodexAppServerPersonality = "friendly" | "none" | "pragmatic";
 export type CodexAppServerSortDirection = "asc" | "desc";
@@ -29,7 +34,7 @@ export type CodexAppServerThreadStatus =
   | { type: "idle" }
   | { type: "notLoaded" }
   | { type: "systemError" };
-export type CodexAppServerThreadSource = "memory_consolidation" | "subagent" | "user";
+export type CodexAppServerThreadSource = string;
 export type CodexAppServerThreadStartSource = "clear" | "startup";
 export type CodexAppServerSubAgentThreadSpawnSource = {
   parent_thread_id: string;
@@ -99,7 +104,6 @@ export type CodexAppServerSubagentThreadItem =
   | CodexAppServerSubAgentActivityThreadItem;
 export type CodexAppServerAskForApproval =
   | "never"
-  | "on-failure"
   | "on-request"
   | "untrusted"
   | {
@@ -115,7 +119,7 @@ export type CodexAppServerApprovalsReviewer = "auto_review" | "guardian_subagent
 export type CodexAppServerSandboxMode = "danger-full-access" | "read-only" | "workspace-write";
 export type CodexAppServerSandboxPolicy =
   | { type: "dangerFullAccess" }
-  | { type: "externalSandbox"; networkAccess: CodexAppServerJsonValue }
+  | { type: "externalSandbox"; networkAccess: "enabled" | "restricted" }
   | { type: "readOnly"; networkAccess: boolean }
   | {
       type: "workspaceWrite";
@@ -125,20 +129,11 @@ export type CodexAppServerSandboxPolicy =
       writableRoots: CodexAppServerAbsolutePath[];
     };
 
-export type CodexAppServerClientInfo = {
-  name: string;
-  title: string | null;
-  version: string;
-};
-export type CodexAppServerInitializeCapabilities = {
-  experimentalApi: boolean;
-  optOutNotificationMethods?: string[] | null;
-  requestAttestation: boolean;
-};
-export type CodexAppServerInitializeParams = {
-  capabilities: CodexAppServerInitializeCapabilities | null;
-  clientInfo: CodexAppServerClientInfo;
-};
+export type CodexAppServerInitializeParams = CodexAppServerRequestParamsMap["initialize"];
+export type CodexAppServerClientInfo = CodexAppServerInitializeParams["clientInfo"];
+export type CodexAppServerInitializeCapabilities = NonNullable<
+  CodexAppServerInitializeParams["capabilities"]
+>;
 export type CodexAppServerInitializeResponse = {
   codexHome: CodexAppServerAbsolutePath;
   platformFamily: string;
@@ -147,30 +142,51 @@ export type CodexAppServerInitializeResponse = {
 };
 export type CodexAppServerClientNotification = { method: "initialized" };
 
-export type CodexAppServerThread = {
-  agentNickname: string | null;
-  agentRole: string | null;
-  cliVersion: string;
-  createdAt: number;
-  cwd: CodexAppServerAbsolutePath;
-  ephemeral: boolean;
-  forkedFromId: string | null;
-  gitInfo: CodexAppServerJsonValue | null;
-  historyMode: CodexAppServerThreadHistoryMode;
+export type CodexAppServerThreadExtra = Record<string, never>;
+export type CodexAppServerThreadSectionAppearance = {
+  icon: string | null;
+  color: string | null;
+};
+export type CodexAppServerThreadSection = {
   id: string;
-  modelProvider: string;
-  name: string | null;
-  parentThreadId: string | null;
-  path: string | null;
-  preview: string;
-  sessionId: string;
-  source: CodexAppServerSessionSource;
-  status: CodexAppServerThreadStatus;
-  threadSource: CodexAppServerThreadSource | null;
-  turns: CodexAppServerTurn[];
-  updatedAt: number;
+  name: string;
+  appearance: CodexAppServerThreadSectionAppearance | null;
+};
+export type CodexAppServerGitInfo = {
+  sha: string | null;
+  branch: string | null;
+  originUrl: string | null;
 };
 export type CodexAppServerThreadHistoryMode = "legacy" | "paginated";
+export type CodexAppServerThread = {
+  id: string;
+  extra: CodexAppServerThreadExtra | null;
+  sessionId: string;
+  forkedFromId: string | null;
+  parentThreadId: string | null;
+  preview: string;
+  ephemeral: boolean;
+  section: CodexAppServerThreadSection | null;
+  sectionEnteredAt: number | null;
+  projectId: string | null;
+  historyMode: CodexAppServerThreadHistoryMode;
+  modelProvider: string;
+  createdAt: number;
+  updatedAt: number;
+  recencyAt: number | null;
+  status: CodexAppServerThreadStatus;
+  path: string | null;
+  cwd: CodexAppServerAbsolutePath;
+  cliVersion: string;
+  source: CodexAppServerSessionSource;
+  canAcceptDirectInput: boolean | null;
+  threadSource: CodexAppServerThreadSource | null;
+  agentNickname: string | null;
+  agentRole: string | null;
+  gitInfo: CodexAppServerGitInfo | null;
+  name: string | null;
+  turns: CodexAppServerTurn[];
+};
 export type CodexAppServerTurn = {
   completedAt: number | null;
   durationMs: number | null;
@@ -182,43 +198,29 @@ export type CodexAppServerTurn = {
   status: CodexAppServerJsonValue;
 };
 
-export type CodexAppServerThreadStartParams = {
-  approvalPolicy?: CodexAppServerAskForApproval | null;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
-  baseInstructions?: string | null;
-  config?: { [key in string]?: CodexAppServerJsonValue } | null;
-  cwd?: string | null;
-  developerInstructions?: string | null;
-  ephemeral?: boolean | null;
-  historyMode?: CodexAppServerThreadHistoryMode | null;
-  model?: string | null;
-  modelProvider?: string | null;
-  personality?: CodexAppServerPersonality | null;
-  sandbox?: CodexAppServerSandboxMode | null;
-  serviceName?: string | null;
-  serviceTier?: string | null;
-  sessionStartSource?: CodexAppServerThreadStartSource | null;
-  threadSource?: CodexAppServerThreadSource | null;
-};
-export type CodexAppServerThreadResumeParams = Omit<
-  CodexAppServerThreadStartParams,
-  "ephemeral" | "historyMode" | "serviceName" | "sessionStartSource" | "threadSource"
-> & {
-  excludeTurns?: boolean | null;
-  threadId: string;
-};
-export type CodexAppServerThreadForkParams = CodexAppServerThreadResumeParams & {
-  ephemeral?: boolean | null;
-  threadSource?: CodexAppServerThreadSource | null;
-};
-export type CodexAppServerThreadSetNameParams = {
-  threadId: string;
-  name: string;
-};
+export type CodexAppServerThreadStartParams = CodexAppServerRequestParamsMap["thread/start"];
+export type CodexAppServerMultiAgentMode = NonNullable<
+  CodexAppServerThreadStartParams["multiAgentMode"]
+>;
+export type CodexAppServerTurnEnvironmentParams = NonNullable<
+  CodexAppServerThreadStartParams["environments"]
+>[number];
+export type CodexAppServerDynamicToolSpec = NonNullable<
+  CodexAppServerThreadStartParams["dynamicTools"]
+>[number];
+export type CodexAppServerDynamicToolFunctionSpec = Omit<
+  Extract<CodexAppServerDynamicToolSpec, { type: "function" }>,
+  "type"
+>;
+export type CodexAppServerSelectedCapabilityRoot = NonNullable<
+  CodexAppServerThreadStartParams["selectedCapabilityRoots"]
+>[number];
+export type CodexAppServerThreadResumeParams = CodexAppServerRequestParamsMap["thread/resume"];
+export type CodexAppServerThreadForkParams = CodexAppServerRequestParamsMap["thread/fork"];
+export type CodexAppServerThreadSetNameParams = CodexAppServerRequestParamsMap["thread/name/set"];
 export type CodexAppServerThreadSetNameResult = Record<string, never>;
-export type CodexAppServerThreadCompactStartParams = {
-  threadId: string;
-};
+export type CodexAppServerThreadCompactStartParams =
+  CodexAppServerRequestParamsMap["thread/compact/start"];
 export type CodexAppServerThreadCompactStartResult = Record<string, never>;
 export type CodexAppServerThreadStartResult = {
   approvalPolicy: CodexAppServerAskForApproval;
@@ -235,45 +237,24 @@ export type CodexAppServerThreadStartResult = {
 export type CodexAppServerThreadResumeResult = CodexAppServerThreadStartResult;
 export type CodexAppServerThreadForkResult = CodexAppServerThreadStartResult;
 
-export type CodexAppServerThreadListParams = {
-  archived?: boolean | null;
-  cursor?: string | null;
-  cwd?: string | string[] | null;
-  limit?: number | null;
-  modelProviders?: string[] | null;
-  searchTerm?: string | null;
-  sortDirection?: CodexAppServerSortDirection | null;
-  sortKey?: string | null;
-  sourceKinds?: string[] | null;
-  useStateDbOnly?: boolean;
-};
+export type CodexAppServerThreadListParams = CodexAppServerRequestParamsMap["thread/list"];
 export type CodexAppServerThreadListResponse = {
   backwardsCursor: string | null;
   data: CodexAppServerThread[];
   nextCursor: string | null;
 };
-export type CodexAppServerThreadLoadedListParams = {
-  cursor?: string | null;
-  limit?: number | null;
-};
+export type CodexAppServerThreadLoadedListParams =
+  CodexAppServerRequestParamsMap["thread/loaded/list"];
 export type CodexAppServerThreadLoadedListResponse = {
   data: string[];
   nextCursor: string | null;
 };
-export type CodexAppServerThreadReadParams = {
-  includeTurns: boolean;
-  threadId: string;
-};
+export type CodexAppServerThreadReadParams = CodexAppServerRequestParamsMap["thread/read"];
 export type CodexAppServerThreadReadResponse = {
   thread: CodexAppServerThread;
 };
-export type CodexAppServerThreadTurnsListParams = {
-  cursor?: string | null;
-  itemsView?: CodexAppServerTurnItemsView | null;
-  limit?: number | null;
-  sortDirection?: CodexAppServerSortDirection | null;
-  threadId: string;
-};
+export type CodexAppServerThreadTurnsListParams =
+  CodexAppServerRequestParamsMap["thread/turns/list"];
 export type CodexAppServerThreadTurnsListResponse = {
   backwardsCursor: string | null;
   data: CodexAppServerTurn[];
@@ -293,50 +274,22 @@ export type CodexAppServerSkillCatalogEntry = {
   cwd: string;
   skills: CodexAppServerSkillRecord[];
 };
-export type CodexAppServerSkillsListParams = {
-  cwd: string;
-  forceReload?: boolean | null;
-};
+export type CodexAppServerSkillsListParams = CodexAppServerRequestParamsMap["skills/list"];
 export type CodexAppServerSkillsListResponse = {
   data: CodexAppServerSkillCatalogEntry[];
   errors?: CodexAppServerJsonValue[] | null;
 };
 
-export type CodexAppServerUserInput =
-  | { detail?: string; path: string; type: "localImage" }
-  | { detail?: string; type: "image"; url: string }
-  | { name: string; path: string; type: "mention" }
-  | { name: string; path: string; type: "skill" }
-  | { text: string; text_elements: CodexAppServerJsonValue[]; type: "text" };
-export type CodexAppServerTurnStartParams = {
-  approvalPolicy?: CodexAppServerAskForApproval | null;
-  approvalsReviewer?: CodexAppServerApprovalsReviewer | null;
-  cwd?: string | null;
-  effort?: CodexAppServerReasoningEffort | null;
-  input: CodexAppServerUserInput[];
-  model?: string | null;
-  outputSchema?: CodexAppServerJsonValue | null;
-  personality?: CodexAppServerPersonality | null;
-  sandboxPolicy?: CodexAppServerSandboxPolicy | null;
-  serviceTier?: string | null;
-  summary?: CodexAppServerReasoningSummary | null;
-  threadId: string;
-};
+export type CodexAppServerTurnStartParams = CodexAppServerRequestParamsMap["turn/start"];
+export type CodexAppServerUserInput = CodexAppServerTurnStartParams["input"][number];
 export type CodexAppServerTurnStartResult = {
   turn: CodexAppServerTurn;
 };
-export type CodexAppServerTurnSteerParams = {
-  expectedTurnId: string;
-  input: CodexAppServerUserInput[];
-  threadId: string;
-};
+export type CodexAppServerTurnSteerParams = CodexAppServerRequestParamsMap["turn/steer"];
 export type CodexAppServerTurnSteerResult = {
   turnId: string;
 };
-export type CodexAppServerTurnInterruptParams = {
-  threadId: string;
-  turnId: string;
-};
+export type CodexAppServerTurnInterruptParams = CodexAppServerRequestParamsMap["turn/interrupt"];
 export type CodexAppServerTurnInterruptResult = Record<string, never>;
 
 export type CodexAppServerReasoningEffortOption = {
@@ -360,30 +313,20 @@ export type CodexAppServerModel = {
   upgrade: string | null;
   upgradeInfo: CodexAppServerJsonValue | null;
 };
-export type CodexAppServerModelListParams = {
-  cursor?: string | null;
-  includeHidden?: boolean | null;
-  limit?: number | null;
-};
+export type CodexAppServerModelListParams = CodexAppServerRequestParamsMap["model/list"];
 export type CodexAppServerModelListResponse = {
   data: CodexAppServerModel[];
   nextCursor: string | null;
 };
 
-export type CodexAppServerGitDiffToRemoteParams = {
-  cwd: string;
-};
+export type CodexAppServerGitDiffToRemoteParams = CodexAppServerRequestParamsMap["gitDiffToRemote"];
 export type CodexAppServerGitDiffToRemoteResponse = {
   diff: string;
   sha: string;
 };
 
 export type CodexAppServerFuzzyFileSearchMatchType = "file" | "directory";
-export type CodexAppServerFuzzyFileSearchParams = {
-  query: string;
-  roots: string[];
-  cancellationToken: string | null;
-};
+export type CodexAppServerFuzzyFileSearchParams = CodexAppServerRequestParamsMap["fuzzyFileSearch"];
 export type CodexAppServerFuzzyFileSearchResult = {
   root: string;
   path: string;
@@ -418,75 +361,83 @@ export type CodexAppServerThreadStatusChangedNotification = {
 };
 
 export const CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS = [
-  "account/login/completed",
-  "account/rateLimits/updated",
-  "account/updated",
-  "app/list/updated",
-  "command/exec/outputDelta",
-  "configWarning",
-  "deprecationNotice",
   "error",
-  "externalAgentConfig/import/completed",
-  "externalAgentConfig/import/progress",
-  "fs/changed",
-  "fuzzyFileSearch/sessionCompleted",
-  "fuzzyFileSearch/sessionUpdated",
-  "guardianWarning",
-  "hook/completed",
-  "hook/started",
-  "item/agentMessage/delta",
-  "item/autoApprovalReview/completed",
-  "item/autoApprovalReview/started",
-  "item/commandExecution/outputDelta",
-  "item/commandExecution/terminalInteraction",
-  "item/completed",
-  "item/fileChange/outputDelta",
-  "item/fileChange/patchUpdated",
-  "item/mcpToolCall/progress",
-  "item/plan/delta",
-  "item/reasoning/summaryPartAdded",
-  "item/reasoning/summaryTextDelta",
-  "item/reasoning/textDelta",
-  "item/started",
-  "mcpServer/oauthLogin/completed",
-  "mcpServer/startupStatus/updated",
-  "model/rerouted",
-  "model/safetyBuffering/updated",
-  "model/verification",
-  "process/exited",
-  "process/outputDelta",
-  "rawResponseItem/completed",
-  "remoteControl/status/changed",
-  "serverRequest/resolved",
-  "skills/changed",
-  "thread/archived",
-  "thread/closed",
-  "thread/compacted",
-  "thread/deleted",
-  "thread/goal/cleared",
-  "thread/goal/updated",
-  "thread/name/updated",
-  "thread/realtime/closed",
-  "thread/realtime/error",
-  "thread/realtime/itemAdded",
-  "thread/realtime/outputAudio/delta",
-  "thread/realtime/sdp",
-  "thread/realtime/started",
-  "thread/realtime/transcript/delta",
-  "thread/realtime/transcript/done",
-  "thread/settings/updated",
   "thread/started",
   "thread/status/changed",
-  "thread/tokenUsage/updated",
+  "thread/archived",
+  "thread/deleted",
   "thread/unarchived",
-  "turn/completed",
-  "turn/diff/updated",
-  "turn/moderationMetadata",
-  "turn/plan/updated",
+  "thread/closed",
+  "thread/reverted",
+  "skills/changed",
+  "thread/name/updated",
+  "thread/goal/updated",
+  "thread/goal/cleared",
+  "thread/queue/changed",
+  "project/changed",
+  "thread/project/updated",
+  "thread/environment/connected",
+  "thread/environment/disconnected",
+  "thread/settings/updated",
+  "thread/tokenUsage/updated",
   "turn/started",
+  "hook/started",
+  "turn/completed",
+  "hook/completed",
+  "turn/diff/updated",
+  "turn/plan/updated",
+  "item/started",
+  "item/autoApprovalReview/started",
+  "item/autoApprovalReview/completed",
+  "autoApprovalReview/strictReviewRequired",
+  "item/completed",
+  "rawResponseItem/completed",
+  "rawResponse/completed",
+  "item/agentMessage/delta",
+  "item/plan/delta",
+  "command/exec/outputDelta",
+  "process/outputDelta",
+  "process/exited",
+  "item/commandExecution/outputDelta",
+  "item/commandExecution/terminalInteraction",
+  "item/fileChange/outputDelta",
+  "item/fileChange/patchUpdated",
+  "serverRequest/resolved",
+  "item/mcpToolCall/progress",
+  "mcpServer/oauthLogin/completed",
+  "mcpServer/startupStatus/updated",
+  "account/updated",
+  "account/rateLimits/updated",
+  "app/list/updated",
+  "remoteControl/status/changed",
+  "externalAgentConfig/import/progress",
+  "externalAgentConfig/import/completed",
+  "fs/changed",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/summaryPartAdded",
+  "item/reasoning/textDelta",
+  "thread/compacted",
+  "model/rerouted",
+  "model/verification",
+  "turn/moderationMetadata",
+  "model/safetyBuffering/updated",
   "warning",
+  "guardianWarning",
+  "deprecationNotice",
+  "configWarning",
+  "fuzzyFileSearch/sessionUpdated",
+  "fuzzyFileSearch/sessionCompleted",
+  "thread/realtime/started",
+  "thread/realtime/itemAdded",
+  "thread/realtime/transcript/delta",
+  "thread/realtime/transcript/done",
+  "thread/realtime/outputAudio/delta",
+  "thread/realtime/sdp",
+  "thread/realtime/error",
+  "thread/realtime/closed",
   "windows/worldWritableWarning",
   "windowsSandbox/setupCompleted",
+  "account/login/completed",
 ] as const;
 
 export type CodexAppServerServerNotificationMethod =
@@ -527,21 +478,42 @@ export type CodexAppServerLegacyParsedCommand =
   | { cmd: string; path: string | null; type: "list_files" }
   | { cmd: string; path: string | null; query: string | null; type: "search" }
   | { cmd: string; type: "unknown" };
+export type CodexAppServerNetworkApprovalContext = {
+  host: string;
+  protocol: "http" | "https" | "socks5Tcp" | "socks5Udp";
+};
+export type CodexAppServerNetworkPolicyAmendment = {
+  host: string;
+  action: "allow" | "deny";
+};
 export type CodexAppServerCommandExecutionRequestApprovalParams = {
   additionalPermissions?: CodexAppServerRequestPermissionProfile | null;
   approvalId?: string | null;
   command?: string | null;
   commandActions?: CodexAppServerCommandAction[] | null;
   cwd?: CodexAppServerAbsolutePath | null;
+  environmentId: string | null;
   itemId: string;
-  networkApprovalContext?: CodexAppServerJsonValue | null;
+  networkApprovalContext?: CodexAppServerNetworkApprovalContext | null;
   reason?: string | null;
   startedAtMs: number;
   threadId: string;
   turnId: string;
-  proposedExecpolicyAmendment?: CodexAppServerJsonValue | null;
-  proposedNetworkPolicyAmendments?: CodexAppServerJsonValue[] | null;
+  proposedExecpolicyAmendment?: string[] | null;
+  proposedNetworkPolicyAmendments?: CodexAppServerNetworkPolicyAmendment[] | null;
+  availableDecisions?: CodexAppServerCommandExecutionApprovalDecision[] | null;
 };
+export type CodexAppServerCommandExecutionApprovalDecision =
+  | "accept"
+  | "acceptForSession"
+  | "decline"
+  | "cancel"
+  | { acceptWithExecpolicyAmendment: { execpolicy_amendment: string[] } }
+  | {
+      applyNetworkPolicyAmendment: {
+        network_policy_amendment: CodexAppServerNetworkPolicyAmendment;
+      };
+    };
 export type CodexAppServerCommandExecutionApprovalResponse = {
   decision: "accept" | "acceptForSession" | "decline" | "cancel" | CodexAppServerJsonValue;
 };
@@ -581,6 +553,7 @@ export type CodexAppServerPermissionsRequestApprovalParams = {
   threadId: string;
   turnId: string;
   itemId: string;
+  environmentId: string | null;
   startedAtMs: number;
   cwd: CodexAppServerAbsolutePath;
   reason: string | null;
@@ -601,6 +574,17 @@ export type CodexAppServerMcpServerElicitationRequestParams = {
       mode: "form";
       _meta: CodexAppServerJsonValue | null;
       message: string;
+      requestedSchema: {
+        $schema?: string;
+        type: "object";
+        properties: Record<string, CodexAppServerJsonValue>;
+        required?: string[];
+      };
+    }
+  | {
+      mode: "openai/form";
+      _meta: CodexAppServerJsonValue | null;
+      message: string;
       requestedSchema: CodexAppServerJsonValue;
     }
   | {
@@ -616,18 +600,31 @@ export type CodexAppServerMcpServerElicitationRequestResponse = {
   content: CodexAppServerJsonValue | null;
   _meta: CodexAppServerJsonValue | null;
 };
+export type CodexAppServerCurrentTimeReadParams = {
+  threadId: string;
+};
+export type CodexAppServerCurrentTimeReadResponse = {
+  /** Current time as whole Unix seconds. */
+  currentTimeAt: number;
+};
 
 export {
-  isCodexAppServerCommandAction,
-  isCodexAppServerLegacyParsedCommand,
-  isCodexAppServerMcpServerElicitationRequestParams,
-  isCodexAppServerRequestPermissionProfile,
-} from "./codex-app-server-protocol-guards";
+  codexAppServerCommandActionSchema,
+  codexAppServerCommandExecutionRequestApprovalParamsSchema,
+  codexAppServerCurrentTimeReadParamsSchema,
+  codexAppServerCurrentTimeReadResponseSchema,
+  codexAppServerExecCommandApprovalParamsSchema,
+  codexAppServerLegacyParsedCommandSchema,
+  codexAppServerMcpServerElicitationRequestParamsSchema,
+  codexAppServerPermissionsRequestApprovalParamsSchema,
+  codexAppServerRequestPermissionProfileSchema,
+} from "./codex-app-server-protocol-schemas";
 
 export const CODEX_APP_SERVER_SERVER_REQUEST_METHOD = {
   ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH: "account/chatgptAuthTokens/refresh",
   APPLY_PATCH_APPROVAL: "applyPatchApproval",
   ATTESTATION_GENERATE: "attestation/generate",
+  CURRENT_TIME_READ: "currentTime/read",
   EXEC_COMMAND_APPROVAL: "execCommandApproval",
   ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL: "item/commandExecution/requestApproval",
   ITEM_FILE_CHANGE_REQUEST_APPROVAL: "item/fileChange/requestApproval",
@@ -644,6 +641,7 @@ export const CODEX_APP_SERVER_SERVER_REQUEST_METHODS = [
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ACCOUNT_CHATGPT_AUTH_TOKENS_REFRESH,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ATTESTATION_GENERATE,
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD.CURRENT_TIME_READ,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_FILE_CHANGE_REQUEST_APPROVAL,
@@ -691,43 +689,12 @@ export const isCodexAppServerPermissionRequestMethod = (
 ): method is CodexAppServerPermissionRequestMethod =>
   CODEX_APP_SERVER_PERMISSION_REQUEST_METHODS.some((candidate) => candidate === method);
 
-export type CodexAppServerServerRequest =
-  | {
-      id: CodexAppServerRequestId;
-      method: "execCommandApproval";
-      params: CodexAppServerExecCommandApprovalParams;
-    }
-  | {
-      id: CodexAppServerRequestId;
-      method: "item/commandExecution/requestApproval";
-      params: CodexAppServerCommandExecutionRequestApprovalParams;
-    }
-  | {
-      id: CodexAppServerRequestId;
-      method: "item/permissions/requestApproval";
-      params: CodexAppServerPermissionsRequestApprovalParams;
-    }
-  | {
-      id: CodexAppServerRequestId;
-      method: "mcpServer/elicitation/request";
-      params: CodexAppServerMcpServerElicitationRequestParams;
-    }
-  | {
-      id: CodexAppServerRequestId;
-      method: Exclude<
-        CodexAppServerServerRequestMethod,
-        | "execCommandApproval"
-        | "item/commandExecution/requestApproval"
-        | "item/permissions/requestApproval"
-        | "mcpServer/elicitation/request"
-      >;
-      params: CodexAppServerJsonValue;
-    };
+export type CodexAppServerServerRequest = CodexAppServerWireServerRequest;
 export type CodexAppServerProtocolMessage =
   | CodexAppServerServerNotification
   | CodexAppServerServerRequest;
 
-export type CodexAppServerClientRequestMap = {
+type CodexAppServerClientRequestDefinitionMap = {
   initialize: {
     params: CodexAppServerInitializeParams;
     result: CodexAppServerInitializeResponse;
@@ -797,48 +764,32 @@ export type CodexAppServerClientRequestMap = {
     result: CodexAppServerFuzzyFileSearchResponse;
   };
 };
-export type CodexAppServerRequestMethod = keyof CodexAppServerClientRequestMap;
-export type CodexAppServerRequestParams =
-  CodexAppServerClientRequestMap[CodexAppServerRequestMethod]["params"];
-export type CodexAppServerClientRequest = {
-  method: CodexAppServerRequestMethod;
-  params?: CodexAppServerRequestParams;
+export type CodexAppServerClientRequestMap = {
+  [Method in keyof CodexAppServerClientRequestDefinitionMap]: {
+    params: CodexAppServerRequestParamsMap[Method];
+    result: CodexAppServerClientRequestDefinitionMap[Method]["result"];
+  };
 };
+export type CodexAppServerRequestMethod = keyof CodexAppServerClientRequestMap;
+export type CodexAppServerRequestParams<
+  Method extends CodexAppServerRequestMethod = CodexAppServerRequestMethod,
+> = CodexAppServerClientRequestMap[Method]["params"];
+export type CodexAppServerClientRequest = CodexAppServerParsedClientRequest;
 export type CodexAppServerRequestResult =
   CodexAppServerClientRequestMap[CodexAppServerRequestMethod]["result"];
 
-export const isCodexAppServerJsonValue = (value: unknown): value is CodexAppServerJsonValue => {
-  if (value === null || typeof value === "boolean" || typeof value === "string") {
-    return true;
-  }
-  if (typeof value === "number") {
-    return Number.isFinite(value);
-  }
-  if (Array.isArray(value)) {
-    return value.every(isCodexAppServerJsonValue);
-  }
-  if (typeof value !== "object") {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return false;
-  }
-  return Object.values(value).every(isCodexAppServerJsonValue);
-};
+export const parseCodexAppServerClientRequest = (value: unknown): CodexAppServerClientRequest =>
+  parseClientRequest(value);
 
-export const parseCodexAppServerRequestResult = (
-  _method: CodexAppServerRequestMethod,
-  value: unknown,
-): CodexAppServerRequestResult => {
-  if (!isCodexAppServerJsonValue(value)) {
-    throw new TypeError("Codex app-server result must be JSON-compatible.");
-  }
-  return value as CodexAppServerRequestResult;
-};
+export const parseCodexAppServerRequestResult = <Method extends CodexAppServerRequestMethod>(
+  method: Method,
+  value: CodexAppServerJsonValue,
+): CodexAppServerClientRequestMap[Method]["result"] =>
+  parseCodexAppServerRequestResultValue(method, value);
 
 export type CodexAppServerRespondResult =
   | CodexAppServerCommandExecutionApprovalResponse
+  | CodexAppServerCurrentTimeReadResponse
   | CodexAppServerExecCommandApprovalResponse
   | CodexAppServerMcpServerElicitationRequestResponse
   | CodexAppServerPermissionsApprovalResponse

@@ -55,7 +55,7 @@ describe("build tools", () => {
       command: ["bun", "-e", "process.exit(7)"],
       cwd: process.cwd(),
       label: "Failing command",
-    }).catch((caught: unknown) => caught);
+    }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Failing command failed with exit code 7.");

@@ -18,6 +18,7 @@ import {
   type TaskDocumentsRead,
   type TaskSummary,
   type WorkspaceScopedOdtToolName,
+  type JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -77,11 +78,11 @@ export type WorkspaceScopedOdtToolResult =
   | TaskSummary;
 
 export type OdtMcpBridgeService = {
-  ready(input?: unknown): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
-  getWorkspaces(input?: unknown): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
+  ready(input?: JsonValue): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
+  getWorkspaces(input?: JsonValue): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
   invoke(
     toolName: WorkspaceScopedOdtToolName,
-    input: unknown,
+    input: JsonValue | undefined,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
 export type CreateOdtMcpBridgeServiceInput = {

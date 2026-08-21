@@ -14,7 +14,7 @@ bootstrapOpenDucktorShell({
   createShellBridge: createElectronShellBridge,
   prepare: initializeElectronWindowChrome,
   routerMode: "hash",
-}).catch((error: unknown) => {
+}).catch((cause: unknown) => {
   showOpenDucktorStartupFailure();
-  console.error("Critical Electron bootstrap failure", error);
+  console.error("Critical Electron bootstrap failure", cause);
 });

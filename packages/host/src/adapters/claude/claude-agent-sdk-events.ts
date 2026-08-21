@@ -27,6 +27,10 @@ import {
 } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
+import {
+  parseClaudeJsonValue,
+  parseClaudeUserToolResultIngress,
+} from "./claude-agent-sdk-ingress-schemas";
 import { consumeClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
@@ -44,10 +48,7 @@ import {
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
-import {
-  readClaudeTurnOriginKind,
-  shouldFinalizeClaudeTurn,
-} from "./claude-agent-sdk-user-messages";
+import { shouldFinalizeClaudeTurn } from "./claude-agent-sdk-user-messages";
 import { isRecord, readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 type SdkMessageHandlerInput = {
@@ -65,8 +66,12 @@ export const handleClaudeSdkMessage = ({
   session,
   timestamp,
 }: SdkMessageHandlerInput): void => {
+  const messageValue = parseClaudeJsonValue(message, "claudeSdkMessage");
   if (message.type === "system" && message.subtype === "init") {
     return;
+  }
+  if (message.type === "user") {
+    parseClaudeUserToolResultIngress(message);
   }
   const forwardedSubagentMessage = resolveForwardedClaudeSubagentMessage(session, message);
   if (forwardedSubagentMessage !== undefined) {
@@ -83,7 +88,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "assistant") {
-    if (isClaudeSyntheticAssistantMessage(message)) {
+    if (isClaudeSyntheticAssistantMessage(messageValue)) {
       return;
     }
     handleAssistantMessage({
@@ -96,7 +101,8 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "user") {
-    const originKind = readClaudeTurnOriginKind(message);
+    const userToolResultMessage = parseClaudeUserToolResultIngress(message);
+    const originKind = userToolResultMessage.turnOriginKind;
     if (originKind === "human") {
       delete session.assistantTurnOriginKind;
     } else if (originKind !== undefined) {
@@ -170,7 +176,7 @@ export const handleClaudeSdkMessage = ({
     const taskSession =
       findClaudeSubagentTaskSession(
         session,
-        readStringProp(message, "tool_use_id"),
+        readStringProp(messageValue, "tool_use_id"),
         message.task_id,
       ) ?? session;
     handleClaudeSubagentSystemMessage({ emit, message, session: taskSession, timestamp });
@@ -238,14 +244,15 @@ const handleAssistantMessage = ({
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
-  const content = (message.message as { content?: unknown }).content;
+  const assistantMessage = parseClaudeJsonValue(message.message, "claudeAssistantMessage");
+  const content = isRecord(assistantMessage) ? assistantMessage.content : undefined;
   const text = textFromContentBlocks(content);
   const hasToolUse =
     Array.isArray(content) &&
     content.some(
       (block) => isRecord(block) && isClaudeToolUseBlockType(readStringProp(block, "type")),
     );
-  const stopReason = readStringProp(message.message, "stop_reason");
+  const stopReason = readStringProp(assistantMessage, "stop_reason");
   const isForwardedSubagentText = isClaudeSubagentTranscriptTarget(session.externalSessionId);
   const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
   const isPendingSubagentAssistantText =
@@ -258,7 +265,7 @@ const handleAssistantMessage = ({
       session.assistantTurnOriginKind,
       hasActiveClaudeBackgroundWork(session) ? 1 : 0,
     );
-  const responseId = readStringProp(message.message, "id");
+  const responseId = readStringProp(assistantMessage, "id");
   const assistantMessageId = responseId ?? message.uuid;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
     settleClaudeStreamedAssistantText({

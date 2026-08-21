@@ -8,7 +8,7 @@ export const eventTimestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const hasMeaningfulToolInputValue = (value: unknown): boolean => {
+const hasMeaningfulToolInputValue = (value: JsonValue | undefined): boolean => {
   if (typeof value === "string") {
     return value.trim().length > 0;
   }

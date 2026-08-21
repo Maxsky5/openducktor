@@ -1,32 +1,35 @@
+import type { HostEventEnvelope } from "@openducktor/contracts";
 import { createHostEventBus } from "./host-event-bus";
 
 const createBus = () => createHostEventBus({ report: () => {} });
 
 describe("createHostEventBus", () => {
-  test("publishes payloads to subscribers for a checked host channel", () => {
+  test("publishes validated envelopes to subscribers for a checked host channel", () => {
     const bus = createBus();
-    const payloads: unknown[] = [];
+    const envelopes: HostEventEnvelope[] = [];
 
-    bus.subscribe("openducktor://run-event", (payload) => {
-      payloads.push(payload);
+    bus.subscribe("openducktor://run-event", (envelope) => {
+      envelopes.push(envelope);
     });
 
-    bus.publish("openducktor://run-event", { taskId: "task-1" });
+    bus.publish({ channel: "openducktor://run-event", payload: { taskId: "task-1" } });
 
-    expect(payloads).toEqual([{ taskId: "task-1" }]);
+    expect(envelopes).toEqual([
+      { channel: "openducktor://run-event", payload: { taskId: "task-1" } },
+    ]);
   });
 
   test("unsubscribes listeners without affecting later publications", () => {
     const bus = createBus();
-    const payloads: unknown[] = [];
-    const unsubscribe = bus.subscribe("openducktor://run-event", (payload) => {
-      payloads.push(payload);
+    const envelopes: HostEventEnvelope[] = [];
+    const unsubscribe = bus.subscribe("openducktor://run-event", (envelope) => {
+      envelopes.push(envelope);
     });
 
     unsubscribe();
-    bus.publish("openducktor://run-event", { sessionId: "session-1" });
+    bus.publish({ channel: "openducktor://run-event", payload: { sessionId: "session-1" } });
 
-    expect(payloads).toEqual([]);
+    expect(envelopes).toEqual([]);
   });
 
   test("rejects unknown event channels", () => {
@@ -46,22 +49,42 @@ describe("createHostEventBus", () => {
   test("keeps invalid publish channels as acceptance failures", () => {
     const bus = createBus();
 
-    expect(() => bus.publish("openducktor://missing-event", {})).toThrow(
-      "Unknown OpenDucktor host event channel: openducktor://missing-event",
-    );
+    expect(() =>
+      bus.publish(JSON.parse('{"channel":"openducktor://missing-event","payload":{}}')),
+    ).toThrow("Invalid OpenDucktor host event envelope.");
+  });
+  test("rejects payloads that do not match their channel schema", () => {
+    const bus = createBus();
+
+    expect(() =>
+      bus.publish(
+        JSON.parse(
+          '{"channel":"openducktor://dev-server-event","payload":{"type":"not-a-dev-event"}}',
+        ),
+      ),
+    ).toThrow("Invalid OpenDucktor host event envelope.");
+    expect(() =>
+      bus.publish(
+        JSON.parse(
+          '{"channel":"openducktor://agent-session-live-event","payload":{"type":"snapshot","repoPath":"/repo"}}',
+        ),
+      ),
+    ).toThrow("Invalid OpenDucktor host event envelope.");
   });
   test("isolates listener failures and continues a snapshot delivery", () => {
     const failures: unknown[] = [];
     const bus = createHostEventBus({ report: ({ cause }) => failures.push(cause) });
-    const received: unknown[] = [];
+    const received: HostEventEnvelope[] = [];
     bus.subscribe("openducktor://run-event", () => {
       throw new Error("listener failed");
     });
-    bus.subscribe("openducktor://run-event", (payload) => received.push(payload));
+    bus.subscribe("openducktor://run-event", (envelope) => received.push(envelope));
 
-    bus.publish("openducktor://run-event", { taskId: "task-1" });
+    bus.publish({ channel: "openducktor://run-event", payload: { taskId: "task-1" } });
 
-    expect(received).toEqual([{ taskId: "task-1" }]);
+    expect(received).toEqual([
+      { channel: "openducktor://run-event", payload: { taskId: "task-1" } },
+    ]);
     expect(failures).toHaveLength(1);
   });
   test("uses a listener snapshot when a listener unsubscribes another listener", () => {
@@ -73,7 +96,7 @@ describe("createHostEventBus", () => {
       unsubscribe();
     });
 
-    bus.publish("openducktor://run-event", {});
+    bus.publish({ channel: "openducktor://run-event", payload: {} });
 
     expect(received).toEqual(["second", "first"]);
   });

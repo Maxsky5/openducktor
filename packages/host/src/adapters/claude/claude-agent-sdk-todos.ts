@@ -14,6 +14,7 @@ import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
+import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -58,14 +59,14 @@ const readTaskOutput = (raw: Record<string, JsonValue>): Record<string, JsonValu
   return isRecord(raw.structuredContent) ? raw.structuredContent : raw;
 };
 
-const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null => {
+const readTaskStatus = (value: JsonValue | undefined): AgentSessionTodoItem["status"] | null => {
   if (value === "pending" || value === "in_progress" || value === "completed") {
     return value;
   }
   return null;
 };
 
-const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
+const readTaskItem = (value: JsonValue | undefined): AgentSessionTodoItem | null => {
   if (!isRecord(value)) {
     return null;
   }
@@ -248,16 +249,18 @@ export const toClaudeTodos = (
   };
 
   for (const entry of messages) {
+    const value = parseClaudeJsonValue(entry, "claudeHistoryMessage");
     const retracted = retractClaudeTranscriptCorrelations(
       correlationState,
-      retractedHistoryMessageIds(entry),
+      retractedHistoryMessageIds(value),
     );
     retractClaudeTodoToolResults(projectionState, retracted.toolUseIds);
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
     if (entry.type === "assistant") {
-      const content = isRecord(entry.message) ? entry.message.content : undefined;
+      const content =
+        isRecord(value) && isRecord(value.message) ? value.message.content : undefined;
       if (!Array.isArray(content)) {
         continue;
       }

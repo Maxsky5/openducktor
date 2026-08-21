@@ -151,6 +151,7 @@ const AGENT_SESSION_LIVE_METHODS = [
   "agentSessionControlUpdateModel",
   "agentSessionLiveList",
   "agentSessionLiveLoadContext",
+  "agentSessionLiveLoadDiff",
   "agentSessionLiveRead",
   "agentSessionLiveRefresh",
   "agentSessionLiveReplyApproval",

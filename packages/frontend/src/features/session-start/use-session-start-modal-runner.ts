@@ -5,7 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { findRuntimeDefinition, runtimeSupportsStartMode } from "@/lib/agent-runtime";
@@ -64,8 +64,8 @@ type SessionStartModalRunResult = {
 
 type PendingModalRun = {
   request: SessionStartModalRunRequest;
-  execute: (result: SessionStartModalRunResult) => Promise<unknown>;
-  resolve: (value: unknown) => void;
+  execute: (result: SessionStartModalRunResult) => Promise<() => void>;
+  cancel: () => void;
 };
 
 const requireSelectedModel = (
@@ -210,6 +210,7 @@ export function useSessionStartModalRunner({
 } {
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
+  const pendingSettlementRef = useRef<(() => void) | null>(null);
   const [isStarting, setIsStarting] = useState(false);
 
   const {
@@ -272,16 +273,27 @@ export function useSessionStartModalRunner({
     });
   }, [retryRuntimeSettings]);
 
+  useLayoutEffect(() => {
+    const settle = pendingSettlementRef.current;
+    if (!settle) {
+      return;
+    }
+
+    pendingSettlementRef.current = null;
+    settle();
+  });
+
   const resolvePendingRun = useCallback(
-    (value: unknown): void => {
+    (settle?: () => void): void => {
       const pendingRun = pendingRunRef.current;
       if (!pendingRun) {
         return;
       }
 
       pendingRunRef.current = null;
+      pendingSettlementRef.current = settle ?? pendingRun.cancel;
+      setIsStarting(false);
       closeStartModal();
-      pendingRun.resolve(value);
     },
     [closeStartModal],
   );
@@ -294,7 +306,7 @@ export function useSessionStartModalRunner({
       if (isStarting) {
         throw new Error("A session start is already in progress.");
       }
-      resolvePendingRun(undefined);
+      resolvePendingRun();
       const targetBranchValidationError = taskTargetBranchValidationError(
         request.initialTargetBranchError,
       );
@@ -312,8 +324,11 @@ export function useSessionStartModalRunner({
       return new Promise<T | undefined>((resolve) => {
         pendingRunRef.current = {
           request,
-          execute: execute as (result: SessionStartModalRunResult) => Promise<unknown>,
-          resolve: resolve as (value: unknown) => void,
+          execute: async (result) => {
+            const value = await execute(result);
+            return () => resolve(value);
+          },
+          cancel: () => resolve(undefined),
         };
       });
     },
@@ -368,17 +383,16 @@ export function useSessionStartModalRunner({
           });
         }
 
-        const value = await pendingRun.execute({
+        const settle = await pendingRun.execute({
           decision,
           runInBackground: input.runInBackground ?? false,
           request: requestContext,
         });
-        resolvePendingRun(value);
+        resolvePendingRun(settle);
       } catch (error) {
         toast.error("Failed to start the session.", {
           description: errorMessage(error),
         });
-      } finally {
         setIsStarting(false);
       }
     },
@@ -441,7 +455,7 @@ export function useSessionStartModalRunner({
           if (isStarting) {
             return;
           }
-          resolvePendingRun(undefined);
+          resolvePendingRun();
         }
       },
       onConfirm: confirmModal,

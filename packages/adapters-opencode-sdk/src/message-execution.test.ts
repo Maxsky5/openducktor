@@ -164,7 +164,7 @@ describe("message-execution", () => {
     class SdkSessionClient {
       readonly summarizeCalls: unknown[] = [];
 
-      async summarize(input: unknown) {
+      async summarize(input: JsonValue | undefined) {
         this.summarizeCalls.push(input);
         return { data: true, error: null };
       }

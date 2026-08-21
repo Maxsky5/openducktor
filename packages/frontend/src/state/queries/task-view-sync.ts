@@ -32,7 +32,7 @@ export type TaskViewSync = {
   reconcileStreamSnapshot: (activeRepoPath: string | null) => Promise<void>;
 };
 
-const isCancellation = (error: unknown): boolean => isCancelledError(error);
+const isCancellation = (cause: unknown): boolean => isCancelledError(cause);
 
 const toEventChanges = (event: ExternalTaskSyncEvent) =>
   event.kind === "external_task_created"
@@ -255,7 +255,7 @@ export const createTaskViewSync = ({
     operation: (joinWinner: () => Promise<void>) => Promise<void>,
   ) => {
     let resolve!: () => void;
-    let reject!: (error: unknown) => void;
+    let reject!: (cause: unknown) => void;
     const current = new Promise<void>((nextResolve, nextReject) => {
       resolve = nextResolve;
       reject = nextReject;

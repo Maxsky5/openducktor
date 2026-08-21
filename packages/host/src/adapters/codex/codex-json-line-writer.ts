@@ -4,9 +4,9 @@ import { type HostOperationError, toHostOperationError } from "../../effect/host
 
 const WRITE_OPERATION = "codexAppServerTransport.writeLine";
 
-export const writeJsonLine = (
+export const writeJsonLine = <Payload>(
   stdin: Writable,
-  payload: unknown,
+  payload: Payload,
 ): Effect.Effect<void, HostOperationError> =>
   Effect.async((resume) => {
     let active = true;

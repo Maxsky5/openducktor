@@ -78,7 +78,7 @@ export const createHookHarness = (
 
 export const createDeferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
+  let reject!: (cause?: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -87,7 +87,7 @@ export const createDeferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-const stableTestToken = (value: unknown): string => {
+const stableTestToken = <T>(value: T): string => {
   return `test:${JSON.stringify(value)}`;
 };
 

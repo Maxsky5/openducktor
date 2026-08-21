@@ -19,6 +19,7 @@ import type { TaskActivityGuardPort as RealTaskActivityGuardPort } from "../../.
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
+import type { DevServerTaskInput } from "../../dev-servers/dev-server-service-types";
 import { createRuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
@@ -784,7 +785,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
     start() {
       return Effect.dieMessage("unexpected dev server start");
     },
-    stop(input: unknown) {
+    stop(input: DevServerTaskInput) {
       return Effect.sync(() => {
         calls.push({ type: "stopDevServers", input });
         return {
