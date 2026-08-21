@@ -24,6 +24,18 @@ describe("event-stream schemas", () => {
     expect(() => parseSessionStatus({ status: {} })).toThrow("missing status.type");
   });
 
+  test("parseSessionStatus rejects incomplete retry payloads", () => {
+    for (const status of [
+      { type: "retry", attempt: 1, message: "Retrying" },
+      { type: "retry", attempt: 1, message: "   ", next: 500 },
+      { type: "retry", message: "Retrying", next: 500 },
+    ]) {
+      expect(() => parseSessionStatus({ status })).toThrow(
+        "numeric attempt and next values plus a non-blank message",
+      );
+    }
+  });
+
   test("parsePermissionAsked normalizes invalid patterns as empty list", () => {
     expect(
       parsePermissionAsked({
@@ -51,6 +63,21 @@ describe("event-stream schemas", () => {
       permission: "write",
       patterns: ["src/**"],
       metadata: { tool: "edit" },
+    });
+  });
+
+  test("parsePermissionAsked does not use resources when present patterns are malformed", () => {
+    expect(
+      parsePermissionAsked({
+        id: "perm-1",
+        permission: "write",
+        patterns: [12],
+        resources: ["src/**"],
+      }),
+    ).toEqual({
+      requestId: "perm-1",
+      permission: "write",
+      patterns: [],
     });
   });
 

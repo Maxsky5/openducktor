@@ -14,6 +14,7 @@ import {
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
 import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
+import { asUnknownRecord } from "./guards";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
 
@@ -21,7 +22,14 @@ type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
   controller: AbortController;
   onEvent: (event: Event) => void | Promise<void>;
+  onEventError?: (error: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
   onReady?: () => void;
+};
+
+export type OpencodeGlobalEventFailureScope = {
+  directory: string;
+  externalSessionId?: string;
+  parentExternalSessionId?: string;
 };
 
 type LogEventInput = {
@@ -85,6 +93,27 @@ const toDirectoryScopedEvent = (event: Event, directory: string): Event => {
   } as Event;
 };
 
+const readGlobalEventFailureScope = (
+  event: OpencodeGlobalEvent,
+): OpencodeGlobalEventFailureScope => {
+  const payload = asUnknownRecord(event.payload);
+  const syncEvent = payload?.type === "sync" ? asUnknownRecord(payload.syncEvent) : undefined;
+  const properties = syncEvent ? asUnknownRecord(syncEvent.data) : payload?.properties;
+  const scopedEvent = {
+    type: String(payload?.type ?? "unknown"),
+    properties,
+  } as Event;
+  const externalSessionId =
+    readEventSessionId(scopedEvent) ??
+    (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
+  const parentExternalSessionId = readEventParentExternalSessionId(properties);
+  return {
+    directory: event.directory,
+    ...(externalSessionId ? { externalSessionId } : {}),
+    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+  };
+};
+
 const normalizeDirectory = (directory: string): string => directory.trim();
 
 const isEventDirectoryScopedToSubscriber = (
@@ -127,11 +156,18 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     if (input.controller.signal.aborted) {
       break;
     }
-    const payloadDecision = normalizeOpencodeGlobalEventPayload(event.payload);
-    if (payloadDecision.kind === "heartbeat") {
-      continue;
+    try {
+      const payloadDecision = normalizeOpencodeGlobalEventPayload(event.payload);
+      if (payloadDecision.kind === "heartbeat") {
+        continue;
+      }
+      await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
+    } catch (error) {
+      if (!input.onEventError) {
+        throw error;
+      }
+      await input.onEventError(error, readGlobalEventFailureScope(event));
     }
-    await input.onEvent(toDirectoryScopedEvent(payloadDecision.event, event.directory));
     if (!ready) {
       ready = true;
       input.onReady?.();

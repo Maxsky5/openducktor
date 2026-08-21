@@ -59,7 +59,7 @@ const stateEffect = <Value>(
 const runtimeActivityFromTranscriptEvent = (
   event: AgentSessionTranscriptEvent,
 ): AgentSessionActivity | null => {
-  if (event.type === "session_idle") {
+  if (event.type === "session_idle" || event.type === "session_error") {
     return "idle";
   }
   if (event.type !== "session_status") {

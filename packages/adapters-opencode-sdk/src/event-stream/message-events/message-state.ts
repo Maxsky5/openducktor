@@ -21,6 +21,12 @@ export const removeMessageProjectionState = (
   session.emittedAssistantMessageIds.delete(messageId);
   session.emittedUserMessageSignatures.delete(messageId);
   session.emittedUserMessageStates.delete(messageId);
+  const queuedMessageIndex = session.pendingQueuedUserMessages.findIndex(
+    (entry) => entry.messageId === messageId,
+  );
+  if (queuedMessageIndex >= 0) {
+    session.pendingQueuedUserMessages.splice(queuedMessageIndex, 1);
+  }
   if (session.activeAssistantMessageId !== messageId) {
     return false;
   }

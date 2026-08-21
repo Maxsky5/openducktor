@@ -31,6 +31,7 @@ export type SessionInput = RuntimeWorkingDirectoryRef &
   };
 
 export type QueuedUserMessageSend = {
+  messageId: string;
   signature: string;
   attachmentIdentitySignature?: string;
   attachmentParts?: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[];
@@ -63,7 +64,10 @@ export type SessionRecord = {
   emittedAssistantMessageIds: Set<string>;
   emittedUserMessageSignatures: Map<string, string>;
   emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
-  pendingUserMessageAdmissions: Map<string, () => void>;
+  pendingUserMessageAdmissions: Map<
+    string,
+    { admit: () => void; reject: (reason?: unknown) => void }
+  >;
   pendingQueuedUserMessages: QueuedUserMessageSend[];
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;
   partIdsByMessageId: Map<string, Set<string>>;
@@ -96,7 +100,7 @@ export type RuntimeEventTransportRecord = {
   runtimeId: string;
   runtimeEndpoint: string;
   controller: AbortController;
-  dispatch: (event: Event) => Promise<void>;
+  dispatch: (event: Event) => Promise<boolean>;
   ready: Promise<void>;
   streamDone: Promise<void>;
   subscribers: Map<string, EventStreamSubscriber>;

@@ -16,6 +16,7 @@ describe("types", () => {
     const sessionInput: SessionInput = {
       repoPath: "/repo",
       runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
@@ -24,7 +25,9 @@ describe("types", () => {
     const sessionRecord: SessionRecord = {
       summary: {
         externalSessionId: "external-session-1",
-        role: "spec",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
       },

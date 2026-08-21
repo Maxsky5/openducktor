@@ -222,6 +222,56 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("rejects a send result that arrives after the session is released", async () => {
+    let resolveSendStarted: () => void = () => undefined;
+    let releaseSend: () => void = () => undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      resolveSendStarted = resolve;
+    });
+    const sendBarrier = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const harness = createRuntimeHarness({
+      sendUserMessageBarrier: sendBarrier,
+      onSendUserMessage: resolveSendStarted,
+    });
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const sending = Effect.runPromise(
+      adapter.sendUserMessage({
+        ...ref,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        parts: [{ kind: "text", text: "Hello" }],
+      }),
+    );
+    await sendStarted;
+
+    try {
+      await Effect.runPromise(adapter.releaseSession(ref));
+      releaseSend();
+
+      await expect(sending).rejects.toThrow("is no longer retained");
+      expect(adapter.matches(ref)).toBe(false);
+      expect(
+        publishedChanges.filter(
+          (change) =>
+            change.type === "transcript_event" && change.event.externalSessionId === "session-1",
+        ),
+      ).toEqual([]);
+    } finally {
+      releaseSend();
+      await sending.catch(() => undefined);
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
+  });
+
   for (const operation of ["start", "resume", "fork"] as const) {
     test(`reports the latest runtime association after ${operation} invalidation and refresh`, async () => {
       const harness = createRuntimeHarness();
@@ -436,5 +486,49 @@ describe("OpenCode live session controls", () => {
         .filter((change) => change.type === "session_upsert")
         .map((change) => (change.type === "session_upsert" ? change.snapshot.activity : null)),
     ).toEqual(["running", "idle"]);
+  });
+
+  test("projects a session error as authoritative idle activity", async () => {
+    const harness = createRuntimeHarness();
+    harness.setSources([
+      nativeSource({
+        runtimeActivity: "running",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    ]);
+    const publishedChanges: AgentSessionLiveAdapterChange[] = [];
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(publishedChanges),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+
+    try {
+      await harness.emit({
+        type: "transcript_event",
+        externalSessionId: "session-1",
+        event: {
+          type: "session_error",
+          externalSessionId: "session-1",
+          timestamp: "2026-07-16T10:03:00.000Z",
+          message: "Provider failed",
+        },
+      });
+
+      await expect(Effect.runPromise(adapter.readRetainedSnapshot(ref))).resolves.toMatchObject({
+        type: "live",
+        session: { activity: "idle" },
+      });
+      expect(publishedChanges).toContainEqual({
+        type: "session_upsert",
+        snapshot: expect.objectContaining({ ref, activity: "idle" }),
+      });
+    } finally {
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
   });
 });

@@ -5,7 +5,11 @@ import {
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionLiveAdapterMutation,
@@ -134,9 +138,20 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.flatMap((value) =>
           serializeRuntime(
             commit("opencode-live-session.commit-user-message", () => {
+              const sessionRef = toSessionRef(input);
+              if (!state.has(sessionRef)) {
+                throw new HostValidationError({
+                  field: "externalSessionId",
+                  message: `OpenCode session '${input.externalSessionId}' is no longer retained.`,
+                  details: {
+                    runtimeId: runtime.runtimeId,
+                    externalSessionId: input.externalSessionId,
+                  },
+                });
+              }
               const event = agentSessionTranscriptEventSchema.parse({
                 ...value,
-                sessionRef: toSessionRef(input),
+                sessionRef,
               });
               return {
                 value,

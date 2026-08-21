@@ -273,6 +273,7 @@ describe("message-execution", () => {
 
     expect(session.pendingQueuedUserMessages).toEqual([
       {
+        messageId: expect.any(String),
         signature: buildQueuedRequestSignature(
           [
             { kind: "slash_command", command: COMMAND },
@@ -301,6 +302,7 @@ describe("message-execution", () => {
 
     expect(session.pendingQueuedUserMessages).toEqual([
       {
+        messageId: expect.any(String),
         signature: buildQueuedRequestSignature(
           [{ kind: "file_reference", file: FILE_REFERENCE }],
           undefined,
@@ -337,6 +339,7 @@ describe("message-execution", () => {
     });
     session.activeAssistantMessageId = "msg-200";
     const preservedEntry = {
+      messageId: "preserved-message",
       signature: buildQueuedRequestSignature(
         [
           { kind: "slash_command", command: COMMAND },
@@ -585,6 +588,7 @@ describe("message-execution", () => {
 
     expect(session.pendingQueuedUserMessages).toEqual([
       {
+        messageId: expect.any(String),
         signature: buildQueuedRequestSignature(
           [{ kind: "attachment", attachment: IMAGE_ATTACHMENT }],
           undefined,

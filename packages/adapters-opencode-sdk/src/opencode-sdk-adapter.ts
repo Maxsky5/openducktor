@@ -778,7 +778,7 @@ export class OpencodeSdkAdapter
         begunSend.preserveActiveTurnOnFailure,
         this.now(),
       );
-      if (idleEvent) {
+      if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
         this.emit(input.externalSessionId, idleEvent);
       }
       throw error;

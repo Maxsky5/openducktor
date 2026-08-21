@@ -403,6 +403,7 @@ export const sendUserMessage = async (input: {
     (isQueuedBehindActiveAssistant || queuedAttachmentParts.length > 0);
   const queuedEntry = shouldTrackPendingSend
     ? {
+        messageId,
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
         ...(queuedAttachmentParts.length > 0
           ? {

@@ -64,7 +64,7 @@ const queuedSessionEventKey = (event: QueuedSessionEvent): string => {
     case "assistant_message":
       return `assistant_message:${event.messageId}`;
     case "session_status":
-      return "session_status";
+      return `session_status:${event.status.type}`;
     case "session_todos_updated":
       return "session_todos_updated";
     default:

@@ -133,7 +133,7 @@ export const parseSessionStatus = (properties: unknown): ParsedSessionStatus => 
   const attempt = readNumberProp(status, ["attempt"]);
   const message = readStringProp(status, ["message"]);
   const nextEpochMs = readNumberProp(status, ["next"]);
-  if (attempt === undefined || !message || nextEpochMs === undefined) {
+  if (attempt === undefined || !message?.trim() || nextEpochMs === undefined) {
     throw new Error(
       "OpenCode retry status must include numeric attempt and next values plus a non-blank message.",
     );
@@ -148,10 +148,12 @@ export const parsePermissionAsked = (properties: unknown): ParsedPermissionAsked
     return undefined;
   }
 
-  const patterns =
-    readStringArrayProp(properties, "patterns") ??
-    readStringArrayProp(properties, "resources") ??
-    [];
+  const propertiesRecord = asUnknownRecord(properties);
+  let patterns: string[] = [];
+  if (propertiesRecord) {
+    const patternsKey = Object.hasOwn(propertiesRecord, "patterns") ? "patterns" : "resources";
+    patterns = readStringArrayProp(propertiesRecord, patternsKey) ?? [];
+  }
   const metadata = readRecordProp(properties, "metadata");
   return {
     requestId,

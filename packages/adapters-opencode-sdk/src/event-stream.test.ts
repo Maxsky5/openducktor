@@ -1149,6 +1149,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "message-200",
           signature: buildQueuedSignature("Ship it"),
         });
         nextSessionRecord.activeAssistantMessageId = null;
@@ -1164,6 +1165,28 @@ describe("event-stream", () => {
       state: "read",
     });
     expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+  });
+
+  test("removes a queued send when OpenCode retracts it before the message echo", async () => {
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.removed",
+          properties: {
+            sessionID: "external-session-1",
+            messageID: "message-pending",
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingQueuedUserMessages.push({
+          messageId: "message-pending",
+          signature: buildQueuedSignature("Ship it"),
+        });
+      },
+    );
+
+    expect(sessionRecord.pendingQueuedUserMessages).toEqual([]);
   });
 
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
@@ -1232,8 +1255,9 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.activeAssistantMessageId = "msg-100";
         nextSessionRecord.pendingQueuedUserMessages.push(
-          { signature: buildQueuedSignature("Ship it") },
+          { messageId: "msg-unselected", signature: buildQueuedSignature("Ship it") },
           {
+            messageId: "msg-200",
             signature: buildQueuedSignature("Ship it", {
               runtimeKind: "opencode",
               providerId: "openai",
@@ -1254,7 +1278,7 @@ describe("event-stream", () => {
       state: "queued",
     });
     expect(sessionRecord.pendingQueuedUserMessages).toEqual([
-      { signature: buildQueuedSignature("Ship it") },
+      { messageId: "msg-unselected", signature: buildQueuedSignature("Ship it") },
     ]);
   });
 
@@ -1296,6 +1320,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
@@ -1382,6 +1407,7 @@ describe("event-stream", () => {
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-partial-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
@@ -1468,6 +1494,7 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-pdf-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Summarize this PDF" },
@@ -3192,6 +3219,38 @@ describe("event-stream", () => {
     });
   });
 
+  test("removes a queued child question when OpenCode resolves it before correlation", async () => {
+    const { sessionRecord } = await runEventStreamWithSession([
+      {
+        type: "question.asked",
+        properties: {
+          sessionID: "external-child-session",
+          parentID: "external-session-1",
+          id: "question-child-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Pick target",
+              options: [{ label: "A", description: "Option A" }],
+            },
+          ],
+        },
+      } as unknown as Event,
+      {
+        type: "question.replied",
+        properties: {
+          sessionID: "external-child-session",
+          parentID: "external-session-1",
+          requestID: "question-child-1",
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.get("external-child-session"),
+    ).toBeUndefined();
+  });
+
   test("forwards child permission events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
@@ -3370,6 +3429,46 @@ describe("event-stream", () => {
     expect(sessionRecord.pendingSubagentPartEmissionsByExternalSessionId.size).toBe(0);
   });
 
+  test("clears child queues when their subagent part is removed", async () => {
+    const childExternalSessionId = "child-session-1";
+    const correlationKey = "part:assistant-message-4:subtask-part-1";
+    const { sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "message.part.removed",
+          properties: {
+            sessionID: "external-session-1",
+            partID: "subtask-part-1",
+          },
+        } as unknown as Event,
+      ],
+      (record) => {
+        record.subagentCorrelationKeyByPartId.set("subtask-part-1", correlationKey);
+        record.subagentCorrelationKeyByExternalSessionId.set(
+          childExternalSessionId,
+          correlationKey,
+        );
+        record.subagentPartIdByCorrelationKey.set(correlationKey, "subtask-part-1");
+        record.subagentPartIdByExternalSessionId.set(childExternalSessionId, "subtask-part-1");
+        record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
+          arrivalOrder: 1,
+        });
+        record.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, []);
+        record.pendingBackgroundTaskResultsByExternalSessionId.set(childExternalSessionId, []);
+      },
+    );
+
+    expect(
+      sessionRecord.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+    expect(
+      sessionRecord.pendingSubagentInputEventsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+    expect(
+      sessionRecord.pendingBackgroundTaskResultsByExternalSessionId.has(childExternalSessionId),
+    ).toBe(false);
+  });
+
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
@@ -3394,6 +3493,30 @@ describe("event-stream", () => {
     expect(errors[0].message).toBe("Unknown session error");
     expect(sessionRecord.isAwaitingRuntimeTurnStart).toBe(false);
     expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
+  test("emits pending final output before a session error", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-error",
+        finish: "stop",
+        completedAt: 1,
+        text: "Final output before error",
+        partId: "text-error-1",
+      }),
+      {
+        type: "session.error",
+        properties: {
+          sessionID: "external-session-1",
+          error: { data: { message: "Provider failed" } },
+        },
+      } as unknown as Event,
+    ]);
+
+    expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({ message: "Final output before error" }),
+    ]);
+    expect(emitted.at(-1)).toMatchObject({ type: "session_error", message: "Provider failed" });
   });
 
   test("does not replay duplicate delta after suppressed known user-part update", async () => {

@@ -65,6 +65,30 @@ const queueSubagentInputEvent = (runtime: EventStreamRuntime, event: PendingInpu
   runtime.session.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, next);
 };
 
+const removeQueuedSubagentInputEvent = (
+  runtime: EventStreamRuntime,
+  childExternalSessionId: string,
+  requestId: string,
+): void => {
+  const pending =
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.get(childExternalSessionId);
+  if (!pending) {
+    return;
+  }
+  const remaining = pending.filter((event) => event.requestId !== requestId);
+  if (remaining.length === pending.length) {
+    return;
+  }
+  if (remaining.length === 0) {
+    runtime.session.pendingSubagentInputEventsByExternalSessionId.delete(childExternalSessionId);
+    return;
+  }
+  runtime.session.pendingSubagentInputEventsByExternalSessionId.set(
+    childExternalSessionId,
+    remaining,
+  );
+};
+
 type SubagentInputRouting = {
   childExternalSessionId: string;
   parentExternalSessionId?: string;
@@ -354,12 +378,14 @@ const handlePendingInputRepliedEvent = (event: Event, runtime: EventStreamRuntim
     return true;
   }
 
+  const routing = resolveSubagentInputRouting(event, properties, runtime);
+  removeQueuedSubagentInputEvent(runtime, routing.childExternalSessionId, parsed.requestId);
   const resolvedEvent: PendingInputResolvedEvent = {
     type: resolvedEventType,
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     requestId: parsed.requestId,
-    ...resolveSubagentInputRouting(event, properties, runtime),
+    ...routing,
   };
   runtime.emit(runtime.externalSessionId, resolvedEvent);
   return true;
@@ -372,6 +398,8 @@ const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boo
 
   const properties = readEventProperties(event);
   markSessionIdle(runtime);
+  emitCompletedAssistantMessages(runtime);
+  publishUserMessageReadStateChanges(runtime);
   runtime.emit(runtime.externalSessionId, {
     type: "session_error",
     externalSessionId: runtime.externalSessionId,

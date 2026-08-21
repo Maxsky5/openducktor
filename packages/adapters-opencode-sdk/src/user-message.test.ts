@@ -725,7 +725,7 @@ describe("OpencodeSdkAdapter user message", () => {
           string,
           {
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ signature: string }>;
+            pendingQueuedUserMessages: Array<{ messageId: string; signature: string }>;
           }
         >;
       }
@@ -760,7 +760,7 @@ describe("OpencodeSdkAdapter user message", () => {
           string,
           {
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ signature: string }>;
+            pendingQueuedUserMessages: Array<{ messageId: string; signature: string }>;
           }
         >;
       }
@@ -778,7 +778,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
-      { signature: buildQueuedSignature("Queued follow-up") },
+      { messageId: expect.any(String), signature: buildQueuedSignature("Queued follow-up") },
     ]);
   });
 
@@ -798,7 +798,7 @@ describe("OpencodeSdkAdapter user message", () => {
           string,
           {
             activeAssistantMessageId: string | null;
-            pendingQueuedUserMessages: Array<{ signature: string }>;
+            pendingQueuedUserMessages: Array<{ messageId: string; signature: string }>;
           }
         >;
       }
@@ -831,7 +831,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
 
     expect(session.pendingQueuedUserMessages).toEqual([
-      { signature: buildQueuedSignature("Queued follow-up") },
+      { messageId: expect.any(String), signature: buildQueuedSignature("Queued follow-up") },
     ]);
   });
 
