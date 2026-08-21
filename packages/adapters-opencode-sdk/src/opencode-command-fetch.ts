@@ -6,18 +6,26 @@ type CommandFetch = (
 let nodeFetchPromise: Promise<CommandFetch> | undefined;
 
 const loadNodeFetch = async (): Promise<CommandFetch> => {
-  const { Agent, fetch } = await import(/* @vite-ignore */ "undici");
+  const { Agent, Request: UndiciRequest, fetch } = await import(/* @vite-ignore */ "undici");
   const dispatcher = new Agent({
     headersTimeout: 0,
     bodyTimeout: 0,
   });
 
   return async (input, init) => {
-    const options: Parameters<typeof fetch>[1] = {
-      ...(init as Parameters<typeof fetch>[1]),
-      dispatcher,
-    };
-    return (await fetch(input as Parameters<typeof fetch>[0], options)) as unknown as Response;
+    type UndiciRequestInput = ConstructorParameters<typeof UndiciRequest>[0];
+    type UndiciRequestInit = ConstructorParameters<typeof UndiciRequest>[1];
+
+    let request: InstanceType<typeof UndiciRequest>;
+    if (input instanceof globalThis.Request && !(input instanceof UndiciRequest)) {
+      request = new UndiciRequest(input.url, input as unknown as UndiciRequestInit);
+      if (init) {
+        request = new UndiciRequest(request, init as UndiciRequestInit);
+      }
+    } else {
+      request = new UndiciRequest(input as UndiciRequestInput, init as UndiciRequestInit);
+    }
+    return (await fetch(request, { dispatcher })) as unknown as Response;
   };
 };
 
