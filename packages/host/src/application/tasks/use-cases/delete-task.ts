@@ -6,12 +6,14 @@ import { requireDependencies } from "../support/required-task-dependencies";
 import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  createTaskCleanupProgressState,
+  recordStoppedAgentSessionCount,
+} from "../support/task-cleanup-progress";
+import {
   collectDeleteWorktreePaths,
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
-  createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
-  recordStoppedAgentSessionCount,
   runTaskLocalCleanup,
   type TaskSessionRecords,
   taskHasSessionsForRoles,

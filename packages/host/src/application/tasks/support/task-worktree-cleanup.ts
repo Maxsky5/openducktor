@@ -27,7 +27,8 @@ import type {
   TaskWorktreeServiceError,
 } from "../worktrees/task-worktree-service";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
-import { createTaskCleanupProgressState, runTaskRuntimeCleanup } from "./task-cleanup-support";
+import { createTaskCleanupProgressState } from "./task-cleanup-progress";
+import { runTaskRuntimeCleanup } from "./task-cleanup-support";
 
 type TaskWorktreeCleanupError =
   | GitPortError

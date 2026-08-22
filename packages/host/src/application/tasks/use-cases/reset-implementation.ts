@@ -17,7 +17,6 @@ import {
 import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  createTaskCleanupProgressState,
   implementationSessionRoleNames,
   replaceTaskInList,
   resetImplementationRollbackStatus,
@@ -25,6 +24,7 @@ import {
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskImplementationResetUseCase = ({
   devServerService,

@@ -5,10 +5,8 @@ import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
 } from "../support/required-task-dependencies";
-import {
-  createTaskCleanupProgressState,
-  runTaskRuntimeCleanup,
-} from "../support/task-cleanup-support";
+import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
+import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import {
   validatePullRequestManagementStatusEffect,

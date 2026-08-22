@@ -8,12 +8,15 @@ import {
 } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
-  collectRelatedTaskBranches,
   createTaskCleanupProgressState,
-  managedWorktreeBaseForRepoConfig,
   recordStoppedAgentSessionCount,
+} from "../support/task-cleanup-progress";
+import {
+  collectRelatedTaskBranches,
+  managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
   runTaskLocalCleanup,
+  selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
@@ -96,9 +99,7 @@ export const createTaskCloseUseCase = ({
             taskSessions: [
               {
                 taskId,
-                sessions: currentSessions.filter((session) =>
-                  workflowCleanupSessionRoles.has(session.role.trim()),
-                ),
+                sessions: selectWorkflowCleanupSessionRecords(currentSessions),
               },
             ],
           });

@@ -11,7 +11,9 @@ export type TaskActivityGuardStopResult = {
   stoppedSessionCount: number;
 };
 
-type TaskActivityGuardTaskSessions = {
+// Callers pre-filter sessions to the set the mutation would act on; the
+// adapter probes and stops exactly what it receives.
+export type TaskActivityGuardTaskSessions = {
   repoPath: string;
   taskSessions: Array<{
     taskId: string;
@@ -19,8 +21,6 @@ type TaskActivityGuardTaskSessions = {
   }>;
 };
 
-// Callers pre-filter sessions to the set the mutation would act on; the
-// adapter probes and stops exactly what it receives.
 export type TaskActivityGuardPort = {
   countLiveSessions(
     input: TaskActivityGuardTaskSessions,

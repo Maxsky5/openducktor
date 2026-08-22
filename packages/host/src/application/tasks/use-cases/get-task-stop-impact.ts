@@ -6,7 +6,7 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
 import { requireDependencies } from "../support/required-task-dependencies";
-import { workflowCleanupSessionRoles } from "../support/task-cleanup-support";
+import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export type TaskStopImpactInput = {
@@ -57,7 +57,7 @@ const selectStopCandidates = (
   sessions: AgentSessionRecord[],
 ): AgentSessionRecord[] => {
   if (operation === "reset_task" || operation === "close") {
-    return sessions.filter((session) => workflowCleanupSessionRoles.has(session.role.trim()));
+    return selectWorkflowCleanupSessionRecords(sessions);
   }
   return sessions;
 };
@@ -93,17 +93,6 @@ export const createTaskStopImpactUseCase = ({
       if (tasksWithSessions.length === 0) {
         return { stoppableSessionCount: 0 };
       }
-      if (!taskActivityGuard) {
-        return yield* Effect.fail(
-          new HostDependencyError({
-            dependency: "taskActivityGuard",
-            operation: "task_stop_impact_get",
-            message:
-              "task_stop_impact_get requires runtime session activity checks for tasks with agent sessions.",
-            details: { repoPath: input.repoPath, taskId: tasksWithSessions[0]?.taskId },
-          }),
-        );
-      }
 
       const previewTasks: Array<{ taskId: string; sessions: AgentSessionRecord[] }> = [];
       for (const { taskId, sessions } of tasksWithSessions) {
@@ -122,8 +111,21 @@ export const createTaskStopImpactUseCase = ({
         }
         previewTasks.push({ taskId, sessions: candidates });
       }
+      // Mirror the mutations: they skip their guard when no candidate sessions
+      // remain, so the preview must not require one in that case either.
       if (previewTasks.length === 0) {
         return { stoppableSessionCount: 0 };
+      }
+      if (!taskActivityGuard) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "taskActivityGuard",
+            operation: "task_stop_impact_get",
+            message:
+              "task_stop_impact_get requires runtime session activity checks for tasks with agent sessions.",
+            details: { repoPath: input.repoPath, taskId: tasksWithSessions[0]?.taskId },
+          }),
+        );
       }
       const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
         repoPath: effectiveRepoPath,

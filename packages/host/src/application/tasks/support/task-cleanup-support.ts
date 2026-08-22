@@ -7,20 +7,16 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import {
-  errorMessage,
-  HostDependencyError,
-  HostOperationError,
-  HostValidationError,
-} from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { TaskTerminalCleanupPort } from "../task-service";
+import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
-export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
+const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
 export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
 export type TaskSessionRecords = {
@@ -290,49 +286,8 @@ export const collectResetWorktreePaths = (
     [{ taskId, sessions, sessionRoles }],
     operationLabel,
   );
-const taskCleanupProgressCopy = {
-  task_close: { label: "Close", retryVerb: "close" },
-  task_delete: { label: "Delete", retryVerb: "delete" },
-  task_reset: { label: "Reset", retryVerb: "reset" },
-  task_reset_implementation: {
-    label: "Reset implementation",
-    retryVerb: "reset implementation",
-  },
-} as const;
-
-type TaskCleanupProgressInput = {
-  operation: keyof typeof taskCleanupProgressCopy;
-  removedWorktrees: string[];
-  deletedBranches: string[];
-  completedSteps?: string[];
-};
-
-type TaskCleanupOperation = keyof typeof taskCleanupProgressCopy;
 
 type TaskWorktreeCleanupOperation = TaskCleanupOperation;
-
-export type TaskCleanupProgressState = {
-  removedWorktrees: string[];
-  deletedBranches: string[];
-  completedSteps: string[];
-};
-
-export const createTaskCleanupProgressState = (): TaskCleanupProgressState => ({
-  removedWorktrees: [],
-  deletedBranches: [],
-  completedSteps: [],
-});
-
-export const recordStoppedAgentSessionCount = (
-  progress: TaskCleanupProgressState,
-  stoppedSessionCount: number,
-): void => {
-  if (stoppedSessionCount > 0) {
-    progress.completedSteps.push(
-      `Stopped ${stoppedSessionCount} live agent session${stoppedSessionCount === 1 ? "" : "s"}.`,
-    );
-  }
-};
 
 const requireTaskCleanupWorktreeFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
@@ -453,37 +408,17 @@ export const runTaskLocalCleanup = ({
     }
   });
 
-export const appendTaskCleanupProgress = <E>(
-  error: E,
-  { operation, removedWorktrees, deletedBranches, completedSteps = [] }: TaskCleanupProgressInput,
-): E | HostOperationError => {
-  const copy = taskCleanupProgressCopy[operation];
-  const progress: string[] = [];
-  if (removedWorktrees.length > 0) {
-    progress.push(
-      `${copy.label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`,
-    );
-  }
-  if (deletedBranches.length > 0) {
-    progress.push(`${copy.label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
-  }
-  if (completedSteps.length > 0) {
-    progress.push(`${copy.label} cleanup already completed: ${completedSteps.join(", ")}.`);
-  }
-  if (progress.length === 0) {
-    return error;
-  }
-  progress.push(`Retry ${copy.retryVerb} to finish cleanup safely.`);
-  return new HostOperationError({
-    operation: `${operation}.cleanup`,
-    message: `${errorMessage(error)}\n${progress.join("\n")}`,
-    cause: error,
-  });
-};
 export const taskHasSessionsForRoles = (
   sessions: AgentSessionRecord[],
   roles: Set<string>,
 ): boolean => sessions.some((session) => roles.has(session.role.trim()));
+
+// Single source for the workflow-role candidate set used by the reset/close
+// mutations and their stop-count preview, so the two cannot drift.
+export const selectWorkflowCleanupSessionRecords = (
+  sessions: AgentSessionRecord[],
+): AgentSessionRecord[] =>
+  sessions.filter((session) => workflowCleanupSessionRoles.has(session.role.trim()));
 export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus => {
   if (task.documentSummary.plan.has) {
     return "ready_for_dev";

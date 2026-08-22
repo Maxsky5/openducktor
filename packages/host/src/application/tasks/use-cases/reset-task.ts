@@ -9,13 +9,16 @@ import {
 } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
+  createTaskCleanupProgressState,
+  recordStoppedAgentSessionCount,
+} from "../support/task-cleanup-progress";
+import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
-  createTaskCleanupProgressState,
   managedWorktreeBaseForRepoConfig,
-  recordStoppedAgentSessionCount,
   replaceTaskInList,
   runTaskLocalCleanup,
+  selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
@@ -98,9 +101,7 @@ export const createTaskFullResetUseCase = ({
           taskSessions: [
             {
               taskId,
-              sessions: currentSessions.filter((session) =>
-                workflowCleanupSessionRoles.has(session.role.trim()),
-              ),
+              sessions: selectWorkflowCleanupSessionRecords(currentSessions),
             },
           ],
         });

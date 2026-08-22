@@ -5,6 +5,7 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type {
   TaskActivityGuardPort,
   TaskActivityGuardStopResult,
+  TaskActivityGuardTaskSessions,
 } from "../../ports/task-activity-guard-port";
 
 export type CreateRuntimeTaskActivityGuardInput = {
@@ -17,8 +18,6 @@ type LiveSession = {
   runtimeKind: string;
   workingDirectory: string;
 };
-
-type TaskActivityGuardTaskSessions = Parameters<TaskActivityGuardPort["stopLiveSessions"]>[0];
 
 const collectLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,

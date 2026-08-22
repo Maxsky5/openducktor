@@ -6,8 +6,8 @@ import {
   createBuildSettingsConfig,
   createDirectMergeGitPort,
 } from "../test-support/task-workflow-harness";
+import { appendTaskCleanupProgress } from "./task-cleanup-progress";
 import {
-  appendTaskCleanupProgress,
   collectResetWorktreePaths,
   validateExistingTaskWorktreeCandidate,
 } from "./task-cleanup-support";

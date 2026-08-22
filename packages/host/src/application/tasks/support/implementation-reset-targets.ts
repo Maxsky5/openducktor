@@ -8,10 +8,12 @@ import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-p
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
   appendTaskCleanupProgress,
-  collectSessionsUsingCanonicalWorktree,
-  managedWorktreeBaseForRepoConfig,
   recordStoppedAgentSessionCount,
   type TaskCleanupProgressState,
+} from "./task-cleanup-progress";
+import {
+  collectSessionsUsingCanonicalWorktree,
+  managedWorktreeBaseForRepoConfig,
 } from "./task-cleanup-support";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 

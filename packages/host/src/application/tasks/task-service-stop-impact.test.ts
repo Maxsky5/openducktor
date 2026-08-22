@@ -307,4 +307,26 @@ describe("getTaskStopImpact", () => {
       ),
     ).rejects.toThrow("task_stop_impact_get requires runtime session activity checks");
   });
+
+  test("skips the guard requirement when implementation reset has no guarded sessions", async () => {
+    const service = createService({
+      "task-1": [
+        createAgentSessionRecord({
+          externalSessionId: "root-spec",
+          role: "spec",
+          workingDirectory: "/repo",
+        }),
+      ],
+    });
+
+    const result = await Effect.runPromise(
+      service.getTaskStopImpact({
+        repoPath: "/repo",
+        taskIds: ["task-1"],
+        operation: "reset_implementation",
+      }),
+    );
+
+    expect(result).toEqual({ stoppableSessionCount: 0 });
+  });
 });

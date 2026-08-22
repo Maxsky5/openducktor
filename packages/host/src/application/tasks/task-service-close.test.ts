@@ -748,4 +748,88 @@ describe("TaskService.closeTask", () => {
       "transition:task-1:closed",
     ]);
   });
+
+  test("reports stopped live sessions in cleanup progress when a later step fails", async () => {
+    const calls: string[] = [];
+    const buildSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "build",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+      selectedModel: null,
+    };
+    const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
+    };
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
+      taskActivityGuard: activityGuard,
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(new Set(["/repo"])),
+      taskWorktreeService: createTaskWorktreeService(null),
+      terminalService: {
+        acquireTaskCleanup: ({ repoPath, taskIds }) => {
+          calls.push(`terminals:${repoPath}:${taskIds.join(",")}`);
+          return Effect.fail(
+            new TerminalServiceError({
+              code: "close_failed",
+              operation: "close_by_task",
+              message: "Failed terminal terminal-1.",
+              details: { terminalIds: ["terminal-1"] },
+            }),
+          );
+        },
+      },
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      /Stopped 2 live agent sessions\./,
+    );
+    expect(calls).toContain("terminals:/repo:task-1");
+  });
+
+  test("aborts close before destructive work when stopping live sessions fails", async () => {
+    const calls: string[] = [];
+    const buildSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "build",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+      selectedModel: null,
+    };
+    const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      stopLiveSessions: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "runtimeTaskActivityGuard.stopLiveSessions",
+            message: "Failed stopping live build session session-1.",
+          }),
+        ),
+    };
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
+      taskActivityGuard: activityGuard,
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(new Set(["/repo"])),
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "Failed stopping live build session session-1.",
+    );
+    expect(calls).not.toContain("stop-dev:task-1");
+    expect(calls.some((entry) => entry.startsWith("remove-worktree"))).toBe(false);
+    expect(calls.some((entry) => entry.startsWith("terminals:"))).toBe(false);
+    expect(calls).not.toContain("transition:task-1:closed");
+  });
 });
