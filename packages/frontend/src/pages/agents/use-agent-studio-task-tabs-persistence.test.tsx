@@ -70,11 +70,7 @@ const createThrowingStorage = (args: {
   };
 };
 
-const createTrackedStorage = (): {
-  storage: TestStorageLike;
-  setItem: ReturnType<typeof mock>;
-  store: Map<string, string>;
-} => {
+const createTrackedStorage = () => {
   const store = new Map<string, string>();
   const setItem = mock((key: string, value: string) => {
     store.set(key, value);
@@ -97,6 +93,10 @@ const createTrackedStorage = (): {
     },
     setItem,
     store,
+  } satisfies {
+    storage: TestStorageLike;
+    setItem: ReturnType<typeof mock>;
+    store: Map<string, string>;
   };
 };
 

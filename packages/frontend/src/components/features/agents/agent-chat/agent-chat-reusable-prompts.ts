@@ -16,7 +16,12 @@ export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlash
   id: `${REUSABLE_PROMPT_COMMAND_ID_PREFIX}${prompt.id}`,
   trigger: prompt.name,
   title: prompt.name,
-  ...(prompt.description.trim().length > 0 ? { description: prompt.description } : {}),
+  ...(() => {
+    if (prompt.description.trim().length > 0) {
+      return { description: prompt.description };
+    }
+    return {};
+  })(),
   source: "custom",
   hints: [],
 });

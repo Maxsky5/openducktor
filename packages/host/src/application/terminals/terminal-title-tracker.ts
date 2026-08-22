@@ -16,7 +16,12 @@ export const createTerminalTitleTracker = (
   const parser = createTerminalTitleParser();
   const settler = createTerminalTitleSettler({
     onSettledTitle,
-    ...(schedule ? { schedule } : {}),
+    ...(() => {
+      if (schedule) {
+        return { schedule };
+      }
+      return {};
+    })(),
   });
   let disposed = false;
 

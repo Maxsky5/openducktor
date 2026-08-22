@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
   isRecord,
@@ -61,7 +62,12 @@ export const decodeClaudeToolUseBlock = ({
     blockType === "mcp_tool_use" || blockType === "server_tool_use"
       ? {
           blockType,
-          ...(serverName ? { serverName } : {}),
+          ...(() => {
+            if (serverName) {
+              return { serverName };
+            }
+            return {};
+          })(),
         }
       : undefined;
 
@@ -69,8 +75,18 @@ export const decodeClaudeToolUseBlock = ({
     blockType,
     callId,
     toolName,
-    ...(input ? { input } : {}),
-    ...(metadata ? { metadata } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -92,7 +108,12 @@ export const createClaudeRunningToolPart = ({
     ...toolPartPresentation(toolUse.toolName),
     status: "running",
     startedAtMs,
-    ...(toolUse.metadata ? { metadata: toolUse.metadata } : {}),
+    ...(() => {
+      if (toolUse.metadata) {
+        return { metadata: toolUse.metadata };
+      }
+      return {};
+    })(),
   };
   if (toolUse.input) {
     part.input = toolUse.input;
@@ -118,7 +139,12 @@ export const createClaudePendingToolPart = ({
   tool: toolUse.toolName,
   ...toolPartPresentation(toolUse.toolName),
   status: "pending",
-  ...(toolUse.metadata ? { metadata: toolUse.metadata } : {}),
+  ...(() => {
+    if (toolUse.metadata) {
+      return { metadata: toolUse.metadata };
+    }
+    return {};
+  })(),
 });
 
 export const timestampMs = (timestamp: string): number => {
@@ -130,7 +156,7 @@ const stringifyToolResultContent = (value: JsonValue): string => {
   if (value === undefined || value === null) {
     return "";
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
     return String(value);
   }
   try {
@@ -141,7 +167,7 @@ const stringifyToolResultContent = (value: JsonValue): string => {
 };
 
 const toolResultBlockText = (block: JsonValue): string => {
-  if (typeof block === "string") {
+  if (hasRuntimeType(block, "string")) {
     return block;
   }
   if (!isRecord(block)) {
@@ -205,7 +231,12 @@ export const decodeClaudeToolResultValue = (
   const toolName = readStringProp(value, "tool_name") ?? readStringProp(value, "name");
   return {
     toolUseId,
-    ...(toolName ? { toolName } : {}),
+    ...(() => {
+      if (toolName) {
+        return { toolName };
+      }
+      return {};
+    })(),
     isError: isErrorValue === true,
     raw: value,
     text: claudeToolResultContentText(value),

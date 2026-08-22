@@ -14,15 +14,7 @@ export function useTaskResetDialog({
   task,
   onOpenChange,
   onResetTask,
-}: UseTaskResetDialogOptions): {
-  isResetDialogOpen: boolean;
-  isResetPending: boolean;
-  resetError: string | null;
-  openResetDialog: () => void;
-  closeResetDialog: () => void;
-  handleResetDialogOpenChange: (nextOpen: boolean) => void;
-  confirmReset: () => void;
-} {
+}: UseTaskResetDialogOptions) {
   const canReset = task !== null && onResetTask !== undefined;
   const runReset = useCallback((): Promise<void> => {
     if (task === null || onResetTask === undefined) {
@@ -45,5 +37,13 @@ export function useTaskResetDialog({
     closeResetDialog: dialog.closeDialog,
     handleResetDialogOpenChange: dialog.handleDialogOpenChange,
     confirmReset: dialog.confirm,
+  } satisfies {
+    isResetDialogOpen: boolean;
+    isResetPending: boolean;
+    resetError: string | null;
+    openResetDialog: () => void;
+    closeResetDialog: () => void;
+    handleResetDialogOpenChange: (nextOpen: boolean) => void;
+    confirmReset: () => void;
   };
 }

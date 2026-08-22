@@ -22,6 +22,7 @@ import type {
   ActiveTextSelectionRange,
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 
 type KeyDownTestSetupOverrides = {
   sourceDraft?: AgentChatComposerDraft;
@@ -99,14 +100,15 @@ const createDraft = (text = "hello", segmentId = "segment-1"): AgentChatComposer
 });
 
 const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
+  // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
   const root = document.createElement("div") as HTMLDivElement;
-  const event = {
+  const event = createFocusedFixture<React.KeyboardEvent<HTMLDivElement>>({
     key: overrides.key ?? "Enter",
     shiftKey: overrides.shiftKey ?? false,
     metaKey: overrides.metaKey ?? false,
     ctrlKey: overrides.ctrlKey ?? false,
     preventDefault: mock(() => {}),
-  } as unknown as React.KeyboardEvent<HTMLDivElement>;
+  });
   const lineBreakTarget = overrides.lineBreakTarget ?? { segmentId: "segment-1", offset: 5 };
   const repairedSelection = overrides.repairedSelection ?? null;
   const sourceDraft = overrides.sourceDraft ?? createDraft();

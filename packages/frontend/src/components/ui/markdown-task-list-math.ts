@@ -57,6 +57,7 @@ export const normalizeTaskListBlockMath = (tree: Root, markdown: string): void =
     if (body.children[0]?.type !== "math") {
       return;
     }
+    // SAFETY: The surrounding boundary constructs or validates every member required by `ListItem["children"]`.
     node.children = body.children as ListItem["children"];
   });
 };

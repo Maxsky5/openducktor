@@ -125,6 +125,7 @@ describe("settings save transforms", () => {
   });
 
   test("preserves every known prompt override key when preparing save payloads", () => {
+    // SAFETY: This test controls the fixture and supplies `RepoPromptOverrides` used by this case.
     const source = Object.fromEntries(
       agentPromptTemplateIdValues.map((templateId, index) => [
         templateId,
@@ -141,6 +142,7 @@ describe("settings save transforms", () => {
     expect(saveReadyKeys).toEqual(agentPromptTemplateIdValues.toSorted());
 
     for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
+      // SAFETY: This test controls the fixture and supplies `AgentPromptTemplateId` used by this case.
       const entry = saveReady[templateId as AgentPromptTemplateId];
       expect(entry).toEqual({
         template: `${templateId} template`,
@@ -193,6 +195,7 @@ describe("settings save transforms", () => {
   });
 
   test("rejects configured agent defaults without runtime kind", () => {
+    // SAFETY: This test controls the fixture and supplies `RepoConfig["agentDefaults"]["spec"]` used by this case.
     expect(() =>
       prepareRepoConfigForSave({
         ...createRepoConfig(),
@@ -203,7 +206,7 @@ describe("settings save transforms", () => {
             modelId: "gpt-5",
             variant: "high",
             profileId: "spec",
-          } as unknown as RepoConfig["agentDefaults"]["spec"],
+          } as RepoConfig["agentDefaults"]["spec"],
         },
       }),
     ).toThrow(

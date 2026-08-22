@@ -14,6 +14,7 @@ type FakeGitPortInput = {
   gitRepositories?: string[];
   remotes?: Record<string, GitRemote[]>;
 };
+// SAFETY: This test drives the failure path that supplies `GitPort` before this assertion.
 const createFakeGitPort = ({
   canonicalPaths = {},
   gitRepositories = [],
@@ -398,7 +399,7 @@ const createFakeGitPort = ({
           }),
       });
     },
-  }) as GitPort as unknown as GitPort;
+  }) as GitPort;
 describe("parseGithubRemoteUrl", () => {
   test("parses supported GitHub remote URL forms", () => {
     expect(parseGithubRemoteUrl("https://token@github.com/owner/repo.git")).toEqual({

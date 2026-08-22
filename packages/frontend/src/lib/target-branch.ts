@@ -43,7 +43,12 @@ export const normalizeTargetBranch = (
   }
 
   return {
-    ...(normalizedRemote ? { remote: normalizedRemote } : {}),
+    ...(() => {
+      if (normalizedRemote) {
+        return { remote: normalizedRemote };
+      }
+      return {};
+    })(),
     branch: normalizedBranch,
   };
 };
@@ -74,12 +79,7 @@ export const resolveTaskTargetBranchState = ({
   taskTargetBranch: GitTargetBranch | null | undefined;
   taskTargetBranchError: string | null | undefined;
   defaultTargetBranch: GitTargetBranch | null | undefined;
-}): {
-  effectiveTargetBranch: GitTargetBranch;
-  validationError: string | null;
-  displayTargetBranch: string;
-  selectionValue: string;
-} => {
+}) => {
   const effectiveTargetBranch = effectiveTaskTargetBranch(taskTargetBranch, defaultTargetBranch);
   const validationError = taskTargetBranchValidationError(taskTargetBranchError);
 
@@ -90,6 +90,11 @@ export const resolveTaskTargetBranchState = ({
       ? INVALID_TASK_TARGET_BRANCH_LABEL
       : canonicalTargetBranch(effectiveTargetBranch),
     selectionValue: targetBranchSelectionValue(effectiveTargetBranch),
+  } satisfies {
+    effectiveTargetBranch: GitTargetBranch;
+    validationError: string | null;
+    displayTargetBranch: string;
+    selectionValue: string;
   };
 };
 

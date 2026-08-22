@@ -16,12 +16,14 @@ export const ODT_READ_TOOL_NAMES = [
 const ODT_TOOL_NAME_SET = new Set<OdtToolName>(ODT_MCP_TOOL_NAMES);
 const ODT_READ_TOOL_NAME_SET = new Set<OdtToolName>(ODT_READ_TOOL_NAMES);
 
+// SAFETY: The preceding runtime guard establishes `OdtToolName` before this assertion.
 export const normalizeOdtToolName = (
   toolName: string,
   aliasesForTool?: OdtToolAliasResolver,
 ): OdtToolName | null => {
   const trimmedToolName = toolName.trim();
   if (ODT_TOOL_NAME_SET.has(trimmedToolName as OdtToolName)) {
+    // SAFETY: The preceding runtime guard establishes `OdtToolName` before this assertion.
     return trimmedToolName as OdtToolName;
   }
   if (!aliasesForTool) {

@@ -11,6 +11,7 @@ import type { JsonValue } from "@openducktor/contracts";
 const createChild = (
   stdin: Writable = new PassThrough(),
 ): ChildProcessByStdio<Writable, PassThrough, PassThrough> => {
+  // SAFETY: This test controls the fixture and supplies `ChildProcessByStdio<Writable, PassThrough, PassThrough>` used by this case.
   const child = new EventEmitter() as ChildProcessByStdio<Writable, PassThrough, PassThrough>;
   child.stdin = stdin;
   child.stdout = new PassThrough();
@@ -40,6 +41,7 @@ const recordClearTimeouts = () => {
   const originalClearTimeout = globalThis.clearTimeout;
   const clearedTimeouts: ReturnType<typeof globalThis.setTimeout>[] = [];
 
+  // SAFETY: This test controls the fixture and supplies `typeof globalThis.clearTimeout` used by this case.
   globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
     clearedTimeouts.push(timeoutId);
     originalClearTimeout(timeoutId);
@@ -558,6 +560,7 @@ describe("createCodexAppServerTransport", () => {
 
   test("keeps the transport usable after a late response to an interrupted sent request", async () => {
     let writeCount = 0;
+    // SAFETY: This test drives the failure path that supplies `Writable` before this assertion.
     const stdin = {
       write(_chunk: string, callback: (error?: Error | null) => void) {
         writeCount += 1;
@@ -567,7 +570,7 @@ describe("createCodexAppServerTransport", () => {
         return true;
       },
       destroy() {},
-    } as unknown as Writable;
+    } as Writable;
     const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
@@ -629,13 +632,14 @@ describe("createCodexAppServerTransport", () => {
   });
 
   test("clears the pending request timeout when send fails", async () => {
+    // SAFETY: This test drives the failure path that supplies `Writable` before this assertion.
     const stdin = {
       write(_chunk: string, callback: (error?: Error | null) => void) {
         callback(new Error("write failed"));
         return false;
       },
       destroy() {},
-    } as unknown as Writable;
+    } as Writable;
     const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
@@ -665,6 +669,7 @@ describe("createCodexAppServerTransport", () => {
     circularParams.self = circularParams;
 
     try {
+      // SAFETY: This test controls the fixture and supplies `never` used by this case.
       await expect(
         Effect.runPromise(
           transport.request({

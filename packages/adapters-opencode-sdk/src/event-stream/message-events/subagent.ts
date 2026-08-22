@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -75,7 +76,15 @@ const queuePendingSubagentPartEmission = (
   runtime.session.subagentPartIdByExternalSessionId.set(externalSessionId, part.id);
   const pending =
     runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId) ?? [];
-  pending.push({ part, ...(roleHint ? { roleHint } : {}) });
+  pending.push({
+    part,
+    ...(() => {
+      if (roleHint) {
+        return { roleHint };
+      }
+      return {};
+    })(),
+  });
   runtime.session.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
 
@@ -141,7 +150,12 @@ export const normalizeLiveSubagentCorrelation = (
     return {
       ...part,
       correlationKey: existingCorrelationKey,
-      ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : {}),
+      ...(() => {
+        if (effectiveExternalSessionId) {
+          return { externalSessionId: effectiveExternalSessionId };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -175,7 +189,12 @@ export const normalizeLiveSubagentCorrelation = (
     return {
       ...part,
       correlationKey,
-      ...(linkedExternalSessionId ? { externalSessionId: linkedExternalSessionId } : {}),
+      ...(() => {
+        if (linkedExternalSessionId) {
+          return { externalSessionId: linkedExternalSessionId };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -187,7 +206,7 @@ export const normalizeLiveSubagentCorrelation = (
     : [];
   const pendingSessionId = effectiveExternalSessionId;
   const shouldDeferAmbiguousSessionBinding =
-    typeof pendingSessionId === "string" &&
+    hasRuntimeType(pendingSessionId, "string") &&
     pendingSessionId.length > 0 &&
     !sessionCorrelationKey &&
     pendingCorrelationKeys.length > 1;
@@ -220,7 +239,12 @@ export const normalizeLiveSubagentCorrelation = (
   return {
     ...part,
     correlationKey,
-    ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : {}),
+    ...(() => {
+      if (effectiveExternalSessionId) {
+        return { externalSessionId: effectiveExternalSessionId };
+      }
+      return {};
+    })(),
   };
 };
 

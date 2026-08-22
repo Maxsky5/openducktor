@@ -1,4 +1,9 @@
-import type { HookInput, SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  HookInput,
+  SDKMessage,
+  SessionStoreEntry,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { JsonValue } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import { z } from "zod";
@@ -137,9 +142,9 @@ export const claudeUserToolResultIngressSchema = claudeJsonRecordSchema.extend({
   uuid: z.string().optional(),
 });
 
-const parseClaudeIngress = <Schema extends z.ZodType>(
+const parseClaudeIngress = <Schema extends z.ZodType, Input>(
   schema: Schema,
-  value: unknown,
+  value: Input,
   field: string,
 ): z.output<Schema> => {
   const parsed = schema.safeParse(value);
@@ -176,19 +181,19 @@ export type ClaudeUserToolResultIngress = {
 export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
   parseClaudeIngress(claudeHistoryStoreEntrySchema, value, "claudeSessionHistoryEntry");
 
-export const parseClaudeHistoryConversationEntry = (value: unknown) =>
+export const parseClaudeHistoryConversationEntry = <Input>(value: Input) =>
   parseClaudeIngress(claudeHistoryConversationEntrySchema, value, "claudeHistoryMessage");
 
-export const parseClaudeHistoryAssistantEntry = (value: unknown) =>
+export const parseClaudeHistoryAssistantEntry = <Input>(value: Input) =>
   parseClaudeIngress(claudeHistoryAssistantEntrySchema, value, "claudeHistoryAssistantMessage");
 
-export const parseClaudeHistoryAttachment = (value: unknown) =>
+export const parseClaudeHistoryAttachment = <Input>(value: Input) =>
   parseClaudeIngress(claudeHistoryAttachmentSchema, value, "claudeHistoryAttachment");
 
-export const parseClaudeHistoryAttachmentEntry = (value: unknown) =>
+export const parseClaudeHistoryAttachmentEntry = <Input>(value: Input) =>
   parseClaudeIngress(claudeHistoryAttachmentEntrySchema, value, "claudeHistoryAttachmentEntry");
 
-export const parseClaudeMetaQueuedCommandAttachment = (value: unknown) =>
+export const parseClaudeMetaQueuedCommandAttachment = <Input>(value: Input) =>
   parseClaudeIngress(
     claudeMetaQueuedCommandAttachmentSchema,
     value,
@@ -201,14 +206,14 @@ export const parseClaudePreToolUseIngress = (value: HookInput) =>
 export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolUseIngress =>
   parseClaudeIngress(claudePostToolUseIngressSchema, value, "claudePostToolUse");
 
-export const parseClaudeFileEditToolResponse = (value: unknown) =>
+export const parseClaudeFileEditToolResponse = <Input>(value: Input) =>
   parseClaudeIngress(claudeJsonRecordSchema, value, "claudeFileEditToolResponse");
 
-export const parseClaudeJsonValue = (value: unknown, field: string): JsonValue =>
+export const parseClaudeJsonValue = <Input>(value: Input, field: string): JsonValue =>
   parseClaudeIngress(claudeJsonValueSchema, value, field);
 
 export const parseClaudeJsonRecord = (
-  value: Record<string, unknown>,
+  value: Parameters<CanUseTool>[1],
   field: string,
 ): Record<string, JsonValue> => parseClaudeIngress(claudeJsonRecordSchema, value, field);
 
@@ -226,13 +231,24 @@ export const parseClaudeUserToolResultIngress = (
   const normalizedMessage = {
     message: message.message,
     type: message.type,
-    ...(message.parent_tool_use_id === undefined
-      ? {}
-      : { parent_tool_use_id: message.parent_tool_use_id }),
-    ...(message.shouldQuery === false || message.origin === undefined
-      ? {}
-      : { turnOriginKind: message.origin.kind }),
-    ...(message.uuid === undefined ? {} : { uuid: message.uuid }),
+    ...(() => {
+      if (message.parent_tool_use_id === undefined) {
+        return {};
+      }
+      return { parent_tool_use_id: message.parent_tool_use_id };
+    })(),
+    ...(() => {
+      if (message.shouldQuery === false || message.origin === undefined) {
+        return {};
+      }
+      return { turnOriginKind: message.origin.kind };
+    })(),
+    ...(() => {
+      if (message.uuid === undefined) {
+        return {};
+      }
+      return { uuid: message.uuid };
+    })(),
   };
   const topLevelToolUseResult = message.tool_use_result;
   if (topLevelToolUseResult?.kind === "tool_result") {

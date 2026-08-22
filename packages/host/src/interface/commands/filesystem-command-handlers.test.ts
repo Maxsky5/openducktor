@@ -11,6 +11,7 @@ import { createFilesystemCommandHandlers } from "./filesystem-command-handlers";
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
+// SAFETY: This test controls the fixture and supplies `FilesystemService` used by this case.
 const createFilesystemServiceFake = (service: FilesystemService): FilesystemService =>
   service as FilesystemService;
 describe("createFilesystemCommandHandlers", () => {

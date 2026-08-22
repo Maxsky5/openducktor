@@ -5,6 +5,7 @@ import {
   runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostValidationError } from "../../effect/host-errors";
@@ -39,7 +40,7 @@ const requireObjectArg = (
 };
 
 const requireStringArray = (value: JsonValue | undefined, label: string): string[] => {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+  if (!Array.isArray(value) || value.some((entry) => !hasRuntimeType(entry, "string"))) {
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
       field: label,
@@ -49,6 +50,7 @@ const requireStringArray = (value: JsonValue | undefined, label: string): string
     });
   }
 
+  // SAFETY: The preceding runtime guard establishes `string[]` before this assertion.
   return value as string[];
 };
 
@@ -79,7 +81,12 @@ export const createWorkspaceSettingsCommandHandlers = (
       workspaceId: requireString(record.workspaceId, "workspaceId"),
       workspaceName: requireString(record.workspaceName, "workspaceName"),
       repoPath: requireString(record.repoPath, "repoPath"),
-      ...(defaultRuntimeKind ? { defaultRuntimeKind } : {}),
+      ...(() => {
+        if (defaultRuntimeKind) {
+          return { defaultRuntimeKind };
+        }
+        return {};
+      })(),
     });
   },
   workspace_select: (args) =>

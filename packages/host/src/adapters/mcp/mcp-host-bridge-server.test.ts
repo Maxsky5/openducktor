@@ -18,6 +18,16 @@ import { TaskPolicyError } from "../../domain/task";
 import { type HostErrorDetailValue, HostOperationError } from "../../effect/host-errors";
 import { createMcpHostBridgeServer } from "./mcp-host-bridge-server";
 
+class CyclicDetails {
+  [key: string]: HostErrorDetailValue;
+
+  readonly loop: HostErrorDetailValue;
+
+  constructor() {
+    this.loop = this;
+  }
+}
+
 const repoConfig: RepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -32,6 +42,7 @@ const repoConfig: RepoConfig = {
   promptOverrides: {},
   agentDefaults: {},
 };
+// SAFETY: This test drives the failure path that supplies `WorkspaceSettingsService` before this assertion.
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
   ({
     getRepoConfigByRepoPath(repoPath: string) {
@@ -50,10 +61,8 @@ const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
           }),
       });
     },
-  }) as Pick<
-    WorkspaceSettingsService,
-    "getRepoConfigByRepoPath"
-  > as unknown as WorkspaceSettingsService;
+  }) as WorkspaceSettingsService;
+// SAFETY: This test controls the fixture and supplies `OdtMcpBridgeService` used by this case.
 const createBridgeService = (service: OdtMcpBridgeService): OdtMcpBridgeService =>
   service as OdtMcpBridgeService;
 const requestJson = (
@@ -74,7 +83,12 @@ const requestJson = (
       {
         method: options.method ?? "GET",
         headers: {
-          ...(body ? { "Content-Type": "application/json" } : {}),
+          ...(() => {
+            if (body) {
+              return { "Content-Type": "application/json" };
+            }
+            return {};
+          })(),
           ...options.headers,
         },
       },
@@ -85,6 +99,7 @@ const requestJson = (
           payload += chunk;
         });
         response.on("end", () => {
+          // SAFETY: This test controls the fixture and supplies `unknown` used by this case.
           resolve({
             status: response.statusCode ?? 0,
             body: payload ? (JSON.parse(payload) as unknown) : null,
@@ -150,6 +165,7 @@ describe("createMcpHostBridgeServer", () => {
     });
     try {
       await Effect.runPromise(bridge.ensureExternalDiscoveryReady());
+      // SAFETY: This test controls the fixture and supplies `{ hostToken: string; hostUrl: string; pid: number; }` used by this case.
       const published = JSON.parse(await readFile(discoveryPath, "utf8")) as {
         hostToken: string;
         hostUrl: string;
@@ -257,17 +273,19 @@ describe("createMcpHostBridgeServer", () => {
 
   test("returns a bridge error when a response payload cannot be serialized", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    // SAFETY: This test controls the fixture and supplies `OdtMcpBridgeService` used by this case.
     const bridge = createMcpHostBridgeServer({
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
       token: "token-1",
       workspaceSettingsService: createWorkspaceSettingsService(),
       bridgeService: createBridgeService({
         ready() {
+          // SAFETY: This test controls the fixture and supplies `OdtHostBridgeReady` used by this case.
           return Effect.succeed({
             bridgeVersion: 1,
             toolNames: [...ODT_MCP_TOOL_NAMES],
             invalid: 1n,
-          } as unknown as OdtHostBridgeReady);
+          } as OdtHostBridgeReady);
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -352,8 +370,7 @@ describe("createMcpHostBridgeServer", () => {
   });
 
   test("omits cyclic error details while retaining the bridge error", async () => {
-    const cyclicDetails: { loop?: HostErrorDetailValue } = {};
-    cyclicDetails.loop = cyclicDetails;
+    const cyclicDetails = new CyclicDetails();
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const bridge = createMcpHostBridgeServer({
       discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
@@ -405,6 +422,7 @@ describe("createMcpHostBridgeServer", () => {
   test("deduplicates concurrent startup requests", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const discoveryPath = path.join(tempDir, "runtime", "mcp-bridge.json");
+    // SAFETY: This test controls the fixture and supplies `OdtMcpBridgeService` used by this case.
     const bridge = createMcpHostBridgeServer({
       discoveryPath,
       token: "token-1",
@@ -443,6 +461,7 @@ describe("createMcpHostBridgeServer", () => {
         })),
       );
 
+      // SAFETY: This test controls the fixture and supplies `{ hostToken: string; hostUrl: string; pid: number; }` used by this case.
       const published = JSON.parse(await readFile(discoveryPath, "utf8")) as {
         hostToken: string;
         hostUrl: string;

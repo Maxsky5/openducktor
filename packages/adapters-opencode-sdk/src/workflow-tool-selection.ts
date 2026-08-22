@@ -4,6 +4,8 @@ import {
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
   type RuntimeDescriptor,
   toOpencodeExposedOdtToolIds,
+  hasRuntimeType,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import {
   type AgentRole,
@@ -40,8 +42,13 @@ export const resolveRepositoryToolSelection = (
   );
 
 type McpApi = {
-  status?: (args: { directory: string }) => Promise<unknown>;
-  connect?: (args: { directory: string; name: string }) => Promise<unknown>;
+  status?: (args: {
+    directory: string;
+  }) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>;
+  connect?: (args: {
+    directory: string;
+    name: string;
+  }) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>;
 };
 
 type OdtMcpStatus = {
@@ -60,7 +67,7 @@ const readOdtMcpStatus = async (input: {
   mcp: McpApi;
   workingDirectory: string;
 }): Promise<OdtMcpStatus> => {
-  if (typeof input.mcp.status !== "function") {
+  if (!hasRuntimeType(input.mcp.status, "function")) {
     throw new Error(
       `ODT workflow tools unavailable: OpenCode MCP status API is unavailable for "${OPENDUCKTOR_MCP_SERVER_NAME}".`,
     );
@@ -69,6 +76,7 @@ const readOdtMcpStatus = async (input: {
   const response = await input.mcp.status({
     directory: input.workingDirectory,
   });
+  // SAFETY: The preceding runtime guard establishes `{ data?: unknown; error?: { message?: string } | unknown }` before this assertion.
   const statusPayload = unwrapData(
     response as { data?: unknown; error?: { message?: string } | unknown },
     "get mcp status for role policy",
@@ -117,6 +125,7 @@ export const ensureTrustedOdtMcpServerConnected = async (input: {
   workingDirectory: string;
   onReconnectStart?: OdtMcpReconnectStartHandler | undefined;
 }): Promise<void> => {
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `{ mcp?: McpApi }`.
   const mcp = (input.client as { mcp?: McpApi }).mcp;
   if (!mcp) {
     throw new Error(
@@ -133,7 +142,7 @@ export const ensureTrustedOdtMcpServerConnected = async (input: {
     return;
   }
 
-  if (typeof mcp.connect !== "function") {
+  if (!hasRuntimeType(mcp.connect, "function")) {
     throw new Error(
       formatOdtMcpUnavailableError({
         workingDirectory: input.workingDirectory,
@@ -154,6 +163,7 @@ export const ensureTrustedOdtMcpServerConnected = async (input: {
     directory: input.workingDirectory,
     name: OPENDUCKTOR_MCP_SERVER_NAME,
   });
+  // SAFETY: The preceding runtime guard establishes `{ data?: unknown; error?: { message?: string } | unknown }` before this assertion.
   unwrapData(
     connectResponse as { data?: unknown; error?: { message?: string } | unknown },
     `connect mcp server ${OPENDUCKTOR_MCP_SERVER_NAME} for role policy`,

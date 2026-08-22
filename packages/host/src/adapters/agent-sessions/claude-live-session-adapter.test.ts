@@ -35,6 +35,7 @@ const runtime = {
   descriptor: RUNTIME_DESCRIPTORS_BY_KIND.claude,
 };
 
+// SAFETY: This test controls the fixture and supplies `RepoConfig` used by this case.
 const workingDirectoryDependencies = {
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),
@@ -157,6 +158,7 @@ const createHarness = async (
     });
     return Effect.succeed(summary);
   };
+  // SAFETY: This test controls the fixture and supplies `ClaudeAgentSdkService` used by this case.
   const service = {
     startSession: (
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
@@ -186,7 +188,7 @@ const createHarness = async (
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
-  } as unknown as ClaudeAgentSdkService;
+  } as ClaudeAgentSdkService;
   const liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation"> = {
     runAdapterMutation: (mutation) => {
       const barrier = mutationBarrier;
@@ -216,6 +218,7 @@ const createHarness = async (
       );
     },
   };
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   const prepare = createClaudeLiveSessionAdapterPreparer({
     eventHub,
     liveSessionLifecycle,
@@ -223,13 +226,14 @@ const createHarness = async (
     sessionStore: {
       get: (externalSessionId) =>
         externalSessionId === session.externalSessionId
-          ? (session as unknown as ReturnType<ClaudeSessionStore["get"]>)
+          ? (session as ReturnType<ClaudeSessionStore["get"]>)
           : undefined,
     } as ClaudeSessionStore,
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   });
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
+  // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
   return {
     adapter: prepared.adapter as AgentSessionRuntimeAdapterPort,
     changes,

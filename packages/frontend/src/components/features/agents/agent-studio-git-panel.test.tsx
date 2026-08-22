@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   fireEvent,
@@ -7,8 +8,8 @@ import {
 import { act, createElement, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { JsonValue } from "@openducktor/contracts";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -158,10 +159,12 @@ const wrapElement = (element: Element): DomTestNode => ({
   element,
   type: element.tagName.toLowerCase(),
   get props() {
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
     const htmlElement = element as HTMLElement;
     const reactPropsKey = Object.keys(htmlElement).find((key) => key.startsWith("__reactProps$"));
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     const reactProps = reactPropsKey
-      ? ((htmlElement as unknown as Record<string, JsonValue>)[reactPropsKey] as {
+      ? (Object.getOwnPropertyDescriptor(htmlElement, reactPropsKey)?.value as {
           onClick?: (event?: { stopPropagation?: () => void }) => void;
           onChange?: (event?: {
             currentTarget?: { value?: string };
@@ -169,6 +172,7 @@ const wrapElement = (element: Element): DomTestNode => ({
           }) => void;
         })
       : null;
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     return {
       className: htmlElement.className,
       title: htmlElement.getAttribute("title"),
@@ -1914,11 +1918,12 @@ describe("AgentStudioGitPanel", () => {
     );
 
     const fileNameNode = pathNode.findAll(
-      (node) => typeof node.type === "string" && node.children.includes("file-diff-entry.tsx"),
+      (node) =>
+        hasRuntimeType(node.type, "string") && node.children.includes("file-diff-entry.tsx"),
     )[0];
     const dirNameNode = pathNode.findAll(
       (node) =>
-        typeof node.type === "string" &&
+        hasRuntimeType(node.type, "string") &&
         node.children.includes(
           "packages/frontend/src/components/features/agents/agent-studio-git-panel",
         ),

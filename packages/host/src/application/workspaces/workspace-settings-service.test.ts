@@ -143,7 +143,8 @@ const createFakeSettingsConfig = ({
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
   };
-  return port as unknown as FakeSettingsConfigPort;
+  // SAFETY: This test controls the fixture and supplies `FakeSettingsConfigPort` used by this case.
+  return port as FakeSettingsConfigPort;
 };
 describe("createWorkspaceSettingsService", () => {
   test("returns default settings snapshot when config is missing", async () => {
@@ -217,6 +218,7 @@ describe("createWorkspaceSettingsService", () => {
     }
   });
   test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
+    // SAFETY: This test controls the fixture and supplies `Partial<GlobalConfig>` used by this case.
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({
         config: globalConfig({
@@ -224,7 +226,7 @@ describe("createWorkspaceSettingsService", () => {
             opencode: { enabled: true, executablePath: "/bin/opencode" },
             codex: { enabled: true, executablePath: "/bin/codex" },
           },
-        } as unknown as Partial<GlobalConfig>),
+        } as Partial<GlobalConfig>),
       }),
     );
 
@@ -666,15 +668,17 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const invalidVisibility: string = "auto";
 
     await expect(
       Effect.runPromise(
+        // SAFETY: this test passes invalid untrusted input to verify boundary validation.
         service.saveSettingsSnapshot({
           ...snapshot,
           appearance: {
-            horizontalScrollbarVisibility: "auto",
+            horizontalScrollbarVisibility: invalidVisibility,
           },
-        } as unknown as typeof snapshot),
+        } as typeof snapshot),
       ),
     ).rejects.toThrow("Invalid option");
     expect(settingsConfig.writtenConfigs).toHaveLength(0);

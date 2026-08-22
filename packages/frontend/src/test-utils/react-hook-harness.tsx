@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { renderHook } from "@testing-library/react";
 import type { ComponentType, PropsWithChildren } from "react";
 import { act } from "react";
@@ -12,7 +13,7 @@ const flushHookEffects = async (): Promise<void> => {
   await act(async () => {
     await Promise.resolve();
     await new Promise<void>((resolve) => {
-      if (typeof MessageChannel === "undefined") {
+      if (hasRuntimeType(MessageChannel, "undefined")) {
         setTimeout(resolve, 0);
         return;
       }
@@ -40,7 +41,12 @@ export const createHookHarness = <Props, State>(
     await act(async () => {
       rendered = renderHook(useHook, {
         initialProps: currentProps,
-        ...(options?.wrapper ? { wrapper: options.wrapper } : {}),
+        ...(() => {
+          if (options?.wrapper) {
+            return { wrapper: options.wrapper };
+          }
+          return {};
+        })(),
       });
     });
     await flushHookEffects();

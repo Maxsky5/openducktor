@@ -7,6 +7,7 @@ import {
   isCodexAppServerPermissionRequestMethod,
   type RuntimeApprovalReplyOutcome,
   type RuntimeApprovalRequestType,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
@@ -104,7 +105,7 @@ const extractCommandText = (params: JsonValue | undefined): string | null => {
           return null;
         }
         const command = action.command ?? action.cmd;
-        return typeof command === "string" && command.trim().length > 0 ? command : null;
+        return hasRuntimeType(command, "string") && command.trim().length > 0 ? command : null;
       })
       .filter((command): command is string => command !== null);
     if (actionCommands.length === 1) {
@@ -116,7 +117,7 @@ const extractCommandText = (params: JsonValue | undefined): string | null => {
   }
 
   const command = params.command;
-  if (typeof command === "string" && command.trim().length > 0) {
+  if (hasRuntimeType(command, "string") && command.trim().length > 0) {
     return command;
   }
   if (Array.isArray(command)) {
@@ -209,14 +210,22 @@ const commandApprovalFields = (
   const workingDirectory = extractCommandWorkingDirectory(request.params);
   return {
     action: { name: hasNetworkApprovalContext(request) ? "Network access" : "Bash" },
-    ...(command
-      ? {
+    ...(() => {
+      if (command) {
+        return {
           command: {
             command,
-            ...(workingDirectory ? { workingDirectory } : {}),
+            ...(() => {
+              if (workingDirectory) {
+                return { workingDirectory };
+              }
+              return {};
+            })(),
           },
-        }
-      : {}),
+        };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -341,11 +350,21 @@ export const toMcpElicitationApprovalRequest = (
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
     summary: params.message,
-    ...(toolDescription ? { details: toolDescription } : {}),
+    ...(() => {
+      if (toolDescription) {
+        return { details: toolDescription };
+      }
+      return {};
+    })(),
     tool: {
       name: toolName,
       title: toolTitle,
-      ...(isPlainObject(toolParams) ? { input: toolParams } : {}),
+      ...(() => {
+        if (isPlainObject(toolParams)) {
+          return { input: toolParams };
+        }
+        return {};
+      })(),
     },
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
@@ -381,18 +400,7 @@ export const isTerminalTurnStatus = (value: JsonValue | undefined): boolean => {
   return status === "completed" || status === "failed" || status === "interrupted";
 };
 
-export const parseQuestionRequest = (
-  request: CodexServerRequestRecord,
-): {
-  request: Omit<
-    import("@openducktor/core").AgentPendingQuestionRequest,
-    "requestId" | "requestInstanceId"
-  >;
-  threadId: string;
-  turnId: string;
-  questionIds: string[];
-  serverRequestId: CodexAppServerRequestId;
-} => {
+export const parseQuestionRequest = (request: CodexServerRequestRecord) => {
   if (request.id === undefined) {
     throw new Error("Codex app-server question request is missing an id.");
   }
@@ -426,7 +434,7 @@ export const parseQuestionRequest = (
     questionIds.push(id);
     const options = Array.isArray(rawQuestion.options)
       ? rawQuestion.options.map((rawOption) => {
-          if (typeof rawOption === "string") {
+          if (hasRuntimeType(rawOption, "string")) {
             return { label: rawOption, description: "" };
           }
           if (!isPlainObject(rawOption)) {
@@ -454,8 +462,18 @@ export const parseQuestionRequest = (
       header,
       question,
       options,
-      ...(rawQuestion.multiple === true || rawQuestion.multi === true ? { multiple: true } : {}),
-      ...(rawQuestion.isOther === true || rawQuestion.custom === true ? { custom: true } : {}),
+      ...(() => {
+        if (rawQuestion.multiple === true || rawQuestion.multi === true) {
+          return { multiple: true };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (rawQuestion.isOther === true || rawQuestion.custom === true) {
+          return { custom: true };
+        }
+        return {};
+      })(),
     };
   });
 
@@ -467,5 +485,14 @@ export const parseQuestionRequest = (
     turnId,
     questionIds,
     serverRequestId: request.id,
+  } satisfies {
+    request: Omit<
+      import("@openducktor/core").AgentPendingQuestionRequest,
+      "requestId" | "requestInstanceId"
+    >;
+    threadId: string;
+    turnId: string;
+    questionIds: string[];
+    serverRequestId: CodexAppServerRequestId;
   };
 };

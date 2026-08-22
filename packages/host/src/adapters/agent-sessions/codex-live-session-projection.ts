@@ -7,6 +7,7 @@ import {
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import {
   type HostError,
   HostValidationError,
@@ -36,11 +37,11 @@ const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boole
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
-const parseProjectionValue = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseProjectionValue = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
@@ -138,8 +139,18 @@ export const createCodexLiveSessionProjection = ({
         snapshots,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
-        ...(mutation.fault ? { fault: mutation.fault } : {}),
-        ...(faultRef ? { faultRef } : {}),
+        ...(() => {
+          if (mutation.fault) {
+            return { fault: mutation.fault };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (faultRef) {
+            return { faultRef };
+          }
+          return {};
+        })(),
       };
     });
 
@@ -184,7 +195,12 @@ export const createCodexLiveSessionProjection = ({
                 repoPath: runtime.repoPath,
                 operation: "codex-live-session.process-event",
                 message: normalized.fault,
-                ...(normalized.faultRef ? { ref: normalized.faultRef } : {}),
+                ...(() => {
+                  if (normalized.faultRef) {
+                    return { ref: normalized.faultRef };
+                  }
+                  return {};
+                })(),
               });
             }
             return { value: undefined, changes };

@@ -9,6 +9,7 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
   type RuntimeInstanceSummary,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
@@ -62,21 +63,24 @@ const activityForStatus = (
 
 const toApprovalRequest = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
-): AgentSessionLivePendingApprovalRequest => ({
-  requestId: event.requestId,
-  requestType: event.requestType,
-  title: event.title,
-  ...(event.summary !== undefined ? { summary: event.summary } : {}),
-  ...(event.details !== undefined ? { details: event.details } : {}),
-  ...(event.affectedPaths !== undefined ? { affectedPaths: event.affectedPaths } : {}),
-  ...(event.command !== undefined ? { command: event.command } : {}),
-  ...(event.action !== undefined ? { action: event.action } : {}),
-  ...(event.tool !== undefined ? { tool: event.tool } : {}),
-  ...(event.mutation !== undefined ? { mutation: event.mutation } : {}),
-  ...(event.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: event.supportedReplyOutcomes }
-    : {}),
-});
+): AgentSessionLivePendingApprovalRequest => {
+  const request: AgentSessionLivePendingApprovalRequest = {
+    requestId: event.requestId,
+    requestType: event.requestType,
+    title: event.title,
+  };
+  if (event.summary !== undefined) Object.assign(request, { summary: event.summary });
+  if (event.details !== undefined) Object.assign(request, { details: event.details });
+  if (event.affectedPaths !== undefined)
+    Object.assign(request, { affectedPaths: event.affectedPaths });
+  if (event.command !== undefined) Object.assign(request, { command: event.command });
+  if (event.action !== undefined) Object.assign(request, { action: event.action });
+  if (event.tool !== undefined) Object.assign(request, { tool: event.tool });
+  if (event.mutation !== undefined) Object.assign(request, { mutation: event.mutation });
+  if (event.supportedReplyOutcomes !== undefined)
+    Object.assign(request, { supportedReplyOutcomes: event.supportedReplyOutcomes });
+  return request;
+};
 
 const toQuestionRequest = (
   event: Extract<AgentEvent, { type: "question_required" }>,
@@ -104,7 +108,7 @@ const subagentStartedAt = (
   },
   fallback: string,
 ): string => {
-  if (typeof part.startedAtMs !== "number") {
+  if (!hasRuntimeType(part.startedAtMs, "number")) {
     return fallback;
   }
   const startedAt = new Date(part.startedAtMs);
@@ -147,17 +151,20 @@ export const createClaudeLiveSessionState = ({
       return retained;
     }
     const isRoot = ref.externalSessionId === session.externalSessionId;
-    return {
+    const snapshot: AgentSessionLiveSnapshot = {
       ref,
       sessionAssociation: session.summary.sessionAssociation,
       activity: session.activity === "idle" ? "idle" : "running",
       title: isRoot ? (session.summary.title ?? "Claude session") : "Claude subagent",
       startedAt: isRoot ? session.startedAt : timestamp,
-      ...(!isRoot ? { parentExternalSessionId: session.externalSessionId } : {}),
       pendingApprovals: [],
       pendingQuestions: [],
       contextUsage: null,
     };
+    if (!isRoot) {
+      Object.assign(snapshot, { parentExternalSessionId: session.externalSessionId });
+    }
+    return snapshot;
   };
 
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
@@ -314,12 +321,15 @@ export const createClaudeLiveSessionState = ({
     const changes: AgentSessionLiveAdapterChange[] = [];
     if (event.type === "session_context_updated") {
       contextRevisionsByRef.set(key, (contextRevisionsByRef.get(key) ?? 0) + 1);
+      const contextUsage: NonNullable<AgentSessionLiveSnapshot["contextUsage"]> = {
+        totalTokens: event.totalTokens,
+      };
+      if (event.contextWindow !== undefined) {
+        Object.assign(contextUsage, { contextWindow: event.contextWindow });
+      }
       return commitSnapshot({
         ...snapshot,
-        contextUsage: {
-          totalTokens: event.totalTokens,
-          ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
-        },
+        contextUsage,
       });
     }
     if (event.type === "session_status") {
@@ -369,10 +379,7 @@ export const createClaudeLiveSessionState = ({
     applyPendingResolution: (
       session: ClaudeSessionContext,
       event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>,
-    ): {
-      changes: AgentSessionLiveAdapterChange[];
-      rollback: () => void;
-    } => {
+    ) => {
       const ref = eventRef(session, event);
       const key = refKey(ref);
       const previous = readSnapshot(ref);
@@ -386,32 +393,47 @@ export const createClaudeLiveSessionState = ({
             snapshotsByRef.delete(key);
           }
         },
+      } satisfies {
+        changes: AgentSessionLiveAdapterChange[];
+        rollback: () => void;
       };
     },
     applyLoadedContext: (
       ref: AgentSessionLiveRef,
       contextUsage: AgentSessionContextUsage | null,
       expectedRevision: number,
-    ): {
-      value: AgentSessionContextUsage | null;
-      changes: AgentSessionLiveAdapterChange[];
-    } => {
+    ) => {
       const snapshot = readSnapshot(ref);
       if ((contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision) {
-        return { value: snapshot?.contextUsage ?? contextUsage, changes: [] };
+        return { value: snapshot?.contextUsage ?? contextUsage, changes: [] } satisfies {
+          value: AgentSessionContextUsage | null;
+          changes: AgentSessionLiveAdapterChange[];
+        };
       }
       if (!contextUsage) {
-        return { value: snapshot?.contextUsage ?? null, changes: [] };
+        return { value: snapshot?.contextUsage ?? null, changes: [] } satisfies {
+          value: AgentSessionContextUsage | null;
+          changes: AgentSessionLiveAdapterChange[];
+        };
       }
       if (!snapshot) {
-        return { value: contextUsage, changes: [] };
+        return { value: contextUsage, changes: [] } satisfies {
+          value: AgentSessionContextUsage | null;
+          changes: AgentSessionLiveAdapterChange[];
+        };
       }
       if (JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)) {
-        return { value: snapshot.contextUsage, changes: [] };
+        return { value: snapshot.contextUsage, changes: [] } satisfies {
+          value: AgentSessionContextUsage | null;
+          changes: AgentSessionLiveAdapterChange[];
+        };
       }
       return {
         value: contextUsage,
         changes: commitSnapshot({ ...snapshot, contextUsage }),
+      } satisfies {
+        value: AgentSessionContextUsage | null;
+        changes: AgentSessionLiveAdapterChange[];
       };
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
@@ -457,19 +479,20 @@ export const createClaudeLiveSessionState = ({
       if (options.preserveRetainedActivity && current) {
         activity = current.activity;
       }
-      return commitSnapshot({
+      const nextSnapshot: AgentSessionLiveSnapshot = {
         ref,
         sessionAssociation: summary.sessionAssociation,
         activity,
         title: summary.title ?? current?.title ?? "Claude session",
         startedAt: summary.startedAt,
-        ...(options.parentExternalSessionId
-          ? { parentExternalSessionId: options.parentExternalSessionId }
-          : {}),
         pendingApprovals: current?.pendingApprovals ?? [],
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
-      });
+      };
+      if (options.parentExternalSessionId) {
+        Object.assign(nextSnapshot, { parentExternalSessionId: options.parentExternalSessionId });
+      }
+      return commitSnapshot(nextSnapshot);
     },
   };
 };

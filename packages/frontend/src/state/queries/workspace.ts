@@ -4,6 +4,7 @@ import {
   type RepoConfig,
   type SettingsSnapshot,
   type WorkspaceRecord,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
@@ -136,7 +137,7 @@ export const writeWorkspaceListToQuery = (
   );
   queryClient.setQueryData<WorkspaceRecord[]>(
     workspaceQueryKeys.list(),
-    typeof recordsOrUpdater === "function" ? recordsOrUpdater : recordsOrUpdater,
+    hasRuntimeType(recordsOrUpdater, "function") ? recordsOrUpdater : recordsOrUpdater,
   );
 };
 

@@ -24,7 +24,12 @@ export const pickDefaultSessionSelectionForCatalog = (
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
+    ...(() => {
+      if (variant) {
+        return { variant };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -52,8 +57,18 @@ export const coerceSessionSelectionToCatalog = (
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
+    ...(() => {
+      if (variant) {
+        return { variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (profileId) {
+        return { profileId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -67,8 +82,18 @@ export const normalizePersistedSelection = (
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : {}),
-    ...(selection.profileId ? { profileId: selection.profileId } : {}),
+    ...(() => {
+      if (selection.variant) {
+        return { variant: selection.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (selection.profileId) {
+        return { profileId: selection.profileId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -83,15 +108,29 @@ export const mergeModelSelection = (
     return base;
   }
 
+  const runtimeKind = override.runtimeKind ?? base.runtimeKind;
+  const variant = override.variant ?? base.variant;
+  const profileId = override.profileId ?? base.profileId;
   return {
-    ...((override.runtimeKind ?? base.runtimeKind)
-      ? { runtimeKind: override.runtimeKind ?? base.runtimeKind }
-      : {}),
+    ...(() => {
+      if (runtimeKind) {
+        return { runtimeKind };
+      }
+      return {};
+    })(),
     providerId: override.providerId,
     modelId: override.modelId,
-    ...((override.variant ?? base.variant) ? { variant: override.variant ?? base.variant } : {}),
-    ...((override.profileId ?? base.profileId)
-      ? { profileId: override.profileId ?? base.profileId }
-      : {}),
+    ...(() => {
+      if (variant) {
+        return { variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (profileId) {
+        return { profileId };
+      }
+      return {};
+    })(),
   };
 };

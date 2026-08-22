@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
@@ -31,7 +32,7 @@ export const codexForkHistoryIsChildOwned = (response: JsonValue | undefined): b
     return true;
   }
   const createdAt = thread.createdAt ?? thread.created_at;
-  if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+  if (!hasRuntimeType(createdAt, "number") || !Number.isFinite(createdAt)) {
     return false;
   }
   return turns.every((turn) => {
@@ -39,12 +40,14 @@ export const codexForkHistoryIsChildOwned = (response: JsonValue | undefined): b
       return false;
     }
     const startedAt = turn.startedAt ?? turn.started_at;
-    return typeof startedAt === "number" && Number.isFinite(startedAt) && startedAt > createdAt;
+    return (
+      hasRuntimeType(startedAt, "number") && Number.isFinite(startedAt) && startedAt > createdAt
+    );
   });
 };
 
 const timestampFromSeconds = (value: JsonValue | undefined, context: string): string => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!hasRuntimeType(value, "number") || !Number.isFinite(value)) {
     throw new Error(`Codex ${context} is missing a valid timestamp.`);
   }
   return new Date(value * 1000).toISOString();

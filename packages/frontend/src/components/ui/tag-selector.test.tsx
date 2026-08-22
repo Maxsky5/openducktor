@@ -3,6 +3,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { act, useState } from "react";
 import { TagSelector } from "./tag-selector";
 
+// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };

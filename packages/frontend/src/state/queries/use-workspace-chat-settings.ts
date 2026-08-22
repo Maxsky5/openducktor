@@ -3,11 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { readChatSettingsFromSnapshot, settingsSnapshotQueryOptions } from "./workspace";
 
-export function useWorkspaceChatSettings({ hasWorkspace }: { hasWorkspace: boolean }): {
-  chatSettings: ChatSettings;
-  chatSettingsError: Error | null;
-  retryChatSettingsLoad: () => void;
-} {
+export function useWorkspaceChatSettings({ hasWorkspace }: { hasWorkspace: boolean }) {
   const {
     data: chatSettings,
     error,
@@ -30,5 +26,9 @@ export function useWorkspaceChatSettings({ hasWorkspace }: { hasWorkspace: boole
     chatSettings: hasWorkspace ? (chatSettings ?? DEFAULT_CHAT_SETTINGS) : DEFAULT_CHAT_SETTINGS,
     chatSettingsError: hasWorkspace ? error : null,
     retryChatSettingsLoad,
+  } satisfies {
+    chatSettings: ChatSettings;
+    chatSettingsError: Error | null;
+    retryChatSettingsLoad: () => void;
   };
 }

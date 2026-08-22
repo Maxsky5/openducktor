@@ -162,6 +162,7 @@ const createUnserializedWorkspaceSettingsService = (
       }
 
       config.workspaceOrder = workspaceOrder;
+      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const parsed = yield* Effect.try({
         try: () => globalConfigSchema.parse(config) as LoadedGlobalConfig,
         catch: (cause) =>
@@ -337,6 +338,7 @@ const createUnserializedWorkspaceSettingsService = (
         config,
         snapshot.workspaces,
       );
+      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
@@ -382,6 +384,7 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
@@ -409,6 +412,7 @@ const createUnserializedWorkspaceSettingsService = (
   setTheme(theme) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
+      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({
@@ -427,6 +431,7 @@ const createUnserializedWorkspaceSettingsService = (
   updateGlobalGitConfig(git) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
+      // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
       const nextConfig = yield* Effect.try({
         try: () =>
           globalConfigSchema.parse({

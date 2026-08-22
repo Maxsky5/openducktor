@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { toToolMessageId } from "../support/chat-message-ids";
@@ -48,23 +49,31 @@ const composeToolTimingMeta = (
   status: ToolPartStatus,
   input: Record<string, JsonValue> | undefined,
 ): ToolTimingMeta => {
-  const observedStartedAtMs =
-    typeof existingToolMeta?.observedStartedAtMs === "number"
-      ? existingToolMeta.observedStartedAtMs
-      : observedEventTimestampMs;
+  const observedStartedAtMs = hasRuntimeType(existingToolMeta?.observedStartedAtMs, "number")
+    ? existingToolMeta.observedStartedAtMs
+    : observedEventTimestampMs;
   const observedEndedAtMs =
     status === "completed" || status === "error" ? observedEventTimestampMs : undefined;
-  const inputReadyAtMs =
-    typeof existingToolMeta?.inputReadyAtMs === "number"
-      ? existingToolMeta.inputReadyAtMs
-      : hasMeaningfulToolInput(input)
-        ? observedEventTimestampMs
-        : undefined;
+  const inputReadyAtMs = hasRuntimeType(existingToolMeta?.inputReadyAtMs, "number")
+    ? existingToolMeta.inputReadyAtMs
+    : hasMeaningfulToolInput(input)
+      ? observedEventTimestampMs
+      : undefined;
 
   return {
     observedStartedAtMs,
-    ...(typeof observedEndedAtMs === "number" ? { observedEndedAtMs } : {}),
-    ...(typeof inputReadyAtMs === "number" ? { inputReadyAtMs } : {}),
+    ...(() => {
+      if (hasRuntimeType(observedEndedAtMs, "number")) {
+        return { observedEndedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(inputReadyAtMs, "number")) {
+        return { inputReadyAtMs };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -83,27 +92,96 @@ const composeToolMessageMeta = (
     tool: part.tool,
     toolType: part.toolType,
     status,
-    ...(part.preview ? { preview: part.preview } : {}),
-    ...(part.title ? { title: part.title } : {}),
-    ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
-    ...(input ? { input } : {}),
-    ...(output ? { output } : {}),
-    ...(error ? { error } : {}),
-    ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : {}),
-    ...(part.fileContent ? { fileContent: part.fileContent } : {}),
-    ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
-    ...(part.metadata ? { metadata: part.metadata } : {}),
-    ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-    ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
-    ...(typeof timingMeta.observedStartedAtMs === "number"
-      ? { observedStartedAtMs: timingMeta.observedStartedAtMs }
-      : {}),
-    ...(typeof timingMeta.observedEndedAtMs === "number"
-      ? { observedEndedAtMs: timingMeta.observedEndedAtMs }
-      : {}),
-    ...(typeof timingMeta.inputReadyAtMs === "number"
-      ? { inputReadyAtMs: timingMeta.inputReadyAtMs }
-      : {}),
+    ...(() => {
+      if (part.preview) {
+        return { preview: part.preview };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.title) {
+        return { title: part.title };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.displayLabel) {
+        return { displayLabel: part.displayLabel };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (output) {
+        return { output };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (error) {
+        return { error };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.fileDiffs) {
+        return { fileDiffs: part.fileDiffs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.fileContent) {
+        return { fileContent: part.fileContent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.fileChanges) {
+        return { fileChanges: part.fileChanges };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.metadata) {
+        return { metadata: part.metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(part.startedAtMs, "number")) {
+        return { startedAtMs: part.startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(part.endedAtMs, "number")) {
+        return { endedAtMs: part.endedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(timingMeta.observedStartedAtMs, "number")) {
+        return { observedStartedAtMs: timingMeta.observedStartedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(timingMeta.observedEndedAtMs, "number")) {
+        return { observedEndedAtMs: timingMeta.observedEndedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(timingMeta.inputReadyAtMs, "number")) {
+        return { inputReadyAtMs: timingMeta.inputReadyAtMs };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -162,25 +240,40 @@ const composeToolPartSessionUpdate = ({
   const resolvedError = preserveExistingToolValue(error, existingToolMeta?.error);
   const resolvedPart: ToolPart = {
     ...part,
-    ...(part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined
-      ? { fileDiffs: existingToolMeta.fileDiffs }
-      : {}),
-    ...(part.fileContent === undefined && existingToolMeta?.fileContent !== undefined
-      ? { fileContent: existingToolMeta.fileContent }
-      : {}),
-    ...(part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined
-      ? { fileChanges: existingToolMeta.fileChanges }
-      : {}),
-    ...(typeof part.startedAtMs === "number"
-      ? {}
-      : typeof existingToolMeta?.startedAtMs === "number"
+    ...(() => {
+      if (part.fileDiffs === undefined && existingToolMeta?.fileDiffs !== undefined) {
+        return { fileDiffs: existingToolMeta.fileDiffs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.fileContent === undefined && existingToolMeta?.fileContent !== undefined) {
+        return { fileContent: existingToolMeta.fileContent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined) {
+        return { fileChanges: existingToolMeta.fileChanges };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(part.startedAtMs, "number")) {
+        return {};
+      }
+      return hasRuntimeType(existingToolMeta?.startedAtMs, "number")
         ? { startedAtMs: existingToolMeta.startedAtMs }
-        : {}),
-    ...(typeof part.endedAtMs === "number"
-      ? {}
-      : typeof existingToolMeta?.endedAtMs === "number"
+        : {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(part.endedAtMs, "number")) {
+        return {};
+      }
+      return hasRuntimeType(existingToolMeta?.endedAtMs, "number")
         ? { endedAtMs: existingToolMeta.endedAtMs }
-        : {}),
+        : {};
+    })(),
   };
   const timingMeta = composeToolTimingMeta(
     existingToolMeta,
@@ -198,12 +291,18 @@ const composeToolPartSessionUpdate = ({
       content: formatToolContent({
         ...resolvedPart,
         status,
-        ...(typeof resolvedError === "string" && resolvedError.length > 0
-          ? { error: resolvedError }
-          : {}),
-        ...(typeof resolvedOutput === "string" && resolvedOutput.length > 0
-          ? { output: resolvedOutput }
-          : {}),
+        ...(() => {
+          if (hasRuntimeType(resolvedError, "string") && resolvedError.length > 0) {
+            return { error: resolvedError };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(resolvedOutput, "string") && resolvedOutput.length > 0) {
+            return { output: resolvedOutput };
+          }
+          return {};
+        })(),
       }),
       timestamp: existing?.timestamp ?? timestamp,
       meta: composeToolMessageMeta(

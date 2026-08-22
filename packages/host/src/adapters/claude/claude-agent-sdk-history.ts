@@ -17,6 +17,7 @@ import {
   isClaudeHistoryCompactBoundaryMessage,
   isClaudeHistorySubagentSystemMessage,
 } from "./claude-agent-sdk-history-import";
+import { toClaudeTaskNotificationMessage } from "./claude-agent-sdk-history-notifications";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import {
@@ -214,20 +215,10 @@ export const toClaudeHistoryMessages = (
     const timestamp = readHistoryTimestamp(entry, now);
     const taskNotifications = readClaudeTaskNotifications(entryValue);
     if (taskNotifications.length > 0) {
-      for (const taskNotification of taskNotifications) {
+      for (const notification of taskNotifications) {
         appendClaudeHistorySubagentSystemMessage({
           entry,
-          message: {
-            type: "system",
-            subtype: "task_notification",
-            uuid: entry.uuid,
-            session_id: readHistorySessionId(entry),
-            task_id: taskNotification.taskId,
-            status: taskNotification.status,
-            ...(taskNotification.toolUseId ? { tool_use_id: taskNotification.toolUseId } : {}),
-            ...(taskNotification.outputFile ? { output_file: taskNotification.outputFile } : {}),
-            ...(taskNotification.summary ? { summary: taskNotification.summary } : {}),
-          } as Parameters<typeof handleClaudeSubagentSystemMessage>[0]["message"],
+          message: toClaudeTaskNotificationMessage(entry, notification),
           state: toolResultState,
           timestamp,
         });
@@ -288,7 +279,10 @@ export const toClaudeHistoryMessages = (
     if (isClaudeHistorySubagentSystemMessage(entry)) {
       appendClaudeHistorySubagentSystemMessage({
         entry,
-        message: entry as Parameters<typeof handleClaudeSubagentSystemMessage>[0]["message"],
+        message:
+          /* SAFETY: The guard above proves the subagent message shape. */ entry as Parameters<
+            typeof handleClaudeSubagentSystemMessage
+          >[0]["message"],
         state: toolResultState,
         timestamp,
       });
@@ -322,7 +316,7 @@ export const toClaudeHistoryMessages = (
         }
         const input = toolInputsByCallId.get(part.callId);
         const subagentEvents: AgentEvent[] = [];
-        emitClaudeAgentToolResultSubagentPart({
+        const subagentResult: Parameters<typeof emitClaudeAgentToolResultSubagentPart>[0] = {
           emit: (event) => subagentEvents.push(event),
           isError: false,
           resultRaw: { agentId, status: "running" },
@@ -340,8 +334,9 @@ export const toClaudeHistoryMessages = (
           },
           timestamp,
           toolUseId: part.callId,
-          ...(input ? { input } : {}),
-        });
+        };
+        if (input) Object.assign(subagentResult, { input });
+        emitClaudeAgentToolResultSubagentPart(subagentResult);
         return [
           part,
           ...subagentEvents.flatMap((event) =>

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import {
@@ -47,8 +48,18 @@ const emitFileEditResult = ({
     raw: toolResponse,
     text: hookResponseText(toolResponse),
     tool: input.tool_name,
-    ...(toolInput ? { input: toolInput } : {}),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    ...(() => {
+      if (toolInput) {
+        return { input: toolInput };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(startedAtMs, "number")) {
+        return { startedAtMs };
+      }
+      return {};
+    })(),
   });
   if (!part.fileDiffs) {
     return;

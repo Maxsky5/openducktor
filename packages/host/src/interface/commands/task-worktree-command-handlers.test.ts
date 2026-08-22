@@ -12,6 +12,7 @@ import { createTaskWorktreeCommandHandlers } from "./task-worktree-command-handl
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
+// SAFETY: This test controls the fixture and supplies `TaskWorktreeService` used by this case.
 const createTaskWorktreeServiceFake = (service: TaskWorktreeService): TaskWorktreeService =>
   service as TaskWorktreeService;
 describe("createTaskWorktreeCommandHandlers", () => {

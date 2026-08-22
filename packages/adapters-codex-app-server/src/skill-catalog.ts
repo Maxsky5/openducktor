@@ -1,4 +1,9 @@
-import { jsonValueSchema, skillCatalogSchema, type JsonValue } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  skillCatalogSchema,
+  type JsonValue,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import type { AgentSkillCatalog } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
 
@@ -9,7 +14,7 @@ const readOptionalString = (
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw new Error(`Invalid Codex skill payload: ${fieldName} must be a string.`);
   }
   const trimmed = value.trim();
@@ -28,7 +33,7 @@ const readEnabled = (value: JsonValue | undefined): boolean => {
   if (value === undefined || value === null) {
     return true;
   }
-  if (typeof value !== "boolean") {
+  if (!hasRuntimeType(value, "boolean")) {
     throw new Error("Invalid Codex skill payload: enabled must be a boolean.");
   }
   return value;
@@ -43,7 +48,9 @@ const compareSkillsByName = (
   return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
 };
 
-export const toCodexSkillCatalog = (response: unknown): AgentSkillCatalog => {
+export const toCodexSkillCatalog = (
+  response: Parameters<typeof jsonValueSchema.safeParse>[0],
+): AgentSkillCatalog => {
   const parsed = jsonValueSchema.safeParse(response);
   if (!parsed.success || !isPlainObject(parsed.data) || !Array.isArray(parsed.data.data)) {
     throw new Error("Invalid Codex skills/list payload: expected an object with data array.");

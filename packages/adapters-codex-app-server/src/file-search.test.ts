@@ -3,6 +3,7 @@ import type { JsonValue } from "@openducktor/contracts";
 import { searchCodexFiles } from "./file-search";
 import type { CodexAppServerClient } from "./types";
 
+// SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
 const createClient = (
   response: JsonValue | undefined,
   calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }>,
@@ -10,6 +11,7 @@ const createClient = (
   ({
     async fuzzyFileSearch(params) {
       calls.push(params);
+      // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<CodexAppServerClient["fuzzyFileSearch"]>>` used by this case.
       return response as Awaited<ReturnType<CodexAppServerClient["fuzzyFileSearch"]>>;
     },
   }) as CodexAppServerClient;
@@ -169,6 +171,7 @@ describe("searchCodexFiles", () => {
   });
 
   test("propagates upstream Codex app-server failures", async () => {
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       async fuzzyFileSearch() {
         throw new Error("Codex app-server unavailable");

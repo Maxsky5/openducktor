@@ -57,6 +57,7 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame => {
           taskIds: Object.freeze([...frame.event.taskIds]),
         })
       : Object.freeze({ ...frame.event });
+  // SAFETY: The surrounding boundary constructs or validates every member required by `TaskEventStreamFrame`.
   return Object.freeze({
     ...frame,
     cursor: freezeCursor(frame.cursor),

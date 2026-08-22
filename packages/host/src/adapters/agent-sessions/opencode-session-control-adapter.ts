@@ -2,6 +2,7 @@ import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-ope
 import {
   type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
+  agentSessionControlSummarySchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -63,7 +64,7 @@ export const createOpenCodeSessionControlAdapter = ({
 
   const runControlSummary = (
     operation: string,
-    run: () => Promise<unknown>,
+    run: () => Promise<Parameters<typeof agentSessionControlSummarySchema.parse>[0]>,
     parentExternalSessionId?: string,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(
@@ -94,7 +95,12 @@ export const createOpenCodeSessionControlAdapter = ({
           workingDirectory: input.workingDirectory,
           sessionScope: input.sessionScope,
           systemPrompt: input.systemPrompt,
-          ...(input.model ? { model: input.model } : {}),
+          ...(() => {
+            if (input.model) {
+              return { model: input.model };
+            }
+            return {};
+          })(),
         }),
       ),
     resumeSession: (input) =>
@@ -104,8 +110,18 @@ export const createOpenCodeSessionControlAdapter = ({
           runtimeKind: "opencode",
           runtimePolicy: { kind: "opencode" },
           sessionScope: input.sessionScope,
-          ...(input.model ? { model: input.model } : {}),
-          ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
+          ...(() => {
+            if (input.model) {
+              return { model: input.model };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (input.systemPrompt) {
+              return { systemPrompt: input.systemPrompt };
+            }
+            return {};
+          })(),
         }),
       ),
     forkSession: (input) =>
@@ -120,15 +136,24 @@ export const createOpenCodeSessionControlAdapter = ({
             sessionScope: input.sessionScope,
             systemPrompt: input.systemPrompt,
             parentExternalSessionId: input.parentExternalSessionId,
-            ...(input.runtimeHistoryAnchor
-              ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
-              : {}),
-            ...(input.model ? { model: input.model } : {}),
+            ...(() => {
+              if (input.runtimeHistoryAnchor) {
+                return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (input.model) {
+                return { model: input.model };
+              }
+              return {};
+            })(),
           }),
         input.parentExternalSessionId,
       ),
     sendUserMessage: (input) => {
       const sessionRef = toSessionRef(input);
+      // SAFETY: The schema parser validates every field required by the asserted shape before returning.
       return serializeSessionSend(
         refKey(sessionRef),
         Effect.tryPromise({
@@ -141,8 +166,18 @@ export const createOpenCodeSessionControlAdapter = ({
               parts: input.parts as Parameters<
                 OpencodeSessionRuntimeConnection["sendUserMessage"]
               >[0]["parts"],
-              ...(input.model ? { model: input.model } : {}),
-              ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
+              ...(() => {
+                if (input.model) {
+                  return { model: input.model };
+                }
+                return {};
+              })(),
+              ...(() => {
+                if (input.systemPrompt) {
+                  return { systemPrompt: input.systemPrompt };
+                }
+                return {};
+              })(),
             }),
           catch: (cause) =>
             toHostOperationError(cause, "opencode-live-session.send-user-message", {

@@ -360,7 +360,8 @@ describe("createTaskService list and session reads", () => {
     const { createTaskCommandHandlers } =
       await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
-    const handlers = createTaskCommandHandlers(service as unknown as TaskService);
+    // SAFETY: This test controls the fixture and supplies `TaskService` used by this case.
+    const handlers = createTaskCommandHandlers(service as TaskService);
     expect(() =>
       handlers.tasks_list?.(
         { repoPath: "/repo", doneVisibleDays: -1 },
@@ -861,6 +862,7 @@ describe("createTaskService list and session reads", () => {
   });
   test("deletes one exact durable agent session identity", async () => {
     const calls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const taskStore = {
       deleteAgentSession(input: JsonValue | undefined) {
         return Effect.sync(() => {

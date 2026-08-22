@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
 import { toOpenCodePermissionReply } from "./approval-translation";
@@ -50,11 +51,19 @@ export const readLatestOpencodeContextUsage = async (
     return null;
   }
   const totalTokens = extractMessageTotalTokens(latestAssistant.info, latestAssistant.parts);
-  if (typeof totalTokens !== "number") {
+  if (!hasRuntimeType(totalTokens, "number")) {
     return null;
   }
   const model = readMessageModelSelection(latestAssistant.info);
-  return { totalTokens, ...(model ? { model } : {}) };
+  return {
+    totalTokens,
+    ...(() => {
+      if (model) {
+        return { model };
+      }
+      return {};
+    })(),
+  };
 };
 
 export const replyToOpencodeApproval = async (
@@ -69,7 +78,12 @@ export const replyToOpencodeApproval = async (
     directory: input.ref.workingDirectory,
     requestID: input.nativeRequestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : {}),
+    ...(() => {
+      if (input.message) {
+        return { message: input.message };
+      }
+      return {};
+    })(),
   });
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);

@@ -12,6 +12,7 @@ type HarnessProps = {
   onDelete: ((taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>) | undefined;
 };
 
+// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };

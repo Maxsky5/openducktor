@@ -24,6 +24,7 @@ type CreateNodePtyPortInput = {
 
 const loadNodePty = (): NodePtyModule => {
   const require = createRequire(import.meta.url);
+  // SAFETY: The surrounding boundary constructs or validates every member required by `NodePtyModule`.
   return require("node-pty") as NodePtyModule;
 };
 

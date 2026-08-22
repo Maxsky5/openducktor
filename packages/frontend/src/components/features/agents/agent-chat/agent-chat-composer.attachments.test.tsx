@@ -96,8 +96,8 @@ const buildModel = () => ({
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
   onComposerEditorInput: SHARED_CALLBACKS.onComposerEditorInput,
-  scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
-  syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
+  scrollToBottomOnSendRef: { current: null } satisfies { current: (() => void) | null },
+  syncBottomAfterComposerLayoutRef: { current: null } satisfies { current: (() => void) | null },
 });
 
 const createMemoryStorage = (spies?: { getItem?: (key: string) => void }): TestStorage => {

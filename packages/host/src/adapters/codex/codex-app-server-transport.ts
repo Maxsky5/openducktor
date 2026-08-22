@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { createInterface } from "node:readline";
 import { Effect, Exit } from "effect";
 import {
@@ -263,10 +264,12 @@ export const createCodexAppServerTransport = (
       return;
     }
 
-    const responseId = typeof message.id === "number" ? message.id : null;
+    const responseId = hasRuntimeType(message.id, "number") ? message.id : null;
     const serverRequestId =
-      typeof message.id === "number" || typeof message.id === "string" ? message.id : null;
-    const hasMethod = typeof message.method === "string";
+      hasRuntimeType(message.id, "number") || hasRuntimeType(message.id, "string")
+        ? message.id
+        : null;
+    const hasMethod = hasRuntimeType(message.method, "string");
     const hasResponse = "result" in message || "error" in message;
 
     if (hasResponse) {
@@ -449,12 +452,13 @@ export const createCodexAppServerTransport = (
             }),
           );
         }
-        yield* sendMessage({
+        const response: CodexTransportResponseMessage = {
           jsonrpc: "2.0",
           id: requestId,
-          ...(result !== undefined ? { result } : {}),
-          ...(error !== undefined ? { error } : {}),
-        });
+        };
+        if (result !== undefined) Object.assign(response, { result });
+        if (error !== undefined) Object.assign(response, { error });
+        yield* sendMessage(response);
       });
     },
     rejectPendingRequestsForShutdown() {

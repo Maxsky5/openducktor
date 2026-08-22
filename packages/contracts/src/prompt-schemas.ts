@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+interface REQUIREDPLACEHOLDERSBYTEMPLATEContract extends Partial<
+  Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>
+> {}
+
 export const agentPromptTemplateIdValues = [
   "system.shared.workflow_guards",
   "system.shared.tool_protocol",
@@ -43,9 +47,7 @@ export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues)
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
 const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValues);
 
-const REQUIRED_PLACEHOLDERS_BY_TEMPLATE: Partial<
-  Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>
-> = {
+const REQUIRED_PLACEHOLDERS_BY_TEMPLATE: REQUIREDPLACEHOLDERSBYTEMPLATEContract = {
   "kickoff.build_after_human_request_changes": ["humanFeedback"],
   "kickoff.build_pull_request_generation": ["git.targetBranch"],
 };

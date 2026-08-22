@@ -393,6 +393,7 @@ describe("useAgentStudioSessionActions", () => {
 
   beforeEach(async () => {
     await clearAppQueryClient();
+    // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>` used by this case.
     host.workspaceGetRepoConfig = async () =>
       ({
         workspaceId: "repo",

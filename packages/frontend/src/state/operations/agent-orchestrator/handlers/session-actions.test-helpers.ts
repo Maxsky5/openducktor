@@ -96,6 +96,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     sessionsRef: overrideSessionsRef,
     ...actionOverrides
   } = overrides;
+  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentEnginePort`.
   const adapter = (adapterOverride ?? new OpencodeSdkAdapter()) as AgentEnginePort;
   const sessionsRef = overrideSessionsRef ?? createSessionsRef();
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));

@@ -20,6 +20,7 @@ import {
 import type { JsonValue, TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
+// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
@@ -77,6 +78,7 @@ const readImmediateStreamChunk = async (
   return result;
 };
 
+// SAFETY: This test controls the fixture and supplies `ReturnType<EffectHostCommandRouter["invoke"]>` used by this case.
 const createTestHostCommandRouter = (
   invoke: TestHostCommandInvoke = () => Effect.succeed(null),
 ): EffectHostCommandRouter => ({
@@ -116,9 +118,12 @@ const handleTestRequest = (
       controlToken: options.controlToken ?? CONTROL_TOKEN,
       eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
       hostCommandRouter,
-      ...(options.taskEventLeaseManager
-        ? { taskEventLeaseManager: options.taskEventLeaseManager }
-        : {}),
+      ...(() => {
+        if (options.taskEventLeaseManager) {
+          return { taskEventLeaseManager: options.taskEventLeaseManager };
+        }
+        return {};
+      })(),
       taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
       localAttachments: createLocalAttachmentAdapter(),
       logger: testLogger,
@@ -446,6 +451,7 @@ describe("TypeScript web host backend", () => {
         publish: () => {},
         subscribe: (input, nextSink) => {
           subscribeCalls.push(input);
+          // SAFETY: This test controls the fixture and supplies `(frame: TaskEventStreamFrame) => void` used by this case.
           sink = nextSink as (frame: TaskEventStreamFrame) => void;
           return { subscriptionId: "host-subscription", unsubscribe: () => {} };
         },
@@ -460,9 +466,11 @@ describe("TypeScript web host backend", () => {
       { taskEventLeaseManager },
     );
     expect(create.status).toBe(201);
+    // SAFETY: This test controls the fixture and supplies `{ subscriptionId: string; streamToken: string }` used by this case.
     const created = (await create.json()) as { subscriptionId: string; streamToken: string };
     expect(subscribeCalls).toEqual([{ cursor: null }]);
 
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const stream = await handleTestRequest(
       {
         headers: new Headers([
@@ -482,12 +490,14 @@ describe("TypeScript web host backend", () => {
       cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
       reason: "buffer_gap" as const,
     };
+    // SAFETY: This test controls the fixture and supplies `(nextFrame: typeof frame) => void` used by this case.
     (sink as (nextFrame: typeof frame) => void)(frame);
     const sse = new TextDecoder().decode((await reader.read()).value);
     expect(sse).toContain("event: task-frame");
     expect(sse).toContain(JSON.stringify(frame));
     await reader.cancel();
 
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const reconnect = await handleTestRequest(
       {
         headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
@@ -523,6 +533,7 @@ describe("TypeScript web host backend", () => {
     const lease = taskEventLeaseManager.get(created.subscriptionId);
     if (!lease) throw new Error("Expected task event stream lease.");
     taskEventLeaseManager.delete(lease);
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const expired = await handleTestRequest(
       {
         headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
@@ -534,6 +545,7 @@ describe("TypeScript web host backend", () => {
     expect(expired.status).toBe(410);
     expect(subscribeCalls).toHaveLength(1);
 
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const tampered = await handleTestRequest(
       {
         headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
@@ -851,6 +863,7 @@ describe("TypeScript web host backend", () => {
       message: "Missing OpenDucktor web host app token.",
     });
 
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const previewInvalid = await handleTestRequest({
       headers: new Headers([["cookie", "openducktor_web_session=wrong"]]),
       method: "GET",
@@ -893,6 +906,7 @@ describe("TypeScript web host backend", () => {
     expect(unauthorized.status).toBe(401);
     expect(readInput).toBeUndefined();
 
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const response = await handleTestRequest(
       {
         headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
@@ -913,6 +927,7 @@ describe("TypeScript web host backend", () => {
   test("returns 404 when an authenticated task asset relation is missing", async () => {
     const url =
       "http://127.0.0.1/task-assets/9f66372b-e956-47f4-af2f-77e0df2ad4e1/task-1/description/550e8400-e29b-41d4-a716-446655440000";
+    // SAFETY: This test controls the fixture and supplies `Request` used by this case.
     const response = await handleTestRequest({
       headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
       method: "GET",

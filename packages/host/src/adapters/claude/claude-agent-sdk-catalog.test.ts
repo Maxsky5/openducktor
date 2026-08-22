@@ -152,6 +152,7 @@ describe("toClaudeSlashCommandCatalog", () => {
   });
 
   test("maps Claude slash commands into OpenDucktor catalogs", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(
       toClaudeSlashCommandCatalog([
         {

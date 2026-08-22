@@ -31,6 +31,7 @@ type GlobalEventPayload = TestGlobalEventPayload;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 
+// SAFETY: This test controls the fixture and supplies `SubagentPart` used by this case.
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
     .filter(
@@ -39,6 +40,7 @@ const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
     )
     .map((event) => event.part as SubagentPart);
 
+// SAFETY: This test controls the fixture and supplies `Event` used by this case.
 const assistantRoleEvent = (messageId: string): Event =>
   ({
     type: "message.updated",
@@ -49,8 +51,9 @@ const assistantRoleEvent = (messageId: string): Event =>
         sessionID: "external-session-1",
       },
     },
-  }) as unknown as Event;
+  }) as Event;
 
+// SAFETY: This test controls the fixture and supplies `Event` used by this case.
 const assistantSubtaskEvent = (input: {
   messageId: string;
   partId: string;
@@ -69,8 +72,9 @@ const assistantSubtaskEvent = (input: {
         description: input.description,
       },
     },
-  }) as unknown as Event;
+  }) as Event;
 
+// SAFETY: This test controls the fixture and supplies `Event` used by this case.
 const assistantTaskToolEvent = (input: {
   messageId: string;
   partId: string;
@@ -99,7 +103,7 @@ const assistantTaskToolEvent = (input: {
         },
       },
     },
-  }) as unknown as Event;
+  }) as Event;
 
 const childPermissionEvent = (childSessionId: string): Event =>
   permissionAskedEvent({
@@ -152,6 +156,7 @@ const syncAssistantSubtaskEvent = (input: {
   }) satisfies SyncEventMessagePartUpdated;
 
 const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): GlobalEventPayload => {
+  // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
   return {
     type: "sync",
     id: `sync-${childSessionId}`,
@@ -177,7 +182,7 @@ const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): Glob
         },
       },
     },
-  } as unknown as GlobalEventPayload;
+  } as GlobalEventPayload;
 };
 
 const syncChildSessionUpdatedEvent = (childSessionId: string): SyncEventSessionUpdated =>
@@ -215,6 +220,7 @@ const syncChildSessionDeletedEvent = (
     },
   }) satisfies SyncEventSessionDeleted;
 
+// SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
 const malformedSyncLifecycleDataEvent = (): GlobalEventPayload =>
   ({
     type: "sync",
@@ -226,7 +232,7 @@ const malformedSyncLifecycleDataEvent = (): GlobalEventPayload =>
       aggregateID: "external-child-session",
       data: null,
     },
-  }) as unknown as GlobalEventPayload;
+  }) as GlobalEventPayload;
 
 const childSessionDeletedEvent = (childSessionId: string): EventSessionDeleted =>
   ({
@@ -255,6 +261,7 @@ const makeLiveClient = (): OpencodeClient => {
     properties: {},
   } satisfies Extract<GlobalEventPayload, { type: "server.connected" }>;
 
+  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   return {
     global: {
       event: async (options?: { signal?: AbortSignal }) => {
@@ -273,7 +280,7 @@ const makeLiveClient = (): OpencodeClient => {
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  } as OpencodeClient;
 };
 
 const runRuntimeEventTransport = async (
@@ -306,7 +313,12 @@ const runRuntimeEventTransport = async (
       emit: (_externalSessionId, event) => {
         emitted.push(event);
       },
-      ...(options?.logEvent ? { logEvent: options.logEvent } : {}),
+      ...(() => {
+        if (options?.logEvent) {
+          return { logEvent: options.logEvent };
+        }
+        return {};
+      })(),
     });
   }
 
@@ -327,7 +339,7 @@ describe("session registry runtime event transport", () => {
     const admission = waitForUserMessageAdmission(session, "message-1");
     const settledAdmission = admission.promise.then(
       () => null,
-      (error: unknown) => error,
+      (cause: unknown) => cause,
     );
 
     await releaseSessionRuntime(session, sessions, runtimeEventTransports);
@@ -338,6 +350,7 @@ describe("session registry runtime event transport", () => {
   });
 
   test("keeps other sessions live after one session receives an unsupported status", async () => {
+    // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
     const emitted = await runRuntimeEventTransport(
       [
         {
@@ -347,7 +360,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-1",
             status: { type: "reconnect" },
           },
-        } as unknown as GlobalEventPayload,
+        } as GlobalEventPayload,
         {
           id: "event-status-external-session-2",
           type: "session.status",
@@ -355,7 +368,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-2",
             status: { type: "busy" },
           },
-        } as unknown as GlobalEventPayload,
+        } as GlobalEventPayload,
       ],
       { externalSessionIds: ["external-session-1", "external-session-2"] },
     );
@@ -376,6 +389,7 @@ describe("session registry runtime event transport", () => {
   });
 
   test("attributes a subscriber projection failure to that subscriber", async () => {
+    // SAFETY: This test drives the failure path that supplies `GlobalEventPayload` before this assertion.
     const emitted = await runRuntimeEventTransport(
       [
         {
@@ -385,7 +399,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-1",
             status: { type: "busy" },
           },
-        } as unknown as GlobalEventPayload,
+        } as GlobalEventPayload,
       ],
       {
         externalSessionIds: ["external-session-1", "external-session-2"],
@@ -408,13 +422,14 @@ describe("session registry runtime event transport", () => {
   test("terminates runtime observation when an event failure has no safe session owner", async () => {
     const terminalFailures: Error[] = [];
 
+    // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
     await expect(
       runRuntimeEventTransport(
         [
           {
             type: "session.created",
             properties: { info: {} },
-          } as unknown as GlobalEventPayload,
+          } as GlobalEventPayload,
         ],
         {
           externalSessionIds: ["external-session-1", "external-session-2"],

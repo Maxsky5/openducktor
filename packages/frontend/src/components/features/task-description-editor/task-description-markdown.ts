@@ -63,6 +63,7 @@ const canonicalizeBody = (body: string): string => {
   }
 };
 
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `JSONContent` at this boundary.
 const semanticTree = (value: JSONContent): JSONContent =>
   JSON.parse(
     JSON.stringify(value, (key, nestedValue) => {

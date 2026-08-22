@@ -41,8 +41,9 @@ const inferredClaudeAgentModelSelectionSchema = z.object({
   variant: optionalFromNullable(nonEmptyStringSchema),
   profileId: optionalFromNullable(nonEmptyStringSchema),
 });
+// SAFETY: The runtime adapter builds this value from the contract fields required by `z.ZodType<ClaudeAgentModelSelection>`.
 export const claudeAgentModelSelectionSchema =
-  inferredClaudeAgentModelSelectionSchema as unknown as z.ZodType<ClaudeAgentModelSelection>;
+  inferredClaudeAgentModelSelectionSchema as z.ZodType<ClaudeAgentModelSelection>;
 
 export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
   runtimeKind: claudeRuntimeKindSchema,

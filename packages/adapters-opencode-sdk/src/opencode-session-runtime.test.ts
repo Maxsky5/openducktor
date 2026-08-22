@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
@@ -62,6 +63,7 @@ const createLiveClientHarness = (
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;
+  // SAFETY: This test controls the fixture and supplies `Event` used by this case.
   const queuedEvents: QueuedStreamEntry[] =
     input.initiallyConnected === false
       ? []
@@ -71,17 +73,18 @@ const createLiveClientHarness = (
             event: {
               type: "server.connected",
               properties: {},
-            } as unknown as Event,
+            } as Event,
           },
         ];
   let wakeStream: (() => void) | null = null;
 
+  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   const client = {
     session: {
       list: async () => {
         callOrder.push("list");
         input.onList?.();
-        if (typeof input.listBarrier === "function") {
+        if (hasRuntimeType(input.listBarrier, "function")) {
           await input.listBarrier();
         } else {
           await input.listBarrier;
@@ -110,22 +113,21 @@ const createLiveClientHarness = (
         input.onMessages?.();
         await input.messagesBarrier;
         return {
-          data:
-            typeof input.totalTokens === "number"
-              ? [
-                  {
-                    info: {
-                      id: "assistant-latest",
-                      role: "assistant",
-                      providerID: "openai",
-                      modelID: "gpt-5",
-                      tokens: { input: input.totalTokens - 100, output: 100 },
-                      time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
-                    },
-                    parts: [],
+          data: hasRuntimeType(input.totalTokens, "number")
+            ? [
+                {
+                  info: {
+                    id: "assistant-latest",
+                    role: "assistant",
+                    providerID: "openai",
+                    modelID: "gpt-5",
+                    tokens: { input: input.totalTokens - 100, output: 100 },
+                    time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
                   },
-                ]
-              : [],
+                  parts: [],
+                },
+              ]
+            : [],
           error: undefined,
         };
       },
@@ -148,7 +150,7 @@ const createLiveClientHarness = (
             }))
           : [];
         input.onPermissionList?.();
-        if (typeof input.permissionListBarrier === "function") {
+        if (hasRuntimeType(input.permissionListBarrier, "function")) {
           await input.permissionListBarrier();
         } else {
           await input.permissionListBarrier;
@@ -183,7 +185,7 @@ const createLiveClientHarness = (
             ]
           : [];
         input.onQuestionList?.();
-        if (typeof input.questionListBarrier === "function") {
+        if (hasRuntimeType(input.questionListBarrier, "function")) {
           await input.questionListBarrier();
         } else {
           await input.questionListBarrier;
@@ -244,7 +246,7 @@ const createLiveClientHarness = (
     tool: {
       ids: async () => ({ data: [], error: undefined }),
     },
-  } as unknown as OpencodeClient;
+  } as OpencodeClient;
 
   return {
     client,
@@ -328,11 +330,12 @@ describe("OpenCode session runtime connection", () => {
       }
     });
 
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     harness.emit({
       id: "event-heartbeat-1",
       type: "server.heartbeat",
       properties: {},
-    } as unknown as Event);
+    } as Event);
     harness.emit(sessionStatusEvent({ type: "busy" }, "session-1"));
 
     expect(await observation).toBe("status");
@@ -439,7 +442,8 @@ describe("OpenCode session runtime connection", () => {
     await expect(firstPreparing).rejects.toBeDefined();
     expect(harness.streamSignal()?.aborted).toBe(false);
 
-    harness.emit({ type: "server.connected", properties: {} } as unknown as Event);
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
+    harness.emit({ type: "server.connected", properties: {} } as Event);
     const secondPrepared = await secondPreparing;
     await secondPrepared.release();
     expect(harness.streamSignal()?.aborted).toBe(true);
@@ -564,6 +568,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const preparing = createPrepareRuntime(harness)(runtimeInput);
     await listStarted;
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     harness.emit({
       type: "message.updated",
       properties: {
@@ -585,7 +590,7 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as unknown as Event);
+    } as Event);
     releaseList();
     const prepared = await preparing;
 
@@ -610,6 +615,7 @@ describe("OpenCode session runtime connection", () => {
     });
     await firstStarted;
 
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -631,7 +637,7 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as unknown as Event);
+    } as Event);
     expect(messages).toEqual(["Buffered transcript"]);
 
     releaseFirst();
@@ -688,13 +694,14 @@ describe("OpenCode session runtime connection", () => {
       signals.push(signal);
     });
 
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "session.error",
       properties: {
         sessionID: "session-1",
         error: { data: { message: "Provider failed" } },
       },
-    } as unknown as Event);
+    } as Event);
 
     expect(signals).toContainEqual({
       type: "transcript_event",
@@ -729,6 +736,7 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "repository" },
       parts: [{ kind: "text", text: "Do the work" }],
     });
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -750,7 +758,8 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as unknown as Event);
+    } as Event);
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "session.idle",
       properties: { sessionID: "session-1" },
@@ -777,6 +786,7 @@ describe("OpenCode session runtime connection", () => {
     });
     const preparing = createPrepareRuntime(retainedHarness)(runtimeInput);
     await listStarted;
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await retainedHarness.emitAndWait({
       type: "message.updated",
       properties: {

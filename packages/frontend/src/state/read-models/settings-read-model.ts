@@ -1,5 +1,5 @@
 import type { RepoDevServerScript, ReusablePrompt } from "@openducktor/contracts";
-import { REUSABLE_PROMPT_TRIGGER_PATTERN } from "@openducktor/contracts";
+import { REUSABLE_PROMPT_TRIGGER_PATTERN, hasRuntimeType } from "@openducktor/contracts";
 
 type HookDraftInput = {
   preStart: string[];
@@ -33,7 +33,10 @@ type RepoScriptDraftInput = {
 export const parseHookLines = (value: string): string[] => value.split("\n");
 
 export const createReusablePromptDraft = (): ReusablePrompt => {
-  if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
+  if (
+    hasRuntimeType(globalThis.crypto, "undefined") ||
+    !hasRuntimeType(crypto.randomUUID, "function")
+  ) {
     throw new Error(
       "Cannot create a reusable prompt because random UUID generation is unavailable.",
     );
@@ -50,9 +53,7 @@ export const createReusablePromptDraft = (): ReusablePrompt => {
 const isValidReusablePromptName = (name: string): boolean =>
   REUSABLE_PROMPT_TRIGGER_PATTERN.test(name.trim());
 
-export const buildReusablePromptValidationErrors = (
-  prompts: ReusablePrompt[],
-): ReusablePromptValidationMap => {
+export const buildReusablePromptValidationErrors = (prompts: ReusablePrompt[]) => {
   const errorsById: ReusablePromptValidationMap = {};
   const promptIdsByNormalizedName = new Map<string, string[]>();
 
@@ -94,7 +95,7 @@ export const buildReusablePromptValidationErrors = (
     }
   }
 
-  return errorsById;
+  return errorsById satisfies ReusablePromptValidationMap;
 };
 
 export const countReusablePromptValidationErrors = (
@@ -207,17 +208,15 @@ export const normalizeHooks = (hooks: HookDraftInput): HookDraftInput => ({
   postComplete: normalizeHookCommands(hooks.postComplete),
 });
 
-export const normalizeRepoScripts = (
-  input: RepoScriptDraftInput,
-): {
-  hooks: HookDraftInput;
-  devServers: RepoDevServerDraftInput[];
-} => {
+export const normalizeRepoScripts = (input: RepoScriptDraftInput) => {
   const normalizedHooks = normalizeHooks(input.hooks);
   const normalizedDevServers = normalizeDevServers(input.devServers);
 
   return {
     hooks: normalizedHooks,
     devServers: normalizedDevServers,
+  } satisfies {
+    hooks: HookDraftInput;
+    devServers: RepoDevServerDraftInput[];
   };
 };

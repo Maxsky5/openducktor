@@ -14,21 +14,25 @@ export type TaskDescriptionAssetOperations = {
   discardStaged(workspaceId: string, assetIds: string[]): Promise<void>;
 };
 
+const isFileReaderText = (value: FileReader["result"]): value is string =>
+  typeof value === "string";
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error ?? new Error("Could not read the image."));
     reader.onload = () => {
-      if (typeof reader.result !== "string") {
+      const result = reader.result;
+      if (!isFileReaderText(result)) {
         reject(new Error("Could not read the image."));
         return;
       }
-      const comma = reader.result.indexOf(",");
+      const comma = result.indexOf(",");
       if (comma < 0) {
         reject(new Error("Could not encode the image."));
         return;
       }
-      resolve(reader.result.slice(comma + 1));
+      resolve(result.slice(comma + 1));
     };
     reader.readAsDataURL(file);
   });

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { RefObject } from "react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import {
@@ -123,8 +124,9 @@ export const deriveTextSelectionTargetAfterInput = (
   }
 
   if (inputType?.startsWith("insert")) {
-    const offset =
-      typeof data === "string" ? rememberedTarget.offset + data.length : segment.text.length;
+    const offset = hasRuntimeType(data, "string")
+      ? rememberedTarget.offset + data.length
+      : segment.text.length;
     return {
       segmentId: segment.id,
       offset: clampTextSelectionOffset(segment.text, offset),
@@ -297,7 +299,7 @@ const usePendingFocus = (editorRef: RefObject<HTMLDivElement | null>) => {
     }
 
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
+    if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
       return;
     }
 
@@ -310,7 +312,7 @@ const usePendingFocus = (editorRef: RefObject<HTMLDivElement | null>) => {
 
     return () => {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (typeof cancelAnimationFrameFn === "function") {
+      if (hasRuntimeType(cancelAnimationFrameFn, "function")) {
         cancelAnimationFrameFn(rafId);
       }
     };

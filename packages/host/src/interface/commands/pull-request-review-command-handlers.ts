@@ -3,17 +3,20 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 import { optionalString, requireRecord, requireStringPreservingWhitespace } from "./command-inputs";
 import type { JsonValue } from "@openducktor/contracts";
 
-const parsePullRequestReviewContextInput = (
-  args: Record<string, JsonValue> | undefined,
-): {
-  repoPath: string;
-  taskId?: string;
-} => {
+const parsePullRequestReviewContextInput = (args: Record<string, JsonValue> | undefined) => {
   const record = requireRecord(args, "pull_request_review_context_get input");
   const taskId = optionalString(record.taskId, "taskId");
   return {
     repoPath: requireStringPreservingWhitespace(record.repoPath, "repoPath"),
-    ...(taskId ? { taskId } : {}),
+    ...(() => {
+      if (taskId) {
+        return { taskId };
+      }
+      return {};
+    })(),
+  } satisfies {
+    repoPath: string;
+    taskId?: string;
   };
 };
 

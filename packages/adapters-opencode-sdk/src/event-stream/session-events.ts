@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
@@ -244,8 +245,18 @@ const resolveSubagentInputRouting = (
 
   return {
     childExternalSessionId,
-    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
-    ...(subagentCorrelationKey ? { subagentCorrelationKey } : {}),
+    ...(() => {
+      if (parentExternalSessionId) {
+        return { parentExternalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (subagentCorrelationKey) {
+        return { subagentCorrelationKey };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -322,8 +333,18 @@ const handleQuestionAsked = (
       header: question.header,
       question: question.question,
       options: question.options,
-      ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
-      ...(question.custom !== undefined ? { custom: question.custom } : {}),
+      ...(() => {
+        if (question.multiple !== undefined) {
+          return { multiple: question.multiple };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (question.custom !== undefined) {
+          return { custom: question.custom };
+        }
+        return {};
+      })(),
     })),
   };
   runtime.emit(runtime.externalSessionId, questionEvent);
@@ -446,11 +467,12 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
   }
 
   const normalizedChildExternalSessionId = childExternalSessionId.trim();
+  // SAFETY: The preceding runtime guard establishes `{ time?: { created?: unknown } }` before this assertion.
   const createdAtValue =
-    info && typeof info === "object" && info !== null
+    info && hasRuntimeType(info, "object") && info !== null
       ? (info as { time?: { created?: unknown } }).time?.created
       : undefined;
-  const createdAtMs = typeof createdAtValue === "number" ? createdAtValue : undefined;
+  const createdAtMs = hasRuntimeType(createdAtValue, "number") ? createdAtValue : undefined;
   const existingSessionBinding = runtime.session.pendingSubagentSessionsByExternalSessionId.get(
     normalizedChildExternalSessionId,
   );
@@ -460,7 +482,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       runtime.session.pendingSubagentSessionsByExternalSessionId.size + 1,
   };
   const nextCreatedAtMs = createdAtMs ?? existingSessionBinding?.createdAtMs;
-  if (typeof nextCreatedAtMs === "number") {
+  if (hasRuntimeType(nextCreatedAtMs, "number")) {
     nextSessionBinding.createdAtMs = nextCreatedAtMs;
   }
   runtime.session.pendingSubagentSessionsByExternalSessionId.set(

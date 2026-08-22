@@ -32,6 +32,7 @@ const taskCard = (): TaskCard => ({
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 });
+// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
 const fakeTaskService = (
   overrides: Partial<TaskServiceWithMutationProgress>,
 ): TaskServiceWithMutationProgress =>

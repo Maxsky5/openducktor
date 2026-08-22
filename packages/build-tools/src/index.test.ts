@@ -58,6 +58,7 @@ describe("build tools", () => {
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toBe("Failing command failed with exit code 7.");
   });
 });

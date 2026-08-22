@@ -31,7 +31,7 @@ const invalidPatch = (message: string, details?: Record<string, JsonValue>): Hos
     details,
   });
 
-const parseHunkRange = (input: string): { start: number; count: number } => {
+const parseHunkRange = (input: string) => {
   const trimmed = input.trim();
   const [startRaw, countRaw = "1"] = trimmed.split(",", 2);
   const start = Number.parseInt(startRaw ?? "", 10);
@@ -43,7 +43,7 @@ const parseHunkRange = (input: string): { start: number; count: number } => {
     throw invalidPatch(`Invalid hunk range count: ${trimmed}`, { range: trimmed });
   }
 
-  return { start, count };
+  return { start, count } satisfies { start: number; count: number };
 };
 
 const parseHunkSpec = (line: string): HunkSpec => {
@@ -145,7 +145,12 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
   return {
     header,
     hunks,
-    ...(renamePaths ? { renamePaths } : {}),
+    ...(() => {
+      if (renamePaths) {
+        return { renamePaths };
+      }
+      return {};
+    })(),
   };
 };
 

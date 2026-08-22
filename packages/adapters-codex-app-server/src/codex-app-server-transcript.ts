@@ -47,7 +47,7 @@ import {
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -106,12 +106,12 @@ const codexTurnTimestampSeconds = (
 ): number | null => {
   const [camelKey, snakeKey] = keys;
   const camelValue = turn[camelKey];
-  if (typeof camelValue === "number") {
+  if (hasRuntimeType(camelValue, "number")) {
     return camelValue;
   }
 
   const snakeValue = turn[snakeKey];
-  return typeof snakeValue === "number" ? snakeValue : null;
+  return hasRuntimeType(snakeValue, "number") ? snakeValue : null;
 };
 
 export const timestampFromCodexTurn = (
@@ -161,7 +161,7 @@ const codexAgentMessageText = (item: Record<string, JsonValue>): string => {
   }
   const contentText = arrayFromUnknown(item.content)
     .map((entry) => {
-      if (typeof entry === "string") {
+      if (hasRuntimeType(entry, "string")) {
         return entry;
       }
       return isPlainObject(entry)
@@ -220,7 +220,7 @@ export const codexTurnItemsFromThreadRead = (
     const completedAtSeconds = codexTurnTimestampSeconds(turn, ["completedAt", "completed_at"]);
     const durationMs =
       extractNumberField(turn, ["durationMs", "duration_ms"]) ??
-      (typeof startedAtSeconds === "number" && typeof completedAtSeconds === "number"
+      (hasRuntimeType(startedAtSeconds, "number") && hasRuntimeType(completedAtSeconds, "number")
         ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
         : null);
     const modelId = extractStringField(turn, ["model", "modelId", "model_id"]);
@@ -233,7 +233,12 @@ export const codexTurnItemsFromThreadRead = (
         ? {
             providerId,
             modelId,
-            ...(variant ? { variant } : {}),
+            ...(() => {
+              if (variant) {
+                return { variant };
+              }
+              return {};
+            })(),
           }
         : undefined;
     return items.map((item) => {
@@ -258,13 +263,23 @@ export const codexTurnItemsFromThreadRead = (
         turnIndex,
         turnId,
         timestamp,
-        ...(timestampIsApproximate ? { timestampIsApproximate: true as const } : {}),
+        ...(() => {
+          if (timestampIsApproximate) {
+            return { timestampIsApproximate: true as const };
+          }
+          return {};
+        })(),
         isFinalAgentMessage: itemIsFinalAgentMessage,
         turnTiming:
-          itemIsFinalAgentMessage && typeof durationMs === "number" && durationMs > 0
+          itemIsFinalAgentMessage && hasRuntimeType(durationMs, "number") && durationMs > 0
             ? { durationMs }
             : null,
-        ...(model ? { model } : {}),
+        ...(() => {
+          if (model) {
+            return { model };
+          }
+          return {};
+        })(),
       };
     });
   });
@@ -285,9 +300,9 @@ export const toHistoryMessage = (
   const messageId = codexItemId(item, fallbackId);
   const messageTimestamp =
     timestamp ??
-    (typeof item.timestamp === "string"
+    (hasRuntimeType(item.timestamp, "string")
       ? item.timestamp
-      : typeof item.createdAt === "string"
+      : hasRuntimeType(item.createdAt, "string")
         ? item.createdAt
         : new Date().toISOString());
   if (codexItemTypeMatches(item, "userMessage") || item.role === "user") {
@@ -307,7 +322,12 @@ export const toHistoryMessage = (
           : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     };
   }
   if (codexItemTypeMatches(item, "agentMessage") || item.role === "assistant") {
@@ -317,14 +337,39 @@ export const toHistoryMessage = (
       role: "assistant",
       timestamp: messageTimestamp,
       text,
-      ...(isFinalAgentMessage && turnTiming ? { durationMs: turnTiming.durationMs } : {}),
-      ...(isFinalAgentMessage && tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
+      ...(() => {
+        if (isFinalAgentMessage && turnTiming) {
+          return { durationMs: turnTiming.durationMs };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (isFinalAgentMessage && tokenUsage) {
+          return codexTokenUsageHistoryFields(tokenUsage);
+        }
+        return {};
+      })(),
       parts: toHistoryParts(item, messageId, text, {
-        ...(isFinalAgentMessage ? { isFinalAgentMessage } : {}),
-        ...(tokenUsage ? { tokenUsage } : {}),
+        ...(() => {
+          if (isFinalAgentMessage) {
+            return { isFinalAgentMessage };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (tokenUsage) {
+            return { tokenUsage };
+          }
+          return {};
+        })(),
         includeTextFallback: false,
       }),
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     };
   }
   const parts = toStreamPart(withCodexItemCompletedAtMs(item), messageId, messageId);
@@ -335,7 +380,12 @@ export const toHistoryMessage = (
       timestamp: messageTimestamp,
       text: "",
       parts,
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     };
   }
   return null;
@@ -345,9 +395,12 @@ export const codexTokenUsageHistoryFields = (
   tokenUsage: CodexTokenUsageTotals,
 ): CodexHistoryTokenUsageFields => ({
   totalTokens: tokenUsage.totalTokens,
-  ...(typeof tokenUsage.contextWindow === "number"
-    ? { contextWindow: tokenUsage.contextWindow }
-    : {}),
+  ...(() => {
+    if (hasRuntimeType(tokenUsage.contextWindow, "number")) {
+      return { contextWindow: tokenUsage.contextWindow };
+    }
+    return {};
+  })(),
 });
 
 const toHistoryParts = (
@@ -400,7 +453,12 @@ export const terminalHistoryPart = (
   partId: `${messageId}-finish`,
   phase: "finish",
   reason: "stop",
-  ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
+  ...(() => {
+    if (tokenUsage) {
+      return codexTokenUsageHistoryFields(tokenUsage);
+    }
+    return {};
+  })(),
 });
 
 const firstPlainObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
@@ -408,7 +466,7 @@ const firstPlainObject = (value: JsonValue | undefined): Record<string, JsonValu
 };
 
 const parseObjectString = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return null;
   }
   try {
@@ -445,9 +503,17 @@ const commandActionInput = (
   action: Record<string, JsonValue> | null,
   command: string,
   cwd: string | null,
-): Record<string, JsonValue> => {
+) => {
   if (!action) {
-    return { command, ...(cwd ? { cwd } : {}) };
+    return {
+      command,
+      ...(() => {
+        if (cwd) {
+          return { cwd };
+        }
+        return {};
+      })(),
+    } satisfies Record<string, JsonValue>;
   }
   const actionCommand = extractStringField(action, ["command"]) ?? command;
   const tool = commandActionToolName(action);
@@ -466,16 +532,41 @@ const commandActionInput = (
   const name = extractStringField(action, ["name"]);
   return {
     command: actionCommand,
-    ...(cwd ? { cwd } : {}),
-    ...(path ? { path } : {}),
-    ...(query ? { query } : {}),
-    ...(pattern ? { pattern } : {}),
-    ...(name ? { name } : {}),
-  };
+    ...(() => {
+      if (cwd) {
+        return { cwd };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (path) {
+        return { path };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (query) {
+        return { query };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (pattern) {
+        return { pattern };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (name) {
+        return { name };
+      }
+      return {};
+    })(),
+  } satisfies Record<string, JsonValue>;
 };
 
 const codexCommandText = (value: JsonValue | undefined): string | null => {
-  if (typeof value === "string" && value.trim().length > 0) {
+  if (hasRuntimeType(value, "string") && value.trim().length > 0) {
     return value;
   }
   const argv = Array.isArray(value)
@@ -494,7 +585,7 @@ const codexObjectInput = (value: JsonValue | undefined): Record<string, JsonValu
   if (isPlainObject(value)) {
     return value;
   }
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return undefined;
   }
   try {
@@ -509,7 +600,7 @@ const codexToolResultText = (value: JsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return value;
   }
   const content = Array.isArray(value)
@@ -519,7 +610,7 @@ const codexToolResultText = (value: JsonValue | undefined): string | null => {
       : [];
   const text = content
     .map((entry) => {
-      if (typeof entry === "string") {
+      if (hasRuntimeType(entry, "string")) {
         return entry;
       }
       if (!isPlainObject(entry)) {
@@ -565,8 +656,18 @@ const webSearchActionInput = (
       return undefined;
     }
     return {
-      ...(pattern ? { pattern } : {}),
-      ...(url ? { url } : {}),
+      ...(() => {
+        if (pattern) {
+          return { pattern };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (url) {
+          return { url };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -602,7 +703,7 @@ export const extractCodexTokenUsageTotals = (
   const totalTokens =
     extractNumberField(last, ["totalTokens", "total_tokens"]) ??
     extractNumberField(usage, ["totalTokens", "total_tokens"]);
-  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+  if (!hasRuntimeType(totalTokens, "number") || totalTokens <= 0) {
     return null;
   }
   const contextWindow = extractNumberField(usage, [
@@ -613,7 +714,12 @@ export const extractCodexTokenUsageTotals = (
   ]);
   return {
     totalTokens,
-    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
+    ...(() => {
+      if (hasRuntimeType(contextWindow, "number") && contextWindow > 0) {
+        return { contextWindow };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -633,7 +739,15 @@ const syntheticToolPart = ({
   ...part
 }: Extract<AgentStreamPart, { kind: "tool" }>): Extract<AgentStreamPart, { kind: "tool" }> => ({
   ...part,
-  metadata: { ...(isPlainObject(metadata) ? metadata : {}), syntheticCodexToolPart: true },
+  metadata: {
+    ...(() => {
+      if (isPlainObject(metadata)) {
+        return metadata;
+      }
+      return {};
+    })(),
+    syntheticCodexToolPart: true,
+  },
 });
 
 const normalizedCodexToolPart = (input: NormalizedCodexToolInvocation): AgentStreamPart[] => {
@@ -736,7 +850,12 @@ const codexFileChangeStreamParts = (
     title: "File changes",
     status: error ? "error" : statusFromCodexStatus(value.status),
     preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
-    ...(fileDiffsResult.error ? {} : diff ? { input: { patch: diff }, output: diff } : {}),
+    ...(() => {
+      if (fileDiffsResult.error) {
+        return {};
+      }
+      return diff ? { input: { patch: diff }, output: diff } : {};
+    })(),
     error,
     fileDiffs: fileDiffsResult.fileDiffs,
     metadata: { codexItem: value },
@@ -760,11 +879,24 @@ const codexMcpToolCallStreamParts = (
     callId: partId,
     rawToolName: codexNamespacedToolName(server, tool),
     status: error ? "error" : statusFromCodexStatus(value.status),
-    ...(args ? { input: args } : {}),
+    ...(() => {
+      if (args) {
+        return { input: args };
+      }
+      return {};
+    })(),
     output: error ? null : output,
     error,
     ...codexToolTimingFields(value, timingOptions),
-    metadata: { codexItem: value, ...(server ? { server } : {}) },
+    metadata: {
+      codexItem: value,
+      ...(() => {
+        if (server) {
+          return { server };
+        }
+        return {};
+      })(),
+    },
   });
 };
 
@@ -792,8 +924,18 @@ const codexCollabAgentToolCallStreamParts = (
       toolType: "generic",
       title: `Collab ${tool}`,
       status: statusFromCodexStatus(value.status),
-      ...(prompt ? { input: { prompt } } : {}),
-      ...(receivers.length > 0 ? { output: receivers.join("\n") } : {}),
+      ...(() => {
+        if (prompt) {
+          return { input: { prompt } };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (receivers.length > 0) {
+          return { output: receivers.join("\n") };
+        }
+        return {};
+      })(),
       metadata: { codexItem: value },
     }),
   ];
@@ -835,7 +977,7 @@ const codexDynamicToolCallStreamParts = (
   const resultPayload = codexDynamicToolDisplayPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
-  const success = typeof value.success === "boolean" ? value.success : true;
+  const success = hasRuntimeType(value.success, "boolean") ? value.success : true;
   const failed = !success || error !== null;
   return normalizedCodexToolPart({
     messageId,
@@ -843,7 +985,12 @@ const codexDynamicToolCallStreamParts = (
     callId: partId,
     rawToolName: rawTool,
     status: failed ? "error" : statusFromCodexStatus(value.status),
-    ...(input ? { input } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
     output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
     fileDiffs,
@@ -868,9 +1015,24 @@ const codexWebSearchStreamParts = (
     callId: partId,
     rawToolName: "webSearch",
     status: "completed",
-    ...(input ? { input } : {}),
-    ...(output ? { output } : {}),
-    ...(input ? { preview: Object.values(input).join(" ") } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (output) {
+        return { output };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input) {
+        return { preview: Object.values(input).join(" ") };
+      }
+      return {};
+    })(),
     ...codexToolTimingFields(value, timingOptions),
     metadata: { codexItem: value },
   });

@@ -48,7 +48,7 @@ export const missingSpecSections = (markdown: string): string[] => {
     });
 };
 
-export const validateSpecMarkdown = (markdown: string): { valid: boolean; missing: string[] } => {
+export const validateSpecMarkdown = (markdown: string) => {
   const missing = missingSpecSections(markdown);
-  return { valid: missing.length === 0, missing };
+  return { valid: missing.length === 0, missing } satisfies { valid: boolean; missing: string[] };
 };

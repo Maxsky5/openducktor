@@ -10,8 +10,10 @@ afterEach(() => {
 describe("diff-ops", () => {
   test("loadSessionDiff parses wrapped diff payloads", async () => {
     const requestedUrls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `typeof fetch` used by this case.
     globalThis.fetch = (async (url: URL | RequestInfo) => {
       requestedUrls.push(url.toString());
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ok: true,
         status: 200,
@@ -43,6 +45,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff parses OpenCode snapshot diff payloads", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -71,6 +74,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff defaults missing OpenCode snapshot diff status to modified", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -98,6 +102,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff keeps modified full-file standard payloads path-only", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -128,6 +133,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff renders added full-file standard payloads as added-file diffs", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -158,6 +164,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff keeps modified full-file snapshot payloads path-only", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -186,6 +193,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff renders added full-file snapshot payloads as added-file diffs", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -215,6 +223,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -224,7 +233,7 @@ describe("diff-ops", () => {
           {
             file: "src/main.ts",
             patch: "@@ -1 +1 @@",
-            additions: Number.NaN,
+            additions: [],
             deletions: 1,
             status: 5,
           },
@@ -237,6 +246,7 @@ describe("diff-ops", () => {
   });
 
   test("loadSessionDiff rejects HTTP failures with status context", async () => {
+    // SAFETY: This test drives the failure path that supplies the asserted shape before this assertion.
     globalThis.fetch = (async () =>
       ({
         ok: false,
@@ -254,8 +264,10 @@ describe("diff-ops", () => {
 
   test("loadFileStatus rejects malformed payloads", async () => {
     const requestedUrls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `typeof fetch` used by this case.
     globalThis.fetch = (async (url: URL | RequestInfo) => {
       requestedUrls.push(url.toString());
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ok: true,
         status: 200,
@@ -271,6 +283,7 @@ describe("diff-ops", () => {
   });
 
   test("loadFileStatus rejects transport errors", async () => {
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async () => {
       throw new Error("socket closed");
     }) as typeof fetch;

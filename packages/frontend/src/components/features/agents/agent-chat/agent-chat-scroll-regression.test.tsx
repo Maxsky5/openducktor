@@ -6,6 +6,7 @@ import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -70,6 +71,7 @@ const triggerResizeObservers = (): void => {
       continue;
     }
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     controller.callback(
       Array.from(controller.observedElements).map((target) => ({
         borderBoxSize: [] as ResizeObserverSize[],
@@ -176,7 +178,8 @@ describe("agent chat scroll regression", () => {
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
+    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
     animationFrameDriver.install();
   });
 
@@ -188,15 +191,18 @@ describe("agent chat scroll regression", () => {
   test("keeps the transcript pinned after returning to bottom and growing the composer", async () => {
     render(<ChatScrollRegressionHarness />);
 
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     const container = screen.getByTestId("messages-container") as HTMLDivElement & {
       scrollTo: (options: ScrollToOptions) => void;
       scrollTop: number;
       scrollHeight: number;
       clientHeight: number;
     };
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement & { scrollHeight: number; }` before this lookup.
     const content = screen.getByTestId("messages-content") as HTMLDivElement & {
       scrollHeight: number;
     };
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = screen.getByTestId("composer") as HTMLTextAreaElement;
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
@@ -265,14 +271,17 @@ describe("agent chat scroll regression", () => {
   test("keeps the transcript pinned after growing the contenteditable composer", async () => {
     render(<ChatEditorScrollRegressionHarness />);
 
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     const container = screen.getByTestId("messages-container") as HTMLDivElement & {
       scrollTop: number;
       scrollHeight: number;
       clientHeight: number;
     };
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement & { scrollHeight: number; }` before this lookup.
     const content = screen.getByTestId("messages-content") as HTMLDivElement & {
       scrollHeight: number;
     };
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     const editor = screen.getByTestId("composer-editor") as HTMLDivElement & {
       scrollHeight: number;
       getBoundingClientRect: () => { height: number };

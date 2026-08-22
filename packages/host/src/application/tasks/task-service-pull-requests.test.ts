@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
@@ -264,11 +265,12 @@ describe("createTaskService pull requests", () => {
   });
   test("detectPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const taskStore = {
       getTask() {
         return Effect.succeed(task({ status: "open" }));
       },
-    } as unknown as TaskStorePort;
+    } as TaskStorePort;
     const service = createTaskService({
       gitPort: createDirectMergeGitPort({ calls }),
       systemCommands: createPullRequestDetectSystemCommands({
@@ -289,6 +291,7 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
+    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
   });
   test("links a pull request by number after fetching provider metadata", async () => {
@@ -1254,9 +1257,10 @@ describe("createTaskService pull requests", () => {
         ]),
       }),
     );
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const resolvedGhChecks = calls.filter(
       (call) =>
-        typeof call === "object" &&
+        hasRuntimeType(call, "object") &&
         call !== null &&
         (call as { type?: unknown }).type === "resolveCommand" &&
         (call as { command?: unknown }).command === "gh",
@@ -3516,6 +3520,7 @@ describe("createTaskService pull requests", () => {
   });
   test("linkMergedPullRequest preserves task policy errors for invalid workflow statuses", async () => {
     const calls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const taskStore = {
       listTasks(input: { repoPath: string }) {
         calls.push({ type: "list", input });
@@ -3529,7 +3534,7 @@ describe("createTaskService pull requests", () => {
           agentSessions: [],
         });
       },
-    } as unknown as TaskStorePort;
+    } as TaskStorePort;
     const service = createTaskService({
       devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({ calls }),
@@ -3554,6 +3559,7 @@ describe("createTaskService pull requests", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
+    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },

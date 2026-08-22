@@ -14,6 +14,7 @@ import {
 describe("Electron terminal IPC", () => {
   test("validates frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
     const terminalService = {
       attach: (input: { attachmentId: string; terminalId: string }) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
@@ -44,6 +45,7 @@ describe("Electron terminal IPC", () => {
 
   test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
     const terminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
@@ -73,6 +75,7 @@ describe("Electron terminal IPC", () => {
 
   test("keeps live attachments during same-document main-frame navigation", async () => {
     const attachments = new Set<string>();
+    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
     const terminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => attachments.add(input.attachmentId)),
@@ -142,6 +145,7 @@ describe("Electron terminal IPC", () => {
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {
     const detached: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
     const terminalService = {
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         Effect.fail(
@@ -204,6 +208,7 @@ describe("Electron terminal IPC", () => {
     });
     const attachments = new Set<string>();
     const operations: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
     const terminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => {

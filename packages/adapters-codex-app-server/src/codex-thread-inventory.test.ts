@@ -11,20 +11,21 @@ const threadListResponse = (
   cwd = "/repo",
   status: Record<string, JsonValue> = { type: "idle" },
   extra: Record<string, JsonValue> = {},
-): unknown => ({
-  data: [
-    {
-      id,
-      cwd,
-      createdAt: 1,
-      updatedAt: 2,
-      preview,
-      status,
-      ...extra,
-    },
-  ],
-  nextCursor: null,
-});
+) =>
+  ({
+    data: [
+      {
+        id,
+        cwd,
+        createdAt: 1,
+        updatedAt: 2,
+        preview,
+        status,
+        ...extra,
+      },
+    ],
+    nextCursor: null,
+  }) satisfies unknown;
 
 const threadReadResponse = (
   id: string,
@@ -32,18 +33,19 @@ const threadReadResponse = (
   status: Record<string, JsonValue> = { type: "idle" },
   turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
   extra: Record<string, JsonValue> = {},
-): unknown => ({
-  thread: {
-    id,
-    cwd,
-    createdAt: 1,
-    updatedAt: 2,
-    preview: "Stored thread",
-    status,
-    turns,
-    ...extra,
-  },
-});
+) =>
+  ({
+    thread: {
+      id,
+      cwd,
+      createdAt: 1,
+      updatedAt: 2,
+      preview: "Stored thread",
+      status,
+      turns,
+      ...extra,
+    },
+  }) satisfies unknown;
 
 describe("CodexThreadInventoryReader", () => {
   test("preserves the Codex thread update timestamp as a lifecycle watermark", () => {
@@ -82,13 +84,14 @@ describe("CodexThreadInventoryReader", () => {
   test("requests interactive and subagent thread sources from Codex", async () => {
     const threadListCalls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
       threadList: async (params: Record<string, JsonValue>) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.refresh(client, "runtime-1");
 
@@ -104,13 +107,14 @@ describe("CodexThreadInventoryReader", () => {
   test("scopes startup inventory reads to the requested working directories and state database", async () => {
     const threadListCalls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({ data: [], nextCursor: null }),
       threadList: async (params: Record<string, JsonValue>) => {
         threadListCalls.push(params);
         return { data: [], nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.readForDirectories(client, "runtime-1", ["/repo", "/repo/worktree"]);
 
@@ -128,6 +132,7 @@ describe("CodexThreadInventoryReader", () => {
   test("reads every parent turn id with summary-only pagination", async () => {
     const calls: Array<Record<string, JsonValue>> = [];
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadTurnsList: async (params: Record<string, JsonValue>) => {
         calls.push(params);
@@ -135,7 +140,7 @@ describe("CodexThreadInventoryReader", () => {
           ? { data: [{ id: "turn-2" }], nextCursor: null }
           : { data: [{ id: "turn-1" }], nextCursor: "page-2" };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const turnIds = await reader.readThreadTurnIds(client, "parent-thread");
 
@@ -160,9 +165,10 @@ describe("CodexThreadInventoryReader", () => {
 
   test("rejects malformed summary turn entries at the pagination boundary", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadTurnsList: async () => ({ data: [null], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(reader.readThreadTurnIds(client, "parent-thread")).rejects.toThrow(
       "Codex thread/turns/list response data[0] must be an object.",
@@ -177,6 +183,7 @@ describe("CodexThreadInventoryReader", () => {
     const refreshedThreads = createDeferred<unknown>();
     const loadedResponses = [firstLoaded, refreshedLoaded];
     const threadResponses = [firstThreads, refreshedThreads];
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       threadLoadedList: () => {
         const response = loadedResponses.shift();
@@ -192,7 +199,7 @@ describe("CodexThreadInventoryReader", () => {
         }
         return response.promise;
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const staleRead = reader.read(client, "runtime-1");
     const refreshedRead = reader.refresh(client, "runtime-1");
@@ -215,6 +222,7 @@ describe("CodexThreadInventoryReader", () => {
     const staleThreads = createDeferred<unknown>();
     let loadedCalls = 0;
     let threadCalls = 0;
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: () => {
         loadedCalls += 1;
@@ -228,7 +236,7 @@ describe("CodexThreadInventoryReader", () => {
           ? staleThreads.promise
           : Promise.resolve(threadListResponse("thread-fresh", "Fresh inventory"));
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const staleRead = reader.readForDirectories(client, "runtime-1", ["/repo"]);
     reader.clearInventory("runtime-1");
@@ -249,6 +257,7 @@ describe("CodexThreadInventoryReader", () => {
     const loaded = createDeferred<unknown>();
     const threads = createDeferred<unknown>();
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: () => {
         calls.push("thread/loaded/list");
@@ -258,7 +267,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/list");
         return threads.promise;
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const firstRefresh = reader.refresh(client, "runtime-1");
     const secondRefresh = reader.refresh(client, "runtime-1");
@@ -275,6 +284,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("applies runtime status updates to cached inventory", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
       threadList: async () =>
@@ -282,7 +292,7 @@ describe("CodexThreadInventoryReader", () => {
           type: "active",
           activeFlags: [],
         }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -293,6 +303,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("extracts Codex subagent parent and label metadata from thread list", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({ data: ["child-thread"], nextCursor: null }),
       threadList: async () =>
@@ -318,7 +329,7 @@ describe("CodexThreadInventoryReader", () => {
             },
           },
         ),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const inventory = await reader.refresh(client, "runtime-1");
 
@@ -339,6 +350,7 @@ describe("CodexThreadInventoryReader", () => {
   test("clears a runtime status override without refetching inventory", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => {
         calls.push("thread/loaded/list");
@@ -351,7 +363,7 @@ describe("CodexThreadInventoryReader", () => {
           activeFlags: [],
         });
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -369,6 +381,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("clears one runtime status override without touching other sessions", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({
         data: ["thread-1", "thread-2"],
@@ -393,7 +406,7 @@ describe("CodexThreadInventoryReader", () => {
         ],
         nextCursor: null,
       }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -408,6 +421,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("clears raw inventory without clearing status overrides", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: async () => ({ data: ["thread-1"], nextCursor: null }),
       threadList: async () =>
@@ -415,7 +429,7 @@ describe("CodexThreadInventoryReader", () => {
           type: "active",
           activeFlags: [],
         }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -430,10 +444,11 @@ describe("CodexThreadInventoryReader", () => {
     const reader = new CodexThreadInventoryReader();
     const loaded = createDeferred<unknown>();
     const threads = createDeferred<unknown>();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: () => loaded.promise,
       threadList: () => threads.promise,
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const inventoryRead = reader.refresh(client, "runtime-1");
     reader.updateThreadStatus("runtime-1", "thread-1", codexThreadStatusSnapshot("idle"));
@@ -472,6 +487,7 @@ describe("CodexThreadInventoryReader", () => {
         ],
       },
     ];
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async (params: Parameters<CodexAppServerClient["threadRead"]>[0]) => {
         calls.push({ method: "thread/read", params });
@@ -481,7 +497,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push({ method: "thread/turns/list", params });
         return { data: pagedTurns, nextCursor: null };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -511,6 +527,7 @@ describe("CodexThreadInventoryReader", () => {
 
   test("uses an empty paginated history instead of stale thread metadata turns", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async () =>
         threadReadResponse("thread-idle", "/repo", { type: "idle" }, [
@@ -528,7 +545,7 @@ describe("CodexThreadInventoryReader", () => {
           },
         ]),
       threadTurnsList: async () => ({ data: [], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -540,10 +557,11 @@ describe("CodexThreadInventoryReader", () => {
 
   test("rejects malformed paginated turn data", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async () => threadReadResponse("thread-idle"),
       threadTurnsList: async () => ({ data: {}, nextCursor: null }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -555,10 +573,11 @@ describe("CodexThreadInventoryReader", () => {
 
   test("rejects malformed turns in paginated history", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async () => threadReadResponse("thread-idle"),
       threadTurnsList: async () => ({ data: [null], nextCursor: null }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -570,13 +589,14 @@ describe("CodexThreadInventoryReader", () => {
 
   test("rejects paginated history turns without full items", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async () => threadReadResponse("thread-idle"),
       threadTurnsList: async () => ({
         data: [{ id: "turn-1", items: null }],
         nextCursor: null,
       }),
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -589,12 +609,13 @@ describe("CodexThreadInventoryReader", () => {
   test("returns null when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       threadRead: async () => {
         calls.push("thread/read");
         throw new Error("thread not loaded: thread-idle");
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -607,13 +628,14 @@ describe("CodexThreadInventoryReader", () => {
 
   test("preserves a synthetic empty history response for a known local session", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       threadRead: async () => {
         throw new Error(
           "thread is not materialized yet: includeTurns is unavailable before first user message",
         );
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -626,12 +648,13 @@ describe("CodexThreadInventoryReader", () => {
 
   test("preserves empty history when paginated turns are unavailable before the first message", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       threadRead: async () => threadReadResponse("thread-local"),
       threadTurnsList: async () => {
         throw new Error("thread/turns/list is unavailable before first user message");
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -645,6 +668,7 @@ describe("CodexThreadInventoryReader", () => {
   test("returns null when read-only history cwd does not match", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadRead: async () => {
         calls.push("thread/read");
@@ -654,7 +678,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/turns/list");
         return { data: [] };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const historyLoad = await reader.readThreadHistory(client, {
       externalSessionId: "thread-idle",
@@ -667,11 +691,12 @@ describe("CodexThreadInventoryReader", () => {
 
   test("propagates thread/read history failures", async () => {
     const reader = new CodexThreadInventoryReader();
+    // SAFETY: This test drives the failure path that supplies `CodexAppServerClient` before this assertion.
     const client = {
       threadRead: async () => {
         throw new Error("read failed");
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     await expect(
       reader.readThreadHistory(client, {
@@ -686,6 +711,7 @@ describe("CodexThreadInventoryReader", () => {
     const loaded = createDeferred<unknown>();
     const threads = createDeferred<unknown>();
     const calls: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
     const client = {
       threadLoadedList: () => {
         calls.push("thread/loaded/list");
@@ -703,7 +729,7 @@ describe("CodexThreadInventoryReader", () => {
         calls.push("thread/turns/list");
         return { data: [{ id: "turn-1", status: "completed", items: [] }] };
       },
-    } as unknown as CodexAppServerClient;
+    } as CodexAppServerClient;
 
     const pendingRead = reader.read(client, "runtime-1");
     const pendingHistoryLoad = reader.readThreadHistory(client, {

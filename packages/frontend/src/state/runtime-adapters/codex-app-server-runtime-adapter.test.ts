@@ -49,9 +49,11 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       };
     });
 
+    // SAFETY: This test controls the fixture and supplies `typeof host.runtimeRequire` used by this case.
     host.runtimeRequire = mock(async () =>
       createCodexRuntime("runtime-codex-live"),
     ) as typeof host.runtimeRequire;
+    // SAFETY: This test controls the fixture and supplies `typeof host.codexAppServerRequest` used by this case.
     host.codexAppServerRequest = codexRequest as typeof host.codexAppServerRequest;
 
     try {

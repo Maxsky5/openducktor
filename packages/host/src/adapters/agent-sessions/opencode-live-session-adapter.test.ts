@@ -32,6 +32,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime),
     );
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
 
     const snapshots = await Effect.runPromise(adapter.listRetainedSnapshots("/repo"));
@@ -151,6 +152,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime),
     );
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
     const before = await Effect.runPromise(adapter.readRetainedSnapshot(ref));
     if (before.type !== "live") {
@@ -236,6 +238,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime,
       })(runtime),
     );
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
 
     const first = Effect.runPromise(adapter.loadContext(ref));
@@ -307,6 +310,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
         prepareRuntime,
       })(runtime),
     );
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
 
     await expect(Effect.runPromise(adapter.loadContext(ref))).rejects.toThrow(
@@ -365,7 +369,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
 
     const first = await Effect.runPromise(prepareAdapter(runtime));
     const second = await Effect.runPromise(prepareAdapter(secondRuntime));
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const firstAdapter = first.adapter as AgentSessionRuntimeAdapterPort;
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
     const secondAdapter = second.adapter as AgentSessionRuntimeAdapterPort;
     const firstSnapshot = await Effect.runPromise(firstAdapter.readRetainedSnapshot(ref));
     const secondSnapshot = await Effect.runPromise(secondAdapter.readRetainedSnapshot(secondRef));

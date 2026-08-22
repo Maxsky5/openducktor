@@ -53,6 +53,7 @@ export const resolveElectronSidecarBuildPlan = ({
   workspaceRoot,
 }: ResolveElectronSidecarBuildPlanInput): ElectronSidecarBuildPlan => {
   const outputDirectory = join(electronPackageDirectory, "build", "sidecars");
+  // SAFETY: The surrounding boundary constructs or validates every member required by `Record<ElectronSidecarId, string>`.
   const outputPaths = Object.fromEntries(
     ELECTRON_SIDECAR_IDS.map((sidecarId) => [
       sidecarId,

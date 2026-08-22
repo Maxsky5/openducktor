@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
@@ -88,10 +89,30 @@ export const createClaudeCompletedToolPart = ({
     tool,
     ...toolPartPresentation(tool),
     status: isError ? "error" : "completed",
-    ...(input ? { input } : {}),
-    ...(resolvedPreview ? { preview: resolvedPreview } : {}),
-    ...(metadata ? { metadata } : {}),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resolvedPreview) {
+        return { preview: resolvedPreview };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(startedAtMs, "number")) {
+        return { startedAtMs };
+      }
+      return {};
+    })(),
     endedAtMs,
     ...(isError ? { error: text } : { output: text }),
   };
@@ -119,7 +140,12 @@ export const claudeAssistantTextPartEvent = ({
   timestamp,
   part: createClaudeAssistantTextPart({
     messageId,
-    ...(partId ? { partId } : {}),
+    ...(() => {
+      if (partId) {
+        return { partId };
+      }
+      return {};
+    })(),
     text,
   }),
 });

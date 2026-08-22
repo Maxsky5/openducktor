@@ -66,6 +66,7 @@ describe("classifySystemSlashCommandInvocation", () => {
     ).toEqual({ kind: "not_system" });
   });
 
+  // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
   test.each([
     { kind: "text", text: "explain" },
     { kind: "file_reference", file: { id: "f", path: "a.ts", name: "a.ts", kind: "code" } },

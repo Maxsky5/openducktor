@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createInvalidFixture } from "../../test-support/focused-service";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
@@ -12,9 +13,11 @@ describe("Claude SDK ingress", () => {
   test("rejects malformed history entries before history projection", () => {
     let error: unknown;
     try {
-      Reflect.apply(filterClaudeHistoryMessages, undefined, [
-        [{ type: "assistant", message: new Date() }],
-      ]);
+      filterClaudeHistoryMessages(
+        createInvalidFixture<Parameters<typeof filterClaudeHistoryMessages>[0]>([
+          { type: "assistant", message: new Date() },
+        ]),
+      );
     } catch (cause) {
       error = cause;
     }
@@ -29,16 +32,16 @@ describe("Claude SDK ingress", () => {
     const hook = createClaudePreToolUseHook({ session: createClaudeSession() });
 
     await expect(
-      Reflect.apply(hook, undefined, [
-        {
+      hook(
+        createInvalidFixture<Parameters<typeof hook>[0]>({
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
           tool_input: "pwd",
           tool_use_id: "tool-1",
-        },
+        }),
         "tool-1",
         { signal: new AbortController().signal },
-      ]),
+      ),
     ).rejects.toMatchObject({
       _tag: "HostValidationError",
       field: "claudePreToolUse",
@@ -53,17 +56,17 @@ describe("Claude SDK ingress", () => {
     });
 
     await expect(
-      Reflect.apply(hook, undefined, [
-        {
+      hook(
+        createInvalidFixture<Parameters<typeof hook>[0]>({
           hook_event_name: "PostToolUse",
           tool_name: "Edit",
           tool_input: { file_path: "src/file.ts" },
           tool_response: new Date(),
           tool_use_id: "tool-1",
-        },
+        }),
         "tool-1",
         { signal: new AbortController().signal },
-      ]),
+      ),
     ).rejects.toMatchObject({
       _tag: "HostValidationError",
       field: "claudePostToolUse",

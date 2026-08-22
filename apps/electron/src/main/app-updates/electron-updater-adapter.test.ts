@@ -37,6 +37,7 @@ class FakeNativeUpdater {
 
   emit(eventName: string, payload: NativeUpdaterEventPayload): void {
     for (const listener of this.listeners.get(eventName) ?? []) {
+      // SAFETY: This test controls the fixture and supplies `never` used by this case.
       listener(payload as never);
     }
   }

@@ -172,7 +172,9 @@ describe("agent-chat-attachments", () => {
     if (!first || !second) {
       throw new Error("Expected PDF attachments to classify");
     }
+    // SAFETY: This test controls the fixture and supplies `File` used by this case.
     first.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 + 1 } as File;
+    // SAFETY: This test controls the fixture and supplies `File` used by this case.
     second.file = { size: LOCAL_ATTACHMENT_BYTE_LIMIT / 2 } as File;
 
     expect(

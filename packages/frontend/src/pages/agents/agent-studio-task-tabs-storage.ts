@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue, TaskCard } from "@openducktor/contracts";
 import { isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
@@ -37,6 +38,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
   }
 
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored tabs are JSON
 
     if (Array.isArray(parsed)) {
@@ -52,7 +54,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
 
     const tabs = normalizeTaskTabs(parsed.tabs);
     const activeTaskId =
-      typeof parsed.activeTaskId === "string" && parsed.activeTaskId.trim().length > 0
+      hasRuntimeType(parsed.activeTaskId, "string") && parsed.activeTaskId.trim().length > 0
         ? parsed.activeTaskId
         : null;
     return {

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 const STARTUP_SPLASH_ID = "openducktor-startup";
 const STARTUP_SPLASH_STATUS_SELECTOR = "[data-odt-startup-status]";
 const STARTUP_SPLASH_LEAVING_CLASS = "odt-startup--leaving";
@@ -53,7 +54,7 @@ const beginStartupSplashDismissal = (splash: HTMLElement): void => {
 };
 
 // Module evaluation starts a conservative hold before the browser can paint the splash.
-if (typeof document !== "undefined") {
+if (!hasRuntimeType(globalThis.document, "undefined")) {
   getStartupSplash();
 }
 

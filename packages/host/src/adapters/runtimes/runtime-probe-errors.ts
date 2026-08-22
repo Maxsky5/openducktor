@@ -1,0 +1,44 @@
+import { hasRuntimeType } from "@openducktor/contracts";
+
+const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
+const TIMEOUT_ERROR_CODES = new Set([
+  "ABORT_ERR",
+  "ETIMEDOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+]);
+
+interface RuntimeFailure {
+  cause?: unknown;
+  code?: unknown;
+  details?: unknown;
+  name?: unknown;
+}
+
+const isRuntimeFailure = (cause: unknown): cause is RuntimeFailure =>
+  hasRuntimeType(cause, "object") && cause !== null;
+
+const readStringField = (cause: unknown, field: "code" | "name"): string | null => {
+  if (!isRuntimeFailure(cause)) return null;
+  const value = cause[field];
+  return hasRuntimeType(value, "string") ? value : null;
+};
+
+const readFailureKind = (cause: unknown): string | null => {
+  if (!isRuntimeFailure(cause)) return null;
+  const { details } = cause;
+  if (!hasRuntimeType(details, "object") || details === null || !("failureKind" in details))
+    return null;
+  return hasRuntimeType(details.failureKind, "string") ? details.failureKind : null;
+};
+
+export const isTimeoutError = (cause: unknown): boolean => {
+  if (readFailureKind(cause) === "timeout") return true;
+  const name = readStringField(cause, "name");
+  if (name && TIMEOUT_ERROR_NAMES.has(name)) return true;
+  const code = readStringField(cause, "code");
+  if (code && TIMEOUT_ERROR_CODES.has(code)) return true;
+  const nestedCause = isRuntimeFailure(cause) ? (cause.cause ?? null) : null;
+  return nestedCause !== null && nestedCause !== cause && isTimeoutError(nestedCause);
+};

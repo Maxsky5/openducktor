@@ -79,6 +79,7 @@ const createGithubDependencies = () => {
         sourceCategory: "provided_path",
       }),
   };
+  // SAFETY: This test controls the fixture and supplies `SystemCommandPort` used by this case.
   const dependencies: GithubCommandDependencies = {
     resolveGithubCommand: () =>
       Effect.succeed({

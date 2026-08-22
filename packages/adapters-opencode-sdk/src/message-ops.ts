@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type {
@@ -35,7 +36,7 @@ const asRecord = (value: JsonValue | undefined): Record<string, JsonValue> | nul
 const readString = (record: Record<string, JsonValue>, keys: string[]): string | undefined => {
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       return value;
     }
   }
@@ -45,7 +46,7 @@ const readString = (record: Record<string, JsonValue>, keys: string[]): string |
 const hasCompletedAssistantMessage = (value: JsonValue | undefined): boolean => {
   const record = asRecord(value);
   const time = record ? asRecord(record.time) : null;
-  return typeof time?.completed === "number";
+  return hasRuntimeType(time?.completed, "number");
 };
 
 const isCompactionMarkerEntry = (entry: { parts: ParsedOpencodePart[] }): boolean =>
@@ -85,11 +86,11 @@ const buildPartScopedSubagentCorrelationKey = (
 const readChildSessionCreatedAt = (session: Session): number | undefined => session.time?.created;
 
 const toChildSessionLink = (session: Session): ChildSessionLink | null => {
-  if (typeof session.id !== "string" || session.id.trim().length === 0) {
+  if (!hasRuntimeType(session.id, "string") || session.id.trim().length === 0) {
     return null;
   }
   const createdAtMs = readChildSessionCreatedAt(session);
-  if (typeof createdAtMs !== "number") {
+  if (!hasRuntimeType(createdAtMs, "number")) {
     return null;
   }
 
@@ -106,9 +107,10 @@ const listChildSessionLinks = async (
     externalSessionId: string;
   },
 ): Promise<ChildSessionLink[]> => {
+  // SAFETY: The preceding runtime guard establishes `OpencodeClient & { session?: { children?: unknown } }` before this assertion.
   const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
     ?.children;
-  if (typeof childrenApi !== "function") {
+  if (!hasRuntimeType(childrenApi, "function")) {
     throw new Error(
       "OpenCode SDK does not expose session.children(); cannot load subagent transcript links.",
     );
@@ -129,7 +131,7 @@ const takeChildSessionLinkForSubagentPart = (
   part: MappedSubagentPart,
 ): ChildSessionLink | undefined => {
   const startedAtMs = part.startedAtMs;
-  if (part.externalSessionId || typeof startedAtMs !== "number") {
+  if (part.externalSessionId || !hasRuntimeType(startedAtMs, "number")) {
     return undefined;
   }
 
@@ -382,7 +384,12 @@ export const loadSessionHistory = async (
   const response = await client.session.messages({
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
-    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+    ...(() => {
+      if (hasRuntimeType(input.limit, "number")) {
+        return { limit: input.limit };
+      }
+      return {};
+    })(),
   });
   const data = opencodeSessionMessagesPayloadSchema.parse(
     unwrapData(response, "load session messages"),
@@ -427,10 +434,30 @@ export const loadSessionHistory = async (
         entry,
         timestamp,
         text,
-        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-        ...(model ? { model } : {}),
-        ...(parentId ? { parentId } : {}),
-        ...(entry.info.role === "user" ? { displayParts } : {}),
+        ...(() => {
+          if (hasRuntimeType(totalTokens, "number")) {
+            return { totalTokens };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (model) {
+            return { model };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (parentId) {
+            return { parentId };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (entry.info.role === "user") {
+            return { displayParts };
+          }
+          return {};
+        })(),
         rawParts: entry.parts,
       };
     })
@@ -487,8 +514,18 @@ export const loadSessionHistory = async (
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
-        ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
-        ...(item.model ? { model: item.model } : {}),
+        ...(() => {
+          if (hasRuntimeType(item.totalTokens, "number")) {
+            return { totalTokens: item.totalTokens };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (item.model) {
+            return { model: item.model };
+          }
+          return {};
+        })(),
         parts: item.parts,
       });
       continue;
@@ -501,7 +538,12 @@ export const loadSessionHistory = async (
       text: item.text,
       displayParts: item.displayParts ?? [],
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
-      ...(item.model ? { model: item.model } : {}),
+      ...(() => {
+        if (item.model) {
+          return { model: item.model };
+        }
+        return {};
+      })(),
       parts: item.parts,
     });
   }
@@ -525,9 +567,15 @@ export const loadSessionTodos = async (
     });
     const response = await client.session.todo({
       sessionID: input.externalSessionId,
-      ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : {}),
+      ...(() => {
+        if (trimmedWorkingDirectory.length > 0) {
+          return { directory: trimmedWorkingDirectory };
+        }
+        return {};
+      })(),
     });
     if (response.data === undefined || response.data === null) {
+      // SAFETY: The runtime adapter builds this value from the contract fields required by `{ response?: { status?: unknown; statusText?: unknown } }`.
       throw toOpenCodeRequestError(
         "load session todos",
         response.error,

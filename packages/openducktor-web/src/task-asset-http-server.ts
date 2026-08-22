@@ -47,6 +47,7 @@ export const routeTaskAssetHttpRequest = ({
       return yield* reject("Task asset was not found.", 404);
     }
 
+    // SAFETY: The surrounding boundary constructs or validates every member required by `ArrayBuffer`.
     const body = asset.bytes.buffer.slice(
       asset.bytes.byteOffset,
       asset.bytes.byteOffset + asset.bytes.byteLength,

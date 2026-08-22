@@ -14,6 +14,14 @@ import {
   Workflow,
 } from "lucide-react";
 
+interface PROMPTTEMPLATELABELSContract extends Record<AgentPromptTemplateId, string> {}
+
+interface PROMPTTEMPLATEDESCRIPTIONSContract extends Record<AgentPromptTemplateId, string> {}
+
+interface PROMPTIDSBYROLEContract extends Record<PromptRoleTabId, AgentPromptTemplateId[]> {}
+
+interface CountsContract extends Record<PromptRoleTabId, number> {}
+
 export type SettingsSectionId =
   | "general"
   | "git"
@@ -69,7 +77,7 @@ export const PROMPT_ROLE_TABS: ReadonlyArray<{
   { id: "qa", label: "QA" },
 ];
 
-export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
+export const PROMPT_TEMPLATE_LABELS: PROMPTTEMPLATELABELSContract = {
   "system.shared.workflow_guards": "Workflow Guards",
   "system.shared.tool_protocol": "Tool Protocol",
   "system.shared.task_context": "Task Context",
@@ -88,7 +96,7 @@ export const PROMPT_TEMPLATE_LABELS: Record<AgentPromptTemplateId, string> = {
   "permission.read_only.reject": "Read-Only Permission Rejection",
 };
 
-export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string> = {
+export const PROMPT_TEMPLATE_DESCRIPTIONS: PROMPTTEMPLATEDESCRIPTIONSContract = {
   "system.shared.workflow_guards":
     "Added to every system prompt to enforce lifecycle guardrails, artifact discipline, repo-guidance governance, and fail-fast rules.",
   "system.shared.tool_protocol":
@@ -125,6 +133,7 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS: Record<AgentPromptTemplateId, string>
 
 export const BUILTIN_PROMPTS_BY_ID: Record<AgentPromptTemplateId, BuiltinPromptDefinition> =
   (() => {
+    // SAFETY: This scope populates or freezes the value as `Record<AgentPromptTemplateId, BuiltinPromptDefinition>` before it can escape.
     const map = {} as Record<AgentPromptTemplateId, BuiltinPromptDefinition>;
     for (const definition of listBuiltinAgentPromptTemplates()) {
       map[definition.id] = definition;
@@ -148,7 +157,7 @@ export const resolvePromptRoleTab = (templateId: AgentPromptTemplateId): PromptR
   return "shared";
 };
 
-export const PROMPT_IDS_BY_ROLE: Record<PromptRoleTabId, AgentPromptTemplateId[]> = {
+export const PROMPT_IDS_BY_ROLE: PROMPTIDSBYROLEContract = {
   shared: [],
   spec: [],
   planner: [],
@@ -162,8 +171,8 @@ for (const templateId of agentPromptTemplateIdValues) {
 
 export const countPromptErrorsByRoleTab = (
   errors: Partial<Record<AgentPromptTemplateId, string>>,
-): Record<PromptRoleTabId, number> => {
-  const counts: Record<PromptRoleTabId, number> = {
+) => {
+  const counts: CountsContract = {
     shared: 0,
     spec: 0,
     planner: 0,
@@ -178,5 +187,5 @@ export const countPromptErrorsByRoleTab = (
     counts[resolvePromptRoleTab(templateId)] += 1;
   }
 
-  return counts;
+  return counts satisfies Record<PromptRoleTabId, number>;
 };

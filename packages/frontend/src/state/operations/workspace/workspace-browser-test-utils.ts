@@ -1,18 +1,11 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { mock } from "bun:test";
 import { act } from "react";
 import { flush } from "./workspace-hook-test-fixtures";
 
 export const createBrowserListenerHarness = (
   visibilityState: DocumentVisibilityState = "visible",
-): {
-  addWindowEventListener: ReturnType<typeof mock>;
-  removeWindowEventListener: ReturnType<typeof mock>;
-  addDocumentEventListener: ReturnType<typeof mock>;
-  removeDocumentEventListener: ReturnType<typeof mock>;
-  triggerFocus: () => Promise<void>;
-  triggerVisibilityChange: (nextVisibilityState?: DocumentVisibilityState) => Promise<void>;
-  restoreBrowserGlobals: () => void;
-} => {
+) => {
   let focusHandler: (() => void) | null = null;
   let visibilityChangeHandler: (() => void) | null = null;
   let currentVisibilityState = visibilityState;
@@ -24,7 +17,8 @@ export const createBrowserListenerHarness = (
 
   const addWindowEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "focus" && typeof handler === "function") {
+      if (event === "focus" && hasRuntimeType(handler, "function")) {
+        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
         focusHandler = handler as () => void;
       }
     },
@@ -32,16 +26,21 @@ export const createBrowserListenerHarness = (
   const removeWindowEventListener = mock(() => {});
   const addDocumentEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "visibilitychange" && typeof handler === "function") {
+      if (event === "visibilitychange" && hasRuntimeType(handler, "function")) {
+        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
         visibilityChangeHandler = handler as () => void;
       }
     },
   );
   const removeDocumentEventListener = mock(() => {});
 
+  // SAFETY: This test creates the DOM fixture that supplies `typeof window.addEventListener` before this lookup.
   window.addEventListener = addWindowEventListener as typeof window.addEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof window.removeEventListener` before this lookup.
   window.removeEventListener = removeWindowEventListener as typeof window.removeEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof document.addEventListener` before this lookup.
   document.addEventListener = addDocumentEventListener as typeof document.addEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof document.removeEventListener` before this lookup.
   document.removeEventListener = removeDocumentEventListener as typeof document.removeEventListener;
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -90,5 +89,13 @@ export const createBrowserListenerHarness = (
       await flush();
     },
     restoreBrowserGlobals,
+  } satisfies {
+    addWindowEventListener: ReturnType<typeof mock>;
+    removeWindowEventListener: ReturnType<typeof mock>;
+    addDocumentEventListener: ReturnType<typeof mock>;
+    removeDocumentEventListener: ReturnType<typeof mock>;
+    triggerFocus: () => Promise<void>;
+    triggerVisibilityChange: (nextVisibilityState?: DocumentVisibilityState) => Promise<void>;
+    restoreBrowserGlobals: () => void;
   };
 };

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSubagentStatus } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { extractStringField, extractText, isPlainObject } from "./codex-app-server-shared";
@@ -18,7 +19,7 @@ const lifecycleTimestampMs = (
   const snakeCaseField = field === "startedAt" ? "started_at" : "completed_at";
   const value = turn[field] ?? turn[snakeCaseField];
   if (value !== null && value !== undefined) {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
+    if (!hasRuntimeType(value, "number") || !Number.isFinite(value)) {
       throw new Error(`Codex ${notification.method} turn has an invalid ${field} timestamp.`);
     }
     return value * 1000;

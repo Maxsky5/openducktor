@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import { readNumberProp, readStringProp, readUnknownProp } from "../../guards";
 import type { JsonValue } from "@openducktor/contracts";
@@ -29,7 +30,7 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
 };
 
 const readIsoTimestampFromTime = (time: JsonValue | undefined): string | undefined => {
-  if (typeof time === "number") {
+  if (hasRuntimeType(time, "number")) {
     return toIsoTimestamp(time);
   }
   return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
@@ -66,7 +67,7 @@ export const handleMessagePartDeltaEvent = (event: Event, runtime: EventStreamRu
   const messageId = readStringProp(deltaEvent, ["messageID", "messageId", "message_id"]);
   const field = readStringProp(deltaEvent, ["field"]) ?? "";
   const deltaValue = readUnknownProp(deltaEvent, "delta");
-  const delta = typeof deltaValue === "string" ? deltaValue : "";
+  const delta = hasRuntimeType(deltaValue, "string") ? deltaValue : "";
 
   const knownPart = partId ? runtime.session.partsById.get(partId) : undefined;
   const deltaMessageId = knownPart?.messageID ?? messageId;
@@ -157,6 +158,7 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
 
+  // SAFETY: The preceding runtime guard establishes `Part` before this assertion.
   const current = rawPartRecord as Part;
   const nextPart = applyPendingDeltas(runtime, partId, current);
   setMessagePart(runtime.session, nextPart);

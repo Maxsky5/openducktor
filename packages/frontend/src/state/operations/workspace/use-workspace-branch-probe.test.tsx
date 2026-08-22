@@ -9,6 +9,18 @@ import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
 
+interface QueryClientCaptureContract {
+  current: QueryClient | null;
+}
+
+interface QueryClientCaptureContract101 {
+  current: QueryClient | null;
+}
+
+interface QueryClientCaptureContract152 {
+  current: QueryClient | null;
+}
+
 let workspaceHost = createWorkspaceHostClient();
 
 beforeEach(() => {
@@ -60,7 +72,7 @@ describe("use-workspace-branch-probe", () => {
     };
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
     const gitGetBranches = mock(async () => []);
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranch);
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -98,7 +110,7 @@ describe("use-workspace-branch-probe", () => {
   test("retries a failed branch-list refresh when the branch identity is unchanged", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract101 = { current: null };
     const gitGetBranches = mock(async () => []);
     gitGetBranches.mockImplementationOnce(async () => {
       throw new Error("branch list unavailable");
@@ -149,12 +161,13 @@ describe("use-workspace-branch-probe", () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: { current: QueryClient | null } = { current: null };
+    const queryClientCapture: QueryClientCaptureContract152 = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const rendered = render(
       <ProbeHarness
@@ -190,6 +203,7 @@ describe("use-workspace-branch-probe", () => {
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       rendered.unmount();
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -209,7 +223,8 @@ describe("use-workspace-branch-probe", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const rendered = render(
       <ProbeHarness
@@ -230,6 +245,7 @@ describe("use-workspace-branch-probe", () => {
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }

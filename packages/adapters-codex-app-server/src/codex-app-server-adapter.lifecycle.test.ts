@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import { resolveCodexEffectivePolicy, runtimeTypeName } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
@@ -16,11 +16,11 @@ import {
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
 
+// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
 const localSessions = (
   adapter: CodexAppServerAdapter,
 ): { has(externalSessionId: string): boolean } =>
-  (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
-    .localSessions;
+  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
@@ -680,7 +680,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       () => {},
     );
 
-    expect(typeof unsubscribe).toBe("function");
+    expect(runtimeTypeName(unsubscribe)).toBe("function");
   });
 
   test("rejects event subscription for an existing session in another working directory", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, runtimeTypeName } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import {
   classifyDiagnosticsQueryError,
@@ -48,6 +48,7 @@ const notStartedRuntimeHealth = {
   mcp: null,
 } as const;
 
+// SAFETY: This test controls the fixture and supplies `string[]` used by this case.
 const reconnectingRuntimeHealth = {
   ...readyRuntimeHealth,
   status: "checking",
@@ -217,7 +218,7 @@ describe("repoRuntimeHealthQueryOptions", () => {
       },
     );
 
-    expect(typeof queryOptions.refetchInterval).toBe("function");
+    expect(runtimeTypeName(queryOptions.refetchInterval)).toBe("function");
     expect(repoRuntimeHealthRefetchInterval(undefined)).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: readyRuntimeHealth })).toBe(false);
     expect(repoRuntimeHealthRefetchInterval({ opencode: errorRuntimeHealth })).toBe(false);

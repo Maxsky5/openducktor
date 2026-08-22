@@ -6,11 +6,13 @@ import { useAgentStudioTaskTabReorderDrag } from "./use-agent-studio-task-tab-re
 
 type HookValue = ReturnType<typeof useAgentStudioTaskTabReorderDrag>;
 
+// SAFETY: This test controls the fixture and supplies `DragStartEvent` used by this case.
 const dragStartEvent = (taskId: string): DragStartEvent =>
   ({
     active: { id: taskId },
   }) as DragStartEvent;
 
+// SAFETY: This test controls the fixture and supplies `DragEndEvent` used by this case.
 const dragEndEvent = (draggedTaskId: string, overTaskId: string | null): DragEndEvent =>
   ({
     active: { id: draggedTaskId },

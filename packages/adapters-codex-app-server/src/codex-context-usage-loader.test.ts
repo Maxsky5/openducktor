@@ -51,8 +51,9 @@ describe("CodexContextUsageLoader", () => {
   test("rejects cached context usage for a retained unbound session", async () => {
     const { adapter } = createHarness();
     const started = await adapter.startSession(codexStartSessionInput());
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const session = (
-      adapter as unknown as {
+      adapter as {
         localSessions: {
           get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
         };
@@ -163,7 +164,8 @@ describe("CodexContextUsageLoader", () => {
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
 
     await adapter.startSession(codexStartSessionInput());
-    const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+    // SAFETY: This test controls the fixture and supplies `{ subagents: CodexSubagentLinkState }` used by this case.
+    const state = adapter as { subagents: CodexSubagentLinkState };
     state.subagents.upsertLink({
       runtimeId: "runtime-live",
       parentThreadId: "thread/start-runtime-live",
@@ -200,7 +202,8 @@ describe("CodexContextUsageLoader", () => {
       if (!transport) {
         throw new Error("Expected Codex transport.");
       }
-      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      // SAFETY: This test controls the fixture and supplies `{ subagents: CodexSubagentLinkState }` used by this case.
+      const state = adapter as { subagents: CodexSubagentLinkState };
       state.subagents.upsertLink({
         runtimeId: "runtime-live",
         parentThreadId: "thread/start-runtime-live",
@@ -235,7 +238,8 @@ describe("CodexContextUsageLoader", () => {
   test("loads uncached grandchild context through retained root ownership", async () => {
     const { adapter, transports } = createHarness();
     await adapter.startSession(codexStartSessionInput());
-    const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+    // SAFETY: This test controls the fixture and supplies `{ subagents: CodexSubagentLinkState }` used by this case.
+    const state = adapter as { subagents: CodexSubagentLinkState };
     state.subagents.upsertLink({
       runtimeId: "runtime-live",
       parentThreadId: "thread/start-runtime-live",
@@ -277,7 +281,8 @@ describe("CodexContextUsageLoader", () => {
   test("rejects cross-runtime and cyclic live context routes before resuming", async () => {
     for (const kind of ["cross-runtime", "cycle"] as const) {
       const { adapter, transports } = createHarness();
-      const state = adapter as unknown as { subagents: CodexSubagentLinkState };
+      // SAFETY: This test controls the fixture and supplies `{ subagents: CodexSubagentLinkState }` used by this case.
+      const state = adapter as { subagents: CodexSubagentLinkState };
       if (kind === "cross-runtime") {
         state.subagents.upsertLink({
           runtimeId: "runtime-other",

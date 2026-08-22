@@ -550,7 +550,12 @@ describe("electron app update install handoff", () => {
       };
       const { service } = createService({
         adapter,
-        ...(platform === "linux" ? { appImagePath: "/opt/OpenDucktor.AppImage" } : {}),
+        ...(() => {
+          if (platform === "linux") {
+            return { appImagePath: "/opt/OpenDucktor.AppImage" };
+          }
+          return {};
+        })(),
         platform,
         installDownloadedUpdate: async () => {
           throw new ElectronLifecycleError({

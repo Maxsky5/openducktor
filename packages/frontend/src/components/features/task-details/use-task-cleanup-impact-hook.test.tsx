@@ -11,6 +11,7 @@ import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 
+// SAFETY: This test controls the fixture and supplies `WorkspaceStateContextValue` used by this case.
 const createWorkspaceState = (): WorkspaceStateContextValue =>
   ({
     activeWorkspace: {

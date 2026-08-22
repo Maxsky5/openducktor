@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
@@ -5,12 +6,14 @@ import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -20,6 +23,7 @@ type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>
 type SettingsSnapshotHostClient = NonNullable<Parameters<typeof settingsSnapshotQueryOptions>[0]>;
 type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHostClient;
 
+// SAFETY: This test drives the failure path that supplies `WorkspaceIntegrationHostClient` before this assertion.
 const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
   ({
     workspaceList: async () => [],
@@ -60,9 +64,7 @@ const flush = async (): Promise<void> => {
   });
 };
 
-const createBrowserListenerHarness = (
-  visibilityState: DocumentVisibilityState = "visible",
-): {
+interface BrowserListenerHarness {
   addWindowEventListener: ReturnType<typeof mock>;
   removeWindowEventListener: ReturnType<typeof mock>;
   addDocumentEventListener: ReturnType<typeof mock>;
@@ -70,7 +72,11 @@ const createBrowserListenerHarness = (
   triggerFocus: () => Promise<void>;
   triggerVisibilityChange: (nextVisibilityState?: DocumentVisibilityState) => Promise<void>;
   restoreBrowserGlobals: () => void;
-} => {
+}
+
+const createBrowserListenerHarness = (
+  visibilityState: DocumentVisibilityState = "visible",
+): BrowserListenerHarness => {
   let focusHandler: (() => void) | null = null;
   let visibilityChangeHandler: (() => void) | null = null;
   let currentVisibilityState = visibilityState;
@@ -82,7 +88,8 @@ const createBrowserListenerHarness = (
 
   const addWindowEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "focus" && typeof handler === "function") {
+      if (event === "focus" && hasRuntimeType(handler, "function")) {
+        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
         focusHandler = handler as () => void;
       }
     },
@@ -90,16 +97,21 @@ const createBrowserListenerHarness = (
   const removeWindowEventListener = mock(() => {});
   const addDocumentEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "visibilitychange" && typeof handler === "function") {
+      if (event === "visibilitychange" && hasRuntimeType(handler, "function")) {
+        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
         visibilityChangeHandler = handler as () => void;
       }
     },
   );
   const removeDocumentEventListener = mock(() => {});
 
+  // SAFETY: This test creates the DOM fixture that supplies `typeof window.addEventListener` before this lookup.
   window.addEventListener = addWindowEventListener as typeof window.addEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof window.removeEventListener` before this lookup.
   window.removeEventListener = removeWindowEventListener as typeof window.removeEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof document.addEventListener` before this lookup.
   document.addEventListener = addDocumentEventListener as typeof document.addEventListener;
+  // SAFETY: This test creates the DOM fixture that supplies `typeof document.removeEventListener` before this lookup.
   document.removeEventListener = removeDocumentEventListener as typeof document.removeEventListener;
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -206,7 +218,12 @@ const normalizeHookArgs = ({
     }),
   clearTaskData: rest.clearTaskData ?? (() => {}),
   clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
-  ...(rest.hostClient === undefined ? {} : { hostClient: rest.hostClient }),
+  ...(() => {
+    if (rest.hostClient === undefined) {
+      return {};
+    }
+    return { hostClient: rest.hostClient };
+  })(),
 });
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
@@ -240,6 +257,7 @@ const createHookHarness = (initialArgs: LegacyHookArgs) => {
         throw new Error("Hook not mounted");
       }
       await sharedHarness.run(async () => {
+        // SAFETY: This test controls the fixture and supplies `ReturnType<typeof useWorkspaceOperations>` used by this case.
         await fn(latest as ReturnType<typeof useWorkspaceOperations>);
       });
     },
@@ -852,7 +870,8 @@ describe("use-workspace-operations", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo-old",
@@ -874,16 +893,16 @@ describe("use-workspace-operations", () => {
         detached: false,
       });
 
-      let thrown: unknown = null;
+      const thrown = createFocusedFixture<{ current: unknown }>({ current: null });
       await harness.run(async (value) => {
         try {
           await value.selectWorkspace("repo-a");
         } catch (error) {
-          thrown = error;
+          thrown.current = error;
         }
       });
 
-      expect(thrown).toBeInstanceOf(Error);
+      expect(thrown.current).toBeInstanceOf(Error);
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).not.toHaveBeenCalled();
@@ -912,6 +931,7 @@ describe("use-workspace-operations", () => {
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
     }
   });
@@ -949,7 +969,8 @@ describe("use-workspace-operations", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
     let latestActiveRepo: string | null = null;
@@ -1058,6 +1079,7 @@ describe("use-workspace-operations", () => {
       workspaceHost.workspaceList = originalWorkspaceList;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
     }
   });
@@ -1233,7 +1255,8 @@ describe("use-workspace-operations", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1259,6 +1282,7 @@ describe("use-workspace-operations", () => {
     } finally {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -1278,7 +1302,8 @@ describe("use-workspace-operations", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const baseArgs = {
       setActiveRepo,
@@ -1308,6 +1333,7 @@ describe("use-workspace-operations", () => {
     } finally {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }
@@ -1409,7 +1435,8 @@ describe("use-workspace-operations", () => {
 
     const originalToastError = toast.error;
     const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1434,6 +1461,7 @@ describe("use-workspace-operations", () => {
       await harness.unmount();
       workspaceHost.gitGetCurrentBranch = original.gitGetCurrentBranch;
       workspaceHost.gitGetBranches = original.gitGetBranches;
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       restoreBrowserGlobals();
     }

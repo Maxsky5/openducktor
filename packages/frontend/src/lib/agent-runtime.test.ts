@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createInvalidFixture } from "@/test-utils/focused-fixture";
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -118,6 +119,7 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("fails fast on runtime descriptor schema violations before registration", () => {
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor` used by this case.
     const invariantViolation = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
@@ -135,20 +137,21 @@ describe("agent-runtime capability policies", () => {
           supportsSubagentReferences: false,
         },
       },
-    } as unknown as RuntimeDescriptor;
+    } as RuntimeDescriptor;
 
     expect(validateRuntimeDefinitionForOpenDucktor(invariantViolation)).toEqual([
       "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support slash commands must declare slash command prompt parts.",
       "[optional_enhancement] runtime descriptor schema violation at capabilities.promptInput.supportedParts: Runtime descriptors that support file search must declare file or folder prompt references.",
     ]);
 
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor` used by this case.
     const staleFlatCapability = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
         supportsFileSearch: true,
       },
-    } as unknown as RuntimeDescriptor;
+    } as RuntimeDescriptor;
 
     expect(validateRuntimeDefinitionForOpenDucktor(staleFlatCapability)).toEqual([
       '[baseline] runtime descriptor schema violation at capabilities: Unrecognized key: "supportsFileSearch"',
@@ -156,13 +159,13 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("returns schema errors instead of crashing for partially migrated descriptors", () => {
-    const malformedDescriptor = {
+    const malformedDescriptor = createInvalidFixture<RuntimeDescriptor>({
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
         workflow: undefined,
       },
-    } as unknown as RuntimeDescriptor;
+    });
 
     expect(() => validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).not.toThrow();
     expect(validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).toEqual([
@@ -209,12 +212,14 @@ describe("agent-runtime capability policies", () => {
         supportedReplyOutcomes: ["reject"],
       },
     });
-    const structuredInputDescriptor = withCapabilities({
-      structuredInput: {
-        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
-        supportsQuestions: "yes",
-      },
-    } as unknown as Partial<RuntimeDescriptor["capabilities"]>);
+    const structuredInputDescriptor = withCapabilities(
+      createInvalidFixture<Partial<RuntimeDescriptor["capabilities"]>>({
+        structuredInput: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+          supportsQuestions: "yes",
+        },
+      }),
+    );
 
     expect(validateRuntimeDefinitionForOpenDucktor(approvalDescriptor)).toEqual([
       "[workflow] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",
@@ -326,6 +331,7 @@ describe("agent-runtime capability policies", () => {
         forkTargets: [],
       },
     });
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["kind"]` used by this case.
     const forkRuntime = {
       ...withCapabilities({
         sessionLifecycle: {
@@ -335,7 +341,7 @@ describe("agent-runtime capability policies", () => {
           forkTargets: ["session"],
         },
       }),
-      kind: "fork-runtime" as unknown as RuntimeDescriptor["kind"],
+      kind: "fork-runtime" as RuntimeDescriptor["kind"],
       label: "Fork Runtime",
     };
 
@@ -399,21 +405,23 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("runtime selection resolution never falls back to OpenCode implicitly", () => {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const codex = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
-      kind: "codex" as unknown as RuntimeDescriptor["kind"],
+      kind: "codex" as RuntimeDescriptor["kind"],
       label: "Codex",
     } as RuntimeDescriptor;
 
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["kind"]` used by this case.
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, codex],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
       }),
     ).toEqual({
       status: "resolved",
-      runtimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      runtimeKind: "codex" as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
     });
     expect(
       resolveRuntimeKindSelectionState({
@@ -421,25 +429,27 @@ describe("agent-runtime capability policies", () => {
         requestedRuntimeKind: null,
       }),
     ).toEqual({ status: "missing-request", runtimeKind: null });
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["kind"]` used by this case.
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
       }),
     ).toEqual({
       status: "unknown-request",
       runtimeKind: null,
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
     });
+    // SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["kind"]` used by this case.
     expect(
       resolveRuntimeKindSelectionState({
         runtimeDefinitions: [],
-        requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+        requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
       }),
     ).toEqual({
       status: "no-definitions",
       runtimeKind: null,
-      requestedRuntimeKind: "codex" as unknown as RuntimeDescriptor["kind"],
+      requestedRuntimeKind: "codex" as RuntimeDescriptor["kind"],
     });
     expect(
       resolveRuntimeKindSelection({

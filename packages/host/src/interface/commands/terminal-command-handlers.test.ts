@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { TerminalService } from "../../application/terminals/terminal-service";
@@ -7,7 +8,7 @@ import { createTerminalCommandHandlers } from "./terminal-command-handlers";
 const closeInput = { terminalId: "terminal-1", confirmTerminate: false };
 
 const createService = (close: TerminalService["close"]): TerminalService =>
-  ({ close }) as TerminalService;
+  createFocusedTestService<TerminalService>({ close });
 
 const invokeClose = (service: TerminalService) => {
   const handler = createTerminalCommandHandlers(service).terminal_close;
@@ -24,9 +25,9 @@ const invokePreparePathInput = (service: TerminalService) => {
 
 describe("createTerminalCommandHandlers", () => {
   test("delegates path-input preparation to the host terminal", async () => {
-    const service = {
+    const service = createFocusedTestService<TerminalService>({
       preparePathInput: () => Effect.succeed({ text: "'/tmp/image.png'" }),
-    } as unknown as TerminalService;
+    });
 
     await expect(invokePreparePathInput(service)).resolves.toEqual({ text: "'/tmp/image.png'" });
   });

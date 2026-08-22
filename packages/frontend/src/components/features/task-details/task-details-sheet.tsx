@@ -94,12 +94,15 @@ export function TaskDetailsSheet({
     onQaOpen,
     onBuild,
     onOpenSession,
-    ...(task
-      ? {
+    ...(() => {
+      if (task) {
+        return {
           resolveSessionOptionsByRole: (role: AgentRole) =>
             resolveSessionTargetOptions(historicalSessions, taskSessions, role),
-        }
-      : {}),
+        };
+      }
+      return {};
+    })(),
     onDelegate,
     onHumanApprove,
     onHumanRequestChanges,
@@ -194,8 +197,18 @@ export function TaskDetailsSheet({
             ? {
                 includeActions: detailActions,
                 hasActiveSession,
-                ...(activeSessionRole ? { activeSessionRole } : {}),
-                ...(historicalSessionRoles.length > 0 ? { historicalSessionRoles } : {}),
+                ...(() => {
+                  if (activeSessionRole) {
+                    return { activeSessionRole };
+                  }
+                  return {};
+                })(),
+                ...(() => {
+                  if (historicalSessionRoles.length > 0) {
+                    return { historicalSessionRoles };
+                  }
+                  return {};
+                })(),
                 onWorkflowAction: viewModel.runWorkflowAction,
               }
             : {})}

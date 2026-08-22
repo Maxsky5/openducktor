@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
+// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
 const artifactHook = require("./print-package-artifacts.cjs") as {
   selectPackageArtifacts: (buildResult: { artifactPaths: string[]; outDir: string }) => string[];
   formatPackageArtifacts: (artifactPaths: string[]) => string;

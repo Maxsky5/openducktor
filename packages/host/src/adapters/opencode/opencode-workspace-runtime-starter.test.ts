@@ -72,7 +72,12 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
   const effectiveToolDiscovery =
     toolDiscovery ??
     createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? {} : { env: processEnv }),
+      ...(() => {
+        if (processEnv === undefined) {
+          return {};
+        }
+        return { env: processEnv };
+      })(),
       systemCommands: systemCommands ?? createSystemCommands(),
     });
   return createEffectOpenCodeWorkspaceRuntimeStarter({
@@ -104,7 +109,12 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
           discard: () => Effect.void,
         } satisfies PreparedRuntimeLiveSessionAdapter);
       }),
-    ...(processEnv === undefined ? {} : { processEnv }),
+    ...(() => {
+      if (processEnv === undefined) {
+        return {};
+      }
+      return { processEnv };
+    })(),
     ...starterInput,
   });
 };
@@ -183,6 +193,7 @@ const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boole
   }
 };
 
+// SAFETY: This test drives the failure path that supplies `NodeJS.ErrnoException` before this assertion.
 const forceStopProcessTree = (pid: number) =>
   process.platform === "win32"
     ? terminateProcessTree({
@@ -811,6 +822,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
+      // SAFETY: This test controls the fixture and supplies `number` used by this case.
       await waitFor(() => !processIsAlive(childPid as number));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
@@ -855,6 +867,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         ),
       ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
       childPid = Number(await readFile(childPidPath, "utf8"));
+      // SAFETY: This test controls the fixture and supplies `number` used by this case.
       await waitFor(() => !processIsAlive(childPid as number));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {

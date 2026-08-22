@@ -35,7 +35,8 @@ enableReactActEnvironment();
 const defaultTaskApprovalContextGet = async (_repoPath: string, _taskId: string) => {
   throw new Error("not configured");
 };
-const defaultTaskDirectMerge = async () => ({
+type TaskDirectMerge = ReturnType<typeof createHostClient>["taskDirectMerge"];
+const defaultTaskDirectMerge: TaskDirectMerge = async () => ({
   outcome: "completed" as const,
   task: createTaskCardFixture({ id: "TASK-1", status: "closed" }),
 });
@@ -97,8 +98,8 @@ const openResetImplementationMock = mock(defaultOpenResetImplementation);
 const agentSessionsListMock = mock(defaultAgentSessionsList);
 const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
 const toastLoadingMock = mock(() => "toast-id");
-const toastSuccessMock = mock(() => {});
-const toastErrorMock = mock(() => {});
+const toastSuccessMock = mock(() => "success-toast-id");
+const toastErrorMock = mock(() => "error-toast-id");
 const originalToastLoading = toast.loading;
 const originalToastSuccess = toast.success;
 const originalToastError = toast.error;
@@ -193,6 +194,7 @@ const applyHostMocks = async (): Promise<void> => {
   ]);
   const mockedHost = buildMockedHost();
   if (!originalHostMethods) {
+    // SAFETY: This test controls the fixture and supplies `Partial<HostLike>` used by this case.
     originalHostMethods = Object.fromEntries(
       HOST_METHOD_NAMES.map((name) => [name, hostClientModule.hostClient[name]]),
     ) as Partial<HostLike>;
@@ -292,18 +294,27 @@ const createMissingBuilderWorktreeApprovalContextResult = (
 
 const createConflictDirectMergeResult = (
   overrides: { currentBranch?: string; workingDir?: string } = {},
-) =>
-  ({
-    outcome: "conflicts" as const,
-    conflict: {
-      operation: "direct_merge_merge_commit" as const,
-      currentBranch: overrides.currentBranch,
-      targetBranch: "main",
-      conflictedFiles: ["src/app.ts"],
-      output: "conflict output",
-      workingDir: overrides.workingDir,
-    },
-  }) as unknown as Awaited<ReturnType<typeof defaultTaskDirectMerge>>;
+): Awaited<ReturnType<TaskDirectMerge>> => ({
+  outcome: "conflicts" as const,
+  conflict: {
+    operation: "direct_merge_merge_commit" as const,
+    ...(() => {
+      if (overrides.currentBranch) {
+        return { currentBranch: overrides.currentBranch };
+      }
+      return {};
+    })(),
+    targetBranch: "main",
+    conflictedFiles: ["src/app.ts"],
+    output: "conflict output",
+    ...(() => {
+      if (overrides.workingDir) {
+        return { workingDir: overrides.workingDir };
+      }
+      return {};
+    })(),
+  },
+});
 
 const createUseTaskApprovalFlowArgs = (
   overrides: Partial<Parameters<typeof useTaskApprovalFlow>[0]>,
@@ -353,12 +364,12 @@ describe("useTaskApprovalFlow", () => {
     resetAgentChatDraftStoreForTests();
     await applyHostMocks();
     latestHarnessValue = null;
-    (toast as { loading: typeof toast.loading }).loading =
-      toastLoadingMock as unknown as typeof toast.loading;
-    (toast as { success: typeof toast.success }).success =
-      toastSuccessMock as unknown as typeof toast.success;
-    (toast as { error: typeof toast.error }).error =
-      toastErrorMock as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies `{ loading: typeof toast.loading }` used by this case.
+    (toast as { loading: typeof toast.loading }).loading = toastLoadingMock;
+    // SAFETY: This test controls the fixture and supplies `{ success: typeof toast.success }` used by this case.
+    (toast as { success: typeof toast.success }).success = toastSuccessMock;
+    // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
+    (toast as { error: typeof toast.error }).error = toastErrorMock;
     toastLoadingMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
@@ -386,15 +397,19 @@ describe("useTaskApprovalFlow", () => {
 
   afterAll(async () => {
     await restoreHostMocks();
+    // SAFETY: This test controls the fixture and supplies `{ loading: typeof toast.loading }` used by this case.
     (toast as { loading: typeof toast.loading }).loading = originalToastLoading;
+    // SAFETY: This test controls the fixture and supplies `{ success: typeof toast.success }` used by this case.
     (toast as { success: typeof toast.success }).success = originalToastSuccess;
+    // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
     (toast as { error: typeof toast.error }).error = originalToastError;
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
+      (async () => pendingApprovalContext.promise) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -457,8 +472,9 @@ describe("useTaskApprovalFlow", () => {
 
   test("defaults to pull_request mode when GitHub provider is available", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
+      (async () => pendingApprovalContext.promise) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -524,8 +540,9 @@ describe("useTaskApprovalFlow", () => {
 
   test("defaults to direct_merge mode when no git provider is available", async () => {
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => pendingApprovalContext.promise) as unknown as never,
+      (async () => pendingApprovalContext.promise) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -581,6 +598,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("reopens in direct merge completion stage when a local merge is already recorded", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         workingDirectory: undefined,
@@ -591,7 +609,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -625,8 +643,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens the recovery modal when the builder worktree is missing", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult() as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -706,8 +725,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("completes the task from missing-builder-worktree recovery and closes the modal", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult() as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -749,8 +769,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the recovery modal open when completion fails from missing-builder-worktree recovery", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult() as never,
     );
     humanApproveTaskMock.mockImplementationOnce(async () => {
       throw new Error("Task is no longer reviewable");
@@ -802,8 +823,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("only closes the recovery modal after reset handoff succeeds", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createMissingBuilderWorktreeApprovalContextResult() as unknown as never,
+      createMissingBuilderWorktreeApprovalContextResult() as never,
     );
     openResetImplementationMock.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
@@ -893,17 +915,19 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("refetches approval context on reopen so worktree status is current", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         hasUncommittedChanges: true,
         uncommittedFileCount: 2,
-      }) as unknown as never,
+      }) as never,
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         hasUncommittedChanges: false,
         uncommittedFileCount: 0,
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -952,16 +976,16 @@ describe("useTaskApprovalFlow", () => {
 
   test("ignores a stale approval-context response from a superseded open cycle", async () => {
     const firstContext = createDeferred<TaskApprovalContextLoadResult>();
-    taskApprovalContextGetMock.mockImplementationOnce(
-      (async () => firstContext.promise) as unknown as never,
-    );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
+    taskApprovalContextGetMock.mockImplementationOnce((async () => firstContext.promise) as never);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         taskId: "TASK-2",
         defaultMergeMethod: "rebase",
         hasUncommittedChanges: false,
         providers: [],
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1027,12 +1051,14 @@ describe("useTaskApprovalFlow", () => {
       outcome: "completed" as const,
       task: createTaskCardFixture({ id: "TASK-1", status: "human_review" }),
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         targetBranch: { remote: "upstream", branch: "main" },
         publishTarget: { remote: "upstream", branch: "main" },
-      }) as unknown as never,
+      }) as never,
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         targetBranch: { remote: "upstream", branch: "main" },
@@ -1043,7 +1069,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "upstream", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }) as never,
     );
 
     const storage = createMemoryStorage();
@@ -1117,11 +1143,12 @@ describe("useTaskApprovalFlow", () => {
     setAgentChatDraftStorageForTests(storage);
     const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "direct merge draft");
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         targetBranch: { branch: "release/2026.03" },
         publishTarget: undefined,
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1173,8 +1200,9 @@ describe("useTaskApprovalFlow", () => {
     agentSessionsListForTasksMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1225,6 +1253,7 @@ describe("useTaskApprovalFlow", () => {
     agentSessionsListForTasksMock.mockImplementationOnce(async () => {
       throw new Error("session lookup failed");
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         publishTarget: { remote: "origin", branch: "main" },
@@ -1234,7 +1263,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1283,8 +1312,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens the git conflict dialog when direct merge returns conflicts", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
     taskDirectMergeMock.mockResolvedValueOnce(createConflictDirectMergeResult());
 
@@ -1334,11 +1364,13 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("reopens approval in direct_merge mode after aborting a git conflict", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1396,8 +1428,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the git conflict dialog open when Ask Builder does not start a resolution session", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1456,8 +1489,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("surfaces Ask Builder failures without closing the git conflict dialog", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as unknown as never,
+      createReadyTaskApprovalContextResult({ publishTarget: undefined }) as never,
     );
     taskDirectMergeMock.mockResolvedValueOnce(
       createConflictDirectMergeResult({
@@ -1519,6 +1553,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
     const refreshTasksMock = mock(async () => {});
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         providers: [
@@ -1529,7 +1564,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1600,6 +1635,7 @@ describe("useTaskApprovalFlow", () => {
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValue(
       createReadyTaskApprovalContextResult({
         providers: [
@@ -1610,7 +1646,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1667,6 +1703,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("keeps the approval modal open when AI pull request generation is cancelled", async () => {
     const requestPullRequestGenerationMock = mock(async () => undefined);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValue(
       createReadyTaskApprovalContextResult({
         providers: [
@@ -1677,7 +1714,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }) as never,
     );
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
@@ -1737,6 +1774,7 @@ describe("useTaskApprovalFlow", () => {
     );
     const secondApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockImplementation((async (_repoPath: string, taskId: string) => {
       if (taskId === "TASK-1") {
         return createReadyTaskApprovalContextResult({
@@ -1753,7 +1791,7 @@ describe("useTaskApprovalFlow", () => {
       }
 
       return secondApprovalContext.promise;
-    }) as unknown as never);
+    }) as never);
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1837,6 +1875,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the modal open when pull request generation cannot start", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValue(
       createReadyTaskApprovalContextResult({
         providers: [
@@ -1847,7 +1886,7 @@ describe("useTaskApprovalFlow", () => {
             reason: undefined,
           },
         ],
-      }) as unknown as never,
+      }) as never,
     );
     const requestPullRequestGenerationMock = mock(async () => {
       throw new Error("Generation crashed");
@@ -1905,6 +1944,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps direct-merge completion recoverable when publish configuration is incomplete", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         publishTarget: { branch: "main" },
@@ -1914,7 +1954,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {
@@ -1967,12 +2007,14 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("uses a fallback message when direct-merge publish fails without output", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     gitPushBranchMock.mockResolvedValueOnce({
       outcome: "rejected" as const,
       remote: "origin",
       branch: "main",
       output: "",
-    } as unknown as never);
+    } as never);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         directMerge: {
@@ -1981,7 +2023,7 @@ describe("useTaskApprovalFlow", () => {
           targetBranch: { remote: "origin", branch: "main" },
           mergedAt: "2026-03-12T12:00:00Z",
         },
-      }) as unknown as never,
+      }) as never,
     );
 
     const Harness = (): ReactElement | null => {

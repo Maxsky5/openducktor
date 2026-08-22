@@ -381,6 +381,7 @@ describe("settings git sections", () => {
       });
       const detectButton = screen.getByRole("button", { name: /detect from origin/i });
       expect(detectButton).toBeInstanceOf(HTMLButtonElement);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((detectButton as HTMLButtonElement).disabled).toBe(false);
     } finally {
       rendered?.unmount();

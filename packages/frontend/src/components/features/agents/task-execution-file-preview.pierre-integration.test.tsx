@@ -5,6 +5,7 @@ import { CodeView, EditProvider } from "@pierre/diffs/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
 
@@ -61,10 +62,15 @@ function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessPr
 describe("Pierre CodeView editor continuity", () => {
   test("keeps the attached editor document, selection, and undo history across Save state", async () => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = (() => ({
-      font: "",
-      measureText: (text: string) => ({ width: text.length * 8 }),
-    })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: () =>
+        createFocusedFixture<CanvasRenderingContext2D>({
+          font: "",
+          measureText: (text: string) =>
+            createFocusedFixture<TextMetrics>({ width: text.length * 8 }),
+        }),
+    });
     const attachedEditors: Editor<undefined>[] = [];
     let view: ReturnType<typeof render> | undefined;
     try {
@@ -106,7 +112,10 @@ describe("Pierre CodeView editor continuity", () => {
       expect(editor.getText()).toBe("one");
     } finally {
       view?.unmount();
-      HTMLCanvasElement.prototype.getContext = originalGetContext;
+      Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+        configurable: true,
+        value: originalGetContext,
+      });
     }
   });
 });

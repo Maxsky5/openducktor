@@ -132,6 +132,7 @@ describe("merge mac update manifests", () => {
       const error = await mergeMacUpdateManifests(assetsDirectory).catch((cause: unknown) => cause);
 
       expect(error).toBeInstanceOf(Error);
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toBe(
         "Canonical latest-mac.yml must include both arm64 and x64 update files.",
       );

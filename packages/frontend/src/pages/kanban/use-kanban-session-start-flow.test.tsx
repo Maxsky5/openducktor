@@ -368,7 +368,8 @@ describe("useKanbanSessionStartFlow", () => {
   test("blocks builder start when the persisted task target branch is invalid", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -395,6 +396,7 @@ describe("useKanbanSessionStartFlow", () => {
           "Invalid openducktor.targetBranch metadata: missing field `branch`. Fix the saved task metadata or choose a valid target branch again.",
       });
     } finally {
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       await harness.unmount();
     }
@@ -403,7 +405,8 @@ describe("useKanbanSessionStartFlow", () => {
   test("does not block QA start when a task has an invalid build target branch", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -427,6 +430,7 @@ describe("useKanbanSessionStartFlow", () => {
       expect(harness.getLatest().sessionStartModal?.title).toBe("Start QA Session");
       expect(toastError).not.toHaveBeenCalled();
     } finally {
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       await harness.unmount();
     }
@@ -666,8 +670,8 @@ describe("useKanbanSessionStartFlow", () => {
   test("background start adds one Agent Studio task tab when setting is enabled", async () => {
     const originalToastSuccess = toast.success;
     const toastSuccess = mock(() => "toast-id");
-    (toast as { success: typeof toast.success }).success =
-      toastSuccess as unknown as typeof toast.success;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { success: typeof toast.success }).success = toastSuccess as typeof toast.success;
     const storageKey = toTabsStorageKey("workspace-1");
     globalThis.localStorage.removeItem(storageKey);
     const navigate = mock(() => {});
@@ -720,6 +724,7 @@ describe("useKanbanSessionStartFlow", () => {
       ]);
     } finally {
       globalThis.localStorage.removeItem(storageKey);
+      // SAFETY: This test controls the fixture and supplies `{ success: typeof toast.success }` used by this case.
       (toast as { success: typeof toast.success }).success = originalToastSuccess;
       await harness.unmount();
     }

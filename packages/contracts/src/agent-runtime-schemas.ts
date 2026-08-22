@@ -648,6 +648,7 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>`.
 const runtimeCapabilityClassEntries = Object.entries(runtimeCapabilityClasses).sort(
   ([left], [right]) => right.length - left.length,
 ) as Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>;
@@ -764,15 +765,17 @@ const runtimeWorkflowToolAliasesSchema = z
     message: "Workflow tool aliases for a canonical tool must be unique.",
   });
 
-const runtimeWorkflowToolAliasesByCanonicalShape = Object.fromEntries(
+// SAFETY: The map visits every canonical AgentToolName once and assigns the same optional alias schema.
+const runtimeWorkflowToolAliasesByCanonical = Object.fromEntries(
   ODT_WORKFLOW_AGENT_TOOL_NAMES.map((toolName) => [
     toolName,
     runtimeWorkflowToolAliasesSchema.optional(),
   ]),
 ) as Record<AgentToolName, z.ZodOptional<typeof runtimeWorkflowToolAliasesSchema>>;
 
+// SAFETY: The map keys come from the canonical AgentToolName list above.
 const runtimeWorkflowToolAliasesByCanonicalSchema = z
-  .object(runtimeWorkflowToolAliasesByCanonicalShape)
+  .object(runtimeWorkflowToolAliasesByCanonical)
   .strict()
   .superRefine((aliasesByCanonical, context) => {
     const canonicalByAlias = new Map<string, AgentToolName>();

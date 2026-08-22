@@ -92,6 +92,7 @@ describe("TaskDescriptionEditor", () => {
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = view.getByRole("textbox") as HTMLTextAreaElement;
     expect(textarea.className).toContain("font-sans");
     expect(textarea.className).not.toContain("font-mono");
@@ -99,6 +100,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.change(textarea, { target: { value: "Body!" } });
 
     expect(view.queryByText("Checking whether Visual mode can preserve this Markdown…")).toBeNull();
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Body!");
   });
 
@@ -131,12 +133,14 @@ describe("TaskDescriptionEditor", () => {
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     await waitFor(() =>
       expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
         false,
       ),
     );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.queryByRole("status", { name: "Loading Visual editor" })).toBeNull();
@@ -223,6 +227,7 @@ describe("TaskDescriptionEditor", () => {
 
       fireEvent.click(view.getByRole("button", { name: "Markdown" }));
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
@@ -242,9 +247,11 @@ describe("TaskDescriptionEditor", () => {
       );
 
       const textarea = await waitFor(() => view.getByRole("textbox"));
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       expect((textarea as HTMLTextAreaElement).value).toBe(markdown);
       expect(view.getByRole("alert").textContent).toContain("blank line");
       fireEvent.click(view.getByRole("button", { name: "Visual" }));
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
       expect(onChange).not.toHaveBeenCalled();
     },
@@ -305,6 +312,7 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(onChange).not.toHaveBeenCalled();
@@ -320,7 +328,9 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "cannot be preserved",
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
@@ -339,8 +349,10 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -354,6 +366,7 @@ describe("TaskDescriptionEditor", () => {
     expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
       "Block math delimiters",
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
@@ -366,12 +379,14 @@ describe("TaskDescriptionEditor", () => {
     );
 
     expect(view.getByText(/Front matter preserved/)).toBeTruthy();
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     await waitFor(() =>
       expect((view.getByRole("button", { name: "Visual" }) as HTMLButtonElement).disabled).toBe(
         false,
       ),
     );
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     expect((view.getByRole("textbox") as HTMLTextAreaElement).value).toBe(markdown);
   });
 
@@ -411,6 +426,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
     const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "x" } });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
     expect(onChange).toHaveBeenCalled();
@@ -611,6 +627,7 @@ describe("TaskDescriptionEditor", () => {
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
+    // SAFETY: This test creates the DOM fixture that supplies `Element` before this lookup.
     fireEvent.paste(view.container.querySelector(".tiptap") as Element, {
       clipboardData: { files: [file] },
     });
@@ -652,6 +669,7 @@ describe("TaskDescriptionEditor", () => {
     );
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
+    // SAFETY: This test creates the DOM fixture that supplies `Element` before this lookup.
     fireEvent.drop(view.container.querySelector(".tiptap") as Element, {
       dataTransfer: { files: [failedFile, acceptedFile] },
     });
@@ -697,6 +715,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
     const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "y" } });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
     await waitFor(() =>
@@ -725,6 +744,7 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Inline math" }));
     const input = await waitFor(() => view.getByRole("textbox", { name: "LaTeX formula" }));
     fireEvent.change(input, { target: { value: "y" } });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
     await waitFor(() =>
@@ -745,6 +765,7 @@ describe("TaskDescriptionEditor", () => {
     const mathNode = await waitFor(() => {
       const node = view.container.querySelector('[data-type="inline-math"]');
       expect(node).not.toBeNull();
+      // SAFETY: This test creates the DOM fixture that supplies `Element` before this lookup.
       return node as Element;
     });
 
@@ -753,6 +774,7 @@ describe("TaskDescriptionEditor", () => {
       await waitFor(() => view.getByRole("dialog", { name: "Edit inline formula" })),
     ).toBeTruthy();
     const input = view.getByRole("textbox", { name: "LaTeX formula" });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((input as HTMLInputElement).value).toBe("x");
     fireEvent.change(input, { target: { value: "\\frac{" } });
     fireEvent.click(view.getByRole("button", { name: "Save formula" }));
@@ -771,6 +793,7 @@ describe("TaskDescriptionEditor", () => {
     ).toBeTruthy();
     const replacement = view.getByRole("textbox", { name: "LaTeX formula" });
     fireEvent.change(replacement, { target: { value: "y^2" } });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
     fireEvent.submit(replacement.closest("form") as HTMLFormElement);
     await waitFor(() =>
       expect(onChange.mock.calls.some(([value]) => String(value).includes("$y^2$"))).toBe(true),

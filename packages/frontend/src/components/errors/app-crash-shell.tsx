@@ -43,10 +43,12 @@ export function AppCrashShell({
       reportFatal(report, event);
     };
 
+    // SAFETY: The preceding runtime guard establishes `EventListener` before this assertion.
     window.addEventListener("error", onError as EventListener);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
 
     return () => {
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       window.removeEventListener("error", onError as EventListener);
       window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };

@@ -3,6 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
 
+// SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<Query["getContextUsage"]>>` used by this case.
 const contextUsageResponse = {
   totalTokens: 176_005,
   maxTokens: 200_000,
@@ -11,6 +12,7 @@ const contextUsageResponse = {
 describe("loadClaudeDetachedSessionContextUsage", () => {
   test("resumes an idle persisted session only to read its context usage", async () => {
     const close = mock(() => {});
+    // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<Query["initializationResult"]>>` used by this case.
     const initializationResult = mock(
       async () => ({}) as Awaited<ReturnType<Query["initializationResult"]>>,
     );
@@ -53,6 +55,7 @@ describe("loadClaudeDetachedSessionContextUsage", () => {
 
   test("closes the resumed query when the context read fails", async () => {
     const close = mock(() => {});
+    // SAFETY: This test drives the failure path that supplies `Awaited<ReturnType<Query["initializationResult"]>>` before this assertion.
     const createQuery = mock((_input: Parameters<ClaudeContextUsageQueryFactory>[0]) => ({
       close,
       getContextUsage: async () => {

@@ -80,7 +80,9 @@ const createHarness = ({
       };
     }),
   };
-  const onDegraded = mock((_cause: unknown) => {});
+  const onDegraded = mock((cause: unknown) => {
+    void cause;
+  });
   const controller = createTaskStreamController({
     transport,
     metadata,

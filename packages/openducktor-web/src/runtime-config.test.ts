@@ -6,6 +6,7 @@ import {
 } from "./browser-config";
 import type { JsonValue } from "@openducktor/contracts";
 import { loadBrowserRuntimeConfig, RUNTIME_CONFIG_PATH } from "./runtime-config";
+import { createFetchFixture } from "./test-support";
 
 const response = (body: JsonValue | undefined, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -20,12 +21,12 @@ describe("runtime config loader", () => {
 
   test("loads the launcher runtime config before the web shell starts", async () => {
     const requests: Array<{ cache: RequestCache | undefined; url: string }> = [];
-    const fetchImpl = ((url: string, init?: RequestInit) => {
-      requests.push({ cache: init?.cache, url });
+    const fetchImpl = createFetchFixture((url, init) => {
+      requests.push({ cache: init?.cache, url: url.toString() });
       return Promise.resolve(
         response({ backendUrl: "http://127.0.0.1:14327", appToken: "app-token" }),
       );
-    }) as typeof fetch;
+    });
 
     await loadBrowserRuntimeConfig(fetchImpl);
 
@@ -35,8 +36,9 @@ describe("runtime config loader", () => {
   });
 
   test("surfaces runtime config HTTP failures", async () => {
-    const fetchImpl = (() =>
-      Promise.resolve(response({ error: "missing" }, 503))) as unknown as typeof fetch;
+    const fetchImpl = createFetchFixture(() =>
+      Promise.resolve(response({ error: "missing" }, 503)),
+    );
 
     await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toThrow(
       `OpenDucktor web failed to load runtime config from ${RUNTIME_CONFIG_PATH}: HTTP 503.`,
@@ -47,10 +49,9 @@ describe("runtime config loader", () => {
   });
 
   test("rejects malformed runtime config payloads", async () => {
-    const fetchImpl = (() =>
-      Promise.resolve(
-        response({ backendUrl: "http://127.0.0.1:14327" }),
-      )) as unknown as typeof fetch;
+    const fetchImpl = createFetchFixture(() =>
+      Promise.resolve(response({ backendUrl: "http://127.0.0.1:14327" })),
+    );
 
     await expect(loadBrowserRuntimeConfig(fetchImpl)).rejects.toThrow(
       `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is missing backendUrl or appToken.`,

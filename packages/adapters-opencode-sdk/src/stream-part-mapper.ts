@@ -3,6 +3,7 @@ import {
   type FileDiff,
   type JsonValue,
   odtToolErrorPayloadSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import {
   type AgentStreamPart,
@@ -23,14 +24,14 @@ import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import { opencodePartPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 
 const toDisplayText = (value: JsonValue | undefined): string | undefined => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
     return String(value);
   }
   if (Array.isArray(value) && value.length === 0) {
@@ -50,7 +51,7 @@ const toDisplayText = (value: JsonValue | undefined): string | undefined => {
 const parseStructuredTextObject = (
   value: JsonValue | undefined,
 ): Record<string, JsonValue> | undefined => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return undefined;
   }
 
@@ -80,7 +81,7 @@ const outputTextFromMcpPayload = (value: JsonValue | undefined): string | undefi
         return null;
       }
       const text = readUnknownProp(entryRecord, "text");
-      return typeof text === "string" ? text.trim() : null;
+      return hasRuntimeType(text, "string") ? text.trim() : null;
     })
     .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
   if (textChunks.length === 0) {
@@ -96,7 +97,7 @@ const readToolOutputText = (value: JsonValue | undefined): string | undefined =>
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
 const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
@@ -129,7 +130,7 @@ const readEnvelopeErrorMessage = (value: JsonValue | undefined): string | undefi
 };
 
 const readMcpTransportError = (value: JsonValue | undefined): string | undefined => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return undefined;
   }
 
@@ -195,7 +196,7 @@ const normalizeMetadata = (value: JsonValue | undefined): Record<string, JsonVal
 };
 
 const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return "modified";
   }
   const normalized = value.trim().toLowerCase();
@@ -283,7 +284,7 @@ const fileDiffFromToolFileDiffMetadata = (
       readStringProp(record, ["file"]) ??
       readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]),
     type:
-      typeof oldString === "string" && oldString.length === 0
+      hasRuntimeType(oldString, "string") && oldString.length === 0
         ? "added"
         : normalizeFileDiffType(readUnknownProp(record, "status")),
     patch: readFileDiffPatch(record),
@@ -404,13 +405,7 @@ const readToolMetadataFileEditPayload = (
   return fileContent ? { fileContent: [fileContent] } : {};
 };
 
-const extractPartTiming = (
-  part: ParsedOpencodePart,
-  toolState: Record<string, JsonValue>,
-): {
-  startedAtMs?: number;
-  endedAtMs?: number;
-} => {
+const extractPartTiming = (part: ParsedOpencodePart, toolState: Record<string, JsonValue>) => {
   const directTime = readRecordProp(part, "time");
   const fromDirectStart = readNumberProp(directTime, ["start"]);
   const fromDirectEnd = readNumberProp(directTime, ["end"]);
@@ -423,8 +418,21 @@ const extractPartTiming = (
   const endedAtMs = fromDirectEnd ?? fromStateEnd;
 
   return {
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    ...(() => {
+      if (hasRuntimeType(startedAtMs, "number")) {
+        return { startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(endedAtMs, "number")) {
+        return { endedAtMs };
+      }
+      return {};
+    })(),
+  } satisfies {
+    startedAtMs?: number;
+    endedAtMs?: number;
   };
 };
 
@@ -449,14 +457,14 @@ const isCancelledStatus = (value: string): boolean => {
 const normalizeSubagentExecutionMode = (
   value: JsonValue | undefined,
 ): SubagentStreamPart["executionMode"] => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     const normalized = value.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
       return normalized;
     }
   }
 
-  if (typeof value === "boolean") {
+  if (hasRuntimeType(value, "boolean")) {
     return value ? "background" : "foreground";
   }
 
@@ -512,7 +520,7 @@ const isRunningBackgroundSubagentResult = (
 const omitEndedTiming = (
   timing: ReturnType<typeof extractPartTiming>,
 ): ReturnType<typeof extractPartTiming> =>
-  typeof timing.startedAtMs === "number" ? { startedAtMs: timing.startedAtMs } : {};
+  hasRuntimeType(timing.startedAtMs, "number") ? { startedAtMs: timing.startedAtMs } : {};
 
 const resolveSubagentExternalSessionId = (
   ...sources: (JsonValue | undefined)[]
@@ -570,9 +578,24 @@ const buildSubagentStreamPart = (input: {
   const correlationKey = resolveSubagentCorrelationKey({
     messageId: input.messageId,
     partId: input.partId,
-    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
-    ...(input.agent ? { agent: input.agent } : {}),
-    ...(input.prompt ? { prompt: input.prompt } : {}),
+    ...(() => {
+      if (input.externalSessionId) {
+        return { externalSessionId: input.externalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.agent) {
+        return { agent: input.agent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.prompt) {
+        return { prompt: input.prompt };
+      }
+      return {};
+    })(),
   });
 
   return {
@@ -581,15 +604,60 @@ const buildSubagentStreamPart = (input: {
     partId: input.partId,
     correlationKey,
     status: input.status,
-    ...(input.agent ? { agent: input.agent } : {}),
-    ...(input.prompt ? { prompt: input.prompt } : {}),
-    ...(input.description ? { description: input.description } : {}),
-    ...(input.error ? { error: input.error } : {}),
-    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
-    ...(input.executionMode ? { executionMode: input.executionMode } : {}),
-    ...(input.metadata ? { metadata: input.metadata } : {}),
-    ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : {}),
-    ...(typeof input.endedAtMs === "number" ? { endedAtMs: input.endedAtMs } : {}),
+    ...(() => {
+      if (input.agent) {
+        return { agent: input.agent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.prompt) {
+        return { prompt: input.prompt };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.description) {
+        return { description: input.description };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.error) {
+        return { error: input.error };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.externalSessionId) {
+        return { externalSessionId: input.externalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.executionMode) {
+        return { executionMode: input.executionMode };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.metadata) {
+        return { metadata: input.metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(input.startedAtMs, "number")) {
+        return { startedAtMs: input.startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(input.endedAtMs, "number")) {
+        return { endedAtMs: input.endedAtMs };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -659,7 +727,12 @@ const buildSubagentFromToolPart = (
     tool: part.tool,
     rawInput,
     rawOutput,
-    ...(metadata ? { metadata } : {}),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
   });
   const description =
     resolveSubagentDescription(input, output, metadata) ?? (error ? (prompt ?? preview) : preview);
@@ -668,13 +741,43 @@ const buildSubagentFromToolPart = (
     messageId: part.messageID,
     partId: part.id,
     status,
-    ...(agent ? { agent } : {}),
-    ...(prompt ? { prompt } : {}),
-    ...(description ? { description } : {}),
-    ...(error ? { error } : {}),
-    ...(externalSessionId ? { externalSessionId } : {}),
+    ...(() => {
+      if (agent) {
+        return { agent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (prompt) {
+        return { prompt };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (description) {
+        return { description };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (error) {
+        return { error };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (externalSessionId) {
+        return { externalSessionId };
+      }
+      return {};
+    })(),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
-    ...(metadata ? { metadata } : {}),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
     ...mappedTiming,
   });
 };
@@ -741,7 +844,12 @@ const buildToolStreamPart = (
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
     rawOutput: readUnknownProp(toolState, "output"),
-    ...(metadata ? { metadata } : {}),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
   });
   const base: ToolStreamPart = {
     kind: "tool",
@@ -751,9 +859,24 @@ const buildToolStreamPart = (
     tool: part.tool,
     toolType,
     status: normalizedStatus,
-    ...(input ? { input } : {}),
-    ...(preview ? { preview } : {}),
-    ...(metadata ? { metadata } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (preview) {
+        return { preview };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
     ...fileEditPayload,
     ...timing,
   };
@@ -765,7 +888,12 @@ const buildToolStreamPart = (
     const title = toDisplayText(readUnknownProp(toolState, "title"));
     return {
       ...base,
-      ...(title ? { title } : {}),
+      ...(() => {
+        if (title) {
+          return { title };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -795,7 +923,12 @@ const buildToolStreamPart = (
   const titleField = title ? { title } : {};
   return {
     ...base,
-    ...(output ? { output } : {}),
+    ...(() => {
+      if (output) {
+        return { output };
+      }
+      return {};
+    })(),
     ...titleField,
   };
 };
@@ -810,7 +943,12 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         messageId: part.messageID,
         partId: part.id,
         text: part.text,
-        ...(part.synthetic !== undefined ? { synthetic: part.synthetic } : {}),
+        ...(() => {
+          if (part.synthetic !== undefined) {
+            return { synthetic: part.synthetic };
+          }
+          return {};
+        })(),
         completed: Boolean(part.time?.end),
       };
     case "reasoning":
@@ -834,7 +972,7 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
           toolState,
           normalizeSubagentStatus(
             readStringProp(toolState, ["status"]) ?? "",
-            typeof timing.endedAtMs === "number",
+            hasRuntimeType(timing.endedAtMs, "number"),
             structuredError !== undefined,
           ),
           timing,
@@ -845,7 +983,7 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
 
       const normalizedStatus = normalizeToolStatus(
         readStringProp(toolState, ["status"]) ?? "",
-        typeof timing.endedAtMs === "number",
+        hasRuntimeType(timing.endedAtMs, "number"),
       );
 
       return buildToolStreamPart(part, toolState, normalizedStatus, timing, metadata);
@@ -866,13 +1004,28 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         phase: "finish",
         reason: part.reason,
         cost: part.cost,
-        ...(typeof totalTokens === "number" ? { totalTokens } : {}),
+        ...(() => {
+          if (hasRuntimeType(totalTokens, "number")) {
+            return { totalTokens };
+          }
+          return {};
+        })(),
       };
     }
     case "subtask": {
       const subtaskMetadata = normalizeMetadata({
-        ...(part.model ? { model: part.model } : {}),
-        ...(part.command ? { command: part.command } : {}),
+        ...(() => {
+          if (part.model) {
+            return { model: part.model };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (part.command) {
+            return { command: part.command };
+          }
+          return {};
+        })(),
       });
 
       return buildSubagentStreamPart({
@@ -882,7 +1035,12 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         agent: part.agent,
         prompt: part.prompt,
         description: part.description,
-        ...(subtaskMetadata ? { metadata: subtaskMetadata } : {}),
+        ...(() => {
+          if (subtaskMetadata) {
+            return { metadata: subtaskMetadata };
+          }
+          return {};
+        })(),
       });
     }
     case "file":

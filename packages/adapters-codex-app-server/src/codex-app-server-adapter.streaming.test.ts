@@ -281,9 +281,11 @@ describe("CodexAppServerAdapter streaming", () => {
       request: mock(async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
         calls.push(request);
         if (request.method === "initialize") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {} as Response;
         }
         if (request.method === "model/list") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               {
@@ -310,15 +312,19 @@ describe("CodexAppServerAdapter streaming", () => {
           } as Response;
         }
         if (request.method === "thread/start") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return codexThreadStartResultFixture("thread/start-runtime-live") as Response;
         }
         if (request.method === "thread/name/set") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {} as Response;
         }
         if (request.method === "thread/loaded/list") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return { data: ["thread/start-runtime-live"], nextCursor: null } as Response;
         }
         if (request.method === "thread/list") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               codexThreadFixture({
@@ -332,6 +338,7 @@ describe("CodexAppServerAdapter streaming", () => {
           } as Response;
         }
         if (request.method === "thread/read") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             thread: codexThreadFixture({
               id: "thread/start-runtime-live",
@@ -345,9 +352,11 @@ describe("CodexAppServerAdapter streaming", () => {
           if (!deferred) {
             throw new Error("Unexpected extra turn/start request.");
           }
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return (await deferred.promise) as Response;
         }
         if (request.method === "turn/steer") {
+          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return { turnId: "turn-steered" } as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
@@ -522,6 +531,7 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
 
+    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessages = events.filter(
       (event): event is { type: "user_message"; message: string } =>
         (event as { type?: string }).type === "user_message",
@@ -557,6 +567,7 @@ describe("CodexAppServerAdapter streaming", () => {
       },
     });
     await flushCodexAdapterWork();
+    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessagesAfterNativeEcho = events.filter(
       (event): event is { type: "user_message"; message: string } =>
         (event as { type?: string }).type === "user_message",
@@ -613,6 +624,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
+    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessages = events.filter(
       (event) => (event as { type?: string }).type === "user_message",
     );
@@ -678,6 +690,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
+    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessages = events.filter(
       (event) => (event as { type?: string }).type === "user_message",
     );
@@ -761,6 +774,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await Promise.resolve();
 
+    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessages = events.filter(
       (event) => (event as { type?: string }).type === "user_message",
     );
@@ -846,7 +860,8 @@ describe("CodexAppServerAdapter streaming", () => {
     const grandchildThreadId = "grandchild-thread";
     const itemId = "reused-child-item";
     const grandchildItemId = "grandchild-item";
-    const internals = adapter as unknown as {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    const internals = adapter as {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
@@ -979,7 +994,8 @@ describe("CodexAppServerAdapter streaming", () => {
     const parentThreadId = "thread-saved";
     const childThreadId = "retained-child-thread";
     const grandchildThreadId = "owned-grandchild-thread";
-    const internals = adapter as unknown as {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    const internals = adapter as {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;

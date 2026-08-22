@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import { createInvalidFixture } from "@/test-utils/focused-fixture";
 
 const createBaseProps = () => ({
   isStreamingAssistantMessage: false,
@@ -71,7 +72,10 @@ describe("AgentChatThreadRow", () => {
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...createBaseProps(),
-          row: { kind: "unexpected", key: "broken" } as unknown as AgentChatTranscriptRow,
+          row: createInvalidFixture<AgentChatTranscriptRow>({
+            kind: "unexpected",
+            key: "broken",
+          }),
         }),
       );
 

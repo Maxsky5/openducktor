@@ -281,7 +281,9 @@ describe("Claude local slash commands", () => {
 
     expect(session.activeSdkUserTurnCount).toBe(0);
     expect(session.pendingUserTurnCount).toBe(0);
+    // SAFETY: This test controls the fixture and supplies `"idle" | "requires_action" | "running" | undefined` used by this case.
     expect(session.sdkState as "idle" | "requires_action" | "running" | undefined).toBe("idle");
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.activity as "idle" | "running").toBe("idle");
     expect(events.at(-1)).toEqual(
       expect.objectContaining({

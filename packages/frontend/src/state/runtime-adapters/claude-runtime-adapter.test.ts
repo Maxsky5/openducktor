@@ -1,11 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createClaudeRuntimeAdapter } from "./claude-runtime-adapter";
 
 describe("createClaudeRuntimeAdapter", () => {
   test("exposes the Claude runtime descriptor", () => {
-    const adapter = createClaudeRuntimeAdapter({ hostClient: {} as HostClient });
+    const adapter = createClaudeRuntimeAdapter({
+      hostClient: createFocusedFixture<HostClient>({}),
+    });
 
     expect(adapter.getRuntimeDefinition()).toBe(CLAUDE_RUNTIME_DESCRIPTOR);
   });
@@ -17,11 +20,11 @@ describe("createClaudeRuntimeAdapter", () => {
     const listModels = mock(async () => models);
     const listSlashCommands = mock(async () => commands);
     const loadSessionHistory = mock(async () => history);
-    const hostClient = {
+    const hostClient = createFocusedFixture<HostClient>({
       claudeRuntimeListModels: listModels,
       claudeRuntimeListSlashCommands: listSlashCommands,
       claudeRuntimeLoadSessionHistory: loadSessionHistory,
-    } as unknown as HostClient;
+    });
     const adapter = createClaudeRuntimeAdapter({ hostClient });
     const runtimeRef = { repoPath: "/repo", runtimeKind: "claude" as const };
     const workingDirectoryRef = { ...runtimeRef, workingDirectory: "/repo/worktree" };

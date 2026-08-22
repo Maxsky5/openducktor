@@ -62,6 +62,7 @@ describe("task asset command handlers", () => {
   });
 
   test("rejects malformed input before calling the service", () => {
+    // SAFETY: This test controls the fixture and supplies `TaskAssetStagingService` used by this case.
     const service = {
       stage: () => Effect.die("must not run"),
       discard: () => Effect.die("must not run"),

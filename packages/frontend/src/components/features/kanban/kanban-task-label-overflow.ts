@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { KANBAN_CARD_CONTENT_WIDTH_PX, KANBAN_LABEL_ROW_GAP_PX } from "./kanban-layout";
 
 const LABEL_CHIP_ICON_AND_GAP_PX = 18;
@@ -37,7 +38,7 @@ let textMeasureElements: TextMeasureElements | null | undefined;
 const measuredTextWidthCache = new Map<string, number>();
 
 const getTextMeasureElements = (): TextMeasureElements | null => {
-  if (typeof document === "undefined") {
+  if (hasRuntimeType(globalThis.document, "undefined")) {
     return null;
   }
 
@@ -70,7 +71,7 @@ const measureTextWidth = ({
 }): number | null => {
   const cacheKey = `${kind}:${text}`;
   const cachedWidth = measuredTextWidthCache.get(cacheKey);
-  if (typeof cachedWidth === "number") {
+  if (hasRuntimeType(cachedWidth, "number")) {
     return cachedWidth;
   }
 
@@ -109,7 +110,7 @@ export const resolveTaskLabelOverflow = (
   const hasCustomMeasurement =
     options.measureLabelWidth !== undefined || options.measureOverflowWidth !== undefined;
 
-  if (typeof document === "undefined" && !hasCustomMeasurement) {
+  if (hasRuntimeType(globalThis.document, "undefined") && !hasCustomMeasurement) {
     return {
       visibleLabels: labels,
       hiddenLabels: [],

@@ -74,7 +74,12 @@ const appendOrMergeClaudeHistorySubagentPart = (
         messageId: existingPart.messageId,
         partId: existingPart.partId,
         correlationKey: existingPart.correlationKey,
-        ...(metadata ? { metadata } : {}),
+        ...(() => {
+          if (metadata) {
+            return { metadata };
+          }
+          return {};
+        })(),
       };
     });
     return;
@@ -164,7 +169,12 @@ const projectAgentResult = ({
     },
     timestamp,
     toolUseId: result.toolUseId,
-    ...(input ? { input } : {}),
+    ...(() => {
+      if (input) {
+        return { input };
+      }
+      return {};
+    })(),
   });
   return events.flatMap((event) =>
     event.type === "assistant_part" && event.part.kind === "subagent"
@@ -228,6 +238,7 @@ export const projectClaudeHistoryToolResults = ({
       continue;
     }
     const existingMessage = state.assistantMessagesByToolCallId.get(result.toolUseId);
+    // SAFETY: The runtime adapter builds this value from the contract fields required by `Extract<AgentStreamPart, { kind: "tool" }> | undefined`.
     const existingPart = existingMessage?.parts.find(
       (part) => part.kind === "tool" && part.callId === result.toolUseId,
     ) as Extract<AgentStreamPart, { kind: "tool" }> | undefined;
@@ -248,11 +259,26 @@ export const projectClaudeHistoryToolResults = ({
     const { part: completedPart } = projectClaudeCompletedToolResult({
       callId: result.toolUseId,
       endedAtMs: timestampMs(timestamp),
-      ...(input ? { input } : {}),
+      ...(() => {
+        if (input) {
+          return { input };
+        }
+        return {};
+      })(),
       isError: result.isError,
       messageId: existingMessage?.messageId ?? entry.uuid ?? result.toolUseId,
-      ...(existingPart?.metadata ? { metadata: existingPart.metadata } : {}),
-      ...(existingPart?.preview ? { preview: existingPart.preview } : {}),
+      ...(() => {
+        if (existingPart?.metadata) {
+          return { metadata: existingPart.metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (existingPart?.preview) {
+          return { preview: existingPart.preview };
+        }
+        return {};
+      })(),
       raw: result.raw,
       resultText: result.text,
       state: state.todosById,

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
@@ -109,7 +110,7 @@ export function useAgentChatWindow({
       cancelScheduledIdleBottomPin();
 
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-      if (typeof requestAnimationFrameFn !== "function") {
+      if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
         if (userScrollIntentVersionRef.current === scheduledUserScrollIntentVersion) {
           forceScrollToBottom();
         }
@@ -204,7 +205,7 @@ export function useAgentChatWindow({
 
       cancelScheduledComposerLayoutSync();
       const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-      if (typeof requestAnimationFrameFn !== "function") {
+      if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
         forceScrollToBottom();
         return;
       }

@@ -77,6 +77,7 @@ describe("node task asset file port", () => {
     );
     expect(quarantineId).not.toBeNull();
     expect(await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId }))).toBeNull();
+    // SAFETY: This test controls the fixture and supplies `string` used by this case.
     await Effect.runPromise(port.restoreQuarantine(quarantineId as string));
     expect(
       await Effect.runPromise(port.readDurable({ workspaceId, taskId, assetId })),
@@ -85,6 +86,7 @@ describe("node task asset file port", () => {
     const taskQuarantineId = await Effect.runPromise(
       port.quarantineTaskDirectory({ workspaceId, taskId }),
     );
+    // SAFETY: This test controls the fixture and supplies `string` used by this case.
     await Effect.runPromise(port.purgeQuarantine(taskQuarantineId as string));
     expect(
       await readFile(

@@ -21,6 +21,10 @@ import {
   isGitConflictResolutionQuickAction,
 } from "./agent-studio-header-quick-actions-availability";
 
+interface QUICKACTIONROLELABELSContract extends Record<AgentRole, string> {}
+
+interface EntriesByRoleContract extends Record<AgentRole, QuickActionMenuEntry[]> {}
+
 type QuickActionsMenuProps = {
   canOpenActionsMenu: boolean;
   isOpen: boolean;
@@ -52,7 +56,7 @@ type QuickActionMenuGroup = {
 
 const QUICK_ACTION_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
-const QUICK_ACTION_ROLE_LABELS: Record<AgentRole, string> = {
+const QUICK_ACTION_ROLE_LABELS: QUICKACTIONROLELABELSContract = {
   spec: "Spec",
   planner: "Planner",
   build: "Builder",
@@ -103,7 +107,7 @@ const buildQuickActionMenuEntries = (
 ];
 
 const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
-  const entriesByRole: Record<AgentRole, QuickActionMenuEntry[]> = {
+  const entriesByRole: EntriesByRoleContract = {
     spec: [],
     planner: [],
     build: [],

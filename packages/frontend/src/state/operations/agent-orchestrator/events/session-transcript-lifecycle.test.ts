@@ -18,9 +18,8 @@ describe("agent-orchestrator session transcript events", () => {
     const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
-        );
+        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
+        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
         return () => {};
       },
       replyApproval: async () => {},
@@ -200,9 +199,8 @@ describe("agent-orchestrator session transcript events", () => {
     const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_sessionRef, handler) => {
-        handlers.push(
-          handler as unknown as (event: { type: string; [key: string]: JsonValue }) => void,
-        );
+        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
+        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
         return () => {};
       },
       replyApproval: async () => {},

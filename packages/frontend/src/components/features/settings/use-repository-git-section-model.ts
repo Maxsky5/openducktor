@@ -171,7 +171,12 @@ const repositoryGitSectionReducer = (
         ...state,
         detectionMessage: action.reason,
         isDetecting: false,
-        ...(action.manual ? { isManualConfigOpen: true } : {}),
+        ...(() => {
+          if (action.manual) {
+            return { isManualConfigOpen: true };
+          }
+          return {};
+        })(),
       };
     }
     case "detection_invalidated": {
@@ -188,7 +193,12 @@ const repositoryGitSectionReducer = (
         detectionMessage:
           "No GitHub origin was detected for this repository. You can still configure it manually.",
         isDetecting: false,
-        ...(action.manual ? { isManualConfigOpen: true } : {}),
+        ...(() => {
+          if (action.manual) {
+            return { isManualConfigOpen: true };
+          }
+          return {};
+        })(),
       };
     }
     case "detection_started": {

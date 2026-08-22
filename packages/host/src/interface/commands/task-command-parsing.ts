@@ -13,6 +13,7 @@ import {
   taskDirectMergeInputSchema,
   taskStatusSchema,
   taskUpdatePatchSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
@@ -28,15 +29,16 @@ export const requireRecord = (
   value: JsonValue | undefined,
   label: string,
 ): Record<string, JsonValue> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   return value as Record<string, JsonValue>;
 };
 
 export const requireString = (value: JsonValue | undefined, label: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -51,7 +53,7 @@ export const optionalNonNegativeInteger = (
     return undefined;
   }
 
-  if (!Number.isInteger(value) || typeof value !== "number" || value < 0) {
+  if (!Number.isInteger(value) || !hasRuntimeType(value, "number") || value < 0) {
     throw invalidInput(`${label} must be greater than or equal to 0.`, label);
   }
 
@@ -106,7 +108,7 @@ export const optionalBoolean = (
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== "boolean") {
+  if (!hasRuntimeType(value, "boolean")) {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 
@@ -114,7 +116,7 @@ export const optionalBoolean = (
 };
 
 export const parseRequiredMarkdown = (value: JsonValue | undefined, label: string): string => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
 
@@ -133,7 +135,7 @@ export const parseOptionalNote = (
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw invalidInput(`${label} must be a string when present.`, label);
   }
 
@@ -158,25 +160,28 @@ export const parsePlanSubtasks = (value: JsonValue | undefined): PlanSubtaskInpu
 };
 
 const normalizeAgentSessionInput = (value: JsonValue | undefined): JsonValue | undefined => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     return value;
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
+  // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
   return {
     ...record,
-    externalSessionId:
-      typeof record.externalSessionId === "string"
-        ? record.externalSessionId.trim()
-        : record.externalSessionId,
-    role: typeof record.role === "string" ? record.role.trim() : record.role,
-    startedAt: typeof record.startedAt === "string" ? record.startedAt.trim() : record.startedAt,
-    runtimeKind:
-      typeof record.runtimeKind === "string" ? record.runtimeKind.trim() : record.runtimeKind,
-    workingDirectory:
-      typeof record.workingDirectory === "string"
-        ? record.workingDirectory.trim()
-        : record.workingDirectory,
+    externalSessionId: hasRuntimeType(record.externalSessionId, "string")
+      ? record.externalSessionId.trim()
+      : record.externalSessionId,
+    role: hasRuntimeType(record.role, "string") ? record.role.trim() : record.role,
+    startedAt: hasRuntimeType(record.startedAt, "string")
+      ? record.startedAt.trim()
+      : record.startedAt,
+    runtimeKind: hasRuntimeType(record.runtimeKind, "string")
+      ? record.runtimeKind.trim()
+      : record.runtimeKind,
+    workingDirectory: hasRuntimeType(record.workingDirectory, "string")
+      ? record.workingDirectory.trim()
+      : record.workingDirectory,
     // SAFETY: spread fields are copied from a JSON-compatible record; only strings are trimmed.
   } as JsonValue;
 };
@@ -223,16 +228,14 @@ export const parsePullRequest = (value: JsonValue | undefined): PullRequest => {
   );
 };
 
-export const parsePullRequestContent = (
-  value: JsonValue | undefined,
-): { title: string; body: string } => {
+export const parsePullRequestContent = (value: JsonValue | undefined) => {
   const record = requireRecord(value, "task_pull_request_upsert input.input");
   const title = requireString(record.title, "input.title");
-  if (typeof record.body !== "string") {
+  if (!hasRuntimeType(record.body, "string")) {
     throw invalidInput("input.body is required.", "input.body");
   }
 
-  return { title, body: record.body };
+  return { title, body: record.body } satisfies { title: string; body: string };
 };
 
 export const parseTaskDirectMergeInput = (value: JsonValue | undefined) => {

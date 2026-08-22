@@ -263,6 +263,7 @@ describe("asset-aware task store compensation", () => {
     expect(
       await Effect.runPromise(harness.innerStore.listTasks({ repoPath: harness.repoPath })),
     ).toEqual([]);
+    // SAFETY: This test controls the fixture and supplies `string` used by this case.
     expect(
       await Effect.runPromise(
         harness.filePort.readDurable({

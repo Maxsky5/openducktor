@@ -36,6 +36,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   agentDefaults: {},
   ...overrides,
 });
+// SAFETY: This test drives the failure path that supplies `WorkspaceSettingsService` before this assertion.
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
   ({
     getRepoConfigByRepoPath(repoPath: string) {
@@ -50,7 +51,8 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  }) as WorkspaceSettingsService;
+// SAFETY: This test drives the failure path that supplies `WorkspaceSettingsService` before this assertion.
 const createWorkspaceSettingsServiceByRepoPath = (
   configs: Record<string, RepoConfig>,
 ): WorkspaceSettingsService =>
@@ -68,7 +70,7 @@ const createWorkspaceSettingsServiceByRepoPath = (
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  }) as WorkspaceSettingsService;
 const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWorktreeService => ({
   getTaskWorktree() {
     return Effect.succeed(worktree);
@@ -382,7 +384,8 @@ describe("createDevServerService", () => {
       start(input) {
         starts.push(input.command);
         if (input.command === "exit 42") {
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
+          // SAFETY: This test controls the fixture and supplies `ReturnType< DevServerProcessPort["start"] >` used by this case.
+          return Effect.fail(new DevServerProcessStartExitError(42, null)) as ReturnType<
             DevServerProcessPort["start"]
           >;
         }
@@ -456,7 +459,8 @@ describe("createDevServerService", () => {
     const processPort: DevServerProcessPort = {
       start(input) {
         if (input.command === "exit 42") {
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
+          // SAFETY: This test controls the fixture and supplies `ReturnType< DevServerProcessPort["start"] >` used by this case.
+          return Effect.fail(new DevServerProcessStartExitError(42, null)) as ReturnType<
             DevServerProcessPort["start"]
           >;
         }

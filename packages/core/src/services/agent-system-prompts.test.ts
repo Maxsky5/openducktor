@@ -535,6 +535,7 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("rejects unknown kickoff prompt templates", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       buildAgentKickoffPrompt({
         role: "build",

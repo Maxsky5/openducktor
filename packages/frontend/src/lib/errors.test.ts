@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { NON_ERROR_THROWN_PREFIX } from "@/types/constants";
 import { errorMessage } from "./errors";
 
+interface CircularContract {
+  self?: unknown;
+}
+
 describe("errorMessage", () => {
   test("returns a fallback string when JSON serialization yields undefined", () => {
     expect(errorMessage(undefined)).toBe(`${NON_ERROR_THROWN_PREFIX} undefined`);
@@ -10,7 +14,7 @@ describe("errorMessage", () => {
   });
 
   test("returns a fallback string when JSON serialization throws", () => {
-    const circular: { self?: unknown } = {};
+    const circular: CircularContract = {};
     circular.self = circular;
 
     expect(errorMessage(circular)).toContain(NON_ERROR_THROWN_PREFIX);

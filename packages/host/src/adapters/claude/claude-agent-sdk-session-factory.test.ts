@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
+import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
@@ -26,7 +27,7 @@ const createToolDiscovery = (): CreateClaudeAgentSdkServiceInput["toolDiscovery"
 describe("createClaudeAgentSdkSession", () => {
   test("fails a repository session when the workspace-bound OpenDucktor MCP is disconnected", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -43,13 +44,11 @@ describe("createClaudeAgentSdkSession", () => {
         streamFinished.resolve();
         return { done: true, value: undefined } as const;
       },
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     mock.module("@anthropic-ai/claude-agent-sdk", () => ({
       ...realClaudeSdk,
       query: () => fakeQuery,
@@ -116,7 +115,7 @@ describe("createClaudeAgentSdkSession", () => {
 
   test("emits idle after starting an initialized session without a message", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -126,13 +125,11 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     mock.module("@anthropic-ai/claude-agent-sdk", () => ({
       ...realClaudeSdk,
       query: () => fakeQuery,
@@ -204,7 +201,7 @@ describe("createClaudeAgentSdkSession", () => {
 
   test("shares nested transcript state between SDK hooks and session events", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -214,13 +211,11 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     let capturedOptions: realClaudeSdk.Options | undefined;
     mock.module("@anthropic-ai/claude-agent-sdk", () => ({
       ...realClaudeSdk,
@@ -319,11 +314,11 @@ describe("createClaudeAgentSdkSession", () => {
   test("fails creation when the SDK stream ends before startup completes", async () => {
     const initialization =
       deferred<Awaited<ReturnType<realClaudeSdk.Query["initializationResult"]>>>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => {},
       initializationResult: () => initialization.promise,
       async *[Symbol.asyncIterator]() {},
-    } as unknown as realClaudeSdk.Query;
+    });
     mock.module("@anthropic-ai/claude-agent-sdk", () => ({
       ...realClaudeSdk,
       query: () => fakeQuery,
@@ -399,7 +394,7 @@ describe("createClaudeAgentSdkSession", () => {
 
   test("starts a titled fresh session without renaming a transcript that does not exist yet", async () => {
     const streamFinished = deferred<void>();
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -409,13 +404,11 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
-    } as unknown as realClaudeSdk.Query;
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
+    });
     const renameSession = mock(async () => {
       throw new Error("fresh sessions must not be renamed before their first message");
     });
@@ -502,7 +495,7 @@ describe("createClaudeAgentSdkSession", () => {
       await teardownFinished.promise;
       return { done: true, value: undefined } as const;
     });
-    const fakeQuery = {
+    const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
       initializationResult: async () => ({
         account: {},
@@ -512,14 +505,12 @@ describe("createClaudeAgentSdkSession", () => {
         models: [],
         output_style: "default",
       }),
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          await streamFinished.promise;
-          return { done: true, value: undefined };
-        },
-      }),
+      async *[Symbol.asyncIterator]() {
+        await streamFinished.promise;
+        yield* [];
+      },
       return: queryReturn,
-    } as unknown as realClaudeSdk.Query;
+    });
     mock.module("@anthropic-ai/claude-agent-sdk", () => ({
       ...realClaudeSdk,
       query: () => fakeQuery,

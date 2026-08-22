@@ -78,7 +78,12 @@ export function useSessionStartModalCoordinator({
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
     branches,
     repoSettings,
-    ...(initialCatalog !== undefined ? { initialCatalog } : {}),
+    ...(() => {
+      if (initialCatalog !== undefined) {
+        return { initialCatalog };
+      }
+      return {};
+    })(),
     workspaceRepoPath,
   });
 

@@ -79,9 +79,24 @@ export const readClaudeTaskNotifications = (
   return taskIds.map((taskId) => ({
     taskId,
     status,
-    ...(toolUseId ? { toolUseId } : {}),
-    ...(outputFile ? { outputFile } : {}),
-    ...(summary ? { summary } : {}),
+    ...(() => {
+      if (toolUseId) {
+        return { toolUseId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (outputFile) {
+        return { outputFile };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (summary) {
+        return { summary };
+      }
+      return {};
+    })(),
   }));
 };
 
@@ -106,6 +121,11 @@ export const readClaudeBackgroundAgentLaunch = (
   return {
     agentId,
     status: "async_launched",
-    ...(outputFile ? { outputFile } : {}),
+    ...(() => {
+      if (outputFile) {
+        return { outputFile };
+      }
+      return {};
+    })(),
   };
 };

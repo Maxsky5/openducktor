@@ -22,6 +22,7 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
     options.includeStageDirectory === false ? [] : [[attachmentDirectory, 1]],
   );
   const failModifiedTimePaths = new Set<string>();
+  // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
   const calls = {
     exists: 0,
     existsPaths: [] as string[],
@@ -113,6 +114,7 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
         try: async () => {
           calls.readDirectory += 1;
           if (!directories.has(path)) {
+            // SAFETY: This test drives the failure path that supplies `Error & { code: string; }` before this assertion.
             const error = new Error(`missing directory: ${path}`) as Error & {
               code: string;
             };
@@ -151,6 +153,7 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
           if (directoryModifiedTimeMs !== undefined) {
             return directoryModifiedTimeMs;
           }
+          // SAFETY: This test drives the failure path that supplies `Error & { code: string; }` before this assertion.
           const error = new Error(`missing path fixture: ${path}`) as Error & {
             code: string;
           };
@@ -171,6 +174,7 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
       return Effect.succeed(directories.has(path) || files.has(path));
     },
   };
+  // SAFETY: This test controls the fixture and supplies `LocalAttachmentPort` used by this case.
   return {
     calls,
     failModifiedTimePaths,

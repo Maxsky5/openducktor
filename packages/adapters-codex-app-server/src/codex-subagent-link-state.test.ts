@@ -158,7 +158,12 @@ describe("CodexSubagentLinkState", () => {
         childThreadId: "child-thread",
         itemId: "spawn-1",
         status,
-        ...(status === "error" ? { error: "First turn failed" } : {}),
+        ...(() => {
+          if (status === "error") {
+            return { error: "First turn failed" };
+          }
+          return {};
+        })(),
       });
 
       const staleRunning = subagents.upsertLink({
@@ -359,7 +364,7 @@ describe("CodexSubagentLinkState", () => {
 
     subagents.clearSession("parent-thread", "runtime-1");
 
-    const indexes = subagents as unknown as {
+    const indexes = subagents satisfies {
       linksByCorrelationKey: Map<string, unknown>;
       linksByParentKey: Map<string, unknown>;
       linksByChildThreadId: Map<string, unknown>;
@@ -422,8 +427,18 @@ describe("CodexSubagentLinkState", () => {
         childThreadId: "child-thread",
         itemId: "spawn-1",
         status,
-        ...(startedAtMs !== undefined ? { startedAtMs } : {}),
-        ...(endedAtMs !== undefined ? { endedAtMs } : {}),
+        ...(() => {
+          if (startedAtMs !== undefined) {
+            return { startedAtMs };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (endedAtMs !== undefined) {
+            return { endedAtMs };
+          }
+          return {};
+        })(),
       });
 
     update("running", 200);

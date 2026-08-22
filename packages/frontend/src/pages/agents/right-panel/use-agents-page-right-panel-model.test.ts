@@ -61,6 +61,7 @@ const createDiffData = (): DiffDataState => ({
   setDiffScope: () => {},
 });
 
+// SAFETY: This test controls the fixture and supplies `BuildDiffModelArgs["gitActions"]` used by this case.
 const createGitActions = (
   overrides: Partial<BuildDiffModelArgs["gitActions"]> = {},
 ): BuildDiffModelArgs["gitActions"] =>

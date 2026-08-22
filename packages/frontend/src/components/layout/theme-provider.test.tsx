@@ -12,6 +12,10 @@ import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shar
 import { ThemeToggle } from "./sidebar/theme-toggle";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
+interface QueryClientRefContract {
+  current: QueryClient | null;
+}
+
 enableReactActEnvironment();
 
 const ThemeHarness = (): ReactElement => {
@@ -76,7 +80,7 @@ const renderThemeProvider = ({
   withSettingsSnapshot = true,
   enableSettingsSnapshotQuery = withSettingsSnapshot,
 }: RenderThemeProviderOptions = {}) => {
-  const queryClientRef: { current: QueryClient | null } = { current: null };
+  const queryClientRef: QueryClientRefContract = { current: null };
 
   render(
     <QueryProvider useIsolatedClient>

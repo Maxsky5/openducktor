@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Check, History } from "lucide-react";
 import { type ReactElement, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,7 @@ export function SessionHistoryMenu({
             restoreTriggerFocusRef.current = false;
             event.preventDefault();
             const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-            if (typeof requestAnimationFrameFn === "function") {
+            if (hasRuntimeType(requestAnimationFrameFn, "function")) {
               requestAnimationFrameFn(() => {
                 triggerRef.current?.focus();
               });

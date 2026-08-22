@@ -1,8 +1,10 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, createElement, Fragment } from "react";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -19,6 +21,7 @@ const flush = async (): Promise<void> => {
 };
 
 describe("useAgentChatRowMotion", () => {
+  // SAFETY: This test creates the DOM fixture that supplies `{ window?: unknown }` before this lookup.
   const originalWindow = (globalThis as { window?: unknown }).window;
   const originalAnimate = HTMLElement.prototype.animate;
 
@@ -39,6 +42,7 @@ describe("useAgentChatRowMotion", () => {
   };
 
   beforeEach(() => {
+    // SAFETY: This test controls the fixture and supplies `{ window?: unknown }` used by this case.
     (globalThis as { window?: unknown }).window = globalThis;
     HTMLElement.prototype.animate = mock(() => {
       throw new Error("animate should not be called");
@@ -46,9 +50,11 @@ describe("useAgentChatRowMotion", () => {
   });
 
   afterEach(() => {
-    if (typeof originalWindow === "undefined") {
+    if (hasRuntimeType(originalWindow, "undefined")) {
+      // SAFETY: This test controls the fixture and supplies `{ window?: unknown }` used by this case.
       delete (globalThis as { window?: unknown }).window;
     } else {
+      // SAFETY: This test creates the DOM fixture that supplies `{ window?: unknown }` before this lookup.
       (globalThis as { window?: unknown }).window = originalWindow;
     }
     HTMLElement.prototype.animate = originalAnimate;

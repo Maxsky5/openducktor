@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { ArrowUp } from "lucide-react";
 import { act } from "react";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { PolicyBoundSessionRef, StartAgentSessionInput } from "@openducktor/core";
 import { toAgentRuntimePolicyBinding } from "@openducktor/core";
@@ -6,7 +7,7 @@ import type { SessionInput } from "./types";
 type SessionInputSource = StartAgentSessionInput | PolicyBoundSessionRef;
 
 export const toIsoFromEpoch = (value: JsonValue | undefined, fallback: () => string): string => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (!hasRuntimeType(value, "number") || Number.isNaN(value)) {
     return fallback();
   }
   const iso = new Date(value).toISOString();
@@ -20,7 +21,17 @@ export const toSessionInput = (input: SessionInputSource): SessionInput => {
     workingDirectory: input.workingDirectory,
     systemPrompt: input.systemPrompt ?? "",
     ...toAgentRuntimePolicyBinding(input),
-    ...(sessionScope ? { sessionScope } : {}),
-    ...(input.model ? { model: input.model } : {}),
+    ...(() => {
+      if (sessionScope) {
+        return { sessionScope };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.model) {
+        return { model: input.model };
+      }
+      return {};
+    })(),
   };
 };

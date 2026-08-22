@@ -6,6 +6,7 @@ import {
   MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
   mcpBridgeDevelopmentDiscoveryPathSegments,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 
@@ -15,7 +16,7 @@ const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME = ".openducktor";
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return undefined;
   }
   const trimmed = value.trim();

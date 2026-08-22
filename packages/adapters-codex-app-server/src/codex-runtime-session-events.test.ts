@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD } from "@openducktor/contracts";
+import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD, hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
@@ -67,11 +67,12 @@ const createRuntimeEvents = (
 
 type StartedItemTimestampState = Map<string, Map<string, Map<string, number>>>;
 
+// SAFETY: This test controls the fixture and supplies `{ startedItemTimestampsByRuntimeId: StartedItemTimestampState; }` used by this case.
 const startedItemTimestampState = (
   runtimeEvents: CodexRuntimeSessionEvents,
 ): StartedItemTimestampState =>
   (
-    runtimeEvents as unknown as {
+    runtimeEvents as {
       startedItemTimestampsByRuntimeId: StartedItemTimestampState;
     }
   ).startedItemTimestampsByRuntimeId;
@@ -585,12 +586,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const subagentParts = emittedEvents.flatMap((event) => {
       if (
-        typeof event !== "object" ||
+        !hasRuntimeType(event, "object") ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        typeof event.part !== "object" ||
+        !hasRuntimeType(event.part, "object") ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent"
@@ -696,12 +697,12 @@ describe("CodexRuntimeSessionEvents", () => {
 
     const statuses = emittedEvents.flatMap((event) => {
       if (
-        typeof event !== "object" ||
+        !hasRuntimeType(event, "object") ||
         event === null ||
         !("type" in event) ||
         event.type !== "assistant_part" ||
         !("part" in event) ||
-        typeof event.part !== "object" ||
+        !hasRuntimeType(event.part, "object") ||
         event.part === null ||
         !("kind" in event.part) ||
         event.part.kind !== "subagent" ||
@@ -902,9 +903,11 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const parentOneApproval = parentOneEvents.find(
       (event) => (event as { type?: string }).type === "approval_required",
     ) as { externalSessionId: string; requestId: string };
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const parentTwoApproval = parentTwoEvents.find(
       (event) => (event as { type?: string }).type === "approval_required",
     ) as { externalSessionId: string; requestId: string };
@@ -1639,7 +1642,10 @@ describe("CodexRuntimeSessionEvents", () => {
     const eventsByType = (events: unknown[], type: string) =>
       events.filter(
         (event) =>
-          typeof event === "object" && event !== null && "type" in event && event.type === type,
+          hasRuntimeType(event, "object") &&
+          event !== null &&
+          "type" in event &&
+          event.type === type,
       );
     const parentRequired = eventsByType(parentEvents, "question_required");
     const childRequired = eventsByType(childEvents, "question_required");

@@ -3,6 +3,7 @@ import {
   agentRuntimeEventSchema,
   agentSessionLiveSnapshotSchema,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import {
   codexSessionRef,
@@ -48,12 +49,15 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return { data: ["parent-thread", "child-thread"], nextCursor: null } as Response;
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
       const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [
           codexThreadFixture({
@@ -176,13 +180,14 @@ describe("CodexAppServerAdapter approvals", () => {
       message: { id: 71, method: "approval/request", params: { tool: "network" } },
     });
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
+        hasRuntimeType(event, "object") &&
         event !== null &&
         (event as { type?: unknown; message?: unknown }).type === "session_error" &&
-        typeof (event as { message?: unknown }).message === "string" &&
+        hasRuntimeType((event as { message?: unknown }).message, "string") &&
         (event as { message: string }).message.includes("missing a thread identifier"),
     );
     unsubscribe();
@@ -401,13 +406,15 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
+    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
     const question = await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
+        hasRuntimeType(event, "object") &&
         event !== null &&
         (event as { type?: unknown }).type === "question_required",
     );
+    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
     const requestId = (question as { requestId: string }).requestId;
     const reply = {
       runtimeId: "runtime-live",
@@ -514,13 +521,15 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
+    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
     const question = await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
+        hasRuntimeType(event, "object") &&
         event !== null &&
         (event as { type?: unknown }).type === "question_required",
     );
+    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
     const requestId = (question as { requestId: string }).requestId;
     const reply = {
       runtimeId: "runtime-live",
@@ -639,10 +648,11 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
+    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
     const question = await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
+        hasRuntimeType(event, "object") &&
         event !== null &&
         (event as { type?: unknown }).type === "question_required",
     );
@@ -655,6 +665,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     expect(snapshot.classification).toBe("waiting_for_question");
     expect(snapshot.pendingQuestions).toHaveLength(1);
+    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
     const requestId = (question as { requestId: string }).requestId;
     if (!requestId) {
       throw new Error("expected pending question");

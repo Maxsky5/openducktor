@@ -45,7 +45,12 @@ const userMessageEvent = ({
   message,
   parts: [{ kind: "text", text: message }],
   state: "read",
-  ...(sessionRef ? { sessionRef } : {}),
+  ...(() => {
+    if (sessionRef) {
+      return { sessionRef };
+    }
+    return {};
+  })(),
 });
 
 const assistantPartEvent = ({
@@ -62,7 +67,12 @@ const assistantPartEvent = ({
   type: "assistant_part",
   externalSessionId: sessionRef?.externalSessionId ?? "session-1",
   timestamp: "2026-02-22T08:00:01.000Z",
-  ...(sessionRef ? { sessionRef } : {}),
+  ...(() => {
+    if (sessionRef) {
+      return { sessionRef };
+    }
+    return {};
+  })(),
   part: {
     kind: "text",
     messageId,
@@ -86,7 +96,12 @@ const assistantMessageEvent = ({
   messageId,
   timestamp: "2026-02-22T08:00:03.000Z",
   message,
-  ...(sessionRef ? { sessionRef } : {}),
+  ...(() => {
+    if (sessionRef) {
+      return { sessionRef };
+    }
+    return {};
+  })(),
 });
 
 const createRoutingHarness = async ({
@@ -134,11 +149,26 @@ const createRoutingHarness = async ({
     adapter,
     repoPath,
     externalSessionId: sessionRef?.externalSessionId ?? "session-1",
-    ...(sessionRef ? { sessionRef } : {}),
+    ...(() => {
+      if (sessionRef) {
+        return { sessionRef };
+      }
+      return {};
+    })(),
     sessionsRef,
     updateSession,
-    ...(updateSessionTodos ? { updateSessionTodos } : {}),
-    ...(eventBatchWindowMs !== undefined ? { eventBatchWindowMs } : {}),
+    ...(() => {
+      if (updateSessionTodos) {
+        return { updateSessionTodos };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (eventBatchWindowMs !== undefined) {
+        return { eventBatchWindowMs };
+      }
+      return {};
+    })(),
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
   });

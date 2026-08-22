@@ -21,6 +21,7 @@ export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegis
       "stopSession" in adapter &&
       "releaseSession" in adapter
     ) {
+      // SAFETY: The surrounding boundary constructs or validates every member required by `AgentSessionRuntimeAdapterPort`.
       return Effect.succeed(adapter as AgentSessionRuntimeAdapterPort);
     }
     return Effect.fail(

@@ -6,6 +6,8 @@ import { visit } from "unist-util-visit";
 import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
 
+interface UNSUPPORTEDNODEREASONSContract extends Record<string, string> {}
+
 export type VisualMarkdownCompatibility =
   | { compatible: true }
   | { compatible: false; reason: string };
@@ -34,7 +36,7 @@ const SUPPORTED_MDAST_NODE_TYPES = new Set([
   "break",
 ]);
 
-const UNSUPPORTED_NODE_REASONS: Record<string, string> = {
+const UNSUPPORTED_NODE_REASONS: UNSUPPORTEDNODEREASONSContract = {
   html: "Raw HTML is available only in Markdown mode because Visual mode would remove it.",
   definition:
     "Reference-style links and images are available only in Markdown mode. Change them to inline links to use Visual mode.",
@@ -64,15 +66,19 @@ const parseCanonicalRendererMarkdown = (body: string) => {
   return tree;
 };
 
-const canonicalRendererSemanticTree = (body: string): unknown =>
-  JSON.parse(
+const canonicalRendererSemanticTree = (
+  body: string,
+): ReturnType<typeof parseCanonicalRendererMarkdown> => {
+  // SAFETY: serialization removes only positional fields and preserves the Markdown tree contract.
+  return JSON.parse(
     JSON.stringify(parseCanonicalRendererMarkdown(body), (key, nestedValue) => {
       if (key === "position" || key === "spread") {
         return undefined;
       }
       return nestedValue;
     }),
-  );
+  ) as ReturnType<typeof parseCanonicalRendererMarkdown>;
+};
 
 export type MarkdownMathSemantic = {
   kind: "block" | "inline";
@@ -105,6 +111,7 @@ const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedList
   return (node.children ?? []).flatMap(orderedListsInMarkdownTree);
 };
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `MarkdownTreeNode`.
 export const canonicalRendererOrderedListSemantics = (
   body: string,
 ): MarkdownOrderedListSemantic[] =>

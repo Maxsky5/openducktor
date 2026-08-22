@@ -55,8 +55,12 @@ const createController = () => {
   return {
     controller: {
       close: mock(() => {}),
-      enqueue: mock((value: Uint8Array) => enqueued.push(value)),
-    } as unknown as ReadableStreamDefaultController<Uint8Array>,
+      desiredSize: null,
+      enqueue: mock((value: Uint8Array) => {
+        enqueued.push(value);
+      }),
+      error: mock(() => {}),
+    } satisfies ReadableStreamDefaultController<Uint8Array>,
     enqueued,
   };
 };
@@ -69,6 +73,7 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
+      // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
       return {} as ReturnType<typeof setTimeout>;
     },
     taskEventStream: fake.stream,
@@ -88,6 +93,7 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
 test("cancels the creation expiry timer when an SSE connection attaches", () => {
   const fake = createFakeStream();
   const clearExpiryTimer = mock(() => {});
+  // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
@@ -107,6 +113,7 @@ test("cancels the creation expiry timer when an SSE connection attaches", () => 
 test("clears the creation timer and unsubscribes once on explicit delete or shutdown", () => {
   const fake = createFakeStream();
   const clearExpiryTimer = mock(() => {});
+  // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
@@ -195,10 +202,12 @@ test("isolates enqueue failures and deletes host subscriptions on explicit dispo
   const failure = new Error("closed response");
   const brokenController = {
     close: mock(() => {}),
+    desiredSize: null,
     enqueue: mock(() => {
       throw failure;
     }),
-  } as unknown as ReadableStreamDefaultController<Uint8Array>;
+    error: mock(() => {}),
+  } satisfies ReadableStreamDefaultController<Uint8Array>;
   manager.attach(lease, brokenController);
   fake.emit(change(1));
 
@@ -220,6 +229,7 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
+      // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
       return {} as ReturnType<typeof setTimeout>;
     },
     taskEventStream: fake.stream,

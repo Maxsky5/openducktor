@@ -48,6 +48,7 @@ import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
 } from "./user-message-signatures";
+import { createInvalidFixture } from "./test-fixture";
 
 const IMAGE_ATTACHMENT_DISPLAY_PART = {
   kind: "attachment" as const,
@@ -76,22 +77,22 @@ test("global event observation becomes ready only after the lazy SSE stream conn
   const connected = new Promise<void>((resolve) => {
     connect = resolve;
   });
-  const client = {
+  const client = createInvalidFixture<Parameters<typeof subscribeGlobalEvents>[0]["client"]>({
     global: {
       event: async () => ({
         stream: (async function* () {
           await connected;
           yield {
             directory: "/repo",
-            payload: {
+            payload: createInvalidFixture<Event>({
               type: "server.connected",
               properties: {},
-            } as unknown as Event,
+            }),
           };
         })(),
       }),
     },
-  } as unknown as Parameters<typeof subscribeGlobalEvents>[0]["client"];
+  });
   const order: string[] = [];
   const observation = subscribeGlobalEvents({
     client,
@@ -151,11 +152,11 @@ test("classifies OpenCode server heartbeats at the global transport boundary", (
 });
 
 test("keeps session observation alive across OpenCode server heartbeats", async () => {
-  const heartbeat = {
+  const heartbeat = createInvalidFixture<TestGlobalEventPayload>({
     id: "event-heartbeat-1",
     type: "server.heartbeat",
     properties: {},
-  } as unknown as TestGlobalEventPayload;
+  });
   const emitted = await runEventStream([heartbeat, sessionStatusEvent({ type: "busy" })]);
 
   expect(emitted).toEqual([
@@ -205,7 +206,7 @@ test("projects direct and sync message removal events as Transcript retractions"
 
 test("does not emit removed pending assistant output when the session becomes idle", async () => {
   const emitted = await runEventStream([
-    {
+    createInvalidFixture<Event>({
       type: "message.updated",
       properties: {
         info: {
@@ -225,7 +226,7 @@ test("does not emit removed pending assistant output when the session becomes id
           },
         ],
       },
-    } as unknown as Event,
+    }),
     {
       id: "event-message-removed-before-idle",
       type: "message.removed",
@@ -327,20 +328,24 @@ test("readEventParentExternalSessionId prefers parent ids from event info", () =
 
 test("readEventSessionId accepts info.id only for session lifecycle events", () => {
   expect(
-    readEventSessionId({
-      type: "session.created",
-      properties: {
-        info: { id: "external-child-session" },
-      },
-    } as unknown as Event),
+    readEventSessionId(
+      createInvalidFixture<Event>({
+        type: "session.created",
+        properties: {
+          info: { id: "external-child-session" },
+        },
+      }),
+    ),
   ).toBe("external-child-session");
   expect(
-    readEventSessionId({
-      type: "message.updated",
-      properties: {
-        info: { id: "message-1" },
-      },
-    } as unknown as Event),
+    readEventSessionId(
+      createInvalidFixture<Event>({
+        type: "message.updated",
+        properties: {
+          info: { id: "message-1" },
+        },
+      }),
+    ),
   ).toBeUndefined();
 });
 
@@ -362,10 +367,12 @@ test("readSessionLifecycleEvent ignores parent aliases and non-lifecycle events"
 
   expect(readSessionLifecycleEvent(aliasEvent)?.parentExternalSessionId).toBeUndefined();
   expect(
-    readSessionLifecycleEvent({
-      type: "message.updated",
-      properties: event.properties,
-    } as unknown as Event),
+    readSessionLifecycleEvent(
+      createInvalidFixture<Event>({
+        type: "message.updated",
+        properties: event.properties,
+      }),
+    ),
   ).toBeUndefined();
 });
 
@@ -513,7 +520,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
 });
 
 const assistantRoleEvent = (messageId: string): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.updated",
     properties: {
       info: {
@@ -522,15 +529,15 @@ const assistantRoleEvent = (messageId: string): Event =>
         sessionID: "external-session-1",
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeSessionIdleEvent = (): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "session.idle",
     properties: {
       sessionID: "external-session-1",
     },
-  }) as unknown as Event;
+  });
 
 const makeSessionStatusIdleEvent = (): Event => sessionStatusEvent({ type: "idle" });
 
@@ -540,17 +547,18 @@ const makeAssistantTextPart = (input: {
   partId?: string;
   start?: number;
   end?: number;
-}): Record<string, JsonValue> => ({
-  id: input.partId ?? `${input.messageId}-text-1`,
-  sessionID: "external-session-1",
-  messageID: input.messageId,
-  type: "text",
-  text: input.text,
-  time: {
-    start: input.start ?? 1,
-    end: input.end ?? 1,
-  },
-});
+}) =>
+  ({
+    id: input.partId ?? `${input.messageId}-text-1`,
+    sessionID: "external-session-1",
+    messageID: input.messageId,
+    type: "text",
+    text: input.text,
+    time: {
+      start: input.start ?? 1,
+      end: input.end ?? 1,
+    },
+  }) satisfies Record<string, JsonValue>;
 
 const makeAssistantMessageUpdatedEvent = (input: {
   messageId: string;
@@ -573,20 +581,35 @@ const makeAssistantMessageUpdatedEvent = (input: {
         ]
       : undefined);
 
-  return {
+  return createInvalidFixture<Event>({
     type: "message.updated",
     properties: {
       info: {
         id: input.messageId,
         role: "assistant",
         sessionID: "external-session-1",
-        ...(input.finish ? { finish: input.finish } : {}),
-        ...(input.completedAt !== undefined ? { time: { completed: input.completedAt } } : {}),
+        ...(() => {
+          if (input.finish) {
+            return { finish: input.finish };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (input.completedAt !== undefined) {
+            return { time: { completed: input.completedAt } };
+          }
+          return {};
+        })(),
         ...input.info,
       },
-      ...(parts ? { parts } : {}),
+      ...(() => {
+        if (parts) {
+          return { parts };
+        }
+        return {};
+      })(),
     },
-  } as unknown as Event;
+  });
 };
 
 const makeMessagePartUpdatedEvent = (input: {
@@ -595,7 +618,7 @@ const makeMessagePartUpdatedEvent = (input: {
   text: string;
   end?: number;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: makeAssistantTextPart({
@@ -605,14 +628,14 @@ const makeMessagePartUpdatedEvent = (input: {
         end: input.end,
       }),
     },
-  }) as unknown as Event;
+  });
 
 const makeAssistantStepFinishPartUpdatedEvent = (input: {
   messageId: string;
   partId: string;
   reason?: string;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: {
@@ -625,7 +648,7 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
         tokens: {},
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeAssistantSubtaskPartUpdatedEvent = (input: {
   messageId: string;
@@ -634,7 +657,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
   prompt: string;
   description: string;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: {
@@ -647,7 +670,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         description: input.description,
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeMessagePartDeltaEvent = (input: {
   messageId: string;
@@ -655,7 +678,7 @@ const makeMessagePartDeltaEvent = (input: {
   field: string;
   delta: string;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.delta",
     properties: {
       sessionID: "external-session-1",
@@ -664,12 +687,12 @@ const makeMessagePartDeltaEvent = (input: {
       field: input.field,
       delta: input.delta,
     },
-  }) as unknown as Event;
+  });
 
 describe("event-stream", () => {
   test("does not project OpenCode compaction events as shared transcript notices", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -680,15 +703,15 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(
@@ -721,7 +744,7 @@ describe("event-stream", () => {
 
   test("keeps the OpenCode compaction marker hidden without suppressing its assistant summary", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -732,7 +755,7 @@ describe("event-stream", () => {
             auto: false,
           },
         },
-      } as unknown as Event,
+      }),
       makeAssistantMessageUpdatedEvent({
         messageId: "compact-summary-message",
         text: "Compacted session context",
@@ -753,7 +776,7 @@ describe("event-stream", () => {
 
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -770,7 +793,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -792,7 +815,7 @@ describe("event-stream", () => {
 
   test("emits user_message from stored user text parts when message.updated omits visible text", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -803,8 +826,8 @@ describe("event-stream", () => {
             text: "Generate the PR",
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -820,7 +843,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -838,7 +861,7 @@ describe("event-stream", () => {
 
   test("emits user_message when user text parts arrive after message.updated", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -854,8 +877,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -866,7 +889,7 @@ describe("event-stream", () => {
             text: "Ship it",
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -891,7 +914,7 @@ describe("event-stream", () => {
 
   test("re-emits user_message when later parts update the visible text", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -904,8 +927,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -916,7 +939,7 @@ describe("event-stream", () => {
             text: "New text",
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -940,7 +963,7 @@ describe("event-stream", () => {
     const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
 
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -952,8 +975,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -964,8 +987,8 @@ describe("event-stream", () => {
             text: slashEnvelope,
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -976,7 +999,7 @@ describe("event-stream", () => {
             text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -992,7 +1015,7 @@ describe("event-stream", () => {
 
   test("preserves visible user text when later file parts arrive without visible text parts", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1005,8 +1028,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1028,7 +1051,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1067,7 +1090,7 @@ describe("event-stream", () => {
 
   test("keeps queued follow-ups queued until the pending assistant clears", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1079,8 +1102,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1093,13 +1116,13 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "session.idle",
         properties: {
           sessionID: "external-session-1",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1121,7 +1144,7 @@ describe("event-stream", () => {
   test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.updated",
           properties: {
             info: {
@@ -1134,7 +1157,7 @@ describe("event-stream", () => {
               },
             },
           },
-        } as unknown as Event,
+        }),
       ],
       (nextSessionRecord) => {
         nextSessionRecord.pendingQueuedUserMessages.push({
@@ -1159,13 +1182,13 @@ describe("event-stream", () => {
   test("removes a queued send when OpenCode retracts it before the message echo", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.removed",
           properties: {
             sessionID: "external-session-1",
             messageID: "message-pending",
           },
-        } as unknown as Event,
+        }),
       ],
       (session) => {
         session.pendingQueuedUserMessages.push({
@@ -1180,7 +1203,7 @@ describe("event-stream", () => {
 
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1192,8 +1215,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1207,7 +1230,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1222,7 +1245,7 @@ describe("event-stream", () => {
   test("matches queued sends by exact model selection when content repeats", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.updated",
           properties: {
             info: {
@@ -1239,7 +1262,7 @@ describe("event-stream", () => {
               },
             },
           },
-        } as unknown as Event,
+        }),
       ],
       (nextSessionRecord) => {
         nextSessionRecord.activeAssistantMessageId = "msg-100";
@@ -1274,7 +1297,7 @@ describe("event-stream", () => {
   test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.updated",
           properties: {
             info: {
@@ -1305,9 +1328,10 @@ describe("event-stream", () => {
               },
             ],
           },
-        } as unknown as Event,
+        }),
       ],
       (nextSessionRecord) => {
+        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-attachment-1",
           signature: buildQueuedRequestSignature(
@@ -1364,7 +1388,7 @@ describe("event-stream", () => {
   test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.updated",
           properties: {
             info: {
@@ -1377,8 +1401,8 @@ describe("event-stream", () => {
               },
             },
           },
-        } as unknown as Event,
-        {
+        }),
+        createInvalidFixture<Event>({
           type: "message.part.updated",
           properties: {
             part: {
@@ -1391,10 +1415,11 @@ describe("event-stream", () => {
               url: "https://files.example.invalid/uploaded-image",
             },
           },
-        } as unknown as Event,
+        }),
       ],
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
+        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-attachment-partial-1",
           signature: buildQueuedRequestSignature(
@@ -1439,7 +1464,7 @@ describe("event-stream", () => {
   test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.updated",
           properties: {
             info: {
@@ -1479,9 +1504,10 @@ describe("event-stream", () => {
               ],
             },
           },
-        } as unknown as Event,
+        }),
       ],
       (nextSessionRecord) => {
+        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-pdf-1",
           signature: buildQueuedRequestSignature(
@@ -1527,7 +1553,7 @@ describe("event-stream", () => {
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1539,8 +1565,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1553,8 +1579,8 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1567,7 +1593,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
@@ -1683,7 +1709,7 @@ describe("event-stream", () => {
 
   test("emits session_idle for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1704,7 +1730,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      }),
       makeSessionIdleEvent(),
     ]);
 
@@ -1739,7 +1765,7 @@ describe("event-stream", () => {
 
   test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1761,7 +1787,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -1786,7 +1812,7 @@ describe("event-stream", () => {
 
   test("emits final assistant_message from known parts when terminal metadata arrives later", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1798,8 +1824,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1821,7 +1847,7 @@ describe("event-stream", () => {
             finish: "stop",
           },
         },
-      } as unknown as Event,
+      }),
       makeSessionIdleEvent(),
     ]);
 
@@ -1848,7 +1874,7 @@ describe("event-stream", () => {
 
   test("does not emit idle or final assistant_message from known parts without a stop signal", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1860,8 +1886,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -1882,7 +1908,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
@@ -2237,7 +2263,7 @@ describe("event-stream", () => {
 
   test("replays known assistant parts when the assistant role becomes known later", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2248,7 +2274,7 @@ describe("event-stream", () => {
             text: "Late role text",
           },
         },
-      } as unknown as Event,
+      }),
       assistantRoleEvent("assistant-message-late-role-1"),
     ]);
 
@@ -2262,14 +2288,14 @@ describe("event-stream", () => {
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
     const { emitted } = await runEventStreamWithSession([
-      {
+      createInvalidFixture<Event>({
         type: "todo.updated",
         properties: {
           sessionID: "external-other-session",
           todos: [{ content: "ignored" }],
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "todo.updated",
         properties: {
           sessionID: "external-session-1",
@@ -2280,7 +2306,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const todoEvents = emitted.filter((event) => event.type === "session_todos_updated");
@@ -2300,18 +2326,18 @@ describe("event-stream", () => {
 
   test("routes directory-scoped global events only to matching working directories", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "session.idle",
         properties: {
           directory: "/other",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "session.idle",
         properties: {
           directory: "/repo",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
@@ -2323,20 +2349,20 @@ describe("event-stream", () => {
 
     await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "todo.updated",
           properties: {
             sessionID: "external-other-session",
             todos: [{ content: "ignored" }],
           },
-        } as unknown as Event,
-        {
+        }),
+        createInvalidFixture<Event>({
           type: "todo.updated",
           properties: {
             sessionID: "external-session-1",
             todos: [{ content: "handled" }],
           },
-        } as unknown as Event,
+        }),
       ],
       undefined,
       {
@@ -2358,7 +2384,7 @@ describe("event-stream", () => {
       sessionId: "external-child-session",
       permission: "read",
     });
-    const childMessageEvent = {
+    const childMessageEvent = createInvalidFixture<Event>({
       type: "message.updated",
       properties: {
         info: {
@@ -2367,7 +2393,7 @@ describe("event-stream", () => {
           sessionID: "external-child-session",
         },
       },
-    } as unknown as Event;
+    });
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2413,13 +2439,13 @@ describe("event-stream", () => {
       "question.asked",
       "question.replied",
     ] as const) {
-      const event = {
+      const event = createInvalidFixture<Event>({
         type: eventType,
         properties: {
           sessionID: "external-child-session",
           parentID: explicitParentSubscriber.externalSessionId,
         },
-      } as unknown as Event;
+      });
 
       expect(
         isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
@@ -2435,7 +2461,7 @@ describe("event-stream", () => {
   });
 
   test("does not treat a top-level lifecycle parent id as authoritative", () => {
-    const childSessionCreatedEvent = {
+    const childSessionCreatedEvent = createInvalidFixture<Event>({
       type: "session.created",
       properties: {
         parentID: "external-parent-session",
@@ -2443,7 +2469,7 @@ describe("event-stream", () => {
           id: "external-child-session",
         },
       },
-    } as unknown as Event;
+    });
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
       input: makeSessionInput(),
@@ -2520,7 +2546,7 @@ describe("event-stream", () => {
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-2"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2529,8 +2555,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2542,7 +2568,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2562,7 +2588,7 @@ describe("event-stream", () => {
   test("replays queued deltas in FIFO order", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-fifo"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2571,8 +2597,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2581,8 +2607,8 @@ describe("event-stream", () => {
           field: "text",
           delta: "!",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2594,7 +2620,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -2608,7 +2634,7 @@ describe("event-stream", () => {
   test("keeps known-part and queued-part delta application consistent", async () => {
     const queuedPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2617,8 +2643,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2630,12 +2656,12 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const knownPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2647,8 +2673,8 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2657,7 +2683,7 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const queuedParts = queuedPath.filter((event) => event.type === "assistant_part");
@@ -2679,7 +2705,7 @@ describe("event-stream", () => {
 
   test("suppresses assistant_delta when delta belongs to user message", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -2688,15 +2714,15 @@ describe("event-stream", () => {
             sessionID: "external-session-1",
           },
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
           messageID: "user-message-1",
           delta: "typing...",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
@@ -2705,7 +2731,7 @@ describe("event-stream", () => {
   test("emits reasoning channel for reasoning fallback deltas", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-reasoning"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2713,7 +2739,7 @@ describe("event-stream", () => {
           field: "reasoning_content",
           delta: "Hidden chain of thought",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const deltas = emitted.filter((event) => event.type === "assistant_delta");
@@ -2730,7 +2756,7 @@ describe("event-stream", () => {
 
   test("suppresses non-assistant reasoning parts", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -2749,7 +2775,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
@@ -3147,7 +3173,7 @@ describe("event-stream", () => {
         sessionId: "external-child-session",
         properties: { info: { parentID: "external-session-1" } },
       }),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -3170,7 +3196,7 @@ describe("event-stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -3283,7 +3309,7 @@ describe("event-stream", () => {
 
   test("removes a queued child question when OpenCode resolves it before correlation", async () => {
     const { sessionRecord } = await runEventStreamWithSession([
-      {
+      createInvalidFixture<Event>({
         type: "question.asked",
         properties: {
           sessionID: "external-child-session",
@@ -3297,15 +3323,15 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "question.replied",
         properties: {
           sessionID: "external-child-session",
           parentID: "external-session-1",
           requestID: "question-child-1",
         },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(
@@ -3396,7 +3422,7 @@ describe("event-stream", () => {
   test("clears pending deltas when message part is removed", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-3"),
-      {
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -3405,15 +3431,15 @@ describe("event-stream", () => {
           field: "text",
           delta: "stale ",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.removed",
         properties: {
           sessionID: "external-session-1",
           partID: "text-part-2",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.updated",
         properties: {
           part: {
@@ -3425,7 +3451,7 @@ describe("event-stream", () => {
             time: { start: 1, end: 2 },
           },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");
@@ -3442,18 +3468,18 @@ describe("event-stream", () => {
   test("clears deferred pending subagent emissions when message part is removed", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             partID: "subtask-part-1",
           },
-        } as unknown as Event,
+        }),
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set("child-session-1", [
           {
-            part: {
+            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3470,7 +3496,7 @@ describe("event-stream", () => {
                   externalSessionId: "child-session-1",
                 },
               },
-            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+            }),
           },
         ]);
       },
@@ -3484,13 +3510,13 @@ describe("event-stream", () => {
     const correlationKey = "part:assistant-message-4:subtask-part-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             partID: "subtask-part-1",
           },
-        } as unknown as Event,
+        }),
       ],
       (record) => {
         record.subagentCorrelationKeyByPartId.set("subtask-part-1", correlationKey);
@@ -3523,18 +3549,18 @@ describe("event-stream", () => {
     const childExternalSessionId = "child-session-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
             partID: "subtask-part-1",
           },
-        } as unknown as Event,
+        }),
       ],
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
           {
-            part: {
+            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3542,10 +3568,10 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-1",
               state: { status: "running", input: {} },
-            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+            }),
           },
           {
-            part: {
+            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
               id: "subtask-part-2",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3553,7 +3579,7 @@ describe("event-stream", () => {
               tool: "task",
               callID: "call-2",
               state: { status: "running", input: {} },
-            } as unknown as import("@opencode-ai/sdk/v2/client").Part,
+            }),
           },
         ]);
         record.pendingSubagentSessionsByExternalSessionId.set(childExternalSessionId, {
@@ -3583,13 +3609,13 @@ describe("event-stream", () => {
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        {
+        createInvalidFixture<Event>({
           type: "session.error",
           properties: {
             sessionID: "external-session-1",
             error: { data: {} },
           },
-        } as unknown as Event,
+        }),
       ],
       (session) => {
         session.isAwaitingRuntimeTurnStart = true;
@@ -3615,13 +3641,13 @@ describe("event-stream", () => {
         text: "Final output before error",
         partId: "text-error-1",
       }),
-      {
+      createInvalidFixture<Event>({
         type: "session.error",
         properties: {
           sessionID: "external-session-1",
           error: { data: { message: "Provider failed" } },
         },
-      } as unknown as Event,
+      }),
     ]);
 
     expect(emitted.filter((event) => event.type === "assistant_message")).toEqual([
@@ -3632,7 +3658,7 @@ describe("event-stream", () => {
 
   test("does not replay duplicate delta after suppressed known user-part update", async () => {
     const emitted = await runEventStream([
-      {
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -3651,8 +3677,8 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -3661,8 +3687,8 @@ describe("event-stream", () => {
           field: "text",
           delta: " world",
         },
-      } as unknown as Event,
-      {
+      }),
+      createInvalidFixture<Event>({
         type: "message.updated",
         properties: {
           info: {
@@ -3683,7 +3709,7 @@ describe("event-stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      }),
     ]);
 
     const parts = emitted.filter((event) => event.type === "assistant_part");

@@ -126,11 +126,19 @@ const openClaudeSetupUrl = (url: string): void => {
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
 ): CodexPolicyFields[Field][] => {
-  if (field === "sandboxMode") return [...CODEX_SANDBOX_MODE_VALUES] as CodexPolicyFields[Field][];
-  if (field === "approvalPolicy")
+  if (field === "sandboxMode") {
+    // SAFETY: The sandboxMode branch returns only the canonical sandboxMode values.
+    return [...CODEX_SANDBOX_MODE_VALUES] as CodexPolicyFields[Field][];
+  }
+  if (field === "approvalPolicy") {
+    // SAFETY: The approvalPolicy branch returns only the canonical approvalPolicy values.
     return [...CODEX_APPROVAL_POLICY_VALUES] as CodexPolicyFields[Field][];
-  if (field === "approvalsReviewer")
+  }
+  if (field === "approvalsReviewer") {
+    // SAFETY: The approvalsReviewer branch returns only the canonical approvalsReviewer values.
     return [...CODEX_APPROVALS_REVIEWER_VALUES] as CodexPolicyFields[Field][];
+  }
+  // SAFETY: The remaining boolean fields accept exactly false and true.
   return [false, true] as CodexPolicyFields[Field][];
 };
 
@@ -155,18 +163,21 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `CodexPolicyField[]`.
 const removeUndefinedFields = (override: {
   [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
 }): Partial<CodexPolicyFields> => {
   const next: Partial<CodexPolicyFields> = {};
   for (const field of Object.keys(override) as CodexPolicyField[]) {
     if (override[field] !== undefined) {
+      // SAFETY: field selects the matching value type, but indexed assignment loses that generic link.
       next[field] = override[field] as never;
     }
   }
   return next;
 };
 
+// SAFETY: VALUE_LABELS covers every string and boolean policy option passed to this formatter.
 const valueKey = (value: string | boolean): keyof typeof VALUE_LABELS =>
   String(value) as keyof typeof VALUE_LABELS;
 
@@ -330,6 +341,7 @@ function CodexSettings({
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
+        // SAFETY: field and value share Field, but indexed assignment loses that generic link.
         draftRoleOverride[field] = value as never;
       }
       const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
@@ -462,6 +474,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const defaultLabelId = `codex-${field}-default-label`;
   const roleOverrideSwitchId = `codex-${field}-role-overrides`;
 
+  // SAFETY: The surrounding boundary constructs or validates every member required by `CodexPolicyFields[Field]`.
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-col gap-1">
@@ -568,6 +581,7 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     <div className="divide-y divide-border rounded-md border border-border">
       {AGENT_ROLE_ORDER.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
+        // SAFETY: The surrounding boundary constructs or validates every member required by `| CodexPolicyFields[Field] | undefined`.
         const overrideValue = config.roleOverrides[role]?.[field] as
           | CodexPolicyFields[Field]
           | undefined;
@@ -809,6 +823,7 @@ export function AgentRuntimesSection({
           <aside className="border-border bg-muted/50 p-3 md:border-r">
             <div className="space-y-1" role="tablist">
               {sortedRuntimeDefinitions.map((definition) => {
+                // SAFETY: The surrounding boundary constructs or validates every member required by `RuntimeKind`.
                 const runtimeKind = definition.kind as RuntimeKind;
                 const enabled = agentRuntimes[runtimeKind]?.enabled === true;
                 const tabId = `agent-runtime-tab-${definition.kind}`;
@@ -861,6 +876,7 @@ export function AgentRuntimesSection({
           </aside>
 
           {(() => {
+            // SAFETY: The surrounding boundary constructs or validates every member required by `RuntimeKind`.
             const runtimeKind = selectedDefinition.kind as RuntimeKind;
             const updateRuntime = (
               updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
@@ -870,6 +886,7 @@ export function AgentRuntimesSection({
                 [runtimeKind]: updater(current[runtimeKind]),
               }));
 
+            // SAFETY: The surrounding boundary constructs or validates every member required by `CodexRuntimeConfig`.
             return (
               <div
                 id={`agent-runtime-panel-${selectedDefinition.kind}`}

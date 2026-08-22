@@ -1,3 +1,4 @@
+import { hasRuntimeType, jsonValueSchema, runtimeTypeName } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import {
@@ -24,17 +25,21 @@ type ElectronPreviewNet = {
 
 type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   net: ElectronPreviewNet;
-  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>;
+  resolveLocalAttachmentPath: (
+    filePath: string,
+  ) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>;
   session: ElectronPreviewSession;
 };
 
-export const readLocalAttachmentPreviewPath = (filePath: unknown): string => {
-  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+export const readLocalAttachmentPreviewPath = (
+  filePath: Parameters<typeof jsonValueSchema.safeParse>[0],
+): string => {
+  if (!hasRuntimeType(filePath, "string") || filePath.trim().length === 0) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
       message: "Local attachment preview path must be a non-empty string.",
       field: "path",
-      details: { valueType: typeof filePath },
+      details: { valueType: runtimeTypeName(filePath) },
     });
   }
 
@@ -42,7 +47,7 @@ export const readLocalAttachmentPreviewPath = (filePath: unknown): string => {
 };
 
 export const readLocalAttachmentPreviewPathEffect = (
-  filePath: unknown,
+  filePath: Parameters<typeof jsonValueSchema.safeParse>[0],
 ): Effect.Effect<string, ElectronValidationError> =>
   Effect.try({
     try: () => readLocalAttachmentPreviewPath(filePath),
@@ -138,7 +143,9 @@ const createLocalAttachmentPreviewErrorResponse = (cause: unknown, status: 400 |
   });
 
 const resolveLocalAttachmentPathEffect = (
-  resolveLocalAttachmentPath: (filePath: string) => Promise<unknown>,
+  resolveLocalAttachmentPath: (
+    filePath: string,
+  ) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>,
   requestedPath: string,
 ): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
   Effect.tryPromise({

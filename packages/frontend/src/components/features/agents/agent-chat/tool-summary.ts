@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -91,20 +92,22 @@ const parseStructuredOutputSummary = (output: string): string | null => {
   }
 
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
     if (Array.isArray(parsed)) {
       return null;
     }
-    if (!parsed || typeof parsed !== "object") {
+    if (!parsed || !hasRuntimeType(parsed, "object")) {
       return null;
     }
 
+    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
     const record = parsed as Record<string, JsonValue>;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
+    if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
       return compactText(record.message, 160);
     }
 
-    if (typeof record.result === "string" && record.result.trim().length > 0) {
+    if (hasRuntimeType(record.result, "string") && record.result.trim().length > 0) {
       return compactText(record.result, 160);
     }
 
@@ -118,9 +121,10 @@ const countTodosFromUnknown = (value: JsonValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return null;
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
@@ -143,6 +147,7 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
     return null;
   }
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = JSON.parse(output) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
     return countTodosFromUnknown(parsed);
   } catch {
@@ -166,7 +171,7 @@ const normalizeDisplaySummary = (
 
 const extractTaskId = (input: Record<string, JsonValue> | undefined): string | null => {
   const taskId = input?.taskId;
-  return typeof taskId === "string" && taskId.trim().length > 0 ? taskId.trim() : null;
+  return hasRuntimeType(taskId, "string") && taskId.trim().length > 0 ? taskId.trim() : null;
 };
 
 export const buildToolSummary = (
@@ -216,7 +221,7 @@ export const buildToolSummary = (
   }
 
   const command = meta.input?.command;
-  if (toolType === "bash" && typeof command === "string" && command.trim().length > 0) {
+  if (toolType === "bash" && hasRuntimeType(command, "string") && command.trim().length > 0) {
     return compactText(command, 120);
   }
 
@@ -224,7 +229,7 @@ export const buildToolSummary = (
     return "";
   }
 
-  if (typeof meta.preview === "string" && meta.preview.trim().length > 0) {
+  if (hasRuntimeType(meta.preview, "string") && meta.preview.trim().length > 0) {
     return compactText(normalizeDisplaySummary(lowerTool, meta.preview, workingDirectory), 160);
   }
 

@@ -11,9 +11,7 @@ type ActiveController = {
   controller: TerminalTransportController;
 };
 
-export const useTerminalTransport = (
-  bridge: TerminalBridge,
-): { controller: TerminalTransportController | null; transportError: string | null } => {
+export const useTerminalTransport = (bridge: TerminalBridge) => {
   const [activeController, setActiveController] = useState<ActiveController | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
   const handleStateChange = useCallback((state: "connected" | "disconnected"): void => {
@@ -42,5 +40,5 @@ export const useTerminalTransport = (
   return {
     controller: activeController?.bridge === bridge ? activeController.controller : null,
     transportError,
-  };
+  } satisfies { controller: TerminalTransportController | null; transportError: string | null };
 };

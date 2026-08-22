@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
 import type { JsonValue } from "@openducktor/contracts";
 import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
@@ -28,8 +29,18 @@ const subagentEvents = (
       source: ctx.source,
       mapper: "subagent",
       threadId: ctx.threadId,
-      ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-      ...(eventTimestamp ? { timestamp: eventTimestamp } : {}),
+      ...(() => {
+        if (ctx.turnId) {
+          return { turnId: ctx.turnId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (eventTimestamp) {
+          return { timestamp: eventTimestamp };
+        }
+        return {};
+      })(),
       raw: item,
       part,
     })),
@@ -57,7 +68,7 @@ const shouldMapAsSubagentItem = (item: Record<string, JsonValue>): boolean => {
   if (receiverThreadIds !== undefined && receiverThreadIds !== null) {
     return true;
   }
-  if (typeof receiverThreadId === "string") {
+  if (hasRuntimeType(receiverThreadId, "string")) {
     return receiverThreadId.trim().length > 0;
   }
   return receiverThreadId !== undefined && receiverThreadId !== null;

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
@@ -106,12 +107,22 @@ export const handleClaudeUserToolResultMessage = ({
     const { part, todos } = projectClaudeCompletedToolResult({
       callId: result.toolUseId,
       endedAtMs,
-      ...(input ? { input } : {}),
+      ...(() => {
+        if (input) {
+          return { input };
+        }
+        return {};
+      })(),
       isError: result.isError,
       messageId,
       raw: result.raw,
       resultText: result.text,
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+      ...(() => {
+        if (hasRuntimeType(startedAtMs, "number")) {
+          return { startedAtMs };
+        }
+        return {};
+      })(),
       state: session.todosById,
       tool,
     });
@@ -138,7 +149,12 @@ export const handleClaudeUserToolResultMessage = ({
         session,
         timestamp,
         toolUseId: result.toolUseId,
-        ...(input ? { input } : {}),
+        ...(() => {
+          if (input) {
+            return { input };
+          }
+          return {};
+        })(),
       });
     } else if (tool === "TaskStop") {
       emitClaudeTaskStopSubagentPart({

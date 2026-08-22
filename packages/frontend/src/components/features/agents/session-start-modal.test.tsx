@@ -9,6 +9,7 @@ import { AppRuntimeProvider } from "@/state/providers/app-runtime-provider";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
 
+// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -347,7 +348,9 @@ describe("SessionStartModal", () => {
     const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
     let settingsAttempts = 0;
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
+    // SAFETY: This test drives the failure path that supplies `never` before this assertion.
     host.workspaceGetSettingsSnapshot = mock(async () => {
       settingsAttempts += 1;
       if (settingsAttempts === 1) {

@@ -1,4 +1,4 @@
-import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
+import { type FailureKind, failureKindSchema, hasRuntimeType } from "@openducktor/contracts";
 
 type ResponseMetadata = {
   status?: unknown;
@@ -53,34 +53,56 @@ export class OpenCodeRequestError extends Error {
   }
 }
 
-const isRequestFailureRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+type RequestFailureProperties = {
+  cause?: unknown;
+  code?: unknown;
+  data?: unknown;
+  failureKind?: unknown;
+  message?: unknown;
+  status?: unknown;
+  statusText?: unknown;
+};
 
-const readUnknownProp = (value: unknown, key: string): unknown => {
-  if (!isRequestFailureRecord(value)) {
+const isRequestFailureRecord = (cause: unknown): cause is RequestFailureProperties =>
+  typeof cause === "object" && cause !== null && !Array.isArray(cause);
+
+const readUnknownProp = (
+  cause: unknown,
+  key: keyof RequestFailureProperties,
+): RequestFailureProperties[keyof RequestFailureProperties] => {
+  if (!isRequestFailureRecord(cause)) {
     return undefined;
   }
-  return value[key];
+  return cause[key];
 };
 
-const readStringProp = (value: unknown, key: string): string | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : undefined;
+const readStringProp = (
+  cause: unknown,
+  key: keyof RequestFailureProperties,
+): string | undefined => {
+  const candidate = readUnknownProp(cause, key);
+  return hasRuntimeType(candidate, "string") && candidate.trim().length > 0 ? candidate : undefined;
 };
 
-const readNumberProp = (value: unknown, key: string): number | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "number" ? candidate : undefined;
+const readNumberProp = (
+  cause: unknown,
+  key: keyof RequestFailureProperties,
+): number | undefined => {
+  const candidate = readUnknownProp(cause, key);
+  return hasRuntimeType(candidate, "number") ? candidate : undefined;
 };
 
-const readCodeProp = (value: unknown, key: string): string | undefined => {
-  const candidate = readUnknownProp(value, key);
-  return typeof candidate === "string" || typeof candidate === "number"
+const readCodeProp = (cause: unknown, key: keyof RequestFailureProperties): string | undefined => {
+  const candidate = readUnknownProp(cause, key);
+  return hasRuntimeType(candidate, "string") || hasRuntimeType(candidate, "number")
     ? String(candidate)
     : undefined;
 };
 
-const readStringPropFromSources = (sources: unknown[], key: string): string | undefined => {
+const readStringPropFromSources = (
+  sources: unknown[],
+  key: keyof RequestFailureProperties,
+): string | undefined => {
   for (const source of sources) {
     const candidate = readStringProp(source, key);
     if (candidate) {
@@ -90,7 +112,10 @@ const readStringPropFromSources = (sources: unknown[], key: string): string | un
   return undefined;
 };
 
-const readNumberPropFromSources = (sources: unknown[], key: string): number | undefined => {
+const readNumberPropFromSources = (
+  sources: unknown[],
+  key: keyof RequestFailureProperties,
+): number | undefined => {
   for (const source of sources) {
     const candidate = readNumberProp(source, key);
     if (candidate !== undefined) {
@@ -100,7 +125,10 @@ const readNumberPropFromSources = (sources: unknown[], key: string): number | un
   return undefined;
 };
 
-const readCodePropFromSources = (sources: unknown[], key: string): string | undefined => {
+const readCodePropFromSources = (
+  sources: unknown[],
+  key: keyof RequestFailureProperties,
+): string | undefined => {
   for (const source of sources) {
     const candidate = readCodeProp(source, key);
     if (candidate !== undefined) {
@@ -110,8 +138,8 @@ const readCodePropFromSources = (sources: unknown[], key: string): string | unde
   return undefined;
 };
 
-const readFailureKind = (value: unknown): OpenCodeRequestFailureKind | undefined => {
-  const candidate = readUnknownProp(value, "failureKind");
+const readFailureKind = (cause: unknown): OpenCodeRequestFailureKind | undefined => {
+  const candidate = readUnknownProp(cause, "failureKind");
   const result = failureKindSchema.safeParse(candidate);
   return result.success ? result.data : undefined;
 };
@@ -120,7 +148,7 @@ const classifyOpenCodeRequestFailureKind = (failure: {
   status: number | undefined;
   code: string | undefined;
 }): OpenCodeRequestFailureKind => {
-  if (typeof failure.status === "number" && TIMEOUT_STATUS_CODES.has(failure.status)) {
+  if (hasRuntimeType(failure.status, "number") && TIMEOUT_STATUS_CODES.has(failure.status)) {
     return "timeout";
   }
 
@@ -144,7 +172,7 @@ const buildOpenCodeRequestErrorMessage = (
   const prefix = `OpenCode request failed: ${action}`;
   const detailParts: string[] = [];
 
-  if (typeof failure.status === "number") {
+  if (hasRuntimeType(failure.status, "number")) {
     detailParts.push(
       failure.statusText && failure.statusText.trim().length > 0
         ? `${failure.status} ${failure.statusText}`
@@ -181,10 +209,30 @@ const extractRequestFailure = (
       message: cause.message,
       failureKind: cause.failureKind,
       hasPrefixedMessage: true,
-      ...(cause.status !== undefined ? { status: cause.status } : {}),
-      ...(cause.statusText !== undefined ? { statusText: cause.statusText } : {}),
-      ...(cause.code !== undefined ? { code: cause.code } : {}),
-      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
+      ...(() => {
+        if (cause.status !== undefined) {
+          return { status: cause.status };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (cause.statusText !== undefined) {
+          return { statusText: cause.statusText };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (cause.code !== undefined) {
+          return { code: cause.code };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (cause.cause !== undefined) {
+          return { cause: cause.cause };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -192,15 +240,14 @@ const extractRequestFailure = (
   const status = readNumberPropFromSources(sources, "status");
   const statusText = readStringPropFromSources(sources, "statusText");
   const code = readCodePropFromSources(sources, "code");
-  const resolvedStatus =
-    typeof status === "number"
-      ? status
-      : typeof response?.status === "number"
-        ? response.status
-        : undefined;
+  const resolvedStatus = hasRuntimeType(status, "number")
+    ? status
+    : hasRuntimeType(response?.status, "number")
+      ? response.status
+      : undefined;
   const resolvedStatusText =
     statusText ??
-    (typeof response?.statusText === "string" && response.statusText.trim().length > 0
+    (hasRuntimeType(response?.statusText, "string") && response.statusText.trim().length > 0
       ? response.statusText
       : undefined);
 
@@ -214,10 +261,30 @@ const extractRequestFailure = (
           code,
         }),
       hasPrefixedMessage: true,
-      ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
-      ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
-      ...(code !== undefined ? { code } : {}),
-      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
+      ...(() => {
+        if (resolvedStatus !== undefined) {
+          return { status: resolvedStatus };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (resolvedStatusText !== undefined) {
+          return { statusText: resolvedStatusText };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (code !== undefined) {
+          return { code };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (cause.cause !== undefined) {
+          return { cause: cause.cause };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -233,10 +300,30 @@ const extractRequestFailure = (
       code,
     }),
     hasPrefixedMessage: false,
-    ...(resolvedStatus !== undefined ? { status: resolvedStatus } : {}),
-    ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : {}),
-    ...(code !== undefined ? { code } : {}),
-    ...(cause instanceof Error ? { cause } : {}),
+    ...(() => {
+      if (resolvedStatus !== undefined) {
+        return { status: resolvedStatus };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resolvedStatusText !== undefined) {
+        return { statusText: resolvedStatusText };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (code !== undefined) {
+        return { code };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (cause instanceof Error) {
+        return { cause };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -252,15 +339,45 @@ export const toOpenCodeRequestError = (
       ? failure.message
       : buildOpenCodeRequestErrorMessage(action, {
           message: failure.message,
-          ...(failure.status !== undefined ? { status: failure.status } : {}),
-          ...(failure.statusText !== undefined ? { statusText: failure.statusText } : {}),
-          ...(failure.code !== undefined ? { code: failure.code } : {}),
+          ...(() => {
+            if (failure.status !== undefined) {
+              return { status: failure.status };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (failure.statusText !== undefined) {
+              return { statusText: failure.statusText };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (failure.code !== undefined) {
+              return { code: failure.code };
+            }
+            return {};
+          })(),
         }),
     {
       failureKind: failure.failureKind,
-      ...(failure.status !== undefined ? { status: failure.status } : {}),
-      ...(failure.statusText !== undefined ? { statusText: failure.statusText } : {}),
-      ...(failure.code !== undefined ? { code: failure.code } : {}),
+      ...(() => {
+        if (failure.status !== undefined) {
+          return { status: failure.status };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (failure.statusText !== undefined) {
+          return { statusText: failure.statusText };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (failure.code !== undefined) {
+          return { code: failure.code };
+        }
+        return {};
+      })(),
     },
     failure.cause !== undefined ? { cause: failure.cause } : undefined,
   );

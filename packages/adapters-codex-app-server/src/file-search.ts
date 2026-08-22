@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { CodexAppServerFuzzyFileSearchResult } from "@openducktor/contracts";
 import { type AgentFileSearchResult, detectAgentFileReferenceKind } from "@openducktor/core";
 import { basenameForPath, toProjectRelativePath } from "@openducktor/path-support";
@@ -27,7 +28,7 @@ const requireStringField = (
   index: number,
 ): string => {
   const value = record[field];
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw new Error(`Codex fuzzyFileSearch result ${index} must include string field '${field}'.`);
   }
   return value;
@@ -51,7 +52,7 @@ const requireFiniteNumberField = (
   index: number,
 ): number => {
   const value = record[field];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!hasRuntimeType(value, "number") || !Number.isFinite(value)) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has invalid ${field}.`);
   }
   return value;
@@ -63,7 +64,7 @@ const requireIndices = (value: JsonValue | undefined, index: number): number[] |
   }
   if (
     !Array.isArray(value) ||
-    value.some((entry) => typeof entry !== "number" || !Number.isFinite(entry))
+    value.some((entry) => !hasRuntimeType(entry, "number") || !Number.isFinite(entry))
   ) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has invalid indices.`);
   }

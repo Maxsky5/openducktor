@@ -18,7 +18,12 @@ export const toAgentSessionLiveEnvelope = (
         scope: {
           repoPath: change.repoPath,
           runtimeKind: change.runtimeKind,
-          ...(change.workingDirectory ? { workingDirectory: change.workingDirectory } : {}),
+          ...(() => {
+            if (change.workingDirectory) {
+              return { workingDirectory: change.workingDirectory };
+            }
+            return {};
+          })(),
         },
       };
     case "slash_command_catalog_updated":
@@ -36,8 +41,18 @@ export const toAgentSessionLiveEnvelope = (
         type: "fault",
         repoPath: change.repoPath,
         message: change.message,
-        ...(change.operation ? { operation: change.operation } : {}),
-        ...(change.ref ? { ref: change.ref } : {}),
+        ...(() => {
+          if (change.operation) {
+            return { operation: change.operation };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (change.ref) {
+            return { ref: change.ref };
+          }
+          return {};
+        })(),
       };
   }
 };
@@ -48,14 +63,22 @@ export const formatAgentSessionLiveFaultLog = (
   `agent-session-live.fault ${JSON.stringify({
     repoPath: envelope.repoPath,
     message: envelope.message,
-    ...(envelope.operation ? { operation: envelope.operation } : {}),
-    ...(envelope.ref
-      ? {
+    ...(() => {
+      if (envelope.operation) {
+        return { operation: envelope.operation };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (envelope.ref) {
+        return {
           runtimeKind: envelope.ref.runtimeKind,
           workingDirectory: envelope.ref.workingDirectory,
           externalSessionId: envelope.ref.externalSessionId,
-        }
-      : {}),
+        };
+      }
+      return {};
+    })(),
   })}`;
 
 export const toAgentSessionLiveEnvelopePublishError = (

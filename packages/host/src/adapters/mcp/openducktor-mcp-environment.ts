@@ -38,10 +38,11 @@ const requireBridgeValue = (
 export const buildOpenDucktorMcpBridgeEnvironment = (
   bridge: OpenDucktorMcpBridgeConnection,
   runtimeName: string,
-): OpenDucktorMcpBridgeEnvironment => ({
-  ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId", runtimeName),
-  ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl", runtimeName),
-  ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken", runtimeName),
-  ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-  ODT_ALLOWED_TOOLS: ODT_MCP_TOOL_NAMES.join(","),
-});
+) =>
+  ({
+    ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId", runtimeName),
+    ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl", runtimeName),
+    ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken", runtimeName),
+    ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+    ODT_ALLOWED_TOOLS: ODT_MCP_TOOL_NAMES.join(","),
+  }) satisfies OpenDucktorMcpBridgeEnvironment;

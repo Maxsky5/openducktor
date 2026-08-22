@@ -8,6 +8,7 @@ import {
   workspaceTextFileReadResultSchema,
   workspaceTextFileWriteInputSchema,
   workspaceTextFileWriteResultSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Data, Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -110,11 +111,11 @@ const invalidWriteInput = (
   input: JsonValue | undefined,
   cause: unknown,
 ): WorkspaceTextFileWriteError => {
-  const record = typeof input === "object" && input !== null ? input : {};
+  const record = hasRuntimeType(input, "object") && input !== null ? input : {};
   const rootPath =
-    "rootPath" in record && typeof record.rootPath === "string" ? record.rootPath : ".";
+    "rootPath" in record && hasRuntimeType(record.rootPath, "string") ? record.rootPath : ".";
   const relativePath =
-    "relativePath" in record && typeof record.relativePath === "string"
+    "relativePath" in record && hasRuntimeType(record.relativePath, "string")
       ? record.relativePath
       : "unknown";
   return writeFailure(

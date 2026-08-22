@@ -126,6 +126,7 @@ export const createTaskDescriptionComponents = ({
     if (className === "language-mermaid") {
       return <MarkdownMermaid source={String(children).replace(/\n$/, "")} />;
     }
+    // SAFETY: The surrounding boundary constructs or validates every member required by `| ComponentType<ComponentProps<"code"> & ExtraProps> | undefined`.
     const CodeComponent = components.code as
       | ComponentType<ComponentProps<"code"> & ExtraProps>
       | undefined;
@@ -186,6 +187,7 @@ export const createTaskDescriptionComponents = ({
     ) {
       return <MarkdownMermaid source={String(child.props.children).replace(/\n$/, "")} />;
     }
+    // SAFETY: The preceding runtime guard establishes `| ComponentType<ComponentProps<"pre"> & ExtraProps> | undefined` before this assertion.
     const PreComponent = components.pre as
       | ComponentType<ComponentProps<"pre"> & ExtraProps>
       | undefined;

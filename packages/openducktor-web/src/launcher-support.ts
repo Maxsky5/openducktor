@@ -13,9 +13,16 @@ import {
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
+interface EarlyExitContract {
+  current:
+    | { readonly _tag: "exit-code"; readonly exitCode: number }
+    | { readonly _tag: "failure"; readonly cause: unknown }
+    | null;
+}
+
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
 type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-type SleepFunction = (durationMs: number) => Promise<unknown>;
+type SleepFunction = (durationMs: number) => Promise<void>;
 type BackendReadinessDependencies = {
   fetch: FetchFunction;
   sleep: SleepFunction;
@@ -91,7 +98,12 @@ const verifyBackendReadinessEffect = (
           headers: {
             [APP_TOKEN_HEADER]: appToken,
           },
-          ...(signal ? { signal } : {}),
+          ...(() => {
+            if (signal) {
+              return { signal };
+            }
+            return {};
+          })(),
         }),
       catch: (cause) =>
         new WebDependencyError({
@@ -165,12 +177,7 @@ export const waitForBackendEffect = (
   Effect.gen(function* () {
     const startedAt = Date.now();
     let lastError: unknown;
-    const earlyExit: {
-      current:
-        | { readonly _tag: "exit-code"; readonly exitCode: number }
-        | { readonly _tag: "failure"; readonly cause: unknown }
-        | null;
-    } = { current: null };
+    const earlyExit: EarlyExitContract = { current: null };
 
     yield* Effect.sync(() => {
       void hostProcess.exited.then(

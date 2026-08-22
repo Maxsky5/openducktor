@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { findCatalogModel } from "@/lib/model-catalog-selection";
 import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
@@ -73,16 +74,16 @@ export const roleLabel = (role: AgentChatMessage["role"], message: AgentChatMess
 export const getAssistantFooterData = (
   message: AgentChatMessage,
   modelCatalog?: AgentModelCatalog | null,
-): { infoParts: string[] } => {
+) => {
   if (!isFinalAssistantChatMessage(message)) {
-    return { infoParts: [] };
+    return { infoParts: [] } satisfies { infoParts: string[] };
   }
 
   const assistantMeta = message.meta;
   const parts: string[] = [];
 
   const agentLabel = assistantMeta.profileId;
-  if (typeof agentLabel === "string" && agentLabel.trim().length > 0) {
+  if (hasRuntimeType(agentLabel, "string") && agentLabel.trim().length > 0) {
     parts.push(agentLabel.trim());
   }
 
@@ -90,9 +91,9 @@ export const getAssistantFooterData = (
   const modelLabel = assistantMeta.modelId;
   const catalogModel =
     modelCatalog &&
-    typeof providerLabel === "string" &&
+    hasRuntimeType(providerLabel, "string") &&
     providerLabel.trim().length > 0 &&
-    typeof modelLabel === "string" &&
+    hasRuntimeType(modelLabel, "string") &&
     modelLabel.trim().length > 0
       ? findCatalogModel(modelCatalog, {
           providerId: providerLabel.trim(),
@@ -102,7 +103,7 @@ export const getAssistantFooterData = (
   const displayedModelLabel = catalogModel?.modelName ?? modelLabel;
   const providerModelParts: string[] = [];
   for (const value of [providerLabel, displayedModelLabel]) {
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       providerModelParts.push(value.trim());
     }
   }
@@ -112,9 +113,9 @@ export const getAssistantFooterData = (
   }
 
   const variantLabel = assistantMeta.variant;
-  if (typeof variantLabel === "string" && variantLabel.trim().length > 0) {
+  if (hasRuntimeType(variantLabel, "string") && variantLabel.trim().length > 0) {
     parts.push(variantLabel.trim());
   }
 
-  return { infoParts: parts };
+  return { infoParts: parts } satisfies { infoParts: string[] };
 };

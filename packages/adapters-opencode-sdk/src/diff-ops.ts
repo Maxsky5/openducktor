@@ -3,6 +3,9 @@ import {
   type FileStatus,
   fileDiffSchema,
   fileStatusSchema,
+  hasRuntimeType,
+  type JsonValue,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import { selectRenderableFileDiff } from "@openducktor/core";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -52,7 +55,7 @@ function normalizeRuntimeEndpoint(runtimeEndpoint: string): string {
   return runtimeEndpoint.endsWith("/") ? runtimeEndpoint.slice(0, -1) : runtimeEndpoint;
 }
 
-const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<unknown> => {
+const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<JsonValue> => {
   const response = await fetch(url.toString(), {
     method: "GET",
     headers: { Accept: "application/json" },
@@ -66,13 +69,22 @@ const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<u
     });
   }
 
-  return response.json();
+  return jsonValueSchema.parse(await response.json());
 };
 
-const isResponseRecord = (value: unknown): value is Record<string, unknown> =>
+type OpenCodeDiffResponse = {
+  additions?: JsonValue;
+  data?: JsonValue;
+  deletions?: JsonValue;
+  file?: JsonValue;
+  patch?: JsonValue;
+  status?: JsonValue;
+};
+
+const isResponseRecord = (value: JsonValue): value is OpenCodeDiffResponse =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-function parseFileDiffArray(body: unknown): FileDiff[] {
+function parseFileDiffArray(body: JsonValue): FileDiff[] {
   const payload = readArrayPayload("load session diff", body);
   const standardPayload = fileDiffSchema.array().safeParse(payload);
   if (standardPayload.success) {
@@ -82,11 +94,11 @@ function parseFileDiffArray(body: unknown): FileDiff[] {
   return payload.map((entry, index) => parseSnapshotFileDiff(entry, index));
 }
 
-function parseFileStatusArray(body: unknown): FileStatus[] {
+function parseFileStatusArray(body: JsonValue): FileStatus[] {
   return fileStatusSchema.array().parse(readArrayPayload("load file status", body));
 }
 
-function readArrayPayload(action: string, body: unknown): unknown[] {
+function readArrayPayload(action: string, body: JsonValue): JsonValue[] {
   if (Array.isArray(body)) {
     return body;
   }
@@ -101,7 +113,7 @@ function readArrayPayload(action: string, body: unknown): unknown[] {
   throw toOpenCodeRequestError(action, new Error("unexpected response payload shape"));
 }
 
-function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
+function parseSnapshotFileDiff(entry: JsonValue, index: number): FileDiff {
   if (!isResponseRecord(entry)) {
     throw new Error(`unexpected OpenCode diff entry at index ${index}: expected an object`);
   }
@@ -111,14 +123,14 @@ function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
   const additions = entry.additions;
   const deletions = entry.deletions;
   const status = entry.status;
-  const parsedFile = typeof file === "string" ? file : null;
-  const parsedPatch = typeof patch === "string" ? patch : null;
+  const parsedFile = hasRuntimeType(file, "string") ? file : null;
+  const parsedPatch = hasRuntimeType(patch, "string") ? patch : null;
   const parsedAdditions =
-    typeof additions === "number" && Number.isFinite(additions) ? additions : null;
+    hasRuntimeType(additions, "number") && Number.isFinite(additions) ? additions : null;
   const parsedDeletions =
-    typeof deletions === "number" && Number.isFinite(deletions) ? deletions : null;
+    hasRuntimeType(deletions, "number") && Number.isFinite(deletions) ? deletions : null;
   const type =
-    typeof status === "string" && status.trim().length > 0
+    hasRuntimeType(status, "string") && status.trim().length > 0
       ? status
       : status == null
         ? "modified"

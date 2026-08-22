@@ -255,6 +255,7 @@ describe("TaskViewSync", () => {
   });
 
   test("invalidates inactive repository caches without fetching", async () => {
+    // SAFETY: This test controls the fixture and supplies `TaskCard[]` used by this case.
     const listTasks = mock(async () => [] as TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
@@ -382,6 +383,7 @@ describe("TaskViewSync", () => {
   });
 
   test("reconciles snapshots without fetching cached documents that may be deleted", async () => {
+    // SAFETY: This test controls the fixture and supplies `TaskCard[]` used by this case.
     const listTasks = mock(async () => [] as TaskCard[]);
     const loadFreshDocument = mock(async () => {
       throw new Error("task no longer exists");
@@ -470,6 +472,7 @@ describe("TaskViewSync", () => {
   });
 
   test("invalidates inactive snapshot documents without fetching their repository", async () => {
+    // SAFETY: This test controls the fixture and supplies `TaskCard[]` used by this case.
     const listTasks = mock(async () => [] as TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Snapshot", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));

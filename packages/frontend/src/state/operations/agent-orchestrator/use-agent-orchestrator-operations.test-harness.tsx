@@ -251,6 +251,7 @@ export const createHookHarness = (args: {
         runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
       },
     );
+  // SAFETY: This test controls the fixture and supplies `AgentEnginePort` used by this case.
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),

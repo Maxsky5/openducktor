@@ -68,7 +68,12 @@ export function useAgentStudioGitPushActions({
         const pushResult = await host.gitPushBranch(resolvedRepoPath, resolvedBranch, {
           setUpstream: true,
           forceWithLease,
-          ...(resolvedWorkingDir != null ? { workingDir: resolvedWorkingDir } : {}),
+          ...(() => {
+            if (resolvedWorkingDir != null) {
+              return { workingDir: resolvedWorkingDir };
+            }
+            return {};
+          })(),
         });
 
         if (pushResult.outcome === "rejected_non_fast_forward") {

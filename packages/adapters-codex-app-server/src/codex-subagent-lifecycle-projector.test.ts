@@ -39,7 +39,12 @@ const childLifecycleNotification = (
       ...(method === "turn/started"
         ? { startedAt: timestampSeconds ?? 1_783_683_602 }
         : { completedAt: timestampSeconds ?? 1_783_683_604 }),
-      ...(error ? { error: { message: error } } : {}),
+      ...(() => {
+        if (error) {
+          return { error: { message: error } };
+        }
+        return {};
+      })(),
     },
   },
 });

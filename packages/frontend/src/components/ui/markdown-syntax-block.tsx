@@ -8,13 +8,15 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
 
+interface LANGUAGEALIASESContract extends Record<string, string> {}
+
 type MarkdownSyntaxBlockProps = {
   language: string;
   code: string;
   className?: string;
 };
 
-const LANGUAGE_ALIASES: Record<string, string> = {
+const LANGUAGE_ALIASES: LANGUAGEALIASESContract = {
   cjs: "javascript",
   js: "javascript",
   jsx: "jsx",

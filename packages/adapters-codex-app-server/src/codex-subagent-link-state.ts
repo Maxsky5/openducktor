@@ -1,5 +1,8 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
+
+interface STATUSPRECEDENCEContract extends Record<AgentSubagentStatus, number> {}
 
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
@@ -87,7 +90,7 @@ const defaultCorrelationKey = (input: CodexSubagentLinkInput): string => {
   return linkedCorrelationKey(input.parentThreadId, input.childThreadId);
 };
 
-const STATUS_PRECEDENCE: Record<AgentSubagentStatus, number> = {
+const STATUS_PRECEDENCE: STATUSPRECEDENCEContract = {
   pending: 0,
   running: 1,
   cancelled: 2,
@@ -104,8 +107,8 @@ const isPreviousRunTerminalUpdate = (
 ): boolean =>
   existing?.status === "running" &&
   isTerminalStatus(input.status) &&
-  typeof existing.startedAtMs === "number" &&
-  typeof input.endedAtMs === "number" &&
+  hasRuntimeType(existing.startedAtMs, "number") &&
+  hasRuntimeType(input.endedAtMs, "number") &&
   input.endedAtMs < existing.startedAtMs;
 
 const isExplicitRunningRestart = (
@@ -117,15 +120,15 @@ const isExplicitRunningRestart = (
     input.status !== "running" ||
     !existing ||
     !isTerminalStatus(existing.status) ||
-    typeof input.startedAtMs !== "number"
+    !hasRuntimeType(input.startedAtMs, "number")
   ) {
     return false;
   }
   let lifecycleBoundaryMs = existing.endedAtMs;
-  if (typeof lifecycleBoundaryMs !== "number" && existing.status === "completed") {
+  if (!hasRuntimeType(lifecycleBoundaryMs, "number") && existing.status === "completed") {
     lifecycleBoundaryMs = existing.startedAtMs;
   }
-  return typeof lifecycleBoundaryMs === "number" && input.startedAtMs > lifecycleBoundaryMs;
+  return hasRuntimeType(lifecycleBoundaryMs, "number") && input.startedAtMs > lifecycleBoundaryMs;
 };
 
 const resolveStatus = (
@@ -173,7 +176,12 @@ const mergeDefined = <T extends object>(
 const routeFromLink = (link: CodexStoredSubagentLink): CodexSubagentRoute | null =>
   link.childThreadId
     ? {
-        ...(link.runtimeId ? { runtimeId: link.runtimeId } : {}),
+        ...(() => {
+          if (link.runtimeId) {
+            return { runtimeId: link.runtimeId };
+          }
+          return {};
+        })(),
         parentExternalSessionId: link.parentThreadId,
         childExternalSessionId: link.childThreadId,
         subagentCorrelationKey: link.correlationKey,
@@ -226,25 +234,50 @@ export class CodexSubagentLinkState {
       status = existing?.status === "cancelled" ? "cancelled" : "completed";
     }
     let timing: Pick<CodexSubagentLinkInput, "startedAtMs" | "endedAtMs"> = {};
-    if (typeof thread.updatedAtMs === "number") {
+    if (hasRuntimeType(thread.updatedAtMs, "number")) {
       timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
     }
     this.upsertLink({
-      ...(runtimeId ? { runtimeId } : {}),
+      ...(() => {
+        if (runtimeId) {
+          return { runtimeId };
+        }
+        return {};
+      })(),
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
       status,
       allowStatusRestart: isActive,
       ...timing,
-      ...(agent ? { agent } : {}),
+      ...(() => {
+        if (agent) {
+          return { agent };
+        }
+        return {};
+      })(),
       metadata: {
         codexThread: {
           parentThreadId,
           childThreadId: thread.id,
-          ...(thread.agentNickname ? { agentNickname: thread.agentNickname } : {}),
-          ...(thread.agentRole ? { agentRole: thread.agentRole } : {}),
-          ...(thread.subAgentSource ? { subAgentSource: thread.subAgentSource } : {}),
+          ...(() => {
+            if (thread.agentNickname) {
+              return { agentNickname: thread.agentNickname };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (thread.agentRole) {
+              return { agentRole: thread.agentRole };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (thread.subAgentSource) {
+              return { subAgentSource: thread.subAgentSource };
+            }
+            return {};
+          })(),
         },
       },
     });
@@ -305,8 +338,8 @@ export class CodexSubagentLinkState {
     if (
       status === "running" &&
       existing?.status === "running" &&
-      typeof existing.startedAtMs === "number" &&
-      typeof input.startedAtMs === "number"
+      hasRuntimeType(existing.startedAtMs, "number") &&
+      hasRuntimeType(input.startedAtMs, "number")
     ) {
       startedAtMs = Math.max(existing.startedAtMs, input.startedAtMs);
     }
@@ -316,25 +349,75 @@ export class CodexSubagentLinkState {
         : (input.endedAtMs ?? existing?.endedAtMs);
     if (
       isTerminalStatus(status) &&
-      typeof existing?.endedAtMs === "number" &&
-      typeof input.endedAtMs === "number"
+      hasRuntimeType(existing?.endedAtMs, "number") &&
+      hasRuntimeType(input.endedAtMs, "number")
     ) {
       endedAtMs = Math.max(existing.endedAtMs, input.endedAtMs);
     }
     const link: CodexStoredSubagentLink = {
-      ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
+      ...(() => {
+        if (input.runtimeId) {
+          return { runtimeId: input.runtimeId };
+        }
+        return {};
+      })(),
       parentThreadId: input.parentThreadId,
-      ...(childThreadId ? { childThreadId } : {}),
+      ...(() => {
+        if (childThreadId) {
+          return { childThreadId };
+        }
+        return {};
+      })(),
       correlationKey,
       status,
-      ...(prompt ? { prompt } : {}),
-      ...(description ? { description } : {}),
-      ...(error ? { error } : {}),
-      ...(agent ? { agent } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(executionMode ? { executionMode } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-      ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+      ...(() => {
+        if (prompt) {
+          return { prompt };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (description) {
+          return { description };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (error) {
+          return { error };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (agent) {
+          return { agent };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (metadata) {
+          return { metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (executionMode) {
+          return { executionMode };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(startedAtMs, "number")) {
+          return { startedAtMs };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(endedAtMs, "number")) {
+          return { endedAtMs };
+        }
+        return {};
+      })(),
     };
     this.storeLink(link, parentItemKey);
     const route = routeFromLink(link);
@@ -594,15 +677,60 @@ export class CodexSubagentLinkState {
       partId: link.correlationKey,
       correlationKey: link.correlationKey,
       status: link.status,
-      ...(link.agent ? { agent: link.agent } : {}),
-      ...(link.prompt ? { prompt: link.prompt } : {}),
-      ...(link.description ? { description: link.description } : {}),
-      ...(link.error ? { error: link.error } : {}),
-      ...(link.childThreadId ? { externalSessionId: link.childThreadId } : {}),
-      ...(link.executionMode ? { executionMode: link.executionMode } : {}),
-      ...(link.metadata ? { metadata: link.metadata } : {}),
-      ...(typeof link.startedAtMs === "number" ? { startedAtMs: link.startedAtMs } : {}),
-      ...(typeof link.endedAtMs === "number" ? { endedAtMs: link.endedAtMs } : {}),
+      ...(() => {
+        if (link.agent) {
+          return { agent: link.agent };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.prompt) {
+          return { prompt: link.prompt };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.description) {
+          return { description: link.description };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.error) {
+          return { error: link.error };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.childThreadId) {
+          return { externalSessionId: link.childThreadId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.executionMode) {
+          return { executionMode: link.executionMode };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (link.metadata) {
+          return { metadata: link.metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(link.startedAtMs, "number")) {
+          return { startedAtMs: link.startedAtMs };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(link.endedAtMs, "number")) {
+          return { endedAtMs: link.endedAtMs };
+        }
+        return {};
+      })(),
     };
   }
 }

@@ -1,4 +1,9 @@
-import { jsonValueSchema, odtToolErrorPayloadSchema, type JsonValue } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  odtToolErrorPayloadSchema,
+  type JsonValue,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import {
   arrayFromUnknown,
   extractStringField,
@@ -7,7 +12,7 @@ import {
 } from "./codex-app-server-shared";
 
 const parseJsonObjectString = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return null;
   }
   const trimmed = value.trim();
@@ -27,7 +32,7 @@ const asRecord = (value: JsonValue | undefined): Record<string, JsonValue> | nul
   isPlainObject(value) ? value : parseJsonObjectString(value);
 
 const nonEmptyString = (value: JsonValue | undefined): string | null => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return null;
   }
   const trimmed = value.trim();
@@ -48,7 +53,7 @@ const contentText = (value: JsonValue | undefined): string | null => {
 
   const text = content
     .map((entry) => {
-      if (typeof entry === "string") {
+      if (hasRuntimeType(entry, "string")) {
         return entry.trim();
       }
       if (!isPlainObject(entry)) {
@@ -136,7 +141,7 @@ const failureMarkerMessage = (
 };
 
 const failedStatus = (value: JsonValue | undefined): boolean => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return false;
   }
   const normalized = value

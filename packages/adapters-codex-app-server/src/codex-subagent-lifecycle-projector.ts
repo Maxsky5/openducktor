@@ -14,13 +14,18 @@ import {
 import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
+interface LIFECYCLESTATUSPRECEDENCEContract extends Record<
+  CodexSubagentLifecycleUpdate["status"],
+  number
+> {}
+
 type CodexSubagentLifecycleProjectorDeps = {
   sessions: CodexSessionLookup;
   subagents: CodexSubagentLinkState;
   emitParentSessionEvent: (externalSessionId: string, event: AgentEvent) => void;
 };
 
-const LIFECYCLE_STATUS_PRECEDENCE: Record<CodexSubagentLifecycleUpdate["status"], number> = {
+const LIFECYCLE_STATUS_PRECEDENCE: LIFECYCLESTATUSPRECEDENCEContract = {
   pending: 0,
   running: 1,
   cancelled: 2,
@@ -146,7 +151,12 @@ export class CodexSubagentLifecycleProjector {
       childThreadId,
       itemId: childThreadId,
       status: update.status,
-      ...(update.error ? { error: update.error } : {}),
+      ...(() => {
+        if (update.error) {
+          return { error: update.error };
+        }
+        return {};
+      })(),
       allowStatusRestart: update.allowStatusRestart,
       ...(update.status === "running"
         ? { startedAtMs: update.timestampMs }

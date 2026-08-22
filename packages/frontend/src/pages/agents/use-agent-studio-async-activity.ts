@@ -25,27 +25,28 @@ export type AgentStudioSessionActivityKeyParams = {
   session: AgentSessionIdentityLike | null | undefined;
 };
 
-const incrementActivityCount = (current: ActivityCountByKey, key: string): ActivityCountByKey => ({
-  ...current,
-  [key]: (current[key] ?? 0) + 1,
-});
+const incrementActivityCount = (current: ActivityCountByKey, key: string) =>
+  ({
+    ...current,
+    [key]: (current[key] ?? 0) + 1,
+  }) satisfies ActivityCountByKey;
 
-const decrementActivityCount = (current: ActivityCountByKey, key: string): ActivityCountByKey => {
+const decrementActivityCount = (current: ActivityCountByKey, key: string) => {
   const currentCount = current[key];
   if (!currentCount) {
-    return current;
+    return current satisfies ActivityCountByKey;
   }
 
   if (currentCount === 1) {
     const next = { ...current };
     delete next[key];
-    return next;
+    return next satisfies ActivityCountByKey;
   }
 
   return {
     ...current,
     [key]: currentCount - 1,
-  };
+  } satisfies ActivityCountByKey;
 };
 
 export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTracker => {

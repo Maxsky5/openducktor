@@ -52,7 +52,10 @@ const classifyActivity = (input: {
   return input.runtimeActivity;
 };
 
-const parseSnapshot = (value: unknown, operation: string): AgentSessionLiveSnapshot => {
+const parseSnapshot = (
+  value: Parameters<typeof agentSessionLiveSnapshotSchema.parse>[0],
+  operation: string,
+): AgentSessionLiveSnapshot => {
   try {
     return agentSessionLiveSnapshotSchema.parse(value);
   } catch (cause) {
@@ -114,9 +117,12 @@ export const createOpenCodeLiveSessionState = ({
         }),
         title: source.title,
         startedAt: source.startedAt,
-        ...(source.parentExternalSessionId
-          ? { parentExternalSessionId: source.parentExternalSessionId }
-          : {}),
+        ...(() => {
+          if (source.parentExternalSessionId) {
+            return { parentExternalSessionId: source.parentExternalSessionId };
+          }
+          return {};
+        })(),
         pendingApprovals,
         pendingQuestions,
         contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
@@ -190,20 +196,32 @@ export const createOpenCodeLiveSessionState = ({
   const applyLoadedContext = (
     ref: AgentSessionLiveRef,
     usage: OpencodeSessionContextUsage | null,
-  ): { value: AgentSessionContextUsage | null; changes: AgentSessionLiveAdapterChange[] } => {
+  ) => {
     const retained = sessionsByRef.get(refKey(ref));
     if (retained?.snapshot.contextUsage) {
-      return { value: retained.snapshot.contextUsage, changes: [] };
+      return { value: retained.snapshot.contextUsage, changes: [] } satisfies {
+        value: AgentSessionContextUsage | null;
+        changes: AgentSessionLiveAdapterChange[];
+      };
     }
     if (!usage) {
-      return { value: null, changes: [] };
+      return { value: null, changes: [] } satisfies {
+        value: AgentSessionContextUsage | null;
+        changes: AgentSessionLiveAdapterChange[];
+      };
     }
     const contextUsage = toContextUsage(usage);
     if (!retained) {
-      return { value: contextUsage, changes: [] };
+      return { value: contextUsage, changes: [] } satisfies {
+        value: AgentSessionContextUsage | null;
+        changes: AgentSessionLiveAdapterChange[];
+      };
     }
     const changes = retainContext(ref.externalSessionId, usage);
-    return { value: contextUsage, changes };
+    return { value: contextUsage, changes } satisfies {
+      value: AgentSessionContextUsage | null;
+      changes: AgentSessionLiveAdapterChange[];
+    };
   };
 
   const retainControlSummary = (
@@ -241,9 +259,12 @@ export const createOpenCodeLiveSessionState = ({
         }),
         title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
         startedAt: summary.startedAt,
-        ...(retainedParentExternalSessionId
-          ? { parentExternalSessionId: retainedParentExternalSessionId }
-          : {}),
+        ...(() => {
+          if (retainedParentExternalSessionId) {
+            return { parentExternalSessionId: retainedParentExternalSessionId };
+          }
+          return {};
+        })(),
         pendingApprovals,
         pendingQuestions,
         contextUsage:

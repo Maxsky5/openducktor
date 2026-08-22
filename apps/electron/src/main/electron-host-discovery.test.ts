@@ -61,7 +61,12 @@ describe("Electron host MCP discovery composition", () => {
         onBackgroundFailure: () => Effect.void,
         processEnv: {
           OPENDUCKTOR_CONFIG_DIR: configDirectory,
-          ...(scenario.isPackaged ? {} : { OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab" }),
+          ...(() => {
+            if (scenario.isPackaged) {
+              return {};
+            }
+            return { OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab" };
+          })(),
           PATH: "/usr/bin:/bin",
         },
         runtimeDistribution: testRuntimeDistribution,

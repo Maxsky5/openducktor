@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, JsonValue } from "@openducktor/contracts";
@@ -20,7 +21,7 @@ type TestDevServerEventSubscription = {
   unsubscribe: () => void;
 };
 
-if (typeof document === "undefined") {
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
@@ -1374,6 +1375,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           .getMutationCache()
           .getAll()
           .some((mutation) => {
+            // SAFETY: This test controls the fixture and supplies `DevServerGroupState | undefined` used by this case.
             const data = mutation.state.data as DevServerGroupState | undefined;
             return (
               mutation.state.status === "success" &&

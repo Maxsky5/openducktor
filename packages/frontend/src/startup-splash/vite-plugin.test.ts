@@ -23,7 +23,7 @@ describe("startup splash Vite plugin", () => {
     expect(fontPreload?.attrs?.type).toBe("font/woff2");
     expect(splash?.injectTo).toBe("body-prepend");
     expect(splash?.attrs?.role).toBe("status");
-    expect(splash?.attrs?.["aria-live"]).toBeUndefined();
+    expect("aria-live" in (splash?.attrs ?? {})).toBe(false);
     expect(splash?.children).toContain('<p class="odt-startup__title">OpenDucktor</p>');
     expect(splash?.children).toContain('<div class="odt-startup__orbit" aria-hidden="true">');
     expect(splash?.children).toContain('<div class="odt-startup__particles" aria-hidden="true">');

@@ -8,6 +8,7 @@ import {
   type CodexRuntimeConfig,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type RuntimeInstanceSummary,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type {
@@ -339,7 +340,7 @@ export const codexThreadStartResultFixture = (threadId: string) => ({
 });
 
 const requestThreadId = (params: JsonValue | undefined): string => {
-  if (!isPlainObject(params) || typeof params.threadId !== "string") {
+  if (!isPlainObject(params) || !hasRuntimeType(params.threadId, "string")) {
     throw new Error("Expected request params.threadId.");
   }
   return params.threadId;
@@ -414,7 +415,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           throw new Error("Invalid request: missing field `type`");
         }
         for (const part of params.input) {
-          if (!isPlainObject(part) || typeof part.type !== "string") {
+          if (!isPlainObject(part) || !hasRuntimeType(part.type, "string")) {
             throw new Error("Invalid request: missing field `type`");
           }
         }
@@ -568,10 +569,11 @@ export const createHarness = (
   };
 };
 
+// SAFETY: This test controls the fixture and supplies `{ threadInventory: CodexThreadInventoryReader }` used by this case.
 export const codexThreadInventoryForTest = (
   adapter: CodexAppServerAdapter,
 ): CodexThreadInventoryReader =>
-  (adapter as unknown as { threadInventory: CodexThreadInventoryReader }).threadInventory;
+  (adapter as { threadInventory: CodexThreadInventoryReader }).threadInventory;
 
 type CodexRuntimeTeardownCounts = {
   statusOverrideRuntimeCount: number;
@@ -584,13 +586,15 @@ export const codexRuntimeTeardownCountsForTest = (
   runtimeId: string,
 ): CodexRuntimeTeardownCounts => {
   const threadInventory = codexThreadInventoryForTest(adapter);
+  // SAFETY: This test controls the fixture and supplies `{ statusOverridesByRuntimeId: Map<string, Map<string, unknown>>; }` used by this case.
   const statusOverridesByRuntimeId = (
-    threadInventory as unknown as {
+    threadInventory as {
       statusOverridesByRuntimeId: Map<string, Map<string, unknown>>;
     }
   ).statusOverridesByRuntimeId;
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   const runtimeEventProcessingByRuntimeId = (
-    adapter as unknown as {
+    adapter as {
       runtimeEvents: {
         runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
       };

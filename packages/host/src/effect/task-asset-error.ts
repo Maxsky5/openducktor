@@ -13,7 +13,12 @@ export const taskAssetValidationError = (
   new TaskAssetError({
     operation: taskId ? "update" : "stage",
     code: "validation",
-    ...(taskId ? { taskId } : {}),
+    ...(() => {
+      if (taskId) {
+        return { taskId };
+      }
+      return {};
+    })(),
     assetIds,
     failedPhase: "validation",
     durableState: "unchanged",
@@ -24,7 +29,12 @@ export const taskAssetValidationError = (
 export const taskAssetErrorToFailure = (error: TaskAssetError): TaskAssetFailure => ({
   operation: error.operation,
   code: error.code,
-  ...(error.taskId ? { taskId: error.taskId } : {}),
+  ...(() => {
+    if (error.taskId) {
+      return { taskId: error.taskId };
+    }
+    return {};
+  })(),
   assetIds: error.assetIds,
   failedPhase: error.failedPhase,
   durableState: error.durableState,

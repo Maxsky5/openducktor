@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AnyExtension,
   JSONContent,
@@ -23,11 +24,12 @@ const requireMarkdownHook = <Hook>(
   hookName: string,
   hook: Hook | undefined,
 ): NonNullable<Hook> => {
-  if (typeof hook !== "function") {
+  if (!hasRuntimeType(hook, "function")) {
     throw new Error(
       `TipTap 3.30.0 ${extensionName}.${hookName} is required by the task-description Markdown dialect. Align all TipTap packages before starting the editor.`,
     );
   }
+  // SAFETY: The preceding runtime guard establishes `NonNullable<Hook>` before this assertion.
   return hook as NonNullable<Hook>;
 };
 
@@ -180,15 +182,40 @@ const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
   if (inlineTokens?.[0]) {
     inlineTokens[0] = {
       ...inlineTokens[0],
-      ...(inlineTokens[0].raw === undefined ? {} : { raw: inlineTokens[0].raw.trimStart() }),
-      ...(inlineTokens[0].text === undefined ? {} : { text: inlineTokens[0].text.trimStart() }),
+      ...(() => {
+        if (inlineTokens[0].raw === undefined) {
+          return {};
+        }
+        return { raw: inlineTokens[0].raw.trimStart() };
+      })(),
+      ...(() => {
+        if (inlineTokens[0].text === undefined) {
+          return {};
+        }
+        return { text: inlineTokens[0].text.trimStart() };
+      })(),
     };
   }
   return {
     ...token,
-    ...(token.raw === undefined ? {} : { raw: token.raw.trimStart() }),
-    ...(token.text === undefined ? {} : { text: token.text.trimStart() }),
-    ...(inlineTokens === undefined ? {} : { tokens: inlineTokens }),
+    ...(() => {
+      if (token.raw === undefined) {
+        return {};
+      }
+      return { raw: token.raw.trimStart() };
+    })(),
+    ...(() => {
+      if (token.text === undefined) {
+        return {};
+      }
+      return { text: token.text.trimStart() };
+    })(),
+    ...(() => {
+      if (inlineTokens === undefined) {
+        return {};
+      }
+      return { tokens: inlineTokens };
+    })(),
   };
 };
 
@@ -203,6 +230,7 @@ const findTrailingTokens = (
 
   let suffix = "";
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    // SAFETY: The surrounding boundary constructs or validates every member required by `MarkdownToken`.
     suffix = `${tokenSource(tokens[index] as MarkdownToken)}${suffix}`;
     if (suffix.trim() === trailingSource) {
       const trailingTokens = tokens.slice(index);
@@ -351,6 +379,7 @@ const listItemPrefix = (context: RenderContext): string => {
     return "- ";
   }
   const start = Number(context.meta?.parentAttrs?.start ?? 1);
+  // SAFETY: The surrounding boundary constructs or validates every member required by `string | undefined`.
   const type = context.meta?.parentAttrs?.type as string | undefined;
   return getListMarker(type, start - 1 + context.index, ". ");
 };

@@ -15,6 +15,12 @@ import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 
+interface WORKFLOWSTEPCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
+
+interface WORKFLOWCONNECTORCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
+
+interface WORKFLOWSELECTIONCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
+
 type WorkflowRailProps = {
   steps: AgentWorkflowStep[];
   selectedRole: AgentRole | null;
@@ -24,7 +30,7 @@ type WorkflowRailProps = {
 
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
 
-const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
+const WORKFLOW_STEP_CLASSES: WORKFLOWSTEPCLASSESContract = {
   in_progress: "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
   done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
@@ -38,7 +44,7 @@ const WORKFLOW_STEP_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
   blocked: "border-border bg-muted text-muted-foreground",
 };
 
-const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
+const WORKFLOW_CONNECTOR_CLASSES: WORKFLOWCONNECTORCLASSESContract = {
   done: "text-success-ring",
   in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
@@ -49,7 +55,7 @@ const WORKFLOW_CONNECTOR_CLASSES: Record<AgentWorkflowStepState["tone"], string>
   blocked: "text-muted-foreground/20",
 };
 
-const WORKFLOW_SELECTION_CLASSES: Record<AgentWorkflowStepState["tone"], string> = {
+const WORKFLOW_SELECTION_CLASSES: WORKFLOWSELECTIONCLASSESContract = {
   done: "ring-2 ring-offset-2 ring-offset-card ring-success-ring",
   in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
   available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",

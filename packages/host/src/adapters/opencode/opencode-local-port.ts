@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { type IncomingMessage, request } from "node:http";
 import { createServer } from "node:net";
 import { Effect } from "effect";
@@ -55,7 +56,7 @@ export const pickFreePort = (): Effect.Effect<number, HostOperationError | HostR
     try {
       server.listen(0, "127.0.0.1", () => {
         const address = server.address();
-        if (!address || typeof address === "string") {
+        if (!address || hasRuntimeType(address, "string")) {
           closeThenFinish(
             Effect.fail(
               new HostResourceError({
@@ -114,7 +115,7 @@ export const isOpenCodeHealthy = (port: number, timeoutMs: number): Effect.Effec
           try {
             const parsed: unknown = JSON.parse(body);
             finish(
-              typeof parsed === "object" &&
+              hasRuntimeType(parsed, "object") &&
                 parsed !== null &&
                 "healthy" in parsed &&
                 parsed.healthy === true,

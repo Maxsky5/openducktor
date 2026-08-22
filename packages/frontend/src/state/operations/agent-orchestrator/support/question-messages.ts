@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { isQuestionToolName } from "@/lib/question-tools";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { type SessionMessageOwner, updateLastToolSessionMessage } from "./messages";
@@ -20,14 +21,13 @@ export const annotateQuestionToolMessage = (
       }
 
       const metadata = message.meta.metadata ?? {};
-      const metadataRequestId =
-        typeof metadata.requestId === "string"
-          ? metadata.requestId
-          : typeof metadata.requestID === "string"
-            ? metadata.requestID
-            : typeof metadata.questionRequestId === "string"
-              ? metadata.questionRequestId
-              : null;
+      const metadataRequestId = hasRuntimeType(metadata.requestId, "string")
+        ? metadata.requestId
+        : hasRuntimeType(metadata.requestID, "string")
+          ? metadata.requestID
+          : hasRuntimeType(metadata.questionRequestId, "string")
+            ? metadata.questionRequestId
+            : null;
       return !metadataRequestId || metadataRequestId === requestId;
     },
     (message) => {

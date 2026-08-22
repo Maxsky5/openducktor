@@ -310,6 +310,7 @@ test("shows either a lazy author avatar or its fallback", () => {
     </TooltipProvider>,
   );
 
+  // SAFETY: This test creates the DOM fixture that supplies `HTMLImageElement` before this lookup.
   const avatar = view.getByAltText("reviewer avatar") as HTMLImageElement;
 
   expect(avatar.src).toBe("https://avatars.githubusercontent.com/u/1?v=4");

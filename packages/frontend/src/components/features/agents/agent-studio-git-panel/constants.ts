@@ -1,13 +1,17 @@
 import { FilePlus, FileText, FileX } from "lucide-react";
 import type { DiffScope } from "@/features/agent-studio-git";
 
-export const FILE_STATUS_ICON: Record<string, typeof FileText> = {
+interface FILESTATUSICONContract extends Record<string, typeof FileText> {}
+
+interface FILESTATUSCOLORContract extends Record<string, string> {}
+
+export const FILE_STATUS_ICON: FILESTATUSICONContract = {
   modified: FileText,
   added: FilePlus,
   deleted: FileX,
 };
 
-export const FILE_STATUS_COLOR: Record<string, string> = {
+export const FILE_STATUS_COLOR: FILESTATUSCOLORContract = {
   modified: "text-blue-400",
   added: "text-green-400",
   deleted: "text-red-400",

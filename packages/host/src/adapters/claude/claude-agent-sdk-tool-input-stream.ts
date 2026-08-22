@@ -1,4 +1,5 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { isRecord } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -14,9 +15,9 @@ type ToolStreamState = {
   toolsByCallId: Map<string, ToolStreamEntry>;
 };
 
-const toolStreamStates = new WeakMap<object, ToolStreamState>();
+const toolStreamStates = new WeakMap<ClaudeEventSession, ToolStreamState>();
 
-const toolStreamStateFor = (session: object): ToolStreamState => {
+const toolStreamStateFor = (session: ClaudeEventSession): ToolStreamState => {
   const existing = toolStreamStates.get(session);
   if (existing) {
     return existing;
@@ -48,7 +49,7 @@ const toolInputFingerprint = (input: Record<string, JsonValue>): string => {
 };
 
 export const rememberClaudeStreamToolStart = (
-  session: object,
+  session: ClaudeEventSession,
   blockIndex: number,
   toolUse: ClaudeDecodedToolUse,
 ): void => {
@@ -56,7 +57,12 @@ export const rememberClaudeStreamToolStart = (
     blockIndex,
     partialInputJson: "",
     toolUse,
-    ...(toolUse.input ? { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) } : {}),
+    ...(() => {
+      if (toolUse.input) {
+        return { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) };
+      }
+      return {};
+    })(),
   };
   const state = toolStreamStateFor(session);
   state.toolsByBlockIndex.set(blockIndex, entry);
@@ -64,7 +70,7 @@ export const rememberClaudeStreamToolStart = (
 };
 
 export const appendClaudeStreamToolInputJson = (
-  session: object,
+  session: ClaudeEventSession,
   blockIndex: number,
   partialJson: string,
 ): ClaudeDecodedToolUse | null => {
@@ -93,7 +99,7 @@ export const appendClaudeStreamToolInputJson = (
 };
 
 export const consumeClaudeStreamEmittedToolInput = (
-  session: object,
+  session: ClaudeEventSession,
   callId: string,
   input: Record<string, JsonValue>,
 ): boolean => {

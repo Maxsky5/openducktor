@@ -312,6 +312,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       onSessionCollectionChange?.(sessionsRef.current);
     });
 
+  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentEnginePort`.
   const start = createStartAgentSession(
     toStartSessionDependencies({
       activeRepo,
@@ -339,8 +340,18 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       sendAgentMessage,
       loadRepoPromptOverrides,
       loadSettingsSnapshot,
-      ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
-      ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
+      ...(() => {
+        if (sessionStartGateRef) {
+          return { sessionStartGateRef };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (readSessionSnapshot) {
+          return { readSessionSnapshot };
+        }
+        return {};
+      })(),
     }),
   );
 

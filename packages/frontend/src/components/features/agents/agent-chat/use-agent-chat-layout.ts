@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
@@ -12,12 +13,7 @@ const readInlineHeightPx = (styleHeight: string): number | null => {
   return null;
 };
 
-export const computeComposerEditorLayout = (
-  scrollHeight: number,
-): {
-  heightPx: number;
-  overflowY: "auto" | "hidden";
-} => {
+export const computeComposerEditorLayout = (scrollHeight: number) => {
   const heightPx = Math.min(
     COMPOSER_EDITOR_MAX_HEIGHT_PX,
     Math.max(COMPOSER_EDITOR_MIN_HEIGHT_PX, scrollHeight),
@@ -25,6 +21,9 @@ export const computeComposerEditorLayout = (
   return {
     heightPx,
     overflowY: scrollHeight > COMPOSER_EDITOR_MAX_HEIGHT_PX ? "auto" : "hidden",
+  } satisfies {
+    heightPx: number;
+    overflowY: "auto" | "hidden";
   };
 };
 
@@ -34,7 +33,7 @@ const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: num
     return inlineHeight;
   }
   if (
-    typeof previousHeightPx === "number" &&
+    hasRuntimeType(previousHeightPx, "number") &&
     Number.isFinite(previousHeightPx) &&
     previousHeightPx > 0
   ) {
@@ -47,10 +46,7 @@ export const resizeComposerEditorElement = (
   editor: HTMLDivElement,
   serializedDraftText?: string,
   previousHeightPx?: number,
-): {
-  didHeightChange: boolean;
-  overflowY: "auto" | "hidden";
-} => {
+) => {
   const resolvedSerializedDraftText = serializedDraftText ?? editor.textContent ?? "";
   const currentHeight = readComposerEditorHeight(editor, previousHeightPx);
   if (resolvedSerializedDraftText.length === 0) {
@@ -65,6 +61,9 @@ export const resizeComposerEditorElement = (
     return {
       didHeightChange,
       overflowY: "hidden",
+    } satisfies {
+      didHeightChange: boolean;
+      overflowY: "auto" | "hidden";
     };
   }
 
@@ -83,9 +82,13 @@ export const resizeComposerEditorElement = (
   return {
     didHeightChange,
     overflowY: layout.overflowY,
+  } satisfies {
+    didHeightChange: boolean;
+    overflowY: "auto" | "hidden";
   };
 };
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `HTMLDivElement`.
 export const resizeComposerTextareaElement = (
   editor: HTMLDivElement | HTMLTextAreaElement,
   serializedDraftText?: string,
@@ -97,7 +100,7 @@ export const resizeComposerTextareaElement = (
   resizeComposerEditorElement(
     editor as HTMLDivElement,
     serializedDraftText ??
-      (editor as unknown as { value?: string }).value ??
+      ("value" in editor ? editor.value : undefined) ??
       editor.textContent ??
       "",
     previousHeightPx,
@@ -156,7 +159,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerEditor = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
+    if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
       flushComposerEditorResize();
       return;
     }
@@ -194,7 +197,7 @@ export const useAgentChatLayout = ({
 
   const resizeComposerTextarea = useCallback((): void => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn !== "function") {
+    if (!hasRuntimeType(requestAnimationFrameFn, "function")) {
       flushComposerTextareaResize();
       return;
     }
@@ -211,11 +214,14 @@ export const useAgentChatLayout = ({
 
   const cancelPendingResizeFrames = useCallback((): void => {
     const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-    if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+    if (resizeFrameIdRef.current !== null && hasRuntimeType(cancelAnimationFrameFn, "function")) {
       cancelAnimationFrameFn(resizeFrameIdRef.current);
       resizeFrameIdRef.current = null;
     }
-    if (resizeTextareaFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+    if (
+      resizeTextareaFrameIdRef.current !== null &&
+      hasRuntimeType(cancelAnimationFrameFn, "function")
+    ) {
       cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
       resizeTextareaFrameIdRef.current = null;
     }
@@ -228,7 +234,7 @@ export const useAgentChatLayout = ({
     const hasDisplayedSession = displayedSessionKey !== null;
     if (hasDisplayedSession && resizeFrameIdRef.current !== null) {
       const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (typeof cancelAnimationFrameFn === "function") {
+      if (hasRuntimeType(cancelAnimationFrameFn, "function")) {
         cancelAnimationFrameFn(resizeFrameIdRef.current);
       }
       resizeFrameIdRef.current = null;

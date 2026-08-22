@@ -437,7 +437,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const confirmInput = {
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
-    ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
+    ...(() => {
+      if (showTargetBranchSelector) {
+        return { targetBranch: selectedTargetBranch };
+      }
+      return {};
+    })(),
   };
   const handleConfirm = (): void => {
     if (confirmDisabled) {

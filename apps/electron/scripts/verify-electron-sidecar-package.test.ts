@@ -168,6 +168,7 @@ describe("verifyPackagedElectronSidecars", () => {
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged",
     });
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toContain("openducktor-mcp.exe");
   });
 
@@ -215,6 +216,7 @@ describe("verifyPackagedElectronSidecars", () => {
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged-executable",
     });
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toContain("expected an executable file");
   });
 

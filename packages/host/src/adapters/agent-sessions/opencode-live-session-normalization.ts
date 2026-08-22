@@ -8,6 +8,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 
 export type OpenCodeRuntimeInstance = RuntimeInstanceSummary & {
@@ -31,11 +32,11 @@ export const toSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => (
   externalSessionId: ref.externalSessionId,
 });
 
-export const parseOutput = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+export const parseOutput = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
@@ -53,10 +54,30 @@ export const toContextUsage = (
   try {
     return agentSessionContextUsageSchema.parse({
       totalTokens: contextUsage.totalTokens,
-      ...(model?.providerId ? { providerId: model.providerId } : {}),
-      ...(model?.modelId ? { modelId: model.modelId } : {}),
-      ...(model?.variant ? { variant: model.variant } : {}),
-      ...(model?.profileId ? { profileId: model.profileId } : {}),
+      ...(() => {
+        if (model?.providerId) {
+          return { providerId: model.providerId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (model?.modelId) {
+          return { modelId: model.modelId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (model?.variant) {
+          return { variant: model.variant };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (model?.profileId) {
+          return { profileId: model.profileId };
+        }
+        return {};
+      })(),
     });
   } catch (cause) {
     throw new HostValidationError({
@@ -88,11 +109,12 @@ export const requireRuntime = (
       }),
     );
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeRuntimeInstance`.
   return Effect.succeed(runtime as OpenCodeRuntimeInstance);
 };
 
 export const toControlSummary = (
-  summary: unknown,
+  summary: Parameters<typeof agentSessionControlSummarySchema.parse>[0],
 ): Effect.Effect<AgentSessionControlSummary, HostValidationError> =>
   parseOutput(
     agentSessionControlSummarySchema,

@@ -386,6 +386,7 @@ function FileDiffEntry({
   }, [fileComments, pendingSelection]);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
+      // SAFETY: The surrounding boundary constructs or validates every member required by `GitDiffCommentAnnotationMetadata`.
       const metadata = annotation.metadata as GitDiffCommentAnnotationMetadata;
       if (metadata.kind === "new-comment-form") {
         if (pendingSelection == null) {

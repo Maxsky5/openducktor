@@ -82,17 +82,14 @@ const buildLaunchArgs = (
   return ["-a", appPath, directoryPath];
 };
 
-const buildOpenExternalUrlCommand = (
-  platform: NodeJS.Platform,
-  url: string,
-): { program: string; args: string[] } => {
+const buildOpenExternalUrlCommand = (platform: NodeJS.Platform, url: string) => {
   switch (platform) {
     case "darwin":
-      return { program: "open", args: [url] };
+      return { program: "open", args: [url] } satisfies { program: string; args: string[] };
     case "linux":
-      return { program: "xdg-open", args: [url] };
+      return { program: "xdg-open", args: [url] } satisfies { program: string; args: string[] };
     case "win32":
-      return { program: "explorer.exe", args: [url] };
+      return { program: "explorer.exe", args: [url] } satisfies { program: string; args: string[] };
     default:
       throw new HostValidationError({
         message: `Opening external URLs is not supported on ${platform}.`,

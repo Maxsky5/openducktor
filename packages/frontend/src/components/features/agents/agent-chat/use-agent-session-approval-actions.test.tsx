@@ -1,9 +1,11 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -218,8 +220,8 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
+      await harness.waitFor((state) =>
+        hasRuntimeType(state.approvalReplyErrorByRequestId["req-1"], "string"),
       );
 
       await harness.update({
@@ -247,8 +249,8 @@ describe("useAgentSessionApprovalActions", () => {
       await harness.run(async (state) => {
         await state.onReplyApproval("req-1", "reject");
       });
-      await harness.waitFor(
-        (state) => typeof state.approvalReplyErrorByRequestId["req-1"] === "string",
+      await harness.waitFor((state) =>
+        hasRuntimeType(state.approvalReplyErrorByRequestId["req-1"], "string"),
       );
 
       await harness.update({

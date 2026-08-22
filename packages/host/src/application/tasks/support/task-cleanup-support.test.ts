@@ -21,10 +21,13 @@ describe("task cleanup support", () => {
     });
 
     expect(error).toBeInstanceOf(HostOperationError);
+    // SAFETY: This test controls the fixture and supplies `HostOperationError` used by this case.
     expect((error as HostOperationError).operation).toBe("task_reset_implementation.cleanup");
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toContain(
       "Reset implementation cleanup already removed worktrees: /worktrees/repo/task-1.",
     );
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toContain(
       "Retry reset implementation to finish cleanup safely.",
     );

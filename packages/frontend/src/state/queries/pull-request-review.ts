@@ -35,7 +35,12 @@ export const pullRequestReviewContextQueryOptions = (
     queryFn: (): Promise<PullRequestReviewContext> =>
       hostClient.pullRequestReviewContextGet({
         repoPath: input.repoPath,
-        ...(input.taskId ? { taskId: input.taskId } : {}),
+        ...(() => {
+          if (input.taskId) {
+            return { taskId: input.taskId };
+          }
+          return {};
+        })(),
       }),
     staleTime: PULL_REQUEST_REVIEW_STALE_TIME_MS,
   });

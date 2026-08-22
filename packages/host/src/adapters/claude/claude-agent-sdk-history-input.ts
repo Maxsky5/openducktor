@@ -65,7 +65,12 @@ export const createClaudeHistoryInputProjector = (options: {
       text: input.text,
       displayParts,
       state: liveUserMessage?.state ?? "read",
-      ...(liveUserMessage?.model ? { model: liveUserMessage.model } : {}),
+      ...(() => {
+        if (liveUserMessage?.model) {
+          return { model: liveUserMessage.model };
+        }
+        return {};
+      })(),
       parts: [],
     };
   };
@@ -138,6 +143,7 @@ export const createClaudeHistoryInputProjector = (options: {
     }
 
     const promptId = readStringProp(entryValue, "promptId");
+    // SAFETY: The runtime adapter builds this value from the contract fields required by `{ isCompactSummary?: unknown }`.
     const isCompactSummary = (entry as { isCompactSummary?: unknown }).isCompactSummary === true;
     if (isCompactSummary) {
       if (promptId) {

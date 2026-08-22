@@ -5,6 +5,7 @@ import {
   type JsonValue,
   taskAssetIdSchema,
   taskAssetRenderContextSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 
@@ -14,7 +15,7 @@ const ACTIVE_PUBLICATIONS = new Set<string>();
 const PUBLICATION_PREFIX = ".publishing-";
 
 const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === "ENOENT";
 
 const existingStat = async (target: string) => {
   try {
@@ -28,10 +29,10 @@ const existingStat = async (target: string) => {
 };
 
 const validateManifest = (value: JsonValue | undefined): QuarantineManifest => {
-  if (typeof value !== "object" || value === null) {
+  if (!hasRuntimeType(value, "object") || value === null) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }
-  // SAFETY: the manifest shape is validated field-by-field below; the record is re-exported
+  // SAFETY: the manifest fields are validated below; the record is re-exported
   // through the typed QuarantineManifest boundary only after every field passes.
   const manifest = value as Partial<QuarantineManifest>;
   if (
@@ -42,11 +43,12 @@ const validateManifest = (value: JsonValue | undefined): QuarantineManifest => {
     !manifest.assetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
     !Array.isArray(manifest.promotedAssetIds) ||
     !manifest.promotedAssetIds.every((id) => taskAssetIdSchema.safeParse(id).success) ||
-    !taskAssetRenderContextSchema.shape.workspaceId.safeParse(manifest.workspaceId).success ||
-    !taskAssetRenderContextSchema.shape.taskId.safeParse(manifest.taskId).success
+    !taskAssetRenderContextSchema["shape"].workspaceId.safeParse(manifest.workspaceId).success ||
+    !taskAssetRenderContextSchema["shape"].taskId.safeParse(manifest.taskId).success
   ) {
     throw new Error("Task asset quarantine manifest is invalid.");
   }
+  // SAFETY: The preceding runtime guard establishes `QuarantineManifest` before this assertion.
   return manifest as QuarantineManifest;
 };
 

@@ -97,6 +97,7 @@ describe("use-chat-composer-slash-commands", () => {
   });
 
   test("removes system commands from unsupported session runtimes", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(
       filterSlashCommandsForComposerScope(
         [

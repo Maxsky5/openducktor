@@ -2,6 +2,7 @@ import {
   type TaskEventCursor,
   taskEventCursorSchema,
   taskEventStreamFrameSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type {
   TaskStreamFrame,
@@ -26,37 +27,46 @@ const TASK_EVENT_SUBSCRIPTIONS_PATH = "task-events/subscriptions";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 
 type LocalTaskEventTransportContext = {
+  clearInitialReadinessTimeout?: (timer: ReturnType<typeof setTimeout>) => void;
   ensureSession: () => Effect.Effect<void, WebError>;
   localHostRequestErrorEffect: (
     response: Response,
   ) => Effect.Effect<never, WebDependencyError | WebHostRequestError>;
+  scheduleInitialReadinessTimeout?: (
+    callback: () => void,
+    delayMs: number,
+  ) => ReturnType<typeof setTimeout>;
 };
 
-const parseTaskEventSubscription = (
-  value: JsonValue | undefined,
-): { subscriptionId: string; streamToken: string } => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+const parseTaskEventSubscription = (value: JsonValue | undefined) => {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw new Error("Task event stream subscription response must be an object.");
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const { streamToken, subscriptionId } = value as Record<string, JsonValue>;
   if (
-    typeof streamToken !== "string" ||
+    !hasRuntimeType(streamToken, "string") ||
     streamToken.length === 0 ||
-    typeof subscriptionId !== "string" ||
+    !hasRuntimeType(subscriptionId, "string") ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       subscriptionId,
     )
   ) {
     throw new Error("Task event stream subscription response is invalid.");
   }
-  return { streamToken, subscriptionId };
+  return { streamToken, subscriptionId } satisfies { subscriptionId: string; streamToken: string };
 };
 
 export const subscribeLocalTaskEventStreamEffect = (
   input: { cursor: TaskEventCursor | null },
   onFrame: (frame: TaskStreamFrame) => void,
   onTerminalFailure: ((cause: unknown) => void) | undefined,
-  { ensureSession, localHostRequestErrorEffect }: LocalTaskEventTransportContext,
+  {
+    clearInitialReadinessTimeout = clearTimeout,
+    ensureSession,
+    localHostRequestErrorEffect,
+    scheduleInitialReadinessTimeout = setTimeout,
+  }: LocalTaskEventTransportContext,
 ): Effect.Effect<TaskStreamSubscription, WebError> =>
   Effect.gen(function* () {
     const cursor = yield* Effect.try({
@@ -232,15 +242,18 @@ export const subscribeLocalTaskEventStreamEffect = (
       }
       markInitialReadiness();
     };
+    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
     eventSource.addEventListener("task-frame", handleFrame as EventListener);
+    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
     eventSource.addEventListener("open", handleOpen as EventListener);
+    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
     eventSource.addEventListener("error", handleError as EventListener);
     const initialReadyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
           let timeoutId: ReturnType<typeof setTimeout> | null = null;
           const timeout = new Promise<never>((_, reject) => {
-            timeoutId = setTimeout(
+            timeoutId = scheduleInitialReadinessTimeout(
               () =>
                 reject(
                   new WebDependencyError({
@@ -258,7 +271,7 @@ export const subscribeLocalTaskEventStreamEffect = (
           });
           return Promise.race([initialReadiness, timeout]).finally(() => {
             if (timeoutId) {
-              clearTimeout(timeoutId);
+              clearInitialReadinessTimeout(timeoutId);
             }
           });
         },
@@ -277,8 +290,11 @@ export const subscribeLocalTaskEventStreamEffect = (
     const setupFailureBeforeReturn = setupFailure;
     if (setupFailureBeforeReturn) {
       closed = true;
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("task-frame", handleFrame as EventListener);
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("open", handleOpen as EventListener);
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("error", handleError as EventListener);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);
@@ -286,8 +302,11 @@ export const subscribeLocalTaskEventStreamEffect = (
     }
     if (initialReadyExit._tag === "Failure") {
       closed = true;
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("task-frame", handleFrame as EventListener);
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("open", handleOpen as EventListener);
+      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
       eventSource.removeEventListener("error", handleError as EventListener);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);

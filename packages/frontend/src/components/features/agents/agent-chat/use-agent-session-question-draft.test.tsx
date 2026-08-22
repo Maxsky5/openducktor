@@ -3,6 +3,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-question-draft";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;

@@ -13,7 +13,12 @@ export const workspaceFileValidationError = (
   new HostValidationError({
     message,
     cause,
-    ...(details ? { details } : {}),
+    ...(() => {
+      if (details) {
+        return { details };
+      }
+      return {};
+    })(),
   });
 
 export class WorkspaceFileAccessError extends Data.TaggedError("WorkspaceFileAccessError")<{

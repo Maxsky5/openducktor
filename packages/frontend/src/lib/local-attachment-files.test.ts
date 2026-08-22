@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   resolveLocalAttachmentPreviewSrc,
   stageLocalAttachmentFile,
@@ -13,7 +14,7 @@ import {
 } from "./shell-bridge";
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  client: {} as HostClient,
+  client: createFocusedFixture<HostClient>({}),
   subscribeRunEvents: async () => () => {},
   subscribeDevServerEvents: async () => ({
     transportEpoch: "test:0",
@@ -49,12 +50,12 @@ afterEach(() => {
 describe("local-attachment-files", () => {
   test("stageLocalAttachmentFile rejects oversized files before reading them", async () => {
     const arrayBuffer = mock(async () => new ArrayBuffer(0));
-    const file = {
+    const file = createFocusedFixture<File>({
       name: "oversized.pdf",
       type: "application/pdf",
       size: LOCAL_ATTACHMENT_BYTE_LIMIT + 1,
       arrayBuffer,
-    } as unknown as File;
+    });
 
     await expect(stageLocalAttachmentFile(file)).rejects.toThrow(
       "Attachments must total 32 MiB or less.",

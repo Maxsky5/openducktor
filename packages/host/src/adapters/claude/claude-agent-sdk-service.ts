@@ -95,7 +95,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       input.sessionStore ??
       createClaudeAgentSdkSessionStore({
         now: this.now,
-        ...(input.emit ? { emit: input.emit } : {}),
+        ...(() => {
+          if (input.emit) {
+            return { emit: input.emit };
+          }
+          return {};
+        })(),
       });
   }
 
@@ -271,7 +276,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         this.dependencies.loadDetachedSessionContextUsage({
           claudeExecutablePath,
           externalSessionId: target.sessionId,
-          ...(this.input.processEnv ? { processEnv: this.input.processEnv } : {}),
+          ...(() => {
+            if (this.input.processEnv) {
+              return { processEnv: this.input.processEnv };
+            }
+            return {};
+          })(),
           workingDirectory: input.workingDirectory,
         }),
       );

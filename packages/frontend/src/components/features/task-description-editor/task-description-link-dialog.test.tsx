@@ -9,6 +9,7 @@ const pressEnter = (element: HTMLElement): void => {
     if (element.tagName === "BUTTON") {
       fireEvent.click(element);
     } else {
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
       fireEvent.submit(element.closest("form") as HTMLFormElement);
     }
   }
@@ -88,6 +89,7 @@ describe("TaskDescriptionLinkDialog", () => {
     );
 
     const input = view.getByRole("textbox", { name: "Link destination" });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((input as HTMLInputElement).value).toBe("https://example.com/old");
     fireEvent.change(input, { target: { value: "https://example.com/new" } });
     fireEvent.click(view.getByRole("button", { name: "Save link" }));

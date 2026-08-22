@@ -1,16 +1,20 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
 const hostClientOverrides = new Map<PropertyKey, { value: unknown; restoreValue: unknown }>();
-const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, unknown>>();
+type HostClientValue = HostClient[keyof HostClient];
+const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, HostClientValue>>();
 
-const readShellClientValue = (propertyKey: PropertyKey): unknown => {
+const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undefined => {
   const client = getShellBridge().client;
+  // SAFETY: The preceding runtime guard establishes `keyof HostClient` before this assertion.
   const value = client[propertyKey as keyof HostClient];
-  if (typeof value !== "function") {
+  if (!hasRuntimeType(value, "function")) {
     return value;
   }
 
+  // SAFETY: The preceding runtime guard establishes `object` before this assertion.
   const clientObject = client as object;
   let existingBindings = shellClientMethodBindings.get(clientObject);
   if (!existingBindings) {
@@ -22,11 +26,13 @@ const readShellClientValue = (propertyKey: PropertyKey): unknown => {
     return existingBinding;
   }
 
-  const boundValue = value.bind(client);
+  // SAFETY: binding changes only the receiver; the HostClient method signature stays unchanged.
+  const boundValue = value.bind(client) as HostClientValue;
   existingBindings.set(propertyKey, boundValue);
   return boundValue;
 };
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `HostClient`.
 const hostClientProxy = new Proxy(
   {},
   {

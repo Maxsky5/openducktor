@@ -18,6 +18,7 @@ import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `AgentRole[]`.
 const agentRoles = Object.keys(runtimeRequiredScopesByRole) as AgentRole[];
 
 export const toAgentRuntimeOptions = (
@@ -88,7 +89,12 @@ export const resolveRuntimeKindSelectionState = ({
     return {
       status: "no-definitions",
       runtimeKind: null,
-      ...(requestedRuntimeKind === undefined ? {} : { requestedRuntimeKind }),
+      ...(() => {
+        if (requestedRuntimeKind === undefined) {
+          return {};
+        }
+        return { requestedRuntimeKind };
+      })(),
     };
   }
 

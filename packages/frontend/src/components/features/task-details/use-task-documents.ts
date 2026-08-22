@@ -140,14 +140,7 @@ export function useTaskDocuments(
   open: boolean,
   cacheScope = "",
   loadersOverride?: TaskDocumentLoaders,
-): {
-  specDoc: TaskDocumentState;
-  planDoc: TaskDocumentState;
-  qaDoc: TaskDocumentState;
-  ensureDocumentLoaded: (section: DocumentSectionKey) => boolean;
-  reloadDocument: (section: DocumentSectionKey) => boolean;
-  applyDocumentUpdate: (section: DocumentSectionKey, payload: TaskDocumentPayload) => void;
-} {
+) {
   const loadSpecDocumentFromHost = useMemo(
     () => createHostDocumentLoader(cacheScope, host.specGet),
     [cacheScope],
@@ -250,5 +243,12 @@ export function useTaskDocuments(
     ensureDocumentLoaded,
     reloadDocument,
     applyDocumentUpdate,
+  } satisfies {
+    specDoc: TaskDocumentState;
+    planDoc: TaskDocumentState;
+    qaDoc: TaskDocumentState;
+    ensureDocumentLoaded: (section: DocumentSectionKey) => boolean;
+    reloadDocument: (section: DocumentSectionKey) => boolean;
+    applyDocumentUpdate: (section: DocumentSectionKey, payload: TaskDocumentPayload) => void;
   };
 }

@@ -778,8 +778,9 @@ export type CodexAppServerClientRequest = CodexAppServerParsedClientRequest;
 export type CodexAppServerRequestResult =
   CodexAppServerClientRequestMap[CodexAppServerRequestMethod]["result"];
 
-export const parseCodexAppServerClientRequest = (value: unknown): CodexAppServerClientRequest =>
-  parseClientRequest(value);
+export const parseCodexAppServerClientRequest = <Input>(
+  value: Input,
+): CodexAppServerClientRequest => parseClientRequest(value);
 
 export const parseCodexAppServerRequestResult = <Method extends CodexAppServerRequestMethod>(
   method: Method,

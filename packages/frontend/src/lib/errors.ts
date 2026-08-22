@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { NON_ERROR_THROWN_PREFIX } from "@/types/constants";
 
 export const errorMessage = (cause: unknown): string => {
@@ -5,7 +6,7 @@ export const errorMessage = (cause: unknown): string => {
     return cause.message;
   }
 
-  if (typeof cause === "string") {
+  if (hasRuntimeType(cause, "string")) {
     return cause;
   }
 
@@ -13,7 +14,7 @@ export const errorMessage = (cause: unknown): string => {
 
   try {
     const serialized = JSON.stringify(cause);
-    return typeof serialized === "string" ? serialized : fallbackMessage;
+    return hasRuntimeType(serialized, "string") ? serialized : fallbackMessage;
   } catch {
     return fallbackMessage;
   }

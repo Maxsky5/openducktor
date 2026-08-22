@@ -3,6 +3,8 @@ import type { ComponentType, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface STATEVISUALSContract extends Record<TaskExecutionCiPanelStateKind, StateVisual> {}
+
 export type TaskExecutionCiPanelStateKind = "empty" | "error" | "loading" | "unavailable";
 
 export type TaskExecutionCiPanelStateProps = {
@@ -22,7 +24,7 @@ type StateVisual = {
   iconShellClassName?: string;
 };
 
-const STATE_VISUALS: Record<TaskExecutionCiPanelStateKind, StateVisual> = {
+const STATE_VISUALS: STATEVISUALSContract = {
   empty: {
     icon: GitPullRequest,
   },

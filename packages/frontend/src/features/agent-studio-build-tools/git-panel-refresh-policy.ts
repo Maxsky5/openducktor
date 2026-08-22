@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessageMeta } from "@/types/agent-orchestrator";
 
 export type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;
@@ -83,7 +84,7 @@ export const shouldRefreshGitPanelAfterToolCompletion = (meta: ToolMessageMeta):
     return true;
   }
 
-  const command = typeof meta.input?.command === "string" ? meta.input.command : "";
+  const command = hasRuntimeType(meta.input?.command, "string") ? meta.input.command : "";
   if (SHELL_TOOL_NAMES.has(toolName) || toolType === "bash") {
     return shouldRefreshGitPanelAfterShellCommand(command);
   }

@@ -81,6 +81,7 @@ describe("encodeClaudePromptText", () => {
   });
 
   test("rejects slash-command parts without a native Claude trigger", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       encodeClaudePromptText([
         {

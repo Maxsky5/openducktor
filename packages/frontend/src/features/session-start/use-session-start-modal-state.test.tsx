@@ -108,7 +108,8 @@ const ALTERNATE_RUNTIME_DESCRIPTOR = {
   label: "Alternate Runtime",
 } as const;
 
-const runtimeKind = (kind: string): RuntimeKind => kind as unknown as RuntimeKind;
+// SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
+const runtimeKind = (kind: string): RuntimeKind => kind as RuntimeKind;
 
 const createRuntimeDescriptor = ({
   kind,
@@ -218,6 +219,7 @@ const createReadyRuntimeHealthMap = (
     definitionsByKind.set(definition.kind, definition);
   }
 
+  // SAFETY: This test controls the fixture and supplies `RepoRuntimeHealthMap` used by this case.
   return Object.fromEntries(
     Array.from(definitionsByKind.values()).map((definition) => [
       definition.kind,
@@ -967,6 +969,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("falls back to repo default runtime when role runtime is missing", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings({

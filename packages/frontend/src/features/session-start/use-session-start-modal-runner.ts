@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -201,13 +202,7 @@ export function useSessionStartModalRunner({
   favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
-}): {
-  sessionStartModal: SessionStartModalModel | null;
-  runSessionStartRequest: <T>(
-    request: SessionStartModalRunRequest,
-    execute: (result: SessionStartModalRunResult) => Promise<T>,
-  ) => Promise<T | undefined>;
-} {
+}) {
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const pendingSettlementRef = useRef<(() => void) | null>(null);
@@ -337,7 +332,7 @@ export function useSessionStartModalRunner({
 
   const confirmModal = useCallback(
     async (input?: Parameters<SessionStartModalModel["onConfirm"]>[0]) => {
-      if (!input || typeof input === "boolean") {
+      if (!input || hasRuntimeType(input, "boolean")) {
         return;
       }
 
@@ -501,5 +496,11 @@ export function useSessionStartModalRunner({
   return {
     sessionStartModal,
     runSessionStartRequest,
+  } satisfies {
+    sessionStartModal: SessionStartModalModel | null;
+    runSessionStartRequest: <T>(
+      request: SessionStartModalRunRequest,
+      execute: (result: SessionStartModalRunResult) => Promise<T>,
+    ) => Promise<T | undefined>;
   };
 }

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
@@ -182,9 +183,9 @@ const readStreamEventType = (message: SDKMessage): string | undefined =>
   message.type === "stream_event" &&
   "event" in message &&
   message.event &&
-  typeof message.event === "object" &&
+  hasRuntimeType(message.event, "object") &&
   "type" in message.event &&
-  typeof message.event.type === "string"
+  hasRuntimeType(message.event.type, "string")
     ? message.event.type
     : undefined;
 
@@ -193,6 +194,7 @@ export const shouldRefreshClaudeContextUsageForMessage = (message: SDKMessage): 
     return true;
   }
   if (message.type === "result") {
+    // SAFETY: The preceding runtime guard establishes `{ stop_reason?: unknown }` before this assertion.
     return (message as { stop_reason?: unknown }).stop_reason !== "tool_use";
   }
   return readStreamEventType(message) === "message_stop";

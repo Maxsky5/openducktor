@@ -6,7 +6,13 @@ import {
   createComposerAttachment,
 } from "./agent-chat-composer-draft";
 
-const ATTACHMENT_EXTENSION_KIND: Record<string, AgentAttachmentKind> = {
+interface ATTACHMENTEXTENSIONKINDContract extends Record<string, AgentAttachmentKind> {}
+
+interface ATTACHMENTEXTENSIONMIMEContract extends Record<string, string> {}
+
+interface ATTACHMENTKINDDEFAULTNAMEContract extends Record<AgentAttachmentKind, string> {}
+
+const ATTACHMENT_EXTENSION_KIND: ATTACHMENTEXTENSIONKINDContract = {
   ".avif": "image",
   ".png": "image",
   ".jpg": "image",
@@ -37,7 +43,7 @@ const ATTACHMENT_EXTENSION_KIND: Record<string, AgentAttachmentKind> = {
   ".pdf": "pdf",
 };
 
-const ATTACHMENT_EXTENSION_MIME: Record<string, string> = {
+const ATTACHMENT_EXTENSION_MIME: ATTACHMENTEXTENSIONMIMEContract = {
   ".avif": "image/avif",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -75,7 +81,7 @@ const ATTACHMENT_MIME_EXTENSION = Object.entries(ATTACHMENT_EXTENSION_MIME).redu
   return acc;
 }, {});
 
-const ATTACHMENT_KIND_DEFAULT_NAME: Record<AgentAttachmentKind, string> = {
+const ATTACHMENT_KIND_DEFAULT_NAME: ATTACHMENTKINDDEFAULTNAMEContract = {
   image: "pasted-image",
   audio: "pasted-audio",
   video: "pasted-video",
@@ -145,7 +151,12 @@ export const readAttachmentFileName = (input: {
     input.kind ??
       classifyAttachment({
         name: input.name,
-        ...(input.mime ? { mime: input.mime } : {}),
+        ...(() => {
+          if (input.mime) {
+            return { mime: input.mime };
+          }
+          return {};
+        })(),
       }),
     input.mime,
   );
@@ -178,7 +189,12 @@ export const buildComposerAttachmentFromFile = (file: File): AgentChatComposerAt
   return createComposerAttachment({
     name: normalizedFile.name,
     kind,
-    ...(mime ? { mime } : {}),
+    ...(() => {
+      if (mime) {
+        return { mime };
+      }
+      return {};
+    })(),
     file: normalizedFile,
   });
 };
@@ -192,7 +208,12 @@ export const buildComposerAttachmentFromPath = (
     metadata?.kind ??
     classifyAttachment({
       name,
-      ...(metadata?.mime ? { mime: metadata.mime } : {}),
+      ...(() => {
+        if (metadata?.mime) {
+          return { mime: metadata.mime };
+        }
+        return {};
+      })(),
     });
   if (!kind) {
     return null;
@@ -203,7 +224,12 @@ export const buildComposerAttachmentFromPath = (
     name,
     kind,
     path,
-    ...(mime ? { mime } : {}),
+    ...(() => {
+      if (mime) {
+        return { mime };
+      }
+      return {};
+    })(),
   });
 };
 

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Bot, BrainCog, LoaderCircle, Paperclip, SendHorizontal, Square } from "lucide-react";
 import {
   memo,
@@ -203,7 +204,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <AgentContextUsageIndicator
               totalTokens={contextUsage.totalTokens}
               contextWindow={contextUsage.contextWindow}
-              {...(typeof contextUsage.outputLimit === "number"
+              {...(hasRuntimeType(contextUsage.outputLimit, "number")
                 ? { outputLimit: contextUsage.outputLimit }
                 : {})}
             />
@@ -463,7 +464,7 @@ function useAgentChatComposerFocus({
 
   const scheduleComposerFocus = useCallback(() => {
     const requestAnimationFrameFn = globalThis.requestAnimationFrame;
-    if (typeof requestAnimationFrameFn === "function") {
+    if (hasRuntimeType(requestAnimationFrameFn, "function")) {
       requestAnimationFrameFn(() => {
         focusComposerEditor();
       });
@@ -676,7 +677,7 @@ export function AgentChatComposer({
 
     const previousAttachmentLayoutKey = previousAttachmentLayoutKeyRef.current;
     previousAttachmentLayoutKeyRef.current = attachmentLayoutKey;
-    if (typeof previousAttachmentLayoutKey === "undefined") {
+    if (hasRuntimeType(previousAttachmentLayoutKey, "undefined")) {
       return;
     }
 

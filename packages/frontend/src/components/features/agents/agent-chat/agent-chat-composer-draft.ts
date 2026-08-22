@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentAttachmentKind,
   AgentFileReference,
@@ -171,7 +172,10 @@ export type AgentChatComposerDraftEditResult = {
 };
 
 const createSegmentId = (): string => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    !hasRuntimeType(globalThis.crypto, "undefined") &&
+    hasRuntimeType(crypto.randomUUID, "function")
+  ) {
     return crypto.randomUUID();
   }
   return `segment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -560,13 +564,12 @@ export const applyComposerDraftEdit = (
     case "update_text": {
       return {
         draft: updateTextSegmentInDraft(draft, edit.segmentId, edit.text),
-        focusTarget:
-          typeof edit.caretOffset === "number"
-            ? {
-                segmentId: edit.segmentId,
-                offset: Math.max(0, Math.min(edit.caretOffset, edit.text.length)),
-              }
-            : null,
+        focusTarget: hasRuntimeType(edit.caretOffset, "number")
+          ? {
+              segmentId: edit.segmentId,
+              offset: Math.max(0, Math.min(edit.caretOffset, edit.text.length)),
+            }
+          : null,
       };
     }
     case "insert_newline":
@@ -657,7 +660,12 @@ const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessag
             path: attachment.path,
             name: attachment.name,
             kind: attachment.kind,
-            ...(attachment.mime ? { mime: attachment.mime } : {}),
+            ...(() => {
+              if (attachment.mime) {
+                return { mime: attachment.mime };
+              }
+              return {};
+            })(),
           },
         },
       ];
@@ -690,7 +698,12 @@ export const resolveDraftToUserMessageParts = async (
           path,
           name: attachment.name,
           kind: attachment.kind,
-          ...(attachment.mime ? { mime: attachment.mime } : {}),
+          ...(() => {
+            if (attachment.mime) {
+              return { mime: attachment.mime };
+            }
+            return {};
+          })(),
         },
       } satisfies AgentUserMessagePart;
     }),

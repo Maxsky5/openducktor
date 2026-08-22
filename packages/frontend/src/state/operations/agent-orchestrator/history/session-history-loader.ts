@@ -228,7 +228,12 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
 
     const history = await adapter.loadSessionHistory({
       ...sessionRef,
-      ...(systemPromptContext ? { systemPromptContext } : {}),
+      ...(() => {
+        if (systemPromptContext) {
+          return { systemPromptContext };
+        }
+        return {};
+      })(),
       limit: SESSION_HISTORY_LOAD_LIMIT,
     });
     if (isStaleRepoOperation()) {
@@ -327,7 +332,12 @@ const createLoadSessionHistoryWithPolicy = ({
           session,
           loadRepoPromptOverrides,
         }),
-      ...(loadSettingsSnapshot ? { loadSettingsSnapshot } : {}),
+      ...(() => {
+        if (loadSettingsSnapshot) {
+          return { loadSettingsSnapshot };
+        }
+        return {};
+      })(),
       isStaleRepoOperation,
     });
   };

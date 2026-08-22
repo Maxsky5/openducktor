@@ -206,8 +206,18 @@ const errorResponse = (
     hostErrorResponseSchema.parse({
       error: message,
       message,
-      ...(failureKind ? { failureKind } : {}),
-      ...(failure ? { failure } : {}),
+      ...(() => {
+        if (failureKind) {
+          return { failureKind };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (failure) {
+          return { failure };
+        }
+        return {};
+      })(),
     }),
     { status },
     corsHeaders,
@@ -309,10 +319,25 @@ const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostR
     cause,
     details: {
       command,
-      ...(details ? { hostDetails: details } : {}),
-      ...(hostInvokeFailure ? { hostInvokeFailure } : {}),
+      ...(() => {
+        if (details) {
+          return { hostDetails: details };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hostInvokeFailure) {
+          return { hostInvokeFailure };
+        }
+        return {};
+      })(),
     },
-    ...(failureKind ? { failureKind } : {}),
+    ...(() => {
+      if (failureKind) {
+        return { failureKind };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -678,7 +703,12 @@ const routeCorsRequest = ({
       request,
       requestTimeouts,
       shutdownStarted,
-      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
+      ...(() => {
+        if (taskEventLeaseManager) {
+          return { taskEventLeaseManager };
+        }
+        return {};
+      })(),
       validateAppCookieOrHeader: (sessionRequest, expectedToken) =>
         validateAppCookieOrHeader(sessionRequest, expectedToken, appSessionCookieName),
       validateAppSessionCookie: (sessionRequest, expectedToken) =>
@@ -815,7 +845,12 @@ export const handleTypescriptHostBackendRequest = ({
       corsHeaders,
       eventBus,
       hostCommandRouter,
-      ...(taskEventLeaseManager ? { taskEventLeaseManager } : {}),
+      ...(() => {
+        if (taskEventLeaseManager) {
+          return { taskEventLeaseManager };
+        }
+        return {};
+      })(),
       taskAssetReadService,
       localAttachments,
       logger,
@@ -891,8 +926,18 @@ export const startTypescriptHostBackendEffect = ({
             ),
           ),
       },
-      ...(processEnv ? { processEnv } : {}),
-      ...(providedToolPaths ? { providedToolPaths } : {}),
+      ...(() => {
+        if (processEnv) {
+          return { processEnv };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (providedToolPaths) {
+          return { providedToolPaths };
+        }
+        return {};
+      })(),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
     });

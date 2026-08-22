@@ -1,5 +1,5 @@
 import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
 import {
   isRelevantEvent,
   readEventDirectory,
@@ -24,7 +24,7 @@ type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
   controller: AbortController;
   onEvent: (event: Event) => void | Promise<void>;
-  onEventError?: (error: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
+  onEventError?: (cause: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
   onReady?: () => void;
 };
 
@@ -58,12 +58,14 @@ type GlobalEventApi = {
 };
 
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `OpencodeClient & { global?: { event?: unknown } }`.
   const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
-  if (!globalApi || typeof globalApi.event !== "function") {
+  if (!globalApi || !hasRuntimeType(globalApi.event, "function")) {
     throw new Error(
       "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
     );
   }
+  // SAFETY: The preceding runtime guard establishes `GlobalEventApi` before this assertion.
   return globalApi as GlobalEventApi;
 };
 
@@ -73,11 +75,11 @@ const resolveGlobalEventStream = async (
 ): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
   const stream = await getGlobalEventApi(client).event({ signal });
   if (
-    typeof stream === "object" &&
+    hasRuntimeType(stream, "object") &&
     stream !== null &&
     "stream" in stream &&
     stream.stream &&
-    typeof stream.stream[Symbol.asyncIterator] === "function"
+    hasRuntimeType(stream.stream[Symbol.asyncIterator], "function")
   ) {
     return stream.stream;
   }
@@ -109,12 +111,22 @@ const readGlobalEventFailureScope = (
   };
   const externalSessionId =
     readEventSessionId(scopedEvent) ??
-    (typeof syncEvent?.aggregateID === "string" ? syncEvent.aggregateID : undefined);
+    (hasRuntimeType(syncEvent?.aggregateID, "string") ? syncEvent.aggregateID : undefined);
   const parentExternalSessionId = readEventParentExternalSessionId(properties);
   return {
     directory: event.directory,
-    ...(externalSessionId ? { externalSessionId } : {}),
-    ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+    ...(() => {
+      if (externalSessionId) {
+        return { externalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (parentExternalSessionId) {
+        return { parentExternalSessionId };
+      }
+      return {};
+    })(),
   };
 };
 

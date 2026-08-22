@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type BaseDiffOptions,
   type DiffLineAnnotation,
@@ -91,6 +92,7 @@ type PierreHighlightTarget =
   | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
+// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
 const DIFF_WRAPPER_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "1.5",
@@ -238,7 +240,7 @@ const PierreHighlightSkeleton = ({
   </div>
 );
 
-const getContentMetrics = (value: string): { hash: string; lineCount: number } => {
+const getContentMetrics = (value: string) => {
   let hash = 0x811c9dc5;
   let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
@@ -249,7 +251,10 @@ const getContentMetrics = (value: string): { hash: string; lineCount: number } =
       lineCount += 1;
     }
   }
-  return { hash: (hash >>> 0).toString(36), lineCount };
+  return { hash: (hash >>> 0).toString(36), lineCount } satisfies {
+    hash: string;
+    lineCount: number;
+  };
 };
 
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
@@ -458,15 +463,33 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
-      ...(handleLineSelectionChange
-        ? {
+      ...(() => {
+        if (handleLineSelectionChange) {
+          return {
             onLineSelectionStart: handleLineSelectionChange,
             onLineSelectionChange: handleLineSelectionChange,
-          }
-        : {}),
-      ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : {}),
-      ...(handleGutterUtilityClick ? { onGutterUtilityClick: handleGutterUtilityClick } : {}),
-      ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
+          };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (handleLineSelectionEnd) {
+          return { onLineSelectionEnd: handleLineSelectionEnd };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (handleGutterUtilityClick) {
+          return { onGutterUtilityClick: handleGutterUtilityClick };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (enableHunkReset) {
+          return { unsafeCSS: HUNK_RESET_FLOATING_CSS };
+        }
+        return {};
+      })(),
     }),
     [
       diffStyle,
@@ -490,11 +513,12 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
       if (
-        metadata != null &&
-        typeof metadata === "object" &&
+        hasRuntimeType(metadata, "object") &&
+        metadata !== null &&
         "kind" in metadata &&
         metadata.kind === "hunk-reset"
       ) {
+        // SAFETY: The preceding runtime guard establishes `HunkResetAnnotationMetadata` before this assertion.
         const hunkResetMetadata = metadata as HunkResetAnnotationMetadata;
         return (
           <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>

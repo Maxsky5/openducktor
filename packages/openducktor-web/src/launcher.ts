@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Server as HttpServer } from "node:http";
 import path from "node:path";
-import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
+import { OPENDUCKTOR_DEV_INSTANCE_ENV, hasRuntimeType } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import {
@@ -341,6 +341,7 @@ const startViteServerEffect = (
               details: { frontendPort: options.frontendPort },
             }),
         });
+        // SAFETY: The surrounding boundary constructs or validates every member required by `HttpServer`.
         const httpServer = server.httpServer as HttpServer;
         const close = (): Promise<void> =>
           closeViteFrontendServer({
@@ -378,7 +379,7 @@ const startViteServerEffect = (
           ),
         );
         const address = httpServer.address();
-        if (!address || typeof address === "string") {
+        if (!address || hasRuntimeType(address, "string")) {
           return yield* preserveLauncherFailureAfterStop(
             new WebDependencyError({
               dependency: "vite",
@@ -648,7 +649,12 @@ export const runLauncherEffect = (
     const runtimeDistribution = yield* resolveWebRuntimeDistributionEffect({
       packageRoot: options.packageRoot,
       workspaceMode: options.workspaceMode,
-      ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
+      ...(() => {
+        if (options.workspaceRoot) {
+          return { workspaceRoot: options.workspaceRoot };
+        }
+        return {};
+      })(),
     });
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
     const hostDiscoveryOptions = options.workspaceMode

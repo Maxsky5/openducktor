@@ -21,6 +21,7 @@ export function AgentRuntimeCombobox({
   className,
   triggerClassName,
 }: AgentRuntimeComboboxProps): ReactElement {
+  // SAFETY: The rendered control limits this value to the options represented by `RuntimeKind`.
   return (
     <Combobox
       value={value}

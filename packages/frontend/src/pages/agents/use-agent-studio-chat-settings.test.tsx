@@ -53,6 +53,7 @@ const createSettingsSnapshot = ({
   includeChat?: boolean;
   chatOverrides?: Record<string, JsonValue>;
 } = {}): SettingsSnapshot => {
+  // SAFETY: This test controls the fixture and supplies `Omit<SettingsSnapshot, "chat"> & { chat?: unknown }` used by this case.
   const snapshot = createSettingsSnapshotFixture({
     reusablePrompts: [
       {
@@ -67,13 +68,19 @@ const createSettingsSnapshot = ({
   if (includeChat) {
     snapshot.chat = {
       showThinkingMessages,
-      ...(includeExpandFileDiffsByDefault ? { expandFileDiffsByDefault } : {}),
+      ...(() => {
+        if (includeExpandFileDiffsByDefault) {
+          return { expandFileDiffsByDefault };
+        }
+        return {};
+      })(),
       ...chatOverrides,
     };
   } else {
     delete snapshot.chat;
   }
 
+  // SAFETY: This test controls the fixture and supplies `SettingsSnapshot` used by this case.
   return snapshot as SettingsSnapshot;
 };
 

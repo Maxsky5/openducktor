@@ -2,6 +2,8 @@ import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   type JsonValue,
   type RuntimeRoute,
+  hasRuntimeType,
+  runtimeTypeName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -16,19 +18,12 @@ import type {
   RuntimeMcpStatusProbeResult,
   RuntimeRegistryError,
 } from "../../ports/runtime-registry-port";
+import { isTimeoutError } from "./runtime-probe-errors";
 
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
 const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
-const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError"]);
-const TIMEOUT_ERROR_CODES = new Set([
-  "ABORT_ERR",
-  "ETIMEDOUT",
-  "UND_ERR_BODY_TIMEOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-]);
 const TIMEOUT_RESPONSE_STATUSES = new Set([408, 504]);
 
 type RuntimeSessionRouteInput = {
@@ -37,6 +32,17 @@ type RuntimeSessionRouteInput = {
   externalSessionId: string;
   workingDirectory: string;
 };
+
+interface RuntimeProbeFailureDetails extends Record<string, JsonValue> {
+  detail?: string;
+  failureKind?: "timeout";
+  method?: string;
+  operation?: string;
+  path: string;
+  status?: number;
+  url?: string;
+  workingDirectory: string;
+}
 
 const requireOpenCodeLocalHttpEndpoint = (runtimeRoute: RuntimeRoute, operation: string) =>
   Effect.gen(function* () {
@@ -85,15 +91,16 @@ const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string)
 };
 
 const isLiveSessionStatus = (value: JsonValue | undefined): boolean => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     return false;
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const status = (value as Record<string, JsonValue>).type;
   return status === "busy" || status === "retry";
 };
 
 const requireObjectPayload = (value: JsonValue | undefined, context: string) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     return Effect.fail(
       new HostValidationError({
         message: `${context} must be an object`,
@@ -101,53 +108,13 @@ const requireObjectPayload = (value: JsonValue | undefined, context: string) => 
       }),
     );
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   return Effect.succeed(value as Record<string, JsonValue>);
 };
 
 const readStringProperty = (value: Record<string, JsonValue>, property: string): string | null => {
   const raw = value[property];
-  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
-};
-
-const readStringField = (cause: unknown, field: "code" | "name"): string | null => {
-  if (!cause || typeof cause !== "object" || !(field in cause)) {
-    return null;
-  }
-  const raw = (cause as Record<string, JsonValue>)[field];
-  return typeof raw === "string" ? raw : null;
-};
-
-const readFailureKind = (cause: unknown): string | null => {
-  if (!cause || typeof cause !== "object" || !("details" in cause)) {
-    return null;
-  }
-  const details = (cause as { details?: unknown }).details;
-  if (!details || typeof details !== "object" || !("failureKind" in details)) {
-    return null;
-  }
-  const failureKind = (details as { failureKind?: unknown }).failureKind;
-  return typeof failureKind === "string" ? failureKind : null;
-};
-
-const readCause = (cause: unknown): unknown | null =>
-  cause && typeof cause === "object" && "cause" in cause
-    ? ((cause as { cause?: unknown }).cause ?? null)
-    : null;
-
-const isTimeoutError = (cause: unknown): boolean => {
-  if (readFailureKind(cause) === "timeout") {
-    return true;
-  }
-  const name = readStringField(cause, "name");
-  if (name && TIMEOUT_ERROR_NAMES.has(name)) {
-    return true;
-  }
-  const code = readStringField(cause, "code");
-  if (code && TIMEOUT_ERROR_CODES.has(code)) {
-    return true;
-  }
-  const nestedCause = readCause(cause);
-  return nestedCause !== null && nestedCause !== cause && isTimeoutError(nestedCause);
+  return hasRuntimeType(raw, "string") && raw.trim().length > 0 ? raw.trim() : null;
 };
 
 const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => ({
@@ -164,14 +131,16 @@ const parseToolIds = (payload: JsonValue | undefined) => {
     return Effect.fail(
       new HostValidationError({
         message: "OpenCode tool id payload must be an array",
-        details: { payloadType: typeof payload },
+        details: { payloadType: runtimeTypeName(payload) },
       }),
     );
   }
   return Effect.succeed(
     Array.from(
       new Set(
-        payload.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter(Boolean),
+        payload
+          .map((entry) => (hasRuntimeType(entry, "string") ? entry.trim() : ""))
+          .filter(Boolean),
       ),
     ),
   );
@@ -313,15 +282,21 @@ const fetchOpenCodeJson = (
           method,
           signal: AbortSignal.timeout(MCP_REQUEST_TIMEOUT_MS),
         }),
-      catch: (cause) =>
-        toHostOperationError(cause, `runtimeRegistry.fetchOpenCodeJson.${operation}`, {
+      catch: (cause) => {
+        const details: RuntimeProbeFailureDetails = {
           operation,
           method,
           path: routePath,
           workingDirectory,
           url: url.toString(),
-          ...(isTimeoutError(cause) ? { failureKind: "timeout" as const } : {}),
-        }),
+        };
+        if (isTimeoutError(cause)) details.failureKind = "timeout";
+        return toHostOperationError(
+          cause,
+          `runtimeRegistry.fetchOpenCodeJson.${operation}`,
+          details,
+        );
+      },
     });
     const body = yield* Effect.tryPromise({
       try: () => response.text(),
@@ -330,19 +305,20 @@ const fetchOpenCodeJson = (
     if (!response.ok) {
       const detail = body.trim();
       const timedOut = TIMEOUT_RESPONSE_STATUSES.has(response.status);
+      const details: RuntimeProbeFailureDetails = {
+        status: response.status,
+        detail,
+        path: routePath,
+        workingDirectory,
+      };
+      if (timedOut) details.failureKind = "timeout";
       return yield* Effect.fail(
         new HostOperationError({
           operation: `runtimeRegistry.fetchOpenCodeJson.${operation}`,
           message: detail
             ? `OpenCode ${operation} failed with status ${response.status}: ${detail}`
             : `OpenCode ${operation} failed with status ${response.status}`,
-          details: {
-            status: response.status,
-            detail,
-            path: routePath,
-            workingDirectory,
-            ...(timedOut ? { failureKind: "timeout" as const } : {}),
-          },
+          details,
         }),
       );
     }

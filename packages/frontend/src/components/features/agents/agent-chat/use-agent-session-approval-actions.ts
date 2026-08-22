@@ -26,11 +26,7 @@ export function useAgentSessionApprovalActions({
   pendingApprovals,
   canReplyToApprovals,
   replyAgentApproval,
-}: UseAgentSessionApprovalActionsParams): {
-  isSubmittingApprovalByRequestId: Record<string, boolean>;
-  approvalReplyErrorByRequestId: Record<string, string>;
-  onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
-} {
+}: UseAgentSessionApprovalActionsParams) {
   const [submittingApprovalBySessionKey, setSubmittingApprovalBySessionKey] = useState<
     AgentSessionRequestState<boolean>
   >({});
@@ -132,5 +128,9 @@ export function useAgentSessionApprovalActions({
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
+  } satisfies {
+    isSubmittingApprovalByRequestId: Record<string, boolean>;
+    approvalReplyErrorByRequestId: Record<string, string>;
+    onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   };
 }

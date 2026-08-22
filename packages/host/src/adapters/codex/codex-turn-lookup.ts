@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { CodexAppServerTurn } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -8,13 +9,13 @@ type CodexTurnReaderPort = Pick<CodexAppServerPort, "request">;
 
 const isActiveCodexTurn = (turn: CodexAppServerTurn): boolean =>
   isJsonRecord(turn) &&
-  typeof turn.id === "string" &&
+  hasRuntimeType(turn.id, "string") &&
   turn.id.length > 0 &&
   turn.startedAt !== null &&
   turn.completedAt === null;
 
 const parseCodexTurnCandidates = (
-  value: unknown,
+  value: Parameters<typeof parseThreadTurnsListResponse>[0],
   runtimeId: string,
   threadId: string,
 ): Effect.Effect<CodexAppServerTurn[], HostValidationError> =>

@@ -355,7 +355,12 @@ function TaskActions({
   const workflowActions = resolveTaskCardActions(task, {
     include: TASK_CARD_WORKFLOW_ACTIONS,
     hasActiveSession,
-    ...(activeSessionRole ? { activeSessionRole } : {}),
+    ...(() => {
+      if (activeSessionRole) {
+        return { activeSessionRole };
+      }
+      return {};
+    })(),
     historicalSessionRoles,
   });
 

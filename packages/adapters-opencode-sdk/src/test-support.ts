@@ -267,15 +267,7 @@ export const makeMockClient = ({
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
   modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
-}: MakeMockClientInput = {}): {
-  client: OpencodeClient;
-  session: MockSession;
-  tool: MockTool;
-  mcp: MockMcp;
-  permission: MockPermission;
-  question: MockQuestion;
-  stream: MockEventStream;
-} => {
+}: MakeMockClientInput = {}) => {
   const session: MockSession = {
     createCalls: [],
     promptCalls: [],
@@ -312,6 +304,7 @@ export const makeMockClient = ({
   };
   const queuedSessionIds = [...(sessionIds ?? [sessionId])];
 
+  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   const client = {
     session: {
       create: async (input: JsonValue | undefined) => {
@@ -491,6 +484,7 @@ export const makeMockClient = ({
             if (options?.signal?.aborted) {
               return;
             }
+            // SAFETY: This test controls the fixture and supplies `Event & { properties?: { directory?: string } }` used by this case.
             const directory =
               (event as Event & { properties?: { directory?: string } }).properties?.directory ??
               defaultRuntimeConnection.workingDirectory;
@@ -500,9 +494,17 @@ export const makeMockClient = ({
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  } as OpencodeClient;
 
-  return { client, session, tool, mcp, permission, question, stream };
+  return { client, session, tool, mcp, permission, question, stream } satisfies {
+    client: OpencodeClient;
+    session: MockSession;
+    tool: MockTool;
+    mcp: MockMcp;
+    permission: MockPermission;
+    question: MockQuestion;
+    stream: MockEventStream;
+  };
 };
 
 export const startDefaultSession = async (
@@ -522,7 +524,12 @@ export const startDefaultSession = async (
     sessionScope: workflowAgentSessionScope("task-1", role),
     runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
-    ...(model ? { model } : {}),
+    ...(() => {
+      if (model) {
+        return { model };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -531,13 +538,7 @@ export const defaultLoadSessionTodosInput = {
   externalSessionId: "session-opencode-1",
 };
 
-export const createLoadSessionTodosHarness = (
-  mockInput: MakeMockClientInput,
-): {
-  adapter: BaseOpencodeSdkAdapter;
-  session: MockSession;
-  createClientCalls: unknown[];
-} => {
+export const createLoadSessionTodosHarness = (mockInput: MakeMockClientInput) => {
   const createClientCalls: unknown[] = [];
   const mock = makeMockClient(mockInput);
   const adapter = new OpencodeSdkAdapter({
@@ -548,5 +549,9 @@ export const createLoadSessionTodosHarness = (
     now: () => "2026-02-17T12:00:00Z",
   });
 
-  return { adapter, session: mock.session, createClientCalls };
+  return { adapter, session: mock.session, createClientCalls } satisfies {
+    adapter: BaseOpencodeSdkAdapter;
+    session: MockSession;
+    createClientCalls: unknown[];
+  };
 };

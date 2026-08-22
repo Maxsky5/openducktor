@@ -72,5 +72,6 @@ const inferredAgentModelSelectionSchema = z
   })
   .strict();
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptModelSelection>`.
 export const agentModelSelectionSchema =
-  inferredAgentModelSelectionSchema as unknown as z.ZodType<AgentTranscriptModelSelection>;
+  inferredAgentModelSelectionSchema as z.ZodType<AgentTranscriptModelSelection>;

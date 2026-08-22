@@ -50,6 +50,7 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
   },
 });
 
+// SAFETY: This test controls the fixture and supplies `RepoConfig` used by this case.
 const workingDirectoryDependencies = {
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),

@@ -6,20 +6,22 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
-const createTransport = (
-  response: JsonValue | undefined,
-): { calls: CodexJsonRpcRequest[]; transport: CodexJsonRpcTransport } => {
+const createTransport = (response: JsonValue | undefined) => {
   const calls: CodexJsonRpcRequest[] = [];
   const transport: CodexJsonRpcTransport = {
     async request(request) {
       calls.push(request);
       if (request.method === "fuzzyFileSearch") {
+        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
         return response as Response;
       }
       throw new Error(`Unexpected method '${request.method}'.`);
     },
   };
-  return { calls, transport };
+  return { calls, transport } satisfies {
+    calls: CodexJsonRpcRequest[];
+    transport: CodexJsonRpcTransport;
+  };
 };
 
 const createSearchAdapter = (

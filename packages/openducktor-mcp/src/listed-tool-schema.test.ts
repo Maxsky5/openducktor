@@ -4,16 +4,18 @@ import { getListedToolInputSchema } from "./listed-tool-schema";
 import type { JsonValue } from "@openducktor/contracts";
 
 const propertiesOf = (jsonSchema: Record<string, JsonValue>): Record<string, JsonValue> => {
+  // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
   return jsonSchema.properties as Record<string, JsonValue>;
 };
 
 const requiredOf = (jsonSchema: Record<string, JsonValue>): string[] => {
+  // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
   return Array.isArray(jsonSchema.required) ? (jsonSchema.required as string[]) : [];
 };
 
 describe("listed MCP tool input schema", () => {
   test("uses the full contract schema for tool execution", () => {
-    expect(ODT_TOOL_SCHEMAS.odt_read_task.shape).toHaveProperty("workspaceId");
+    expect(ODT_TOOL_SCHEMAS.odt_read_task["shape"]).toHaveProperty("workspaceId");
   });
 
   test("hides workspaceId from listed tools when the MCP server is already workspace-scoped", () => {

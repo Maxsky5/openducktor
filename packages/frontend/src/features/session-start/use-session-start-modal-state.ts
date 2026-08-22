@@ -307,7 +307,12 @@ export function useSessionStartModalState({
         value: fallbackProfileId,
         label: fallbackProfileId,
         description: "Current default runtime profile",
-        ...(accentColor ? { accentColor } : {}),
+        ...(() => {
+          if (accentColor) {
+            return { accentColor };
+          }
+          return {};
+        })(),
       },
     ];
   }, [catalog, visibleSelection?.profileId]);

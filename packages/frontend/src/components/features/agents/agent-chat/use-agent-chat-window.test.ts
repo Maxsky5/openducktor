@@ -10,6 +10,11 @@ import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { buildAgentChatTurnAnchors } from "./agent-chat-transcript-model";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
+interface LatestResultRefContract {
+  current: HookResult | null;
+}
+
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -74,6 +79,7 @@ const triggerResizeObservers = (targetElement?: Element): void => {
       continue;
     }
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     controller.callback(
       observedElements.map((target) => ({
         borderBoxSize: [] as ResizeObserverSize[],
@@ -176,7 +182,7 @@ const getMaxScrollTop = (container: HTMLDivElement): number => {
 const createHarness = () => {
   const messagesContainerRef = createRef<HTMLDivElement>();
   const messagesContentRef = createRef<HTMLDivElement>();
-  const latestResultRef: { current: HookResult | null } = { current: null };
+  const latestResultRef: LatestResultRefContract = { current: null };
 
   const Harness = (props: HarnessProps): null => {
     const result = useAgentChatWindow({
@@ -185,11 +191,14 @@ const createHarness = () => {
       isSessionWorking: props.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(props.syncBottomAfterComposerLayoutRef
-        ? {
+      ...(() => {
+        if (props.syncBottomAfterComposerLayoutRef) {
+          return {
             syncBottomAfterComposerLayoutRef: props.syncBottomAfterComposerLayoutRef,
-          }
-        : {}),
+          };
+        }
+        return {};
+      })(),
     });
     latestResultRef.current = result;
     return null;
@@ -275,11 +284,14 @@ const mountHarness = async (
       isSessionWorking: nextProps.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(nextProps.syncBottomAfterComposerLayoutRef
-        ? {
+      ...(() => {
+        if (nextProps.syncBottomAfterComposerLayoutRef) {
+          return {
             syncBottomAfterComposerLayoutRef: nextProps.syncBottomAfterComposerLayoutRef,
-          }
-        : {}),
+          };
+        }
+        return {};
+      })(),
     });
     latestResultRef.current = result;
     return result;
@@ -357,7 +369,8 @@ describe("useAgentChatWindow", () => {
   beforeEach(() => {
     actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     mockResizeObserverControllers.clear();
-    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+    // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
+    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
     animationFrameDriver.install();
   });
 
@@ -2315,6 +2328,7 @@ describe("useAgentChatWindow", () => {
   test("syncBottomAfterComposerLayoutRef keeps the transcript pinned while following", async () => {
     const rows = createTurnRows(8);
     const extraContentHeightPx = { current: 0 };
+    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
     const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
     const harness = await mountHarness(
       {
@@ -2357,6 +2371,7 @@ describe("useAgentChatWindow", () => {
   test("syncBottomAfterComposerLayoutRef does not override manual scroll position", async () => {
     const rows = createTurnRows(8);
     const extraContentHeightPx = { current: 0 };
+    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
     const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
     const harness = await mountHarness(
       {

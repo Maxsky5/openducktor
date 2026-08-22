@@ -147,12 +147,15 @@ export const createStartAgentSession = ({
           session,
           runtime,
           stopReason: "start-session-stop-after-bootstrap-failure",
-          ...(startResult.runtimeInfo.bootstrap && !bootstrapCompleted
-            ? {
+          ...(() => {
+            if (startResult.runtimeInfo.bootstrap && !bootstrapCompleted) {
+              return {
                 bootstrap: startResult.runtimeInfo.bootstrap,
                 commitBootstrapOnDeleteFailure: !bootstrapCompletionAttempted,
-              }
-            : {}),
+              };
+            }
+            return {};
+          })(),
         });
       }
 

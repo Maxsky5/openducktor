@@ -1,4 +1,4 @@
-import { ODT_MCP_TOOL_NAMES, type JsonValue } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -132,7 +132,12 @@ const resolveRequestRouteContext = (
   const policySession = parentSession ?? ownerSession ?? session;
   return {
     ownerThreadId,
-    ...(ownerSession ? { ownerSession } : {}),
+    ...(() => {
+      if (ownerSession) {
+        return { ownerSession };
+      }
+      return {};
+    })(),
     policySession,
     runtimeId: ownerSession?.runtimeId ?? policySession.runtimeId,
     route,
@@ -207,7 +212,7 @@ export const handleCodexServerRequest = async (
     }
   };
 
-  if (typeof rawRequest.method !== "string" || rawRequest.method.trim().length === 0) {
+  if (!hasRuntimeType(rawRequest.method, "string") || rawRequest.method.trim().length === 0) {
     throw new Error("Codex app-server server request is missing method.");
   }
 
@@ -291,7 +296,12 @@ export const handleCodexServerRequest = async (
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: mcpElicitationApproval,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
+          ...(() => {
+            if (routeContext.route) {
+              return { route: routeContext.route };
+            }
+            return {};
+          })(),
         });
         if (!registration.isNew) {
           return;
@@ -341,7 +351,12 @@ export const handleCodexServerRequest = async (
           request: parsed.request,
           questionIds: parsed.questionIds,
           input: questionInput,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
+          ...(() => {
+            if (routeContext.route) {
+              return { route: routeContext.route };
+            }
+            return {};
+          })(),
         });
         if (!registration.isNew) {
           return;
@@ -427,7 +442,12 @@ export const handleCodexServerRequest = async (
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: parsedApproval,
-          ...(routeContext.route ? { route: routeContext.route } : {}),
+          ...(() => {
+            if (routeContext.route) {
+              return { route: routeContext.route };
+            }
+            return {};
+          })(),
         });
         if (!registration.isNew) {
           return;

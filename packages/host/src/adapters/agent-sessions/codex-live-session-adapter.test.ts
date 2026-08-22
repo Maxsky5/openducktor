@@ -163,6 +163,7 @@ const createControllerHarness = ({
   const liveContextLoads: unknown[] = [];
   const policyBoundContextLoads: unknown[] = [];
   const sessionDiffLoads: unknown[] = [];
+  // SAFETY: This test controls the fixture and supplies `unknown[]` used by this case.
   const controlInputs = {
     starts: [] as unknown[],
     resumes: [] as unknown[],
@@ -479,6 +480,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       Effect.runPromise(
         prepared.adapter.sendUserMessage({
@@ -718,6 +720,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       harness.getOptions().onLiveSessionMutation?.({
         runtimeId: "runtime-1",

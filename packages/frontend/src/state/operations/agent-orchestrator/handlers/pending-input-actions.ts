@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -48,10 +49,7 @@ const resolvePendingInputRuntimeSession = ({
   readSessionSnapshot: ReadSessionSnapshot;
   currentSession: AgentSessionIdentity;
   request: AgentApprovalRequest | AgentQuestionRequest;
-}): {
-  responseSession: AgentSessionIdentity;
-  turnContextSession: AgentSessionState | null;
-} => {
+}) => {
   const { responseSession, sessions } = resolveAgentPendingInputParticipants(
     currentSession,
     request,
@@ -75,6 +73,9 @@ const resolvePendingInputRuntimeSession = ({
             contextSession.sessionAssociation,
         }
       : null,
+  } satisfies {
+    responseSession: AgentSessionIdentity;
+    turnContextSession: AgentSessionState | null;
   };
 };
 
@@ -82,7 +83,7 @@ const replyRepoPath = (
   workspaceRepoPath: string | null,
   identity: AgentSessionIdentity,
 ): string => {
-  if ("repoPath" in identity && typeof identity.repoPath === "string") {
+  if ("repoPath" in identity && hasRuntimeType(identity.repoPath, "string")) {
     return identity.repoPath;
   }
   return requireWorkspaceRepoPath(workspaceRepoPath);
@@ -110,7 +111,12 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       workingDirectory: responseSession.workingDirectory,
       requestId: request.requestId,
       outcome,
-      ...(message ? { message } : {}),
+      ...(() => {
+        if (message) {
+          return { message };
+        }
+        return {};
+      })(),
     });
   };
 

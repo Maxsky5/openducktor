@@ -62,6 +62,7 @@ type HookHarnessOptions = {
 };
 
 export const enableReactActEnvironment = (): void => {
+  // SAFETY: This test controls the fixture and supplies `ReactActEnvironment` used by this case.
   (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
 };
 
@@ -92,6 +93,7 @@ export const createSelectedSessionTranscriptStateFixture = (
       }
     : transcriptState;
 
+// SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["workflowToolAliasesByCanonical"]` used by this case.
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,
   readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],

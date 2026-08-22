@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,10 +22,10 @@ const createRoot = async (): Promise<string> => {
 };
 
 const createGitPort = (files: string[]): GitPort =>
-  ({
+  createFocusedTestService<GitPort>({
     isGitRepository: () => Effect.succeed(true),
     listFiles: () => Effect.succeed(files),
-  }) as unknown as GitPort;
+  });
 
 const writeError = async (
   effect: ReturnType<ReturnType<typeof createWorkspaceTextFileService>["writeTextFile"]>,

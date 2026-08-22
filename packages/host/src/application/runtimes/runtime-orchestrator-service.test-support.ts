@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import {
   type AgentSessionRecord,
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -21,7 +22,7 @@ export const createGitPort = (
     path === "/repo" ? "/canonical/repo" : path,
   isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
 ): GitPort =>
-  ({
+  createFocusedTestService<GitPort>({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
         try: async () => {
@@ -48,7 +49,7 @@ export const createGitPort = (
           }),
       });
     },
-  }) as Pick<GitPort, "canonicalizePath" | "isGitRepository"> as unknown as GitPort;
+  });
 
 export const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
@@ -67,7 +68,7 @@ export const createTaskStore = (
   }> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
 ): TaskStorePort =>
-  ({
+  createFocusedTestService<TaskStorePort>({
     getTaskMetadata() {
       return Effect.tryPromise({
         try: async () => {
@@ -94,7 +95,7 @@ export const createTaskStore = (
           }),
       });
     },
-  }) as Pick<TaskStorePort, "getTaskMetadata"> as unknown as TaskStorePort;
+  });
 
 export const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
@@ -158,6 +159,7 @@ export const createRegistry = (
           return existingRuntime;
         }
 
+        // SAFETY: This test controls the fixture and supplies `RuntimeInstanceSummary["kind"]` used by this case.
         const runtime = createRuntime({
           kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
           runtimeId: `${input.runtimeKind}-runtime-${runtimeStore.length + 1}`,

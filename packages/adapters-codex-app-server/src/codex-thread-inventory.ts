@@ -257,7 +257,12 @@ export class CodexThreadInventoryReader {
         return {
           thread: {
             id: threadId,
-            ...(unmaterializedWorkingDirectory ? { cwd: unmaterializedWorkingDirectory } : {}),
+            ...(() => {
+              if (unmaterializedWorkingDirectory) {
+                return { cwd: unmaterializedWorkingDirectory };
+              }
+              return {};
+            })(),
             turns: [],
           },
         };
@@ -336,12 +341,20 @@ export class CodexThreadInventoryReader {
         cursor,
         limit: 100,
         sourceKinds: ["cli", "vscode", "exec", "appServer", "subAgent", "unknown"],
-        ...(directories
-          ? {
-              ...(directories.length > 0 ? { cwd: [...directories] } : {}),
+        ...(() => {
+          if (directories) {
+            return {
+              ...(() => {
+                if (directories.length > 0) {
+                  return { cwd: [...directories] };
+                }
+                return {};
+              })(),
               useStateDbOnly: true,
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
       });
       threads.push(...codexThreadList(response));
       cursor = isPlainObject(response)

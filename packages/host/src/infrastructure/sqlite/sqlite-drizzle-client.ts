@@ -1,3 +1,4 @@
+import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import type { ExtractTablesWithRelations } from "drizzle-orm/relations";
 import type { AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import {
@@ -58,16 +59,16 @@ const unsupportedParameterValue = (value: SqliteValue): HostOperationError =>
     operation: "sqlite.drizzleParameter",
     message: "Unsupported SQLite parameter value.",
     details: {
-      valueType: value instanceof Uint8Array ? "Uint8Array" : typeof value,
+      valueType: value instanceof Uint8Array ? "Uint8Array" : runtimeTypeName(value),
     },
   });
 
 const toSqliteValue = (value: SqliteValue): Effect.Effect<SqliteValue, HostOperationError> => {
   if (
     value === null ||
-    typeof value === "bigint" ||
-    typeof value === "number" ||
-    typeof value === "string" ||
+    hasRuntimeType(value, "bigint") ||
+    hasRuntimeType(value, "number") ||
+    hasRuntimeType(value, "string") ||
     value instanceof Uint8Array
   ) {
     return Effect.succeed(value);

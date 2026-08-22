@@ -48,12 +48,7 @@ const setElectronApi = (electronApi: OpenDucktorElectronApi | undefined): void =
   });
 };
 
-const createElectronApi = (): {
-  electronApi: OpenDucktorElectronApi;
-  unsubscribeAppUpdates: ReturnType<typeof mock>;
-  unsubscribe: ReturnType<typeof mock>;
-  unsubscribeTaskStream: ReturnType<typeof mock>;
-} => {
+const createElectronApi = () => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
   const unsubscribeTaskStream = mock(() => {});
@@ -113,6 +108,11 @@ const createElectronApi = (): {
     unsubscribeAppUpdates,
     unsubscribe,
     unsubscribeTaskStream,
+  } satisfies {
+    electronApi: OpenDucktorElectronApi;
+    unsubscribeAppUpdates: ReturnType<typeof mock>;
+    unsubscribe: ReturnType<typeof mock>;
+    unsubscribeTaskStream: ReturnType<typeof mock>;
   };
 };
 
@@ -137,6 +137,7 @@ describe("electron shell bridge", () => {
     })();
 
     expect(error).toBeInstanceOf(ElectronPreloadBridgeUnavailableError);
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((error as Error).message).toContain(
       "OpenDucktor Electron preload bridge is unavailable.",
     );
@@ -148,7 +149,9 @@ describe("electron shell bridge", () => {
 
     const bridge = createElectronShellBridge();
     const listener = mock(() => {});
-    const onTerminalFailure = mock((_cause: unknown) => {});
+    const onTerminalFailure = mock((cause: unknown) => {
+      void cause;
+    });
     const unsubscribeRunEvents = await bridge.subscribeRunEvents(listener);
     const devServerSubscription = await bridge.subscribeDevServerEvents(listener);
     const stopObservingLiveSessions = await bridge.observeAgentSessionLive(
@@ -290,6 +293,7 @@ describe("electron shell bridge", () => {
     const listener = mock(() => {});
 
     await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
     )?.[1] as ((payload: JsonValue | undefined) => void) | undefined;
@@ -336,6 +340,7 @@ describe("electron shell bridge", () => {
     await bridge.appUpdates.check({ initiator: "settings" });
     await bridge.appUpdates.download();
     await bridge.appUpdates.install();
+    // SAFETY: This test controls the fixture and supplies `ReturnType<typeof mock>` used by this case.
     const appUpdateListener = (electronApi.appUpdates.subscribe as ReturnType<typeof mock>).mock
       .calls[0]?.[0];
     appUpdateListener?.({

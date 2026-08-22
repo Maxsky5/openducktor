@@ -32,7 +32,7 @@ export type TaskChatDraftClearPort = {
 };
 
 export type TaskChatDraftCleanupNotificationPort = {
-  error: (title: string, options: { description: string }) => unknown;
+  error: (title: string, options: { description: string }) => ReturnType<typeof toast.error>;
 };
 
 export type TaskChatDraftCleanup = {
@@ -96,28 +96,25 @@ export const createTaskChatDraftCleanup = ({
     shouldCleanup = () => true,
     ...input
   }: RunTaskMutationWithChatDraftCleanupInput<TResult>): Promise<TResult> => {
-    let cleanupTargets: TaskChatDraftCleanupPlan | null = null;
-    let cleanupTargetLookupError: unknown = null;
-    try {
-      cleanupTargets = await prepareTargets(input);
-    } catch (error) {
-      cleanupTargetLookupError = error;
-    }
+    const cleanupPreparation = await prepareTargets(input).then(
+      (targets) => ({ targets, error: null }),
+      (cause: unknown) => ({ targets: null, error: cause }),
+    );
 
     const result = await mutation();
     if (!shouldCleanup(result)) {
       return result;
     }
-    if (cleanupTargetLookupError) {
-      reportFailure(cleanupTargetLookupError);
+    if (cleanupPreparation.error) {
+      reportFailure(cleanupPreparation.error);
       return result;
     }
-    if (!cleanupTargets || cleanupTargets.targets.length === 0) {
+    if (!cleanupPreparation.targets || cleanupPreparation.targets.targets.length === 0) {
       return result;
     }
 
     try {
-      draftClearPort.clearDraftsForTargets(cleanupTargets.targets);
+      draftClearPort.clearDraftsForTargets(cleanupPreparation.targets.targets);
     } catch (error) {
       reportFailure(error);
     }

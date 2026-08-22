@@ -82,10 +82,7 @@ const resolveInitialStartState = ({
   initialSourceSession: AgentSessionIdentity | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
-}): {
-  selectedSourceSessionValue: string;
-  selectedStartMode: AgentSessionStartMode;
-} => {
+}) => {
   const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
   const hasExistingSession = existingSessionOptions.length > 0;
   let selectedStartMode: AgentSessionStartMode;
@@ -112,6 +109,9 @@ const resolveInitialStartState = ({
       existingSessionOptions,
       initialSourceSession,
     ),
+  } satisfies {
+    selectedSourceSessionValue: string;
+    selectedStartMode: AgentSessionStartMode;
   };
 };
 
@@ -127,10 +127,7 @@ const buildSourceSelectionDraft = ({
   runtimeDefinitions: RuntimeDescriptor[];
   startMode: "reuse" | "fork";
   sourceSessionValue: string;
-}): {
-  runtimeKind: RuntimeKind | null;
-  selection: AgentModelSelection | null;
-} => {
+}) => {
   const sourceSelection = resolveSourceSelection(options, sourceSessionValue);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, startMode),
@@ -141,6 +138,9 @@ const buildSourceSelectionDraft = ({
     return {
       runtimeKind,
       selection: null,
+    } satisfies {
+      runtimeKind: RuntimeKind | null;
+      selection: AgentModelSelection | null;
     };
   }
 
@@ -154,6 +154,9 @@ const buildSourceSelectionDraft = ({
     selection: matchingCatalog
       ? coerceVisibleSelectionToCatalog(matchingCatalog, sourceModel)
       : sourceModel,
+  } satisfies {
+    runtimeKind: RuntimeKind | null;
+    selection: AgentModelSelection | null;
   };
 };
 

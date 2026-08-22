@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { extractNumberField, extractStringField } from "./codex-app-server-shared";
@@ -47,7 +48,7 @@ const extractOptionalFiniteNumberField = (
     if (candidate === null || candidate === undefined) {
       return null;
     }
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    if (hasRuntimeType(candidate, "number") && Number.isFinite(candidate)) {
       return candidate;
     }
     throw new Error(`Codex tool ${label} must be a finite number when present.`);
@@ -137,21 +138,31 @@ export const codexToolTimingFields = (
   const endedAtMs =
     explicitEndedAtMs ??
     completedAtMs ??
-    (typeof explicitStartedAtMs === "number" && typeof durationMs === "number"
+    (hasRuntimeType(explicitStartedAtMs, "number") && hasRuntimeType(durationMs, "number")
       ? explicitStartedAtMs + durationMs
       : null);
   const startedAtMs =
     explicitStartedAtMs ??
-    (typeof durationMs === "number" && typeof endedAtMs === "number"
+    (hasRuntimeType(durationMs, "number") && hasRuntimeType(endedAtMs, "number")
       ? Math.max(0, endedAtMs - durationMs)
       : null);
 
   const canEmitStartedAtMs =
-    typeof startedAtMs === "number" &&
-    (options.allowStartedAtOnly === true || typeof endedAtMs === "number");
+    hasRuntimeType(startedAtMs, "number") &&
+    (options.allowStartedAtOnly === true || hasRuntimeType(endedAtMs, "number"));
 
   return {
-    ...(canEmitStartedAtMs ? { startedAtMs } : {}),
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    ...(() => {
+      if (canEmitStartedAtMs) {
+        return { startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(endedAtMs, "number")) {
+        return { endedAtMs };
+      }
+      return {};
+    })(),
   };
 };

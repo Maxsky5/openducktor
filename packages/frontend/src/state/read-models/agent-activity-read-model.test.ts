@@ -15,7 +15,12 @@ const buildSession = (
   } = {},
 ): AgentSessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
-  ...(overrides.title ? { title: overrides.title } : {}),
+  ...(() => {
+    if (overrides.title) {
+      return { title: overrides.title };
+    }
+    return {};
+  })(),
   runtimeKind: overrides.runtimeKind ?? "opencode",
   workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
   taskId: overrides.taskId ?? "task-1",

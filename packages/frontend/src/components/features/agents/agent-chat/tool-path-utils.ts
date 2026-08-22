@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -40,20 +41,22 @@ export const relativizeDisplayPathsInValue = (
   workingDirectory?: string | null,
   key?: string,
 ): JsonValue | undefined => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
       : value;
   }
   if (Array.isArray(value)) {
+    // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
     return value.map((entry) =>
       relativizeDisplayPathsInValue(entry, workingDirectory, key),
     ) as JsonValue;
   }
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return value;
   }
 
+  // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
   return Object.fromEntries(
     Object.entries(value).map(([entryKey, entryValue]) => [
       entryKey,

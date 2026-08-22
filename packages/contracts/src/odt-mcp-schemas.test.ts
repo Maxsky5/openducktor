@@ -113,7 +113,7 @@ describe("odt mcp public task schemas", () => {
   });
 
   test("workspace-scoped tool workspaceId description distinguishes ids from paths", () => {
-    const description = ReadTaskInputSchema.shape.workspaceId.description ?? "";
+    const description = ReadTaskInputSchema["shape"].workspaceId.description ?? "";
 
     expect(description).toBe(
       "Optional workspaceId. Overrides startup workspace; workflow agents omit.",

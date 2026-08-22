@@ -1,22 +1,39 @@
 import { extname } from "node:path";
 import type { ElectronReleasePlatform } from "./electron-release-targets";
 
-export const electronBuilderPlatformFlags: Record<
+interface ElectronBuilderPlatformFlagsContract extends Record<
   ElectronReleasePlatform,
   "--linux" | "--mac" | "--win"
-> = {
+> {}
+
+interface LocalElectronPackageTargetsContract extends Record<
+  ElectronReleasePlatform,
+  readonly string[]
+> {}
+
+interface InstallableArtifactExtensionsContract extends Record<
+  ElectronReleasePlatform,
+  ReadonlySet<string>
+> {}
+
+interface ReleaseArtifactExtensionsContract extends Record<
+  ElectronReleasePlatform,
+  ReadonlySet<string>
+> {}
+
+export const electronBuilderPlatformFlags: ElectronBuilderPlatformFlagsContract = {
   linux: "--linux",
   macos: "--mac",
   windows: "--win",
 };
 
-export const localElectronPackageTargets: Record<ElectronReleasePlatform, readonly string[]> = {
+export const localElectronPackageTargets: LocalElectronPackageTargetsContract = {
   linux: ["AppImage"],
   macos: ["dmg"],
   windows: ["nsis"],
 };
 
-const installableArtifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> = {
+const installableArtifactExtensions: InstallableArtifactExtensionsContract = {
   linux: new Set([".AppImage", ".deb"]),
   macos: new Set([".dmg", ".zip"]),
   windows: new Set([".exe", ".zip"]),
@@ -24,7 +41,7 @@ const installableArtifactExtensions: Record<ElectronReleasePlatform, ReadonlySet
 
 const companionArtifactExtensions: ReadonlySet<string> = new Set([".blockmap"]);
 
-const releaseArtifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> = {
+const releaseArtifactExtensions: ReleaseArtifactExtensionsContract = {
   linux: new Set([".AppImage", ".deb", ".blockmap"]),
   macos: new Set([".dmg", ".zip", ".blockmap"]),
   windows: new Set([".exe", ".zip", ".blockmap"]),
@@ -42,13 +59,12 @@ export const createMacUpdateManifestPattern = (
   updateChannel = defaultElectronUpdateChannel,
 ): RegExp => new RegExp(`^${escapeRegExp(updateChannel)}-mac(?:-[a-z0-9]+)?\\.yml$`, "i");
 
-const updateMetadataArtifactPatterns = (
-  updateChannel = defaultElectronUpdateChannel,
-): Record<ElectronReleasePlatform, RegExp> => ({
-  linux: new RegExp(`^${escapeRegExp(updateChannel)}-linux(?:-[a-z0-9]+)*\\.yml$`, "i"),
-  macos: createMacUpdateManifestPattern(updateChannel),
-  windows: new RegExp(`^${escapeRegExp(updateChannel)}(?:-[a-z0-9]+)*\\.yml$`, "i"),
-});
+const updateMetadataArtifactPatterns = (updateChannel = defaultElectronUpdateChannel) =>
+  ({
+    linux: new RegExp(`^${escapeRegExp(updateChannel)}-linux(?:-[a-z0-9]+)*\\.yml$`, "i"),
+    macos: createMacUpdateManifestPattern(updateChannel),
+    windows: new RegExp(`^${escapeRegExp(updateChannel)}(?:-[a-z0-9]+)*\\.yml$`, "i"),
+  }) satisfies Record<ElectronReleasePlatform, RegExp>;
 
 export const getRequiredUpdateMetadataLabel = (
   platform: ElectronReleasePlatform,

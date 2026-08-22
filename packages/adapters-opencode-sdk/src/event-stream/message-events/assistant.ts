@@ -1,5 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -230,9 +230,19 @@ export const maybeEmitCompletedAssistantMessage = (
 
   updateMessageMetadata(runtime, input.messageId, {
     timestamp,
-    ...(assistantModel ? { model: assistantModel } : {}),
+    ...(() => {
+      if (assistantModel) {
+        return { model: assistantModel };
+      }
+      return {};
+    })(),
     hasStopSignal,
-    ...(totalTokens !== undefined ? { totalTokens } : {}),
+    ...(() => {
+      if (totalTokens !== undefined) {
+        return { totalTokens };
+      }
+      return {};
+    })(),
   });
 
   if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
@@ -257,8 +267,18 @@ export const maybeEmitCompletedAssistantMessage = (
     timestamp,
     messageId: input.messageId,
     message: visible,
-    ...(typeof totalTokens === "number" ? { totalTokens } : {}),
-    ...(assistantModel ? { model: assistantModel } : {}),
+    ...(() => {
+      if (hasRuntimeType(totalTokens, "number")) {
+        return { totalTokens };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (assistantModel) {
+        return { model: assistantModel };
+      }
+      return {};
+    })(),
   });
   session.emittedAssistantMessageIds.add(input.messageId);
   session.pendingCompletedAssistantMessageIds.delete(input.messageId);

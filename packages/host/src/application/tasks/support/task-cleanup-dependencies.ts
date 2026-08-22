@@ -17,12 +17,7 @@ export const requireTaskDeleteDependencies = (
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  devServerService: DevServerService;
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
+) => {
   if (!devServerService) {
     throw missingTaskDependency("Dev server service is required for task_delete.");
   }
@@ -36,7 +31,12 @@ export const requireTaskDeleteDependencies = (
     throw missingTaskDependency("Workspace settings service is required for task_delete.");
   }
 
-  return { devServerService, gitPort, settingsConfig, workspaceSettingsService };
+  return { devServerService, gitPort, settingsConfig, workspaceSettingsService } satisfies {
+    devServerService: DevServerService;
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+    workspaceSettingsService: WorkspaceSettingsService;
+  };
 };
 
 export const requireTaskCloseDependencies = (
@@ -44,12 +44,7 @@ export const requireTaskCloseDependencies = (
   gitPort: GitPort | undefined,
   settingsConfig: SettingsConfigPort | undefined,
   workspaceSettingsService: WorkspaceSettingsService | undefined,
-): {
-  devServerService: DevServerService;
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  workspaceSettingsService: WorkspaceSettingsService;
-} => {
+) => {
   if (!devServerService) {
     throw missingTaskDependency("Dev server service is required for task_close.");
   }
@@ -68,6 +63,11 @@ export const requireTaskCloseDependencies = (
     gitPort,
     settingsConfig,
     workspaceSettingsService,
+  } satisfies {
+    devServerService: DevServerService;
+    gitPort: GitPort;
+    settingsConfig: SettingsConfigPort;
+    workspaceSettingsService: WorkspaceSettingsService;
   };
 };
 
@@ -80,30 +80,28 @@ export const requireTaskCloseWorktreeService = (
   return taskWorktreeService;
 };
 
-export const requireImplementationResetStoreDependencies = (
-  taskStore: TaskStorePort,
-): {
-  clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
-  clearQaReports: TaskStorePort["clearQaReports"];
-  setDirectMerge: TaskStorePort["setDirectMerge"];
-  setPullRequest: TaskStorePort["setPullRequest"];
-} => ({
-  clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
-  clearQaReports: taskStore.clearQaReports.bind(taskStore),
-  setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
-  setPullRequest: taskStore.setPullRequest.bind(taskStore),
-});
+export const requireImplementationResetStoreDependencies = (taskStore: TaskStorePort) =>
+  ({
+    clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
+    clearQaReports: taskStore.clearQaReports.bind(taskStore),
+    setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
+    setPullRequest: taskStore.setPullRequest.bind(taskStore),
+  }) satisfies {
+    clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
+    clearQaReports: TaskStorePort["clearQaReports"];
+    setDirectMerge: TaskStorePort["setDirectMerge"];
+    setPullRequest: TaskStorePort["setPullRequest"];
+  };
 
-export const requireTaskResetStoreDependencies = (
-  taskStore: TaskStorePort,
-): {
-  clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
-  clearWorkflowDocuments: TaskStorePort["clearWorkflowDocuments"];
-  setDirectMerge: TaskStorePort["setDirectMerge"];
-  setPullRequest: TaskStorePort["setPullRequest"];
-} => ({
-  clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
-  clearWorkflowDocuments: taskStore.clearWorkflowDocuments.bind(taskStore),
-  setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
-  setPullRequest: taskStore.setPullRequest.bind(taskStore),
-});
+export const requireTaskResetStoreDependencies = (taskStore: TaskStorePort) =>
+  ({
+    clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
+    clearWorkflowDocuments: taskStore.clearWorkflowDocuments.bind(taskStore),
+    setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
+    setPullRequest: taskStore.setPullRequest.bind(taskStore),
+  }) satisfies {
+    clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
+    clearWorkflowDocuments: TaskStorePort["clearWorkflowDocuments"];
+    setDirectMerge: TaskStorePort["setDirectMerge"];
+    setPullRequest: TaskStorePort["setPullRequest"];
+  };

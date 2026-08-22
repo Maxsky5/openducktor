@@ -81,6 +81,7 @@ describe("createWorkspaceFilesCommandHandlers", () => {
       readTextFile: () => Effect.die("not used"),
       writeTextFile: (input) => {
         received.push(input);
+        // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
         const parsed = input as {
           rootPath: string;
           relativePath: string;

@@ -1,12 +1,15 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { Theme } from "@openducktor/contracts";
 import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bridge";
+import type { HostClient } from "@openducktor/host-client";
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
+import { createFocusedFixture } from "./test-utils/focused-fixture";
 
-if (typeof document === "undefined") {
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
@@ -22,8 +25,8 @@ const expectNoManualShellBootstrapSteps = (source: string): void => {
 };
 
 const createTestShellBridge = (): ShellBridge =>
-  ({
-    client: {},
+  createFocusedFixture<ShellBridge>({
+    client: createFocusedFixture<HostClient>({}),
     subscribeRunEvents: async () => () => {},
     subscribeDevServerEvents: async () => ({
       transportEpoch: "test:0",
@@ -34,6 +37,7 @@ const createTestShellBridge = (): ShellBridge =>
       acknowledge: async () => {},
       unsubscribe: () => {},
     }),
+    observeAgentSessionLive: async () => () => {},
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: "unknown",
@@ -46,7 +50,7 @@ const createTestShellBridge = (): ShellBridge =>
     },
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
-  }) as unknown as ShellBridge;
+  });
 
 type BootstrapHarnessOptions = {
   loadSettingsSnapshot?: () => Promise<{ theme: Theme }>;
@@ -57,7 +61,8 @@ const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
   const events: string[] = [];
   const bridge = createTestShellBridge();
   let configuredBridge: ShellBridge | null = null;
-  const reportSettingsPreloadError = mock((_cause: unknown) => {
+  const reportSettingsPreloadError = mock((cause: unknown) => {
+    void cause;
     events.push("reportSettingsPreloadError");
   });
   const renderApp = mock((_rootElement: HTMLElement) => {

@@ -23,20 +23,7 @@ export function useAgentStudioTaskTabs(args: {
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
-}): {
-  tabTaskIds: string[];
-  activeTaskTabId: string;
-  availableTabTasks: TaskCard[];
-  taskTabs: AgentStudioTaskTabsModel["tabs"];
-  handleSelectTab: (nextTaskId: string) => void;
-  handleCreateTab: (nextTaskId: string) => void;
-  handleCloseTab: (taskIdToClose: string) => void;
-  handleReorderTab: (
-    draggedTaskId: string,
-    targetTaskId: string,
-    position: "before" | "after",
-  ) => void;
-} {
+}) {
   const {
     activeWorkspaceId,
     isRepoNavigationBoundaryPending = false,
@@ -158,5 +145,18 @@ export function useAgentStudioTaskTabs(args: {
     handleCreateTab,
     handleCloseTab,
     handleReorderTab,
+  } satisfies {
+    tabTaskIds: string[];
+    activeTaskTabId: string;
+    availableTabTasks: TaskCard[];
+    taskTabs: AgentStudioTaskTabsModel["tabs"];
+    handleSelectTab: (nextTaskId: string) => void;
+    handleCreateTab: (nextTaskId: string) => void;
+    handleCloseTab: (taskIdToClose: string) => void;
+    handleReorderTab: (
+      draggedTaskId: string,
+      targetTaskId: string,
+      position: "before" | "after",
+    ) => void;
   };
 }

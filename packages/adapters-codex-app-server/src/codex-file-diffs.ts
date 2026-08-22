@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { FileDiff } from "@openducktor/contracts";
 import {
   countRenderableFileDiffLines,
@@ -21,7 +22,7 @@ export const codexFileChangeEntries = (value: Record<string, JsonValue>): JsonVa
 };
 
 const normalizeExplicitDiffType = (value: JsonValue | undefined): string | null => {
-  if (typeof value === "string" && value.trim().length > 0) {
+  if (hasRuntimeType(value, "string") && value.trim().length > 0) {
     const normalized = value.trim();
     if (normalized === "add") {
       return "added";
@@ -66,7 +67,7 @@ const movePathFromKind = (value: JsonValue | undefined): string | null => {
   }
 
   const movePath = value.movePath ?? value.move_path;
-  return typeof movePath === "string" && movePath.trim().length > 0 ? movePath.trim() : null;
+  return hasRuntimeType(movePath, "string") && movePath.trim().length > 0 ? movePath.trim() : null;
 };
 
 const stripMoveTrailer = (diff: string, movePath: string | null): string => {
@@ -103,7 +104,7 @@ const parseFileDiffEntry = (entry: JsonValue | undefined, location: string): Fil
 
   const rawFile = entry.file ?? entry.path;
   const diff = entry.diff ?? entry.patch;
-  if (typeof rawFile !== "string" || typeof diff !== "string") {
+  if (!hasRuntimeType(rawFile, "string") || !hasRuntimeType(diff, "string")) {
     throw new CodexFileDiffParseError(
       `entry ${location} is missing string file/path or diff/patch fields.`,
     );
@@ -124,11 +125,11 @@ const parseFileDiffEntry = (entry: JsonValue | undefined, location: string): Fil
   );
   const counts = countRenderableFileDiffLines(renderableDiff);
   const additions =
-    typeof entry.additions === "number" && Number.isFinite(entry.additions)
+    hasRuntimeType(entry.additions, "number") && Number.isFinite(entry.additions)
       ? entry.additions
       : counts.additions;
   const deletions =
-    typeof entry.deletions === "number" && Number.isFinite(entry.deletions)
+    hasRuntimeType(entry.deletions, "number") && Number.isFinite(entry.deletions)
       ? entry.deletions
       : counts.deletions;
   return {
@@ -225,6 +226,7 @@ const applyPatchFileHeader = (
     return null;
   }
 
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `ApplyPatchFileType`.
   return {
     operation: operation as ApplyPatchFileType,
     file: file.trim(),
@@ -305,7 +307,7 @@ export const codexPatchInputFromToolPayload = (
   value: Record<string, JsonValue>,
   input: Record<string, JsonValue> | null | undefined,
 ): string | null => {
-  if (typeof value.input === "string") {
+  if (hasRuntimeType(value.input, "string")) {
     return value.input;
   }
   return patchInputFromObject(input);

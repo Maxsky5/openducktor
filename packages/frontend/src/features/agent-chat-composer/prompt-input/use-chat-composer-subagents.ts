@@ -28,12 +28,7 @@ export const useChatComposerSubagents = ({
   promptInputRuntime,
   supportsSubagentReferences,
   loadSubagentsForRepo,
-}: UseChatComposerSubagentsArgs): {
-  subagentCatalog: AgentSubagentCatalog;
-  subagents: AgentSubagentCatalog["subagents"];
-  subagentsError: string | null;
-  isSubagentsLoading: boolean;
-} => {
+}: UseChatComposerSubagentsArgs) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const subagentsQuery = useQuery(
@@ -58,5 +53,10 @@ export const useChatComposerSubagents = ({
     subagents: supportsSubagentReferences ? catalog.subagents : [],
     subagentsError: error,
     isSubagentsLoading: isLoading,
+  } satisfies {
+    subagentCatalog: AgentSubagentCatalog;
+    subagents: AgentSubagentCatalog["subagents"];
+    subagentsError: string | null;
+    isSubagentsLoading: boolean;
   };
 };

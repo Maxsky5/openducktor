@@ -79,6 +79,7 @@ describe("agent-orchestrator-runtime", () => {
       qaReport: { markdown: "# QA", updatedAt: "2026-04-10T13:10:00.000Z" },
     }));
 
+    // SAFETY: This test creates the DOM fixture that supplies `never` before this lookup.
     await expect(
       loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh as never),
     ).resolves.toEqual({
@@ -182,6 +183,7 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("fails before build start when repo and role runtime defaults are missing", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     repoConfigLoader = async () =>
       createRepoConfig({
         defaultRuntimeKind: undefined as never,

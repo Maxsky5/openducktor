@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { FileDiff } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import {
@@ -61,13 +62,12 @@ export type NormalizedCodexToolInvocation = {
 };
 
 export const statusFromCodexStatus = (status: JsonValue | undefined): AgentToolStatus => {
-  const normalized =
-    typeof status === "string"
-      ? status
-          .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-          .toLowerCase()
-          .replace(/-/g, "_")
-      : "";
+  const normalized = hasRuntimeType(status, "string")
+    ? status
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .toLowerCase()
+        .replace(/-/g, "_")
+    : "";
   if (
     normalized === "failed" ||
     normalized === "failure" ||
@@ -260,19 +260,39 @@ const codexExecCommandInput = (
   if (tool === "read") {
     return {
       command,
-      ...(cwd ? { cwd } : {}),
-      ...(readPathFromCommand(command) ? { path: readPathFromCommand(command) } : {}),
+      ...(() => {
+        if (cwd) {
+          return { cwd };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (readPathFromCommand(command)) {
+          return { path: readPathFromCommand(command) };
+        }
+        return {};
+      })(),
     };
   }
   if (tool === "search") {
     return {
       ...searchInputFromCommand(command),
-      ...(cwd ? { cwd } : {}),
+      ...(() => {
+        if (cwd) {
+          return { cwd };
+        }
+        return {};
+      })(),
     };
   }
   return {
     command,
-    ...(cwd ? { cwd } : {}),
+    ...(() => {
+      if (cwd) {
+        return { cwd };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -324,17 +344,52 @@ export const normalizeCodexToolInvocation = ({
     tool,
     toolType,
     title: title ?? defaultTitle(tool),
-    ...(displayLabel ? { displayLabel } : {}),
+    ...(() => {
+      if (displayLabel) {
+        return { displayLabel };
+      }
+      return {};
+    })(),
     status: resolvedError ? "error" : statusFromCodexStatus(status),
-    ...(resolvedInput ? { input: resolvedInput } : {}),
-    ...(resolvedPreview ? { preview: resolvedPreview } : {}),
-    ...(resolvedOutput ? { output: resolvedOutput } : {}),
-    ...(resolvedError ? { error: resolvedError } : {}),
-    ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : {}),
+    ...(() => {
+      if (resolvedInput) {
+        return { input: resolvedInput };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resolvedPreview) {
+        return { preview: resolvedPreview };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resolvedOutput) {
+        return { output: resolvedOutput };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resolvedError) {
+        return { error: resolvedError };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (fileDiffs && fileDiffs.length > 0) {
+        return { fileDiffs };
+      }
+      return {};
+    })(),
     metadata: {
       ...metadata,
       rawToolName,
-      ...(namespace ? { namespace } : {}),
+      ...(() => {
+        if (namespace) {
+          return { namespace };
+        }
+        return {};
+      })(),
     },
   };
 };

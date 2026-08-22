@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
@@ -19,12 +20,42 @@ const makeSubagentMessage = (
     partId: input.partId ?? "subagent-part",
     correlationKey: input.correlationKey,
     status: input.status,
-    ...(input.agent ? { agent: input.agent } : {}),
-    ...(input.prompt ? { prompt: input.prompt } : {}),
-    ...(input.description ? { description: input.description } : {}),
-    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
-    ...(typeof input.startedAtMs === "number" ? { startedAtMs: input.startedAtMs } : {}),
-    ...(typeof input.endedAtMs === "number" ? { endedAtMs: input.endedAtMs } : {}),
+    ...(() => {
+      if (input.agent) {
+        return { agent: input.agent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.prompt) {
+        return { prompt: input.prompt };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.description) {
+        return { description: input.description };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.externalSessionId) {
+        return { externalSessionId: input.externalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(input.startedAtMs, "number")) {
+        return { startedAtMs: input.startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(input.endedAtMs, "number")) {
+        return { endedAtMs: input.endedAtMs };
+      }
+      return {};
+    })(),
   };
 
   return {

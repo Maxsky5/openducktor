@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
@@ -9,6 +10,7 @@ type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"]
 
 let FileDiffList: FileDiffListComponent;
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -148,7 +150,7 @@ afterEach(async () => {
 });
 
 afterAll(() => {
-  if (typeof previousActEnvironmentValue === "undefined") {
+  if (hasRuntimeType(previousActEnvironmentValue, "undefined")) {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;

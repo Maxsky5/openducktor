@@ -1,6 +1,7 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeApprovalReplyOutcome,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { JsonObject } from "@openducktor/contracts";
 import { type AgentPendingApprovalRequest, classifyAgentApprovalMutation } from "@openducktor/core";
@@ -13,7 +14,7 @@ const OPENCODE_ODT_WORKFLOW_TOOL_ALIASES =
 
 const readOptionalString = (record: JsonObject | undefined, key: string): string | undefined => {
   const value = record?.[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  return hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
 };
 
 export type ParsedOpenCodePermissionRequest = {
@@ -50,10 +51,35 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     requestType: toolName ? "runtime_tool" : "permission_grant",
     title,
     summary,
-    ...(patterns.length > 0 ? { affectedPaths: patterns } : {}),
-    ...(command ? { command: { command, ...(workingDirectory ? { workingDirectory } : {}) } } : {}),
+    ...(() => {
+      if (patterns.length > 0) {
+        return { affectedPaths: patterns };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (command) {
+        return {
+          command: {
+            command,
+            ...(() => {
+              if (workingDirectory) {
+                return { workingDirectory };
+              }
+              return {};
+            })(),
+          },
+        };
+      }
+      return {};
+    })(),
     action: { name: permission },
-    ...(toolName ? { tool: { name: toolName } } : {}),
+    ...(() => {
+      if (toolName) {
+        return { tool: { name: toolName } };
+      }
+      return {};
+    })(),
     mutation: classifyAgentApprovalMutation({
       actionName: permission,
       toolName,
@@ -66,8 +92,18 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
       opencode: {
         permission,
         patterns,
-        ...(save && save.length > 0 ? { save } : {}),
-        ...(metadata ? { metadata } : {}),
+        ...(() => {
+          if (save && save.length > 0) {
+            return { save };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (metadata) {
+            return { metadata };
+          }
+          return {};
+        })(),
       },
     },
   };

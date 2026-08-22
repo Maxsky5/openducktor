@@ -8,6 +8,7 @@ type ReactActGlobal = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
 
+// SAFETY: This test controls the fixture and supplies `ReactActGlobal` used by this case.
 const actGlobal = globalThis as ReactActGlobal;
 const originalActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
 

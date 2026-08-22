@@ -35,6 +35,7 @@ export const usePremiumCodeComponents = ({
   const codeOverride = useCallback(
     ({ node: _node, className, children, ...props }: CodeOverrideProps): ReactElement => {
       const languageMatch = LANGUAGE_CLASS_PATTERN.exec(className ?? "");
+      // SAFETY: The surrounding boundary constructs or validates every member required by `ComponentType<CodeOverrideProps> | undefined`.
       const codeComponent = components.code as ComponentType<CodeOverrideProps> | undefined;
       if (!languageMatch?.[1]) {
         if (codeComponent) {

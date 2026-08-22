@@ -16,6 +16,10 @@ import {
   type SessionLaunchActionId,
 } from "./session-start-launch-options";
 
+interface LAUNCHACTIONSBYROLEContract extends Record<AgentRole, SessionLaunchActionId[]> {}
+
+interface LAUNCHACTIONLABELSContract extends Record<SessionLaunchActionId, string> {}
+
 type TaskPromptContext = {
   title?: string;
   issueType?: "task" | "feature" | "bug" | "epic";
@@ -38,14 +42,14 @@ type SessionMessagePromptOptions = SharedPromptOptions & {
   git?: AgentPromptGitContext;
 };
 
-export const LAUNCH_ACTIONS_BY_ROLE: Record<AgentRole, SessionLaunchActionId[]> = {
+export const LAUNCH_ACTIONS_BY_ROLE: LAUNCHACTIONSBYROLEContract = {
   spec: getSessionLaunchActionsForRole("spec").map((action) => action.id),
   planner: getSessionLaunchActionsForRole("planner").map((action) => action.id),
   build: getSessionLaunchActionsForRole("build").map((action) => action.id),
   qa: getSessionLaunchActionsForRole("qa").map((action) => action.id),
 };
 
-export const LAUNCH_ACTION_LABELS: Record<SessionLaunchActionId, string> = {
+export const LAUNCH_ACTION_LABELS: LAUNCHACTIONLABELSContract = {
   spec_initial: SESSION_LAUNCH_ACTIONS.spec_initial.label,
   planner_initial: SESSION_LAUNCH_ACTIONS.planner_initial.label,
   build_implementation_start: SESSION_LAUNCH_ACTIONS.build_implementation_start.label,
@@ -75,8 +79,18 @@ export const kickoffPromptForTemplate = (
       taskId,
       ...options?.task,
     },
-    ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : {}),
-    ...(options?.git ? { git: options.git } : {}),
+    ...(() => {
+      if (options?.extraPlaceholders) {
+        return { extraPlaceholders: options.extraPlaceholders };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (options?.git) {
+        return { git: options.git };
+      }
+      return {};
+    })(),
     overrides: options?.overrides ?? {},
   });
 };
@@ -105,7 +119,12 @@ export const buildGitConflictResolutionPrompt = (
       taskId,
       ...options?.task,
     },
-    ...(options?.git ? { git: options.git } : {}),
+    ...(() => {
+      if (options?.git) {
+        return { git: options.git };
+      }
+      return {};
+    })(),
     overrides: options?.overrides ?? {},
   });
 };

@@ -18,6 +18,8 @@ import {
 } from "./selected-session-context";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
+interface ExpectedByRoleContract extends Record<AgentRole, string | null> {}
+
 const createDoc = (markdown: string): TaskDocumentState => ({
   markdown,
   updatedAt: null,
@@ -131,8 +133,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.selectedSession.runtimeData.contextError).toBeNull();
   });
 
+  // SAFETY: This test creates the DOM fixture that supplies `[ AgentRole, string | null, ][]` before this lookup.
   test("maps active document from selected role semantics", () => {
-    const expectedByRole: Record<AgentRole, string | null> = {
+    const expectedByRole: ExpectedByRoleContract = {
       spec: "Specification",
       planner: "Implementation Plan",
       qa: "QA Report",

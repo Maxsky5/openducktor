@@ -80,6 +80,7 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
       }
 
       await sharedHarness.run(async () => {
+        // SAFETY: This test controls the fixture and supplies `ReturnType<typeof useWorkspaceSelectionOperations>` used by this case.
         await fn(latest as ReturnType<typeof useWorkspaceSelectionOperations>);
       });
     },

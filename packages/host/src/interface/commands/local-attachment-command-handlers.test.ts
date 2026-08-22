@@ -47,6 +47,7 @@ const createRecordingLocalAttachmentService = () => {
       });
     },
   };
+  // SAFETY: This test controls the fixture and supplies `LocalAttachmentService` used by this case.
   const service = promiseService as LocalAttachmentService;
   return { calls, service };
 };

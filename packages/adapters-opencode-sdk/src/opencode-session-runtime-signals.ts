@@ -1,6 +1,7 @@
 import {
   type AgentSessionTranscriptEventType,
   isAgentSessionTranscriptEventType,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import { readEventSessionId } from "./event-stream/shared";
@@ -50,14 +51,22 @@ export const readMessageUpdatedContextSignal = (
   }
   const rawParts = Array.isArray(properties?.parts) ? properties.parts : [];
   const totalTokens = extractMessageTotalTokens(info, rawParts);
-  if (typeof totalTokens !== "number") {
+  if (!hasRuntimeType(totalTokens, "number")) {
     return null;
   }
   const model = readMessageModelSelection(info);
   return {
     type: "context_updated",
     externalSessionId,
-    contextUsage: { totalTokens, ...(model ? { model } : {}) },
+    contextUsage: {
+      totalTokens,
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
+    },
   };
 };
 

@@ -337,6 +337,7 @@ const pickToolSchemas = <
   schemas: TSchemas,
   toolNames: TNames,
 ): Pick<TSchemas, TNames[number]> => {
+  // SAFETY: The surrounding boundary constructs or validates every member required by `Pick< TSchemas, TNames[number] >`.
   return Object.fromEntries(toolNames.map((toolName) => [toolName, schemas[toolName]])) as Pick<
     TSchemas,
     TNames[number]

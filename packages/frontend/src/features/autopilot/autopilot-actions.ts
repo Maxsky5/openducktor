@@ -68,6 +68,7 @@ type SkippedAutopilotStart = {
 
 type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `Record<AgentRole, string>`.
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 const findLatestSessionRecordByRole = (
@@ -92,8 +93,18 @@ const toAgentModelSelection = (
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(selection.variant ? { variant: selection.variant } : {}),
-    ...(selection.profileId ? { profileId: selection.profileId } : {}),
+    ...(() => {
+      if (selection.variant) {
+        return { variant: selection.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (selection.profileId) {
+        return { profileId: selection.profileId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -296,9 +307,12 @@ export const executeAutopilotAction = async ({
         : await resolveAutopilotSelection({
             activeWorkspace,
             role: action.role,
-            ...(startResolution.preferredSelection !== undefined
-              ? { preferredSelection: startResolution.preferredSelection }
-              : {}),
+            ...(() => {
+              if (startResolution.preferredSelection !== undefined) {
+                return { preferredSelection: startResolution.preferredSelection };
+              }
+              return {};
+            })(),
             queryClient,
             loadRepoRuntimeCatalog,
           });
@@ -309,9 +323,12 @@ export const executeAutopilotAction = async ({
         role: action.role,
         launchActionId: action.launchActionId,
         postStartAction: "kickoff",
-        ...(startResolution.targetWorkingDirectory !== undefined
-          ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
-          : {}),
+        ...(() => {
+          if (startResolution.targetWorkingDirectory !== undefined) {
+            return { targetWorkingDirectory: startResolution.targetWorkingDirectory };
+          }
+          return {};
+        })(),
       },
       decision: toSessionStartDecision({
         resolution: startResolution,

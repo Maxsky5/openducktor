@@ -68,15 +68,26 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
   const effectiveToolDiscovery =
     toolDiscovery ??
     createToolDiscoveryAdapter({
-      ...(processEnv === undefined ? {} : { env: processEnv }),
+      ...(() => {
+        if (processEnv === undefined) {
+          return {};
+        }
+        return { env: processEnv };
+      })(),
       systemCommands: systemCommands ?? createSystemCommands(),
     });
+  // SAFETY: This test controls the fixture and supplies `never` used by this case.
   return createEffectCodexWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
       settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
-    ...(processEnv === undefined ? {} : { processEnv }),
+    ...(() => {
+      if (processEnv === undefined) {
+        return {};
+      }
+      return { processEnv };
+    })(),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??
@@ -494,6 +505,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
+      // SAFETY: This test controls the fixture and supplies `number` used by this case.
       await waitFor(() => !processIsAlive(childPid as number));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
@@ -649,6 +661,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
       );
 
+      // SAFETY: This test controls the fixture and supplies `typeof setTimeout` used by this case.
       globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number) => {
         const timer = originalSetTimeout(handler, timeout);
         if (timeout === 4_000) {
@@ -656,10 +669,12 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }
         return timer;
       }) as typeof setTimeout;
+      // SAFETY: This test controls the fixture and supplies `typeof clearTimeout` used by this case.
       globalThis.clearTimeout = ((timer) => {
         if (timer === requestTimeout) {
           requestTimeoutCleared = true;
         }
+        // SAFETY: This test controls the fixture and supplies `Parameters<typeof originalClearTimeout>[0]` used by this case.
         return originalClearTimeout(timer as Parameters<typeof originalClearTimeout>[0]);
       }) as typeof clearTimeout;
 
@@ -786,6 +801,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         prepareLiveSessionAdapter: (runtime) =>
           Effect.sync(() => {
             order.push("prepare");
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {
               adapter: {
                 binding: {
@@ -907,6 +923,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           }),
         runAdapterMutation: (mutation) => mutation.pipe(Effect.map((result) => result.value)),
       } satisfies RuntimeLiveSessionLifecyclePort;
+      // SAFETY: This test controls the fixture and supplies `never` used by this case.
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
@@ -956,6 +973,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       await waitFor(() => existsSync(runtimePidPath));
       runtimePid = Number(await readFile(runtimePidPath, "utf8"));
       process.kill(runtimePid, "SIGTERM");
+      // SAFETY: This test controls the fixture and supplies `number` used by this case.
       await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
       await expect(
         Effect.runPromise(

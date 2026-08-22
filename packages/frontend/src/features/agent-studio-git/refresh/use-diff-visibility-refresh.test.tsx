@@ -37,10 +37,13 @@ const createVisibilityStateController = () => {
     writable: true,
     value: EventTarget.prototype.dispatchEvent.bind(document),
   });
+  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
   (globalThis as WindowEventTargetOverride).addEventListener =
     windowTarget.addEventListener.bind(windowTarget);
+  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
   (globalThis as WindowEventTargetOverride).removeEventListener =
     windowTarget.removeEventListener.bind(windowTarget);
+  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
   (globalThis as WindowEventTargetOverride).dispatchEvent =
     windowTarget.dispatchEvent.bind(windowTarget);
 
@@ -59,8 +62,11 @@ const createVisibilityStateController = () => {
       } else {
         Reflect.deleteProperty(document, "dispatchEvent");
       }
+      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
       (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
+      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
       (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;
+      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
       (globalThis as WindowEventTargetOverride).dispatchEvent = originalDispatchEvent;
     },
   };

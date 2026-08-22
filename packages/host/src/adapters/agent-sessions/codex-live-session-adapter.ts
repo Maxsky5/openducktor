@@ -17,6 +17,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import {
   type HostError,
   type HostOperationError,
@@ -84,11 +85,11 @@ const toSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
   externalSessionId: ref.externalSessionId,
 });
 
-const parseOutput = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseOutput = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>
@@ -120,6 +121,7 @@ const requireRuntime = (
       }),
     );
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexRuntimeInstance`.
   return Effect.succeed(runtime as CodexRuntimeInstance);
 };
 
@@ -143,6 +145,7 @@ export const createCodexLiveSessionAdapterPreparer =
         liveSessionLifecycle,
       });
 
+      // SAFETY: The schema parser validates every field required by `CodexAppServerRespondInput` before returning.
       const controller = yield* Effect.try({
         try: () =>
           createController({
@@ -163,15 +166,12 @@ export const createCodexLiveSessionAdapterPreparer =
               },
             }),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
-            respondServerRequest: (runtimeId, requestId, result, error) =>
-              Effect.runPromise(
-                codexAppServer.respond({
-                  runtimeId,
-                  requestId,
-                  ...(result !== undefined ? { result } : {}),
-                  ...(error !== undefined ? { error } : {}),
-                } as CodexAppServerRespondInput),
-              ),
+            respondServerRequest: (runtimeId, requestId, result, error) => {
+              const response: CodexAppServerRespondInput = { runtimeId, requestId };
+              if (result !== undefined) Object.assign(response, { result });
+              if (error !== undefined) Object.assign(response, { error });
+              return Effect.runPromise(codexAppServer.respond(response));
+            },
             onRuntimeEventQueueFailure: ({ runtimeId, error }) => {
               Effect.runFork(
                 onBackgroundFailure(
@@ -210,7 +210,7 @@ export const createCodexLiveSessionAdapterPreparer =
 
       const runControlSummary = (
         operation: string,
-        run: () => Promise<unknown>,
+        run: () => Promise<Parameters<typeof agentSessionControlSummarySchema.parse>[0]>,
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         Effect.tryPromise({
           try: run,
@@ -279,6 +279,7 @@ export const createCodexLiveSessionAdapterPreparer =
           externalSessionId,
         });
 
+      // SAFETY: The runtime adapter builds this value from the contract fields required by the asserted shape.
       const adapter: AgentSessionRuntimeAdapterPort = {
         binding: {
           runtimeId: runtime.runtimeId,
@@ -348,9 +349,12 @@ export const createCodexLiveSessionAdapterPreparer =
                 runtimeKind: input.runtimeKind,
                 workingDirectory: input.workingDirectory,
                 externalSessionId: input.externalSessionId,
-                ...(input.runtimeHistoryAnchor !== undefined
-                  ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
-                  : {}),
+                ...(() => {
+                  if (input.runtimeHistoryAnchor !== undefined) {
+                    return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
+                  }
+                  return {};
+                })(),
               }),
             catch: sessionError("codex-live-session.load-diff", input.externalSessionId),
           }),
@@ -362,7 +366,12 @@ export const createCodexLiveSessionAdapterPreparer =
                 externalSessionId: input.externalSessionId,
                 requestId: input.requestId,
                 outcome: input.outcome,
-                ...(input.message !== undefined ? { message: input.message } : {}),
+                ...(() => {
+                  if (input.message !== undefined) {
+                    return { message: input.message };
+                  }
+                  return {};
+                })(),
               }),
             catch: sessionError("codex-live-session.reply-approval", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
@@ -444,7 +453,12 @@ export const createCodexLiveSessionAdapterPreparer =
             try: () =>
               controller.updateSessionModel({
                 ...input,
-                ...(input.model ? { model: input.model } : {}),
+                ...(() => {
+                  if (input.model) {
+                    return { model: input.model };
+                  }
+                  return {};
+                })(),
               } as Parameters<CodexSessionController["updateSessionModel"]>[0]),
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),

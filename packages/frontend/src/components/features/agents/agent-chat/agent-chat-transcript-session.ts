@@ -21,7 +21,12 @@ export const toAgentChatTranscriptSession = (
   session: AgentChatTranscriptSessionSource,
 ): AgentChatTranscriptSession => ({
   ...toAgentSessionIdentity(session),
-  ...(session.title ? { title: session.title } : {}),
+  ...(() => {
+    if (session.title) {
+      return { title: session.title };
+    }
+    return {};
+  })(),
   activityState: getAgentSessionActivityStateFromSession(session),
   runtimeStatusMessage: session.runtimeStatusMessage,
   messages: toSessionMessagesState(session),

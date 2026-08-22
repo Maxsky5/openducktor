@@ -9,14 +9,23 @@ type AgentContextUsageIndicatorProps = {
   className?: string;
 };
 
-const usageColorClasses = (usagePercent: number): { text: string; bar: string } => {
+const usageColorClasses = (usagePercent: number) => {
   if (usagePercent >= 90) {
-    return { text: "text-destructive-muted", bar: "bg-destructive-accent" };
+    return { text: "text-destructive-muted", bar: "bg-destructive-accent" } satisfies {
+      text: string;
+      bar: string;
+    };
   }
   if (usagePercent >= 75) {
-    return { text: "text-warning-muted", bar: "bg-warning-accent" };
+    return { text: "text-warning-muted", bar: "bg-warning-accent" } satisfies {
+      text: string;
+      bar: string;
+    };
   }
-  return { text: "text-success-muted", bar: "bg-success-accent" };
+  return { text: "text-success-muted", bar: "bg-success-accent" } satisfies {
+    text: string;
+    bar: string;
+  };
 };
 
 export function AgentContextUsageIndicator({

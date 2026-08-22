@@ -8,6 +8,7 @@ import {
 
 describe("catalog-and-mcp listAvailableModels", () => {
   test("returns provider models without profile metadata when the runtime agent API is missing", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const catalog = await listAvailableModels(
       (() => ({
         config: {
@@ -44,6 +45,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
     }));
     const createClient = mock(() => ({ command: { list } }));
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const catalog = await listAvailableSlashCommands(createClient as never, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
@@ -95,6 +97,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   });
 
   test("reserves compact case-insensitively after a successful runtime read", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const catalog = await listAvailableSlashCommands(
       (() => ({
         command: {
@@ -113,6 +116,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   });
 
   test("fails when the runtime does not expose command listing", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSlashCommands((() => ({})) as never, {
         runtimeEndpoint: "http://127.0.0.1:1234",
@@ -124,6 +128,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   });
 
   test("fails when the slash command payload is not an array", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSlashCommands(
         (() => ({ command: { list: async () => ({ data: {} }) } })) as never,
@@ -138,6 +143,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   });
 
   test("wraps command listing failures with context", async () => {
+    // SAFETY: This test drives the failure path that supplies `never` before this assertion.
     await expect(
       listAvailableSlashCommands(
         (() => ({
@@ -156,6 +162,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
   });
 
   test("rejects duplicate slash command triggers at runtime", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSlashCommands(
         (() => ({
@@ -191,6 +198,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
     }));
     const createClient = mock(() => ({ app: { agents } }));
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const catalog = await listAvailableSubagents(createClient as never, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
@@ -217,6 +225,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
   });
 
   test("requires the runtime agent listing API", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSubagents((() => ({})) as never, {
         runtimeEndpoint: "http://127.0.0.1:1234",
@@ -228,6 +237,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
   });
 
   test("rejects malformed agent payloads", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSubagents(
         (() => ({
@@ -244,6 +254,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
   });
 
   test("rejects duplicate subagent ids after trimming runtime names", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       listAvailableSubagents(
         (() => ({
@@ -279,6 +290,7 @@ describe("catalog-and-mcp searchFiles", () => {
     }));
     const createClient = mock(() => ({ find: { files } }));
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const results = await searchFiles(createClient as never, {
       runtimeEndpoint: "http://127.0.0.1:1234",
       workingDirectory: "/repo",
@@ -330,6 +342,7 @@ describe("catalog-and-mcp searchFiles", () => {
   });
 
   test("fails when the runtime does not expose file search", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       searchFiles((() => ({})) as never, {
         runtimeEndpoint: "http://127.0.0.1:1234",
@@ -347,6 +360,7 @@ describe("catalog-and-mcp searchFiles", () => {
       error: undefined,
     }));
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       searchFiles((() => ({ find: { files } })) as never, {
         runtimeEndpoint: "http://127.0.0.1:1234",

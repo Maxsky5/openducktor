@@ -18,6 +18,7 @@ const original = {
 describe("useDelegationOperations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
+    // SAFETY: This test controls the fixture and supplies `typeof host.workspaceGetRepoConfig` used by this case.
     host.workspaceGetRepoConfig = mock(async () => ({
       workspaceId: "repo",
       workspaceName: "Repo",

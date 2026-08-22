@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   type AgentChatComposerDraft,
@@ -53,30 +54,42 @@ const createMemoryStorage = (spies?: {
 const installManualTimers = () => {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
-  let nextTimerId = 1;
-  const timers = new Map<number, { handler: () => void; delay: number; cleared: boolean }>();
+  const createTimerHandle = () => {
+    const timer = originalSetTimeout(() => {}, 60_000);
+    originalClearTimeout(timer);
+    return timer;
+  };
+  const timers = new Map<
+    ReturnType<typeof globalThis.setTimeout>,
+    { handler: () => void; delay: number; cleared: boolean }
+  >();
 
-  globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
-    const timerId = nextTimerId;
-    nextTimerId += 1;
-    timers.set(timerId, {
-      handler: () => {
-        if (typeof handler === "function") {
-          handler();
-        }
-      },
-      delay: delay ?? 0,
-      cleared: false,
-    });
-    return timerId as unknown as ReturnType<typeof globalThis.setTimeout>;
-  }) as unknown as typeof globalThis.setTimeout;
+  Object.defineProperty(globalThis, "setTimeout", {
+    configurable: true,
+    value: (handler: TimerHandler, delay?: number) => {
+      const timerId = createTimerHandle();
+      timers.set(timerId, {
+        handler: () => {
+          if (hasRuntimeType(handler, "function")) {
+            handler();
+          }
+        },
+        delay: delay ?? 0,
+        cleared: false,
+      });
+      return timerId;
+    },
+  });
 
-  globalThis.clearTimeout = ((timerId?: ReturnType<typeof globalThis.setTimeout>) => {
-    const timer = timers.get(Number(timerId));
-    if (timer) {
-      timer.cleared = true;
-    }
-  }) as typeof globalThis.clearTimeout;
+  Object.defineProperty(globalThis, "clearTimeout", {
+    configurable: true,
+    value: (timerId?: ReturnType<typeof globalThis.setTimeout>) => {
+      const timer = timerId ? timers.get(timerId) : undefined;
+      if (timer) {
+        timer.cleared = true;
+      }
+    },
+  });
 
   return {
     runNextByDelay: (delay: number) => {
@@ -90,8 +103,14 @@ const installManualTimers = () => {
       timer[1].handler();
     },
     restore: () => {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
+      Object.defineProperty(globalThis, "setTimeout", {
+        configurable: true,
+        value: originalSetTimeout,
+      });
+      Object.defineProperty(globalThis, "clearTimeout", {
+        configurable: true,
+        value: originalClearTimeout,
+      });
     },
   };
 };

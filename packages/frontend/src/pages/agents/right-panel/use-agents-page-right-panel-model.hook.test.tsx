@@ -30,7 +30,14 @@ let realPullRequestReviewQueries: PullRequestReviewQueriesModule | null = null;
 
 const buildToolsSnapshotMock = mock(() => buildToolsSnapshotState.current);
 const gitActionsMock = mock(() => gitActionsState.current);
-const prefetchPullRequestReviewContextMock = mock(async () => {});
+type PrefetchPullRequestReviewContext =
+  PullRequestReviewQueriesModule["prefetchPullRequestReviewContextFromQuery"];
+const prefetchPullRequestReviewContextMock = mock(
+  async (
+    _queryClient: Parameters<PrefetchPullRequestReviewContext>[0],
+    _input: Parameters<PrefetchPullRequestReviewContext>[1],
+  ) => {},
+);
 const refreshWorktreeMock = mock(async (_mode?: "soft" | "hard") => {});
 
 const linkedPullRequest = {
@@ -95,6 +102,7 @@ const createSnapshot = (gitConflictId: string | null) => ({
   gitConflictId,
 });
 
+// SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createGitActions = (gitConflictId: string | null) => ({
   gitConflict: gitConflictId
     ? ({
@@ -270,6 +278,7 @@ afterEach(async () => {
   ]);
 });
 
+// SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: { repoPath: "/repo" } as never,
   branches: [],
@@ -303,6 +312,7 @@ describe("useAgentsPageRightPanelModel", () => {
       useAgentsPageRightPanelModel,
       createHookArgs({
         onGitConflictQuickActionContextChange: (context) => {
+          // SAFETY: This test controls the fixture and supplies `string` used by this case.
           events.push(context ? (context.conflict.operation as string) : null);
         },
       }),
@@ -318,6 +328,7 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.update(
       createHookArgs({
         onGitConflictQuickActionContextChange: (context) => {
+          // SAFETY: This test controls the fixture and supplies `string` used by this case.
           events.push(context ? (context.conflict.operation as string) : null);
         },
       }),
@@ -355,19 +366,8 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.mount();
 
     expect(prefetchPullRequestReviewContextMock).toHaveBeenCalledTimes(1);
-    const prefetchCalls = prefetchPullRequestReviewContextMock.mock.calls as unknown as Array<
-      [
-        unknown,
-        {
-          repoPath: string;
-          taskId?: string;
-          workingDirectory?: string;
-          pullRequest?: { providerId: string; number: number };
-        },
-      ]
-    >;
-    expect(prefetchCalls[0]?.[0]).toBe(queryClient);
-    expect(prefetchCalls[0]?.[1]).toEqual({
+    expect(prefetchPullRequestReviewContextMock.mock.calls[0]?.[0]).toBe(queryClient);
+    expect(prefetchPullRequestReviewContextMock.mock.calls[0]?.[1]).toEqual({
       repoPath: "/repo",
       taskId: "task-1",
       pullRequest: { providerId: "github", number: 42 },

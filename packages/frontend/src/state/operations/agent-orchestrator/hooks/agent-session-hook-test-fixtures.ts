@@ -62,6 +62,7 @@ export const createSession = (overrides: CreateSessionOverrides = {}): AgentSess
   );
 };
 
+// SAFETY: This test controls the fixture and supplies `AgentEnginePort` used by this case.
 export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>
   ({
     listRuntimeDefinitions: () => [],

@@ -1,3 +1,4 @@
+import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createEnsureRuntime } from "./runtime/runtime";
@@ -5,8 +6,8 @@ import { createLoadSourceSession } from "./session-read-model/source-session-loa
 
 describe("agent-orchestrator/index", () => {
   test("exports orchestrator public internals", () => {
-    expect(typeof createAgentSessionActions).toBe("function");
-    expect(typeof createLoadSourceSession).toBe("function");
-    expect(typeof createEnsureRuntime).toBe("function");
+    expect(runtimeTypeName(createAgentSessionActions)).toBe("function");
+    expect(runtimeTypeName(createLoadSourceSession)).toBe("function");
+    expect(runtimeTypeName(createEnsureRuntime)).toBe("function");
   });
 });

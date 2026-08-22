@@ -6,6 +6,7 @@ import {
   createClaudeExecutableProbe,
 } from "./claude-executable-probe";
 
+// SAFETY: This test controls the fixture and supplies `SDKControlInitializeResponse` used by this case.
 const initializationResponse = (): SDKControlInitializeResponse =>
   ({
     commands: [],
@@ -105,6 +106,7 @@ describe("createClaudeExecutableProbe", () => {
   test("rejects an initialization response without the Claude protocol shape", async () => {
     const probe = createClaudeExecutableProbe({
       queryFactory() {
+        // SAFETY: This test controls the fixture and supplies `SDKControlInitializeResponse` used by this case.
         return {
           initializationResult: async () => ({}) as SDKControlInitializeResponse,
           async return() {

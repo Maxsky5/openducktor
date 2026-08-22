@@ -88,6 +88,7 @@ type RuntimeDescriptorInvalidCase = {
 const isJsonObject = (value: JsonValue): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// SAFETY: This test controls the fixture and supplies `T` used by this case.
 const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
@@ -108,6 +109,7 @@ const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase[
   }
 };
 
+// SAFETY: This test controls the fixture and supplies `RuntimeDescriptorInvalidCase[]` used by this case.
 const invalidRuntimeDescriptorCases =
   runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
 
@@ -229,6 +231,7 @@ describe("runtime schemas", () => {
   test.each(invalidRuntimeDescriptorCases)(
     "shared invalid runtime descriptor fixture is rejected: $name",
     (fixtureCase) => {
+      // SAFETY: This test controls the fixture and supplies `JsonObject` used by this case.
       const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
       applyJsonPatch(descriptor, fixtureCase.patch);
 

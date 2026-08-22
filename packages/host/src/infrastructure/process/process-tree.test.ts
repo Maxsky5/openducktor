@@ -250,6 +250,7 @@ describe("process-tree", () => {
   test("observes child close and removes its listener", async () => {
     const closeListeners: Array<() => void> = [];
     const removed: Array<() => void> = [];
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof waitForChildProcessClose>[0]` used by this case.
     const child = {
       once: (_event: "close", listener: () => void) => {
         closeListeners.push(listener);
@@ -259,7 +260,7 @@ describe("process-tree", () => {
         removed.push(listener);
         return child;
       },
-    } as unknown as Parameters<typeof waitForChildProcessClose>[0];
+    } as Parameters<typeof waitForChildProcessClose>[0];
     let closed = false;
     const waiting = Effect.runPromise(waitForChildProcessClose(child, () => closed, 100));
 

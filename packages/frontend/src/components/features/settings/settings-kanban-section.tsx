@@ -32,6 +32,7 @@ const EMPTY_COLUMN_DISPLAY_OPTIONS: ComboboxOption[] = [
   },
 ];
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `KanbanEmptyColumnDisplay`.
 const isKanbanEmptyColumnDisplay = (value: string): value is KanbanEmptyColumnDisplay =>
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES.includes(value as KanbanEmptyColumnDisplay);
 

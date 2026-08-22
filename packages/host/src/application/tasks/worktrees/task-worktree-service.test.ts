@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../../test-support/focused-service";
 import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -23,7 +24,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
-  ({
+  createFocusedTestService<WorkspaceSettingsService>({
     getRepoConfigByRepoPath(repoPath: string) {
       if (repoPath !== "/repo") {
         return Effect.fail(
@@ -36,10 +37,7 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
       }
       return Effect.succeed(config);
     },
-  }) as Pick<
-    WorkspaceSettingsService,
-    "getRepoConfigByRepoPath"
-  > as unknown as WorkspaceSettingsService;
+  });
 const createSettingsConfig = ({
   existingPaths = new Set<string>(),
   canonicalPaths = {},
@@ -47,7 +45,7 @@ const createSettingsConfig = ({
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
 } = {}): SettingsConfigPort =>
-  ({
+  createFocusedTestService<SettingsConfigPort>({
     defaultWorktreeBasePath(workspaceId) {
       return `/home/dev/.openducktor/worktrees/${workspaceId}`;
     },
@@ -72,7 +70,7 @@ const createSettingsConfig = ({
     join(...paths) {
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
-  }) as SettingsConfigPort as SettingsConfigPort;
+  });
 describe("createTaskWorktreeService", () => {
   test("returns a deterministic task worktree when the directory exists", async () => {
     const service = createTaskWorktreeService({

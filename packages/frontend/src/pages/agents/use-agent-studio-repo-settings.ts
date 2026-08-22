@@ -10,11 +10,7 @@ const INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY = "__inactive_workspace__";
 export function useAgentStudioRepoSettings(args: {
   activeWorkspaceId: string | null;
   hostClient?: RepoConfigQueryHost;
-}): {
-  repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
-  isLoadingRepoSettings: boolean;
-} {
+}) {
   const { activeWorkspaceId, hostClient } = args;
   const { data: repoSettingsResult, isLoading } = useQuery({
     ...repoConfigQueryOptions(
@@ -35,5 +31,9 @@ export function useAgentStudioRepoSettings(args: {
     githubIntegrationEnabled:
       activeWorkspaceId !== null && repoSettingsResult?.githubIntegrationEnabled === true,
     isLoadingRepoSettings: activeWorkspaceId !== null && isLoading,
+  } satisfies {
+    repoSettings: RepoSettingsInput | null;
+    githubIntegrationEnabled: boolean;
+    isLoadingRepoSettings: boolean;
   };
 }

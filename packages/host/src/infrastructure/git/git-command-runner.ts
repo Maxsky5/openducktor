@@ -226,6 +226,7 @@ export const createDefaultGitRunner = (
         return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr };
       }
       if (options?.allowFailure) {
+        // SAFETY: The surrounding boundary constructs or validates every member required by `{ stdout?: string; stderr?: string; }`.
         const failed = exit.left as {
           stdout?: string;
           stderr?: string;

@@ -234,6 +234,7 @@ describe("createTaskEventStream", () => {
     acknowledge(stream, subscription.subscriptionId, { epoch, sequence: 0 });
 
     let repoPathReads = 0;
+    // SAFETY: This test controls the fixture and supplies `ExternalTaskSyncEvent` used by this case.
     const published = {
       eventId: "event-1",
       kind: "external_task_created" as const,

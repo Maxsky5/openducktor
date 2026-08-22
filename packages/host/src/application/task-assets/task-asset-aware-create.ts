@@ -163,7 +163,12 @@ export const createTaskAssetAwareCreate =
           operation: "create",
           phase: "create_task_with_assets",
           message: "Failed to create the task with its description assets.",
-          ...(createdTaskId ? { taskId: createdTaskId } : {}),
+          ...(() => {
+            if (createdTaskId) {
+              return { taskId: createdTaskId };
+            }
+            return {};
+          })(),
           assetIds: Array.from(referencedAssetIds),
         });
         if (!createdTaskId) {

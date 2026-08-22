@@ -190,6 +190,7 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
     let sessionEventListener: ((event: { type: string; [key: string]: JsonValue }) => void) | null =
       null;
     adapter.subscribeEvents = async (_externalSessionId, listener) => {
+      // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue; }) => void` used by this case.
       sessionEventListener = listener as (event: {
         type: string;
         [key: string]: JsonValue;

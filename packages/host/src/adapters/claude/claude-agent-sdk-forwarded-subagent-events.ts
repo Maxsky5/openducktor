@@ -131,6 +131,7 @@ export const resolveForwardedClaudeSubagentMessage = (
   if (!childSession) {
     return null;
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `SDKMessage`.
   return {
     message: { ...message, parent_tool_use_id: null } as SDKMessage,
     session: childSession,

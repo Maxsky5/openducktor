@@ -545,6 +545,6 @@ export type CodexAppServerRequestParamsMap = {
 };
 export type CodexAppServerParsedClientRequest = z.output<typeof codexAppServerClientRequestSchema>;
 
-export const parseCodexAppServerClientRequest = (
-  value: unknown,
+export const parseCodexAppServerClientRequest = <Input>(
+  value: Input,
 ): CodexAppServerParsedClientRequest => codexAppServerClientRequestSchema.parse(value);

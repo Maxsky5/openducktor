@@ -67,7 +67,7 @@ export type SessionRecord = {
   emittedUserMessageStates: Map<string, import("@openducktor/core").AgentUserMessageState>;
   pendingUserMessageAdmissions: Map<
     string,
-    { admit: () => void; reject: (reason?: unknown) => void }
+    { admit: () => void; reject: (cause?: unknown) => void }
   >;
   pendingQueuedUserMessages: QueuedUserMessageSend[];
   partsById: Map<string, import("@opencode-ai/sdk/v2/client").Part>;

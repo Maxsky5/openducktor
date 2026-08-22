@@ -42,6 +42,7 @@ describe("resolveAppVersion", () => {
         operation: "electron.config.read-package-version",
         path: packageJsonPath,
       });
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toBe(`Missing package version in ${packageJsonPath}`);
     } finally {
       await rm(tempDirectory, { force: true, recursive: true });

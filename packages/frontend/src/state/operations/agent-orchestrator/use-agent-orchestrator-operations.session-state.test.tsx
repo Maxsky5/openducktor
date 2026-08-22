@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
@@ -22,6 +23,10 @@ import {
   taskFixture,
   taskFixtureWithPersistedBuildSession,
 } from "./use-agent-orchestrator-operations.test-helpers";
+
+interface ReceivedHistoryInputRefContract {
+  current: Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0] | null;
+}
 
 describe("use-agent-orchestrator-operations session state", () => {
   let restoreEnvironment: (() => void) | null = null;
@@ -802,11 +807,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       ...persistedSessionFixture,
       runtimeKind: "codex" as const,
     };
-    const receivedHistoryInputRef: {
-      current:
-        | Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0]
-        | null;
-    } = { current: null };
+    const receivedHistoryInputRef: ReceivedHistoryInputRefContract = { current: null };
 
     host.agentSessionsList = async () => [codexRecord];
     CodexAppServerAdapter.prototype.loadSessionHistory = async (input) => {
@@ -977,7 +978,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       providerId: "openai",
       modelId: "gpt-5",
     };
-    let receivedContextInput: unknown = null;
+    const receivedContextInput = createFocusedFixture<{ current: unknown }>({ current: null });
     let contextReadCount = 0;
     let releaseContextRead: (() => void) | undefined;
     const contextReadGate = new Promise<void>((resolve) => {
@@ -997,7 +998,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         ...liveStream.portOverrides,
         agentSessionLiveLoadContext: async (input) => {
           contextReadCount += 1;
-          receivedContextInput = input;
+          receivedContextInput.current = input;
           await contextReadGate;
           return contextUsage;
         },
@@ -1038,7 +1039,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       });
 
       expect(contextReadCount).toBe(1);
-      expect(receivedContextInput).toEqual({
+      expect(receivedContextInput.current).toEqual({
         repoPath: "/tmp/repo",
         externalSessionId: persistedSession.externalSessionId,
         runtimeKind: persistedSession.runtimeKind,

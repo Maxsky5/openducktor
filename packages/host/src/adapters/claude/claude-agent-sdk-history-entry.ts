@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import type {
@@ -14,8 +15,9 @@ const claudeHistoryValue = (entry: ClaudeHistoryMessage): JsonValue | undefined 
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const value = claudeHistoryValue(entry);
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeHistoryEntryMetadata`.
   const timestamp = isRecord(value) ? (entry as ClaudeHistoryEntryMetadata).timestamp : undefined;
-  if (typeof timestamp !== "string") {
+  if (!hasRuntimeType(timestamp, "string")) {
     return now();
   }
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
@@ -59,11 +61,12 @@ export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {
       return false;
     }
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeHistoryEntryMetadata`.
   const metadata = entry as ClaudeHistoryEntryMetadata;
   const subagentType = metadata.subagent_type;
   return (
     (entry.type === "assistant" && Boolean(entry.parent_tool_use_id)) ||
     metadata.isSidechain === true ||
-    (typeof subagentType === "string" && subagentType.trim().length > 0)
+    (hasRuntimeType(subagentType, "string") && subagentType.trim().length > 0)
   );
 };

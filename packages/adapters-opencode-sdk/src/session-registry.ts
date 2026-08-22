@@ -119,8 +119,8 @@ const abortRuntimeEventTransport = (eventTransport: RuntimeEventTransportRecord)
   eventTransport.controller.abort();
 };
 
-const toRuntimeEventFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("OpenCode runtime event projection failed.");
+const toRuntimeEventFailure = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error("OpenCode runtime event projection failed.");
 
 const reportRuntimeEventFailure = (input: {
   eventTransport: RuntimeEventTransportRecord;
@@ -209,8 +209,18 @@ const ensureRuntimeEventTransport = (input: {
       const parentExternalSessionId = readEventParentExternalSessionId(properties);
       const scope: OpencodeGlobalEventFailureScope = {
         directory: readEventDirectory(event) ?? "",
-        ...(externalSessionId ? { externalSessionId } : {}),
-        ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+        ...(() => {
+          if (externalSessionId) {
+            return { externalSessionId };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (parentExternalSessionId) {
+            return { parentExternalSessionId };
+          }
+          return {};
+        })(),
       };
       try {
         processRuntimeSessionLineage(streamRecord, event);
@@ -237,7 +247,12 @@ const ensureRuntimeEventTransport = (input: {
             subscriber,
             event,
             relevant,
-            ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+            ...(() => {
+              if (input.logEvent) {
+                return { logEvent: input.logEvent };
+              }
+              return {};
+            })(),
           });
           if (!relevant) {
             continue;
@@ -431,7 +446,12 @@ export const subscribeSessionToRuntimeEvents = (input: {
     sessions: input.sessions,
     now: input.now,
     emit: input.emit,
-    ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+    ...(() => {
+      if (input.logEvent) {
+        return { logEvent: input.logEvent };
+      }
+      return {};
+    })(),
   });
   eventTransport.subscribers.set(input.externalSessionId, {
     externalSessionId: input.externalSessionId,
@@ -475,7 +495,12 @@ export const registerSession = (
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(title ? { title } : {}),
+    ...(() => {
+      if (title) {
+        return { title };
+      }
+      return {};
+    })(),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
@@ -528,7 +553,12 @@ export const registerSession = (
         sessionInput: input.sessionInput,
         now: input.now,
         emit: input.emit,
-        ...(input.logEvent ? { logEvent: input.logEvent } : {}),
+        ...(() => {
+          if (input.logEvent) {
+            return { logEvent: input.logEvent };
+          }
+          return {};
+        })(),
       });
     } catch (error) {
       input.sessions.delete(input.externalSessionId);

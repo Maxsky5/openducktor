@@ -138,7 +138,12 @@ const parseStatusPorcelain = (output: string): GitFileStatus[] => {
       statuses.push(
         ...parsedStatuses.map((status) => ({
           ...status,
-          ...(originalPath ? { originalPath } : {}),
+          ...(() => {
+            if (originalPath) {
+              return { originalPath };
+            }
+            return {};
+          })(),
         })),
       );
       index += 1;

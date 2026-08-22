@@ -1,7 +1,9 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import type { AgentStudioTerminalPanelModel } from "../terminals/use-agent-studio-terminals";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
 
@@ -62,23 +64,24 @@ describe("AgentsPageWorkspacePanes", () => {
 describe("AgentsPageWorkspace terminal visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
-    const listeners = new Set<() => void>();
-    window.matchMedia = ((query: string) => ({
+    const listeners = new Set<EventListenerOrEventListenerObject>();
+    const mediaQueryList = createFocusedFixture<MediaQueryList>({
       get matches() {
         return isNarrow;
       },
-      media: query,
+      media: "(max-width: 1023px)",
       onchange: null,
       addListener: () => undefined,
       removeListener: () => undefined,
-      addEventListener: (_type: string, listener: () => void) => {
+      addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
         listeners.add(listener);
       },
-      removeEventListener: (_type: string, listener: () => void) => {
+      removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
         listeners.delete(listener);
       },
       dispatchEvent: () => true,
-    })) as unknown as typeof window.matchMedia;
+    });
+    window.matchMedia = () => mediaQueryList;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
@@ -115,12 +118,17 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         terminalPanel,
       }),
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const draft = view.getByRole("textbox", { name: "Draft preview" }) as HTMLTextAreaElement;
     fireEvent.change(draft, { target: { value: "unsaved draft" } });
 
     isNarrow = true;
     act(() => {
-      for (const listener of listeners) listener();
+      const event = new Event("change");
+      for (const listener of listeners) {
+        if (hasRuntimeType(listener, "function")) listener(event);
+        else listener.handleEvent(event);
+      }
     });
 
     expect(view.getByRole("textbox", { name: "Draft preview" })).toBe(draft);
@@ -128,6 +136,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("keeps the terminal panel mounted while hiding and reopening it", () => {
+    // SAFETY: This test controls the fixture and supplies `typeof window.matchMedia` used by this case.
     window.matchMedia = ((query: string) => ({
       matches: false,
       media: query,
@@ -205,6 +214,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("uses terminal mode at 767px and keeps a path back to the workspace", () => {
+    // SAFETY: This test controls the fixture and supplies `typeof window.matchMedia` used by this case.
     window.matchMedia = ((query: string) => ({
       matches: query === "(max-width: 767px)",
       media: query,

@@ -100,6 +100,7 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       workingDirectory: "/repo/worktree",
     });
+    // SAFETY: This test controls the fixture and supplies `HookArgs["selectedView"]["selectedTask"]` used by this case.
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({

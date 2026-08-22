@@ -51,7 +51,12 @@ export const injectedTaskAssetError = ({
   new TaskAssetError({
     operation,
     code,
-    ...(taskId ? { taskId } : {}),
+    ...(() => {
+      if (taskId) {
+        return { taskId };
+      }
+      return {};
+    })(),
     assetIds,
     failedPhase,
     durableState: "unchanged",

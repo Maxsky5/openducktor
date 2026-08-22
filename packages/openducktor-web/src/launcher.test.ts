@@ -5,6 +5,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { WebOperationError } from "./effect/web-errors";
+import { createTimerFixture } from "./test-support";
 import {
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
@@ -33,6 +34,7 @@ const testLogger: WebLogger = {
 };
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
+  // SAFETY: This test controls the fixture and supplies `Bun.Subprocess` used by this case.
   return { exited } as Bun.Subprocess;
 };
 
@@ -280,7 +282,7 @@ describe("launcher internals", () => {
 
   test("keeps the process alive while shutdown work is pending", async () => {
     let intervalCallback: (() => void) | null = null;
-    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
+    const timer = createTimerFixture();
     const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
     let finishOperation: () => void = () => {};
     const operation = new Promise<void>((resolve) => {

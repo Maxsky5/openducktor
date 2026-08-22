@@ -1,5 +1,9 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -102,10 +106,9 @@ const createSession = (
   legacyExternalSessionIdOrOverrides: string | CreateSessionOverrides = {},
   maybeOverrides: CreateSessionOverrides = {},
 ): AgentSessionState => {
-  const overrides =
-    typeof legacyExternalSessionIdOrOverrides === "string"
-      ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
-      : legacyExternalSessionIdOrOverrides;
+  const overrides = hasRuntimeType(legacyExternalSessionIdOrOverrides, "string")
+    ? { ...maybeOverrides, externalSessionId: legacyExternalSessionIdOrOverrides }
+    : legacyExternalSessionIdOrOverrides;
   return createAgentSessionFixture({
     externalSessionId,
     status: "running",
@@ -583,6 +586,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("scrolls to bottom immediately when sending a message", async () => {
+    // SAFETY: This test controls the fixture and supplies `((value: boolean) => void) | null` used by this case.
     const sendResolver = { current: null as ((value: boolean) => void) | null };
     const onSend = mock(
       () =>

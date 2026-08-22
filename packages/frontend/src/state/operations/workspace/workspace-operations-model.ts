@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { GitCurrentBranch, JsonValue } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
@@ -74,12 +75,14 @@ export const shouldSkipBranchSwitch = (
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
 const toOptionalString = (value: JsonValue | undefined): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
+  hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
 
+// SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
 const toRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null =>
-  typeof value === "object" && value !== null ? (value as Record<string, JsonValue>) : null;
+  hasRuntimeType(value, "object") && value !== null ? (value as Record<string, JsonValue>) : null;
 
 const extractStructuredErrorHint = (cause: unknown): string | null => {
+  // SAFETY: The preceding runtime guard establishes `JsonValue | undefined` before this assertion.
   const record = toRecord(cause as JsonValue | undefined);
   if (!record) {
     return null;

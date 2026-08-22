@@ -43,8 +43,18 @@ export default function MarkdownRendererMath({
       urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
       components={createTaskDescriptionComponents({
         components: premiumComponents,
-        ...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {}),
-        ...(taskAssetContext ? { taskAssetContext } : {}),
+        ...(() => {
+          if (resolveTaskAssetSrc) {
+            return { resolveTaskAssetSrc };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (taskAssetContext) {
+            return { taskAssetContext };
+          }
+          return {};
+        })(),
       })}
     >
       {content}

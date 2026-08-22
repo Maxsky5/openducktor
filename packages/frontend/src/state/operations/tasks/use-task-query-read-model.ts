@@ -35,12 +35,11 @@ export function useTaskQueryReadModel({
   });
 
   useEffect(() => {
-    let taskLoadError: unknown = null;
-    if (settingsSnapshotQuery.isError) {
-      taskLoadError = settingsSnapshotQuery.error;
-    } else if (repoTaskDataQuery.isError) {
-      taskLoadError = repoTaskDataQuery.error;
-    }
+    const taskLoadError = settingsSnapshotQuery.isError
+      ? settingsSnapshotQuery.error
+      : repoTaskDataQuery.isError
+        ? repoTaskDataQuery.error
+        : null;
 
     if (!taskLoadError || !activeRepoPath) {
       if (!taskLoadError) {

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -209,20 +210,20 @@ const withRecordedStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
   item: Record<string, JsonValue>,
-): Record<string, JsonValue> => {
+) => {
   const itemId = extractStringField(item, ["id"]);
   if (!itemId) {
-    return item;
+    return item satisfies Record<string, JsonValue>;
   }
   const startedAtMs = context.takeStartedItemTimestamp(session.runtimeId, session.threadId, itemId);
   if (
-    typeof startedAtMs !== "number" ||
+    !hasRuntimeType(startedAtMs, "number") ||
     Object.hasOwn(item, "startedAtMs") ||
     Object.hasOwn(item, "started_at_ms")
   ) {
-    return item;
+    return item satisfies Record<string, JsonValue>;
   }
-  return { ...item, startedAtMs };
+  return { ...item, startedAtMs } satisfies Record<string, JsonValue>;
 };
 
 let lastAcceptedUserMessageTimestamp = 0;
@@ -255,13 +256,24 @@ const emitFinalAgentMessage = (
       timestamp,
       messageId: itemId,
       message: text,
-      ...(typeof tokenUsage?.totalTokens === "number"
-        ? { totalTokens: tokenUsage.totalTokens }
-        : {}),
-      ...(typeof tokenUsage?.contextWindow === "number"
-        ? { contextWindow: tokenUsage.contextWindow }
-        : {}),
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (hasRuntimeType(tokenUsage?.totalTokens, "number")) {
+          return { totalTokens: tokenUsage.totalTokens };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(tokenUsage?.contextWindow, "number")) {
+          return { contextWindow: tokenUsage.contextWindow };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     });
   }
 };
@@ -282,7 +294,12 @@ export const createCodexAcceptedUserMessage = ({
   message: serializeAgentUserMessagePartsToText(parts),
   parts: toDisplayParts(parts),
   state: "read",
-  ...(model ? { model } : {}),
+  ...(() => {
+    if (model) {
+      return { model };
+    }
+    return {};
+  })(),
 });
 
 export const emitCodexUserMessage = (
@@ -368,7 +385,12 @@ const emitCompletedItem = (
       message,
       parts: codexUserInputsToDisplayParts(input, itemId),
       state: "read",
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     });
     return;
   }
@@ -401,7 +423,12 @@ const emitCompletedItem = (
             session,
             item,
             timestamp,
-            ...(model ? { model } : {}),
+            ...(() => {
+              if (model) {
+                return { model };
+              }
+              return {};
+            })(),
           });
         }
       }
@@ -420,7 +447,12 @@ const emitCompletedItem = (
       source: "live",
       runtimeId: session.runtimeId,
       threadId: session.threadId,
-      ...(turnId ? { turnId } : {}),
+      ...(() => {
+        if (turnId) {
+          return { turnId };
+        }
+        return {};
+      })(),
       timestamp,
     },
   );
@@ -479,7 +511,7 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
 const isCodexIdleThreadStatus = (status: JsonValue | undefined): boolean => {
   const type = isPlainObject(status)
     ? extractStringField(status, ["type"])
-    : typeof status === "string"
+    : hasRuntimeType(status, "string")
       ? status
       : null;
   return type?.toLowerCase() === "idle";
@@ -659,7 +691,7 @@ export const handleCodexPendingNotifications = async (
         Boolean(notificationTurnId) &&
         !activeTurn?.isTurnSettled() &&
         activeTurn?.turnId === notificationTurnId;
-      if (isActiveTurn && typeof params?.showBufferingUi === "boolean") {
+      if (isActiveTurn && hasRuntimeType(params?.showBufferingUi, "boolean")) {
         emitCodexSessionEvent(context, session.threadId, {
           type: "session_status",
           externalSessionId: session.threadId,
@@ -722,7 +754,12 @@ export const handleCodexPendingNotifications = async (
           source: "live",
           runtimeId: session.runtimeId,
           threadId: session.threadId,
-          ...(notificationTurnId ? { turnId: notificationTurnId } : {}),
+          ...(() => {
+            if (notificationTurnId) {
+              return { turnId: notificationTurnId };
+            }
+            return {};
+          })(),
           timestamp,
         },
       );
@@ -768,7 +805,12 @@ export const handleCodexPendingNotifications = async (
             source: "live",
             runtimeId: session.runtimeId,
             threadId: session.threadId,
-            ...(turnId ? { turnId } : {}),
+            ...(() => {
+              if (turnId) {
+                return { turnId };
+              }
+              return {};
+            })(),
             timestamp,
           },
         ),
@@ -785,7 +827,12 @@ export const handleCodexPendingNotifications = async (
           externalSessionId: session.threadId,
           timestamp,
           channel: "text",
-          ...(messageId ? { messageId } : {}),
+          ...(() => {
+            if (messageId) {
+              return { messageId };
+            }
+            return {};
+          })(),
           delta,
         });
       }
@@ -806,7 +853,12 @@ export const handleCodexPendingNotifications = async (
           externalSessionId: session.threadId,
           timestamp,
           channel: "reasoning",
-          ...(messageId ? { messageId } : {}),
+          ...(() => {
+            if (messageId) {
+              return { messageId };
+            }
+            return {};
+          })(),
           delta,
         });
       }

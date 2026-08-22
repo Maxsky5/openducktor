@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import {
@@ -613,8 +614,8 @@ const SubagentMessage = ({
   const durationMs =
     meta.status !== "pending" &&
     meta.status !== "running" &&
-    typeof meta.startedAtMs === "number" &&
-    typeof meta.endedAtMs === "number"
+    hasRuntimeType(meta.startedAtMs, "number") &&
+    hasRuntimeType(meta.endedAtMs, "number")
       ? Math.max(0, meta.endedAtMs - meta.startedAtMs)
       : null;
 

@@ -38,6 +38,7 @@ describe("agent runtime services", () => {
   test("rejects unsupported runtime kinds at the service boundary", async () => {
     const { runtimeCatalogOperations } = createAgentRuntimeServices();
 
+    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     await expect(
       runtimeCatalogOperations.loadRepoRuntimeCatalog({
         repoPath: "/repo",
@@ -49,6 +50,7 @@ describe("agent runtime services", () => {
   test("rejects mismatched runtime policy bindings before dispatching a pure adapter read", () => {
     const { agentEngine } = createAgentRuntimeServices();
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       agentEngine.loadSessionTodos({
         runtimeKind: "opencode",

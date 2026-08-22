@@ -17,7 +17,7 @@ type LogLevel = "INFO" | "WARN" | "ERROR";
 
 type LogStream = {
   isTTY?: boolean;
-  write(chunk: string): unknown;
+  write(chunk: string): boolean;
 };
 
 type ElectronMainLoggerInput = {

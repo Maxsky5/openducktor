@@ -19,6 +19,11 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
+interface WORKFLOWQUICKACTIONSContract extends Record<
+  AgentStudioWorkflowQuickAction,
+  WorkflowQuickActionDefinition
+> {}
+
 export type AgentStudioQuickActionOption = {
   id: string;
   role: AgentRole;
@@ -41,10 +46,7 @@ type WorkflowQuickActionDefinition = {
   requiresHumanFeedback?: true;
 };
 
-const WORKFLOW_QUICK_ACTIONS: Record<
-  AgentStudioWorkflowQuickAction,
-  WorkflowQuickActionDefinition
-> = {
+const WORKFLOW_QUICK_ACTIONS: WORKFLOWQUICKACTIONSContract = {
   set_spec: {
     role: "spec",
     resolveLaunchActionId: () => "spec_initial",
@@ -179,8 +181,18 @@ export const buildAgentStudioQuickActions = (params: {
       description: definition.description,
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
-      ...(disabledReason ? { disabledReason } : {}),
-      ...(definition.requiresHumanFeedback ? { requiresHumanFeedback: true } : {}),
+      ...(() => {
+        if (disabledReason) {
+          return { disabledReason };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (definition.requiresHumanFeedback) {
+          return { requiresHumanFeedback: true };
+        }
+        return {};
+      })(),
     };
   };
   const createSpecialOption = (
@@ -196,7 +208,12 @@ export const buildAgentStudioQuickActions = (params: {
     description,
     postStartAction: "kickoff",
     disabled: disabledReason !== null,
-    ...(disabledReason ? { disabledReason } : {}),
+    ...(() => {
+      if (disabledReason) {
+        return { disabledReason };
+      }
+      return {};
+    })(),
   });
 
   const options = workflowActionOrder.reduce<AgentStudioQuickActionOption[]>(
@@ -238,15 +255,23 @@ export const buildAgentStudioQuickActions = (params: {
       description: "Reuse or fork a Builder session to create or update a pull request.",
       postStartAction: "kickoff",
       disabled: pullRequestDisabledReason !== null,
-      ...(pullRequestDisabledReason ? { disabledReason: pullRequestDisabledReason } : {}),
-      ...(hasBuilderSource
-        ? {
+      ...(() => {
+        if (pullRequestDisabledReason) {
+          return { disabledReason: pullRequestDisabledReason };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasBuilderSource) {
+          return {
             initialStartMode: getSessionLaunchAction("build_pull_request_generation")
               .defaultStartMode,
             existingSessionOptions: builderSessionOptions,
             initialSourceSession: builderSessionOptions[0]?.sourceSession ?? null,
-          }
-        : {}),
+          };
+        }
+        return {};
+      })(),
     });
   }
 

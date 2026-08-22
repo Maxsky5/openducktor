@@ -40,19 +40,34 @@ export const asTaskAssetError = (input: {
     return new TaskAssetError({
       operation: input.operation,
       code: input.cause.code,
-      ...(input.taskId || input.cause.taskId ? { taskId: input.taskId ?? input.cause.taskId } : {}),
+      ...(() => {
+        if (input.taskId || input.cause.taskId) {
+          return { taskId: input.taskId ?? input.cause.taskId };
+        }
+        return {};
+      })(),
       assetIds: input.cause.assetIds,
       failedPhase: operationMatches ? input.cause.failedPhase : input.phase,
       durableState: input.cause.durableState,
       retryAllowed: input.cause.retryAllowed,
       message: input.cause.message,
-      ...(input.cause.cause !== undefined ? { cause: input.cause.cause } : {}),
+      ...(() => {
+        if (input.cause.cause !== undefined) {
+          return { cause: input.cause.cause };
+        }
+        return {};
+      })(),
     });
   }
   return new TaskAssetError({
     operation: input.operation,
     code: input.code ?? "database",
-    ...(input.taskId ? { taskId: input.taskId } : {}),
+    ...(() => {
+      if (input.taskId) {
+        return { taskId: input.taskId };
+      }
+      return {};
+    })(),
     assetIds: input.assetIds ?? [],
     failedPhase: input.phase,
     durableState: "unchanged",

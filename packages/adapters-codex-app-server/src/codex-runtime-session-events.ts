@@ -313,7 +313,12 @@ export class CodexRuntimeSessionEvents {
         const retainedOwner = owner ?? this.runtimeStreamEventSessionOwner(event);
         Object.assign(mutation, {
           fault: this.errorMessage(error),
-          ...(retainedOwner ? { faultRef: codexSessionRef(retainedOwner.targetSession) } : {}),
+          ...(() => {
+            if (retainedOwner) {
+              return { faultRef: codexSessionRef(retainedOwner.targetSession) };
+            }
+            return {};
+          })(),
         });
         this.emitRuntimeStreamEventError(event, error, retainedOwner);
       }
@@ -648,9 +653,12 @@ export class CodexRuntimeSessionEvents {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId: entry.request.requestId,
-      ...(entry.request.requestInstanceId
-        ? { requestInstanceId: entry.request.requestInstanceId }
-        : {}),
+      ...(() => {
+        if (entry.request.requestInstanceId) {
+          return { requestInstanceId: entry.request.requestInstanceId };
+        }
+        return {};
+      })(),
       ...codexSubagentRouteEventFields(route),
     };
     const activeTurn =
@@ -1073,6 +1081,7 @@ export class CodexRuntimeSessionEvents {
     const normalizedEvent = withAgentSessionRef(sessionRef, event);
     this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
     if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
+      // SAFETY: The runtime adapter builds this value from the contract fields required by `AgentSessionTranscriptEvent`.
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
         ?.transcriptEvents.push(normalizedEvent as AgentSessionTranscriptEvent);

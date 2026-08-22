@@ -243,6 +243,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
           return yield* Effect.fail(failure);
         });
       yield* Scope.addFinalizer(runtimeScope, awaitLiveAdapterCleanup.pipe(Effect.ignore));
+      // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexChildProcess`.
       const child = yield* Effect.try({
         try: () =>
           spawn(command.command, command.args, {

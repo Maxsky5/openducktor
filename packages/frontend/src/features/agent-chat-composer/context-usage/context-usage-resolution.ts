@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
 
@@ -42,7 +43,7 @@ export const indexModelDescriptorsByProviderAndModel = (
 
 const pickPositiveNumber = (...values: Array<number | undefined>): number | undefined => {
   for (const value of values) {
-    if (typeof value === "number" && value > 0) {
+    if (hasRuntimeType(value, "number") && value > 0) {
       return value;
     }
   }
@@ -85,6 +86,11 @@ export const extractLatestSessionContextUsage = ({
   return {
     totalTokens: liveContextUsage.totalTokens,
     contextWindow,
-    ...(outputLimit === undefined ? {} : { outputLimit }),
+    ...(() => {
+      if (outputLimit === undefined) {
+        return {};
+      }
+      return { outputLimit };
+    })(),
   };
 };

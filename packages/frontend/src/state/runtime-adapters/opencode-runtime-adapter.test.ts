@@ -7,6 +7,7 @@ describe("createOpenCodeRuntimeAdapter", () => {
   test("requires live repo runtimes through the host runtimeRequire boundary", async () => {
     const originalRuntimeRequire = host.runtimeRequire;
     const runtimeRequireCalls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `typeof host.runtimeRequire` used by this case.
     host.runtimeRequire = mock(async (...args: unknown[]) => {
       runtimeRequireCalls.push(args);
       return {

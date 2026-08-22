@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../../test-support/focused-service";
 import type {
   AgentSessionRecord,
   CommitsAheadBehind,
@@ -78,17 +79,18 @@ const pullRequest = () => ({
 type TaskStorePort = Partial<RealTaskStorePort>;
 type TaskActivityGuardPort = RealTaskActivityGuardPort;
 const createSettingsConfigPort = (port: SettingsConfigPort): SettingsConfigPort =>
-  port as unknown as SettingsConfigPort;
+  createFocusedTestService<SettingsConfigPort>(port);
+// SAFETY: This test controls the fixture and supplies `SystemCommandPort` used by this case.
 const createSystemCommandPort = (port: Partial<SystemCommandPort>): SystemCommandPort =>
   ({
     resolveCommandPath: (command: string) => Effect.succeed(command),
     versionCommand: () => Effect.succeed(null),
     runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
     ...port,
-  }) as unknown as SystemCommandPort;
+  }) as SystemCommandPort;
 const defaultSystemCommands = createSystemCommandPort({});
 const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePort =>
-  ({
+  createFocusedTestService<WorktreeFilePort>({
     ensureDirectory: () => Effect.dieMessage("unexpected ensure directory"),
     copyConfiguredPaths: () => Effect.dieMessage("unexpected copy configured paths"),
     removePathIfPresent: () => Effect.dieMessage("unexpected remove path"),
@@ -96,7 +98,7 @@ const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePo
     resolvePathWithinRoot: () => Effect.dieMessage("unexpected path resolution"),
     pathIsWithinRoot: () => Effect.dieMessage("unexpected path root check"),
     ...port,
-  }) as WorktreeFilePort;
+  });
 const unexpectedRuntimeRegistryCall = (operation: string) =>
   Effect.fail(
     new HostOperationError({
@@ -104,6 +106,7 @@ const unexpectedRuntimeRegistryCall = (operation: string) =>
       message: `Unexpected runtime registry call: ${operation}`,
     }),
   );
+// SAFETY: This test controls the fixture and supplies `RuntimeRegistryPort` used by this case.
 const createRuntimeRegistryPort = (port: Partial<RuntimeRegistryPort>): RuntimeRegistryPort =>
   ({
     ensureWorkspaceRuntime: () =>
@@ -128,7 +131,7 @@ const createRuntimeRegistryPort = (port: Partial<RuntimeRegistryPort>): RuntimeR
     ...port,
   }) as RuntimeRegistryPort;
 const createGitPort = (port: Partial<GitPort>): GitPort =>
-  ({
+  createFocusedTestService<GitPort>({
     canonicalizePath: (path: string) => Effect.succeed(path),
     isGitRepository: () => Effect.dieMessage("unexpected git repository check"),
     shareGitCommonDirectory: () => Effect.dieMessage("unexpected git common directory check"),
@@ -159,28 +162,30 @@ const createGitPort = (port: Partial<GitPort>): GitPort =>
     rebaseAbort: () => Effect.dieMessage("unexpected rebase abort"),
     abortConflict: () => Effect.dieMessage("unexpected abort conflict"),
     ...port,
-  }) as GitPort;
+  });
 const createWorkspaceSettingsServicePort = (
   service: WorkspaceSettingsService | undefined,
-): WorkspaceSettingsService | undefined =>
-  service
-    ? (service as unknown as WorkspaceSettingsService as unknown as WorkspaceSettingsService)
-    : undefined;
+): WorkspaceSettingsService | undefined => service;
 const extendGitPort = (base: GitPort, overrides: Partial<GitPort>): GitPort =>
-  createGitPort({
-    ...base,
-    ...overrides,
-  } as GitPort);
+  createGitPort(
+    createFocusedTestService<GitPort>({
+      ...base,
+      ...overrides,
+    }),
+  );
 const extendSettingsConfigPort = (
   base: SettingsConfigPort,
   overrides: Partial<SettingsConfigPort>,
 ): SettingsConfigPort =>
-  createSettingsConfigPort({
-    ...base,
-    ...overrides,
-  } as SettingsConfigPort);
+  createSettingsConfigPort(
+    createFocusedTestService<SettingsConfigPort>({
+      ...base,
+      ...overrides,
+    }),
+  );
 const unexpectedTaskStoreCall = (methodName: string) => () =>
   Effect.dieMessage(`unexpected task store call: ${methodName}`);
+// SAFETY: This test creates the DOM fixture that supplies `RealTaskStorePort` before this lookup.
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   ({
     clearAgentSessionsByRoles: unexpectedTaskStoreCall("clearAgentSessionsByRoles"),
@@ -204,11 +209,12 @@ const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
     updateTask: unexpectedTaskStoreCall("updateTask"),
     upsertAgentSession: unexpectedTaskStoreCall("upsertAgentSession"),
     ...overrides,
-  }) as unknown as RealTaskStorePort;
+  }) as RealTaskStorePort;
+// SAFETY: This test controls the fixture and supplies `RealTaskActivityGuardPort` used by this case.
 const createTaskActivityGuardPort = (
   guard: TaskActivityGuardPort | undefined,
 ): RealTaskActivityGuardPort | undefined =>
-  guard ? (guard as unknown as RealTaskActivityGuardPort) : undefined;
+  guard ? (guard as RealTaskActivityGuardPort) : undefined;
 const createTaskService = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
     taskActivityGuard?: TaskActivityGuardPort;
@@ -216,6 +222,7 @@ const createTaskService = (
   },
 ) => {
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
+  // SAFETY: This test controls the fixture and supplies `CreateTaskServiceInput` used by this case.
   return createRealTaskService({
     ...rest,
     terminalService:
@@ -227,9 +234,12 @@ const createTaskService = (
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
     workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : {}),
+    ...(() => {
+      if (taskActivityGuard) {
+        return { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) };
+      }
+      return {};
+    })(),
     taskStore: createTaskStorePort(taskStore),
   } as CreateTaskServiceInput);
 };
@@ -240,6 +250,7 @@ const createTaskServiceWithMutationProgress = (
   },
 ) => {
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
+  // SAFETY: This test controls the fixture and supplies `CreateTaskServiceInput` used by this case.
   return createRealTaskServiceWithMutationProgress({
     ...rest,
     terminalService:
@@ -251,9 +262,12 @@ const createTaskServiceWithMutationProgress = (
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
     workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : {}),
+    ...(() => {
+      if (taskActivityGuard) {
+        return { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) };
+      }
+      return {};
+    })(),
     taskStore: createTaskStorePort(taskStore),
   } as CreateTaskServiceInput);
 };
@@ -303,7 +317,7 @@ const createAgentSessionSettingsConfig = (existingPaths: Set<string>): SettingsC
 const createAgentSessionWorkspaceSettingsService = (
   workspace: Pick<WorkspaceRecord, "repoPath" | "effectiveWorktreeBasePath">,
 ): WorkspaceSettingsService =>
-  ({
+  createFocusedTestService<WorkspaceSettingsService>({
     listWorkspaces() {
       return Effect.sync(() => {
         return [
@@ -321,7 +335,7 @@ const createAgentSessionWorkspaceSettingsService = (
         ];
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createBuildSettingsConfig = (
   existingPaths: Set<string>,
   repoPath = "/repo",
@@ -376,7 +390,7 @@ const createBuildSettingsConfig = (
 const createBuildWorkspaceSettingsService = (
   repoConfig: Partial<RepoConfig> & Pick<RepoConfig, "workspaceId" | "repoPath" | "hooks">,
 ): WorkspaceSettingsService =>
-  ({
+  createFocusedTestService<WorkspaceSettingsService>({
     getRepoConfigByRepoPath() {
       return Effect.sync(() => {
         return {
@@ -393,7 +407,7 @@ const createBuildWorkspaceSettingsService = (
         } satisfies RepoConfig;
       });
     },
-  }) as unknown as WorkspaceSettingsService;
+  });
 const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPort =>
   createSystemCommandPort({
     versionCommand() {
@@ -452,6 +466,7 @@ const createBuildStartRuntimeRegistry = (calls: unknown[]): RuntimeRegistryPort 
     ensureWorkspaceRuntime(input) {
       return Effect.sync(() => {
         calls.push({ type: "ensureRuntime", input });
+        // SAFETY: This test controls the fixture and supplies `"opencode" | "codex"` used by this case.
         return {
           kind: input.runtimeKind as "opencode" | "codex",
           runtimeId: "runtime-1",
@@ -775,7 +790,7 @@ const createDirectMergeGitPort = ({
     },
   });
 const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =>
-  ({
+  createFocusedTestService<DevServerService>({
     getState() {
       return Effect.dieMessage("unexpected dev server get state");
     },
@@ -797,7 +812,7 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
         };
       });
     },
-  }) satisfies DevServerService as unknown as DevServerService;
+  } satisfies DevServerService);
 const createDirectMergeTaskWorktreeService = (
   workingDirectory: string | null,
 ): TaskWorktreeService => ({

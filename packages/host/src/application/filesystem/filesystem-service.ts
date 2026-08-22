@@ -2,6 +2,7 @@ import {
   type DirectoryListing,
   directoryListingSchema,
   type FilesystemListDirectoryInput,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Data, Effect, Either } from "effect";
@@ -31,7 +32,7 @@ export type FilesystemService = {
 const hasNodeErrorCode = (cause: unknown, code: string): boolean => {
   const visited = new Set<object>();
   let current: unknown = cause;
-  while (typeof current === "object" && current !== null) {
+  while (hasRuntimeType(current, "object") && current !== null) {
     if (visited.has(current)) {
       return false;
     }

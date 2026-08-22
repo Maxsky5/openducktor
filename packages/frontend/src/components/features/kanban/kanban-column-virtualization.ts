@@ -30,19 +30,16 @@ export function resolveVirtualViewportWindow({
   laneTop,
   viewportTop,
   viewportHeight,
-}: ResolveVirtualViewportWindowArgs): { viewportStart: number; viewportEnd: number } {
+}: ResolveVirtualViewportWindowArgs) {
   const safeViewportHeight = Math.max(0, viewportHeight);
   const viewportStart = viewportTop - laneTop;
   return {
     viewportStart,
     viewportEnd: viewportStart + safeViewportHeight,
-  };
+  } satisfies { viewportStart: number; viewportEnd: number };
 }
 
-export function buildVirtualColumnLayout(
-  itemHeights: number[],
-  gapPx: number,
-): { itemOffsets: number[]; totalHeight: number } {
+export function buildVirtualColumnLayout(itemHeights: number[], gapPx: number) {
   const safeGapPx = Math.max(0, gapPx);
   const itemOffsets: number[] = [];
   let nextOffset = 0;
@@ -56,7 +53,10 @@ export function buildVirtualColumnLayout(
     }
   }
 
-  return { itemOffsets, totalHeight: nextOffset };
+  return { itemOffsets, totalHeight: nextOffset } satisfies {
+    itemOffsets: number[];
+    totalHeight: number;
+  };
 }
 
 export function findVirtualWindowRange({
@@ -94,16 +94,22 @@ export function getVirtualWindowEdgeOffsets({
   itemOffsets,
   itemHeights,
   totalHeight,
-}: VirtualWindowEdgeOffsetsArgs): { topSpacerHeight: number; bottomSpacerHeight: number } {
+}: VirtualWindowEdgeOffsetsArgs) {
   if (range.endIndex < range.startIndex || itemHeights.length === 0) {
-    return { topSpacerHeight: 0, bottomSpacerHeight: totalHeight };
+    return { topSpacerHeight: 0, bottomSpacerHeight: totalHeight } satisfies {
+      topSpacerHeight: number;
+      bottomSpacerHeight: number;
+    };
   }
 
   const topSpacerHeight = itemOffsets[range.startIndex] ?? 0;
   const visibleWindowEnd = (itemOffsets[range.endIndex] ?? 0) + (itemHeights[range.endIndex] ?? 0);
   const bottomSpacerHeight = Math.max(0, totalHeight - visibleWindowEnd);
 
-  return { topSpacerHeight, bottomSpacerHeight };
+  return { topSpacerHeight, bottomSpacerHeight } satisfies {
+    topSpacerHeight: number;
+    bottomSpacerHeight: number;
+  };
 }
 
 function findFirstIndexWithEndAfterStart(

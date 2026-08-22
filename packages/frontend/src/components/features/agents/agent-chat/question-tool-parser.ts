@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -15,6 +16,7 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
     return undefined;
   }
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     return JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
   } catch {
     return undefined;
@@ -22,9 +24,10 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
 };
 
 const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return null;
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
   const candidates = [
     record.question,
@@ -35,7 +38,7 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
     record.name,
   ];
   for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
       return candidate.trim();
     }
   }
@@ -43,16 +46,17 @@ const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
 };
 
 const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? [trimmed] : [];
   }
   if (Array.isArray(value)) {
     return value.flatMap((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return [];
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
   return normalizeAnswerValues(
     record.answers ??
@@ -73,6 +77,7 @@ const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetai
     if (!prompt) {
       return details;
     }
+    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
     const record = entry as Record<string, JsonValue>;
     const answers = normalizeAnswerValues(
       record.answers ?? record.answer ?? record.response ?? record.responses,
@@ -89,9 +94,10 @@ const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return [];
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
   const nested =
     record.answers ??
@@ -136,8 +142,9 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   const inputQuestions = collectQuestionDetails(meta.input?.questions);
   const metadataQuestions = collectQuestionDetails(meta.metadata?.questions);
   const parsedOutput = parseJsonIfPossible(meta.output);
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const outputQuestions = collectQuestionDetails(
-    parsedOutput && typeof parsedOutput === "object"
+    parsedOutput && hasRuntimeType(parsedOutput, "object")
       ? (parsedOutput as Record<string, JsonValue>).questions
       : undefined,
   );
@@ -152,8 +159,9 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const outputRecord =
-    parsedOutput && typeof parsedOutput === "object"
+    parsedOutput && hasRuntimeType(parsedOutput, "object")
       ? (parsedOutput as Record<string, JsonValue>)
       : undefined;
   const answerGroups = firstNonEmptyAnswerGroups([

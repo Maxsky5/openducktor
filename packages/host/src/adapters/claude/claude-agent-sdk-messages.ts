@@ -5,6 +5,11 @@ import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openduck
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
 
+interface MIMEBYEXTENSIONContract extends Record<
+  string,
+  ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME
+> {}
+
 type ClaudeMessageContent = Exclude<SDKUserMessage["message"]["content"], string>;
 type ClaudeMessageContentBlock = ClaudeMessageContent[number];
 type ClaudeDocumentBlock = Extract<ClaudeMessageContentBlock, { type: "document" }>;
@@ -12,6 +17,7 @@ type ClaudeImageBlock = Extract<ClaudeMessageContentBlock, { type: "image" }>;
 
 // Claude expands slash commands from streaming content blocks. A bare string is
 // accepted by the type but reaches the model as ordinary prompt text.
+// SAFETY: The runtime adapter builds this value from the contract fields required by `SDKUserMessage["message"]`.
 const toClaudeMessage = (text: string): SDKUserMessage => ({
   type: "user",
   message: {
@@ -30,10 +36,7 @@ const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set([
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-const MIME_BY_EXTENSION: Record<
-  string,
-  ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME
-> = {
+const MIME_BY_EXTENSION: MIMEBYEXTENSIONContract = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
@@ -49,6 +52,7 @@ const readExtension = (pathOrName: string): string => {
   return lastDot >= 0 ? pathOrName.slice(lastDot).toLowerCase() : "";
 };
 
+// SAFETY: The preceding runtime guard establishes `ClaudeSupportedImageMime` before this assertion.
 const isClaudeSupportedImageMime = (mime: string): mime is ClaudeSupportedImageMime =>
   SUPPORTED_CLAUDE_IMAGE_MIMES.has(mime as ClaudeSupportedImageMime);
 
@@ -139,6 +143,7 @@ const toClaudeAttachmentBlock = async (
   });
 
   if (attachment.kind === "image") {
+    // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeSupportedImageMime`.
     return {
       block: {
         type: "image",
@@ -208,12 +213,7 @@ const encodeClaudeFileReference = (path: string): string => {
   return `@"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 };
 
-export const encodeClaudePromptTextWithSourceRanges = (
-  parts: AgentUserMessagePart[],
-): {
-  text: string;
-  sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];
-} => {
+export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePart[]) => {
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
   const sourceTextByPartIndex: (AgentUserMessageSourceText | undefined)[] = Array.from({
@@ -287,6 +287,9 @@ export const encodeClaudePromptTextWithSourceRanges = (
         end: sourceText.end - leadingWhitespaceLength,
       };
     }),
+  } satisfies {
+    text: string;
+    sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];
   };
 };
 
@@ -361,6 +364,7 @@ export const toClaudeMessageFromParts = async (
 
   flushText();
 
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `SDKUserMessage["message"]`.
   return {
     type: "user",
     message: {

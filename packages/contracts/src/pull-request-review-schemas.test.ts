@@ -167,6 +167,7 @@ describe("pullRequestReviewContextSchema", () => {
     ["comment timestamp", ["comments", 0, "createdAt"], "yesterday"],
     ["refresh timestamp", ["refreshedAt"], "soon"],
   ])("rejects an invalid %s", (_label, path, value) => {
+    // SAFETY: This test controls the fixture and supplies `JsonObject` used by this case.
     const context = {
       status: "loaded" as const,
       providerId: "github",
@@ -212,10 +213,12 @@ describe("pullRequestReviewContextSchema", () => {
       reviewThreads: { openCount: 0 },
       refreshedAt: "2026-07-10T08:02:00Z",
     } as JsonObject;
-    let current: unknown = context;
+    let current = context satisfies unknown;
     for (const segment of path.slice(0, -1)) {
+      // SAFETY: This test controls the fixture and supplies `Record<string | number, JsonValue>` used by this case.
       current = (current as Record<string | number, JsonValue>)[segment];
     }
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     (current as Record<string | number, JsonValue>)[path.at(-1) as string | number] = value;
 
     expect(() => pullRequestReviewContextSchema.parse(context)).toThrow();

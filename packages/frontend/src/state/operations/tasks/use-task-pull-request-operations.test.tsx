@@ -29,10 +29,7 @@ type NotificationEvent = {
   description: string;
 };
 
-const createNotificationPort = (): {
-  events: NotificationEvent[];
-  port: TaskPullRequestNotificationPort;
-} => {
+const createNotificationPort = () => {
   const events: NotificationEvent[] = [];
   const report =
     (level: NotificationEvent["level"]) =>
@@ -47,6 +44,9 @@ const createNotificationPort = (): {
       warning: report("warning"),
       error: report("error"),
     },
+  } satisfies {
+    events: NotificationEvent[];
+    port: TaskPullRequestNotificationPort;
   };
 };
 
@@ -357,6 +357,7 @@ describe("useTaskPullRequestOperations", () => {
 
   test("delegates unlink failures to the mutation runner and clears unlinking state", async () => {
     const unlinkFailure = new Error("GitHub is unavailable");
+    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
     const mutationFailure = { title: null as string | null };
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
       mutationFailure.title = options.failureTitle;

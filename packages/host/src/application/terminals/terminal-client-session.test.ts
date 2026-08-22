@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -12,7 +13,7 @@ describe("TerminalClientSession", () => {
     const attachBlocked = new Promise<void>((resolve) => {
       releaseAttach = resolve;
     });
-    const service = {
+    const service = createFocusedTestService<TerminalService>({
       attach: () =>
         Effect.gen(function* () {
           operations.push("attach:start");
@@ -20,7 +21,7 @@ describe("TerminalClientSession", () => {
           operations.push("attach:complete");
         }),
       acknowledge: () => Effect.sync(() => operations.push("ack")),
-    } as unknown as TerminalService;
+    });
     const session = createTerminalClientSession({
       clientId: "test-client",
       terminalService: service,
@@ -61,7 +62,7 @@ describe("TerminalClientSession", () => {
     const sent: TerminalServerMessage[] = [];
     const detached: string[] = [];
     let rejectAttach = true;
-    const service = {
+    const service = createFocusedTestService<TerminalService>({
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         rejectAttach
           ? Effect.fail(
@@ -75,7 +76,7 @@ describe("TerminalClientSession", () => {
           : Effect.void,
       detach: (terminalId: string, attachmentId: string) =>
         Effect.sync(() => detached.push(`${terminalId}:${attachmentId}`)),
-    } as unknown as TerminalService;
+    });
     const session = createTerminalClientSession({
       clientId: "test-client",
       terminalService: service,

@@ -215,6 +215,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       const nextRuntimeId = runtimeId();
       const runtimeScope = yield* Scope.make();
       scope = runtimeScope;
+      // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeChildProcess`.
       const child = yield* Effect.try({
         try: () =>
           spawn(command.command, command.args, {

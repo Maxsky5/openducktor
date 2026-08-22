@@ -61,6 +61,7 @@ const sourceOption = (externalSessionId: string, runtimeKind: RuntimeKind = "ope
   selectedModel: null,
 });
 
+// SAFETY: This test controls the fixture and supplies `RuntimeDescriptor` used by this case.
 const FORKLESS_RUNTIME = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
   label: "Reuse Runtime",
@@ -322,12 +323,13 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   });
 
   test("requires an available runtime for concrete non-reuse starts", () => {
+    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     expect(() =>
       assertRuntimeSupportsSelectedStartMode({
         launchActionId: "build_implementation_start",
         role: "build",
         runtimeDescriptor: null,
-        runtimeKind: "missing-runtime" as unknown as RuntimeKind,
+        runtimeKind: "missing-runtime" as RuntimeKind,
         startMode: "fresh",
         taskId: "TASK-2",
       }),
@@ -347,12 +349,17 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
   });
 
   test("fails fast when a reusable session has no runtime kind", () => {
+    const missingRuntimeKind: RuntimeKind | null = null;
+    const invalidRuntimeKind = (value: RuntimeKind | null): RuntimeKind => {
+      // SAFETY: this test passes malformed persisted data through the static contract.
+      return value as RuntimeKind;
+    };
     expect(() =>
       requireSourceSessionRuntimeKind({
-        ...sourceOption("session-2", null as unknown as RuntimeKind),
+        ...sourceOption("session-2", invalidRuntimeKind(missingRuntimeKind)),
         sourceSession: {
           externalSessionId: "session-2",
-          runtimeKind: null as unknown as RuntimeKind,
+          runtimeKind: invalidRuntimeKind(missingRuntimeKind),
           workingDirectory: "/repo/worktree",
         },
         label: "Missing runtime session",

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import {
@@ -539,26 +540,36 @@ describe("useRepoNavigationPersistence", () => {
     const originalStorage = globalThis.localStorage;
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
-    let nextTimerId = 1;
-    const scheduledCallbacks = new Map<number, () => void>();
+    const createTimerHandle = () => {
+      const timer = originalSetTimeout(() => {}, 60_000);
+      originalClearTimeout(timer);
+      return timer;
+    };
+    const scheduledCallbacks = new Map<ReturnType<typeof globalThis.setTimeout>, () => void>();
 
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: memoryStorage,
     });
-    globalThis.setTimeout = ((callback: TimerHandler) => {
-      const timerId = nextTimerId++;
-      if (typeof callback !== "function") {
-        throw new Error("Expected function timer callback");
-      }
-      scheduledCallbacks.set(timerId, callback as () => void);
-      return timerId as unknown as ReturnType<typeof globalThis.setTimeout>;
-    }) as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = ((timerId?: ReturnType<typeof globalThis.setTimeout>) => {
-      if (typeof timerId === "number") {
-        scheduledCallbacks.delete(timerId);
-      }
-    }) as unknown as typeof globalThis.clearTimeout;
+    Object.defineProperty(globalThis, "setTimeout", {
+      configurable: true,
+      value: (callback: TimerHandler) => {
+        const timerId = createTimerHandle();
+        if (!hasRuntimeType(callback, "function")) {
+          throw new Error("Expected function timer callback");
+        }
+        scheduledCallbacks.set(timerId, () => callback());
+        return timerId;
+      },
+    });
+    Object.defineProperty(globalThis, "clearTimeout", {
+      configurable: true,
+      value: (timerId?: ReturnType<typeof globalThis.setTimeout>) => {
+        if (timerId) {
+          scheduledCallbacks.delete(timerId);
+        }
+      },
+    });
     const takeLatestScheduledCallback = (message: string): (() => void) => {
       const latestEntry = [...scheduledCallbacks.entries()].at(-1);
       if (!latestEntry) {
@@ -646,8 +657,14 @@ describe("useRepoNavigationPersistence", () => {
 
       await harness.unmount();
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
+      Object.defineProperty(globalThis, "setTimeout", {
+        configurable: true,
+        value: originalSetTimeout,
+      });
+      Object.defineProperty(globalThis, "clearTimeout", {
+        configurable: true,
+        value: originalClearTimeout,
+      });
       Object.defineProperty(globalThis, "localStorage", {
         configurable: true,
         value: originalStorage,

@@ -31,13 +31,14 @@ type PrepareHumanReviewFeedbackInput = {
 };
 
 export type SubmitHumanReviewFeedbackResult = { outcome: "started" } | { outcome: "cancelled" };
+type HumanReviewFeedbackStartResult = object | string;
 
 type SubmitHumanReviewFeedbackInput = {
   state: HumanReviewFeedbackState;
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
-  ) => Promise<unknown | undefined>;
+  ) => Promise<HumanReviewFeedbackStartResult | undefined>;
 };
 
 const buildRequestChangesSessionRequest = (
@@ -55,11 +56,19 @@ const buildRequestChangesSessionRequest = (
     taskId: state.taskId,
     role: "build",
     launchActionId: "build_after_human_request_changes",
-    ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : {}),
+    ...(() => {
+      if (existingSessionOptions.length === 0) {
+        return { initialStartMode: "fresh" as const };
+      }
+      return {};
+    })(),
     existingSessionOptions,
-    ...(latestBuilderSession
-      ? { initialSourceSession: toAgentSessionIdentity(latestBuilderSession) }
-      : {}),
+    ...(() => {
+      if (latestBuilderSession) {
+        return { initialSourceSession: toAgentSessionIdentity(latestBuilderSession) };
+      }
+      return {};
+    })(),
     postStartAction: "kickoff",
     message: feedback,
     beforeStartAction: {

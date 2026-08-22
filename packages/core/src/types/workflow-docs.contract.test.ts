@@ -12,6 +12,7 @@ const loadFixture = (): WorkflowContractFixture => {
     import.meta.dir,
     "../../../../docs/contracts/workflow-contract-fixture.json",
   );
+  // SAFETY: This test controls the fixture and supplies `WorkflowContractFixture` used by this case.
   return JSON.parse(readFileSync(fixturePath, "utf8")) as WorkflowContractFixture;
 };
 

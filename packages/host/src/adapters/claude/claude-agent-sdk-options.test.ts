@@ -3,7 +3,7 @@ import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -231,7 +231,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
     });
-    if (typeof workflowAllowedTools !== "string") {
+    if (!hasRuntimeType(workflowAllowedTools, "string")) {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
     }
     expect(workflowAllowedTools.split(",")).not.toEqual(
@@ -239,7 +239,8 @@ describe("buildClaudeAgentSdkOptions", () => {
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
-    expect(typeof hostTokenFile).toBe("string");
+    expect(runtimeTypeName(hostTokenFile)).toBe("string");
+    // SAFETY: This test controls the fixture and supplies `string` used by this case.
     expect(await readFile(hostTokenFile as string, "utf8")).toBe("bridge-secret-value");
     expect(JSON.stringify(options.mcpServers)).not.toContain("bridge-secret-value");
     session.abortController.abort();
@@ -251,7 +252,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options).not.toHaveProperty("allowedTools");
     expect(options.skills).toBe("all");
     const systemPrompt = options.systemPrompt;
-    if (!systemPrompt || typeof systemPrompt !== "object" || Array.isArray(systemPrompt)) {
+    if (!systemPrompt || !hasRuntimeType(systemPrompt, "object") || Array.isArray(systemPrompt)) {
       throw new Error("Expected Claude Code's system prompt preset.");
     }
     expect(systemPrompt.preset).toBe("claude_code");
@@ -259,7 +260,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(systemPrompt.append).toContain(
       "OpenDucktor starts this Claude Code session with cwd set to",
     );
-    expect(typeof options.onUserDialog).toBe("function");
+    expect(runtimeTypeName(options.onUserDialog)).toBe("function");
     expect(options.supportedDialogKinds).toContain("ask_user_question");
     expect(options.toolConfig).toEqual({
       askUserQuestion: { previewFormat: "markdown" },
@@ -309,6 +310,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       repoPath: "/repo/fairnest",
       workingDirectory: "/repo/fairnest-task-worktree",
     };
+    // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
     const events = { resolvedBridgeRepoPaths: [] as string[] };
 
     const options = await buildOptions(session, events);
@@ -504,6 +506,7 @@ describe("buildClaudeAgentSdkOptions", () => {
           },
         },
       });
+      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       const hookSpecificOutput = (
         hookOutput as {
           hookSpecificOutput?: {

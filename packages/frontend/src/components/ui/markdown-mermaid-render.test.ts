@@ -11,9 +11,13 @@ describe("renderMermaidSvg", () => {
         renderContainer = container;
         expect(container?.isConnected).toBe(true);
         expect(container?.getAttribute("aria-hidden")).toBe("true");
+        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
         expect((container as HTMLElement | undefined)?.style.position).toBe("fixed");
+        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
         expect((container as HTMLElement | undefined)?.style.inset).toBe("0");
+        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
         expect((container as HTMLElement | undefined)?.style.overflow).toBe("hidden");
+        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
         expect((container as HTMLElement | undefined)?.style.pointerEvents).toBe("none");
 
         return {

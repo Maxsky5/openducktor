@@ -34,6 +34,11 @@ export const loadSessionRuntimePolicyResolver = async ({
     resolveAgentSessionRuntimePolicyFromSnapshot({
       runtimeKind,
       snapshot,
-      ...(sessionScope !== undefined ? { sessionScope } : {}),
+      ...(() => {
+        if (sessionScope !== undefined) {
+          return { sessionScope };
+        }
+        return {};
+      })(),
     });
 };

@@ -4,13 +4,16 @@ import type { GithubCommandDependencies } from "../../../application/tasks/suppo
 import { HostOperationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
+const isResponseFactory = <Response>(
+  value: Response | ((args: string[]) => Response),
+): value is (args: string[]) => Response => typeof value === "function";
 
-const createDependencies = ({
+const createDependencies = <Response>({
   commands = [],
   response,
 }: {
   commands?: string[][];
-  response: unknown | ((args: string[]) => unknown);
+  response: Response | ((args: string[]) => Response);
 }): GithubCommandDependencies => {
   const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
     runCommandAllowFailure: (_command, args) => {
@@ -23,11 +26,12 @@ const createDependencies = ({
           }),
         );
       }
-      const payload = typeof response === "function" ? response(args) : response;
+      const payload = isResponseFactory(response) ? response(args) : response;
       return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
     },
   };
 
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   return {
     resolveGithubCommand: () =>
       Effect.succeed({
@@ -54,9 +58,9 @@ const responsePage = ({
   reviews,
   reviewsPageInfo = { hasNextPage: false, endCursor: null },
 }: {
-  comments: unknown[];
+  comments: Array<object | null>;
   commentsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
-  reviews: unknown[];
+  reviews: Array<object | null>;
   reviewsPageInfo?: { hasNextPage: boolean; endCursor: string | null };
 }) => ({
   data: {
@@ -188,7 +192,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
 
   test("paginates comments and reviews independently without refetching completed connections", async () => {
     const commands: string[][] = [];
-    const response = (args: string[]): unknown => {
+    const response = (args: string[]): object => {
       const command = args.join(" ");
       if (command.includes("commentsCursor=comments-page-2")) {
         expect(command).toContain("includeComments=true");
@@ -249,7 +253,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
 
   test("continues review history after comments finish and keeps repeated reviewers", async () => {
     const commands: string[][] = [];
-    const response = (args: string[]): unknown => {
+    const response = (args: string[]): object => {
       const command = args.join(" ");
       if (command.includes("reviewsCursor=reviews-page-2")) {
         expect(command).toContain("includeComments=false");

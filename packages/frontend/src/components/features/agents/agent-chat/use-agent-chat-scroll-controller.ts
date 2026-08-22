@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
@@ -337,7 +338,7 @@ export function useAgentChatScrollController({
 
   useEffect(() => {
     const content = messagesContentRef.current;
-    if (!content || typeof ResizeObserver === "undefined") {
+    if (!content || hasRuntimeType(globalThis.ResizeObserver, "undefined")) {
       return;
     }
 

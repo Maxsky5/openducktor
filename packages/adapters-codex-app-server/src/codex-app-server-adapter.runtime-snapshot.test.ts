@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { CodexAppServerThreadStatus, JsonValue } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
@@ -36,6 +37,7 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
+      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       return {
         threadId: (request.params as { threadId: string }).threadId,
         startedAt: "2026-05-07T00:00:00.000Z",
@@ -52,10 +54,12 @@ class DeferredInventoryTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Promise<Response>` used by this case.
       return this.loadedList.promise as Promise<Response>;
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Promise<Response>` used by this case.
       return this.threadList.promise as Promise<Response>;
     }
     return super.request<Response>(request);
@@ -68,6 +72,7 @@ class MutableThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [codexThreadFixture({ id: "thread-saved", status: this.threadSavedStatus })],
         nextCursor: null,
@@ -82,8 +87,10 @@ class ChildThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
       const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: includesSubagents
           ? [
@@ -106,6 +113,7 @@ class IdleParentThreadListTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [codexThreadFixture({ id: "parent-thread", status: { type: "idle" } })],
         nextCursor: null,
@@ -120,6 +128,7 @@ class IdleParentWithActiveChildTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [
           codexThreadFixture({ id: "parent-thread", status: { type: "idle" } }),
@@ -141,7 +150,9 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
       const threadId = (request.params as { threadId: string }).threadId;
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ...codexThreadStartResultFixture(threadId),
         thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }),
@@ -159,6 +170,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: this.loaded ? ["thread-idle"] : [],
         nextCursor: null,
@@ -166,6 +178,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: this.includeThread
           ? [codexThreadFixture({ id: "thread-idle", status: this.threadStatus })]
@@ -176,6 +189,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
     }
     if (request.method === "thread/read") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         thread: codexThreadFixture({
           id: "thread-idle",
@@ -199,11 +213,13 @@ class StoredIdleHistoryTransport extends RecordingTransport {
     }
     if (request.method === "thread/turns/list") {
       this.calls.push(request);
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return { data: [], nextCursor: null, backwardsCursor: null } as Response;
     }
     if (request.method === "thread/resume") {
       this.calls.push(request);
       this.loaded = true;
+      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ...codexThreadStartResultFixture("thread-idle"),
         thread: codexThreadFixture({ id: "thread-idle", status: { type: "idle" } }),
@@ -239,11 +255,11 @@ class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
   }
 }
 
+// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
 const localSessions = (
   adapter: CodexAppServerAdapter,
 ): { has(externalSessionId: string): boolean } =>
-  (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
-    .localSessions;
+  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -479,10 +495,11 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         },
       },
     });
+    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
     const question = await waitForEvent(
       events,
       (event) =>
-        typeof event === "object" &&
+        hasRuntimeType(event, "object") &&
         event !== null &&
         (event as { type?: unknown }).type === "question_required",
     );
@@ -496,6 +513,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
+    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
     await expect(
       adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
@@ -792,7 +810,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       externalSessionId: "parent-thread",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    const adapterState = adapter as unknown as {
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    const adapterState = adapter as {
       subagents: {
         upsertLink(input: {
           runtimeId: string;
@@ -800,7 +819,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
           childThreadId: string;
           itemId: string;
           status: "completed";
-        }): unknown;
+        }): void;
       };
       pendingInput: CodexPendingInputState;
     };
@@ -861,7 +880,8 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     const { adapter } = createHarness({
       transportFactory: mock(() => new IdleParentThreadListTransport("runtime-live", false)),
     });
-    const adapterState = adapter as unknown as { pendingInput: CodexPendingInputState };
+    // SAFETY: This test controls the fixture and supplies `{ pendingInput: CodexPendingInputState }` used by this case.
+    const adapterState = adapter as { pendingInput: CodexPendingInputState };
     adapterState.pendingInput.addQuestion({
       runtimeId: "runtime-live",
       threadId: "child-thread",

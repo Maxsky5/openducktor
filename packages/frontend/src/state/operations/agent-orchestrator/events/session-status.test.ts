@@ -16,7 +16,8 @@ const observeSession = async (session = buildSession()) => {
   let handleEvent: ((event: RoutedEvent) => void) | undefined;
   const adapter: SessionEventAdapter = {
     subscribeEvents: async (_externalSessionId, handler) => {
-      handleEvent = handler as unknown as (event: RoutedEvent) => void;
+      // SAFETY: This test controls the fixture and supplies `(event: RoutedEvent) => void` used by this case.
+      handleEvent = handler as (event: RoutedEvent) => void;
       return () => {};
     },
     replyApproval: async () => {},

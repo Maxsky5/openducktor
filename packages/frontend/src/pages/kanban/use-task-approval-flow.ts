@@ -83,6 +83,7 @@ export function useTaskApprovalFlow({
       const task = tasks.find((entry) => entry.id === taskId);
       const requestVersion = ++approvalRequestVersionRef.current;
 
+      // SAFETY: The surrounding boundary constructs or validates every member required by `TaskApprovalContextLoadResult | undefined`.
       const cachedContext = queryClient.getQueryData(
         taskApprovalQueryKeys.context(workspaceRepoPath, taskId),
       ) as TaskApprovalContextLoadResult | undefined;

@@ -19,6 +19,7 @@ type ClaudeSdkMessageFixtureResult<
  * Keeps intentionally partial SDK event fixtures honest about their public envelope while
  * centralizing the single assertion needed to omit unrelated protocol fields in focused tests.
  */
+// SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>`.
 export const claudeSdkMessageFixture = <
   MessageType extends SDKMessage["type"],
   ExtraFields extends object,
@@ -29,7 +30,7 @@ export const claudeSdkMessageFixture = <
     uuid: "fixture-message",
     session_id: "session-1",
     ...message,
-  }) as unknown as ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>;
+  }) as ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>;
 
 type ClaudeSessionMessageFixture = {
   readonly type: SessionMessage["type"];
@@ -58,6 +59,7 @@ export const claudeSessionMessageFixtures = (
  * History imports use the SDK's opaque SessionStoreEntry contract. This helper keeps fixtures
  * constrained to that public contract before exposing the adapter's filtered history union.
  */
+// SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeHistoryMessage[]`.
 export const claudeHistoryMessageFixtures = (
   messages: readonly SessionStoreEntry[],
 ): ClaudeHistoryMessage[] => messages as ClaudeHistoryMessage[];

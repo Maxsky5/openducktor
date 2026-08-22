@@ -15,6 +15,7 @@ const isRuntimeConfigRecord = (value: JsonValue | undefined): value is BrowserRu
     return false;
   }
 
+  // SAFETY: The surrounding boundary constructs or validates every member required by `{ backendUrl?: JsonValue; appToken?: JsonValue }`.
   const config = value as { backendUrl?: JsonValue; appToken?: JsonValue };
   return typeof config.backendUrl === "string" && typeof config.appToken === "string";
 };

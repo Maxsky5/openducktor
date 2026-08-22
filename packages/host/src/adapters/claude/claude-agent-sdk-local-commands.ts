@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   ClaudeHistoryEntryMetadata,
   ClaudeHistoryMessage,
@@ -24,7 +25,7 @@ export const readClaudeCommandEnvelope = (text: string): string | null => {
 };
 
 export const readClaudeLocalCommandOutput = (content: JsonValue | undefined): string | null => {
-  if (typeof content !== "string") {
+  if (!hasRuntimeType(content, "string")) {
     return null;
   }
   const match = LOCAL_COMMAND_STDOUT_PATTERN.exec(content.trim());
@@ -48,6 +49,7 @@ export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean
   if (!isRecord(value)) {
     return false;
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `ClaudeHistoryEntryMetadata`.
   const metadata = entry as ClaudeHistoryEntryMetadata;
   return metadata.isMeta === true || metadata.interruptedByShutdown === true;
 };

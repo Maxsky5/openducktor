@@ -3,6 +3,7 @@ import { DismissableLayer, DismissableLayerBranch } from "@radix-ui/react-dismis
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;

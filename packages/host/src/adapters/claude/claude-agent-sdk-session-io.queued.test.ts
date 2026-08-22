@@ -1,12 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { flushQueuedClaudeUserMessage, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import {
+  createClaudeQueryFixture,
+  createClaudeSession,
+} from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 describe("Claude session I/O queued messages", () => {
   test("returns a skill chip for live Claude skill commands", async () => {
@@ -79,10 +80,10 @@ describe("Claude session I/O queued messages", () => {
       activeSdkUserTurnCount: 1,
       activity: "running",
       sdkState: "running",
-      query: {
-        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 
@@ -134,10 +135,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
     queue.push = (message) => {
@@ -256,7 +257,7 @@ describe("Claude session I/O queued messages", () => {
     const events: AgentEvent[] = [];
     const pushed: SDKUserMessage[] = [];
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
+    const applyFlagSettings = mock(async () => {});
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {
       pushed.push(message);
@@ -270,10 +271,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       sdkState: "running",
     });
@@ -371,10 +372,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
@@ -486,9 +487,9 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         setModel: mock(async () => modelUpdate),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [firstMessage],
       sdkState: "idle",
@@ -575,13 +576,13 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => {}),
         setModel: mock(async () => {
           markModelUpdateStarted?.();
           await modelUpdate;
         }),
-      } as unknown as ClaudeSession["query"],
+      }),
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
     });
@@ -670,9 +671,9 @@ describe("Claude session I/O queued messages", () => {
       ],
       activity: "running",
       pendingUserTurnCount: 1,
-      query: {
+      query: createClaudeQueryFixture({
         close: mock(() => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
       queuedSdkMessages: [queuedMessage],
       sdkState: "idle",
@@ -710,10 +711,10 @@ describe("Claude session I/O queued messages", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
-        applyFlagSettings: mock(async (_settings: JsonValue | undefined) => {}),
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
         setModel: mock(async (_model?: string) => {}),
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 

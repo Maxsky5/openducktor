@@ -8,15 +8,17 @@ import type {
   CodexAppServerThreadListResponse,
   CodexSessionStatus,
 } from "../../ports/codex-app-server-port";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 
-export const isJsonRecord = (value: unknown): value is Record<string, JsonValue> =>
+type JsonBoundaryInput = Parameters<typeof jsonValueSchema.safeParse>[0];
+
+export const isJsonRecord = (value: JsonBoundaryInput): value is Record<string, JsonValue> =>
   typeof value === "object" &&
   value !== null &&
   !Array.isArray(value) &&
   jsonValueSchema.safeParse(value).success;
 
-const requireRecord = (value: unknown, context: string): Record<string, JsonValue> => {
+const requireRecord = (value: JsonBoundaryInput, context: string): Record<string, JsonValue> => {
   if (!isJsonRecord(value)) {
     throw new HostValidationError({
       message: `${context} must be an object`,
@@ -26,8 +28,8 @@ const requireRecord = (value: unknown, context: string): Record<string, JsonValu
   return value;
 };
 
-const requireString = (value: unknown, context: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+const requireString = (value: JsonBoundaryInput, context: string): string => {
+  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw new HostValidationError({
       message: `${context} must be a non-empty string`,
       details: { context },
@@ -36,14 +38,14 @@ const requireString = (value: unknown, context: string): string => {
   return value;
 };
 
-const parseCursor = (value: unknown, context: string): string | null => {
+const parseCursor = (value: JsonBoundaryInput, context: string): string | null => {
   if (value === null || value === undefined) {
     return null;
   }
   return requireString(value, context);
 };
 
-const parseThreadStatus = (value: unknown, context: string): CodexSessionStatus => {
+const parseThreadStatus = (value: JsonBoundaryInput, context: string): CodexSessionStatus => {
   const record = requireRecord(value ?? null, `${context} status`);
   if (record.type === "idle" || record.type === "notLoaded" || record.type === "systemError") {
     return record.type;
@@ -64,7 +66,7 @@ const parseThreadStatus = (value: unknown, context: string): CodexSessionStatus 
 };
 
 export const parseLoadedThreadListResponse = (
-  value: unknown,
+  value: JsonBoundaryInput,
 ): CodexAppServerLoadedThreadListResponse => {
   const payload = requireRecord(value, "Codex thread/loaded/list response");
   if (!Array.isArray(payload.data)) {
@@ -81,7 +83,9 @@ export const parseLoadedThreadListResponse = (
   };
 };
 
-export const parseThreadListResponse = (value: unknown): CodexAppServerThreadListResponse => {
+export const parseThreadListResponse = (
+  value: JsonBoundaryInput,
+): CodexAppServerThreadListResponse => {
   const payload = requireRecord(value, "Codex thread/list response");
   if (!Array.isArray(payload.data)) {
     throw new HostValidationError({
@@ -103,17 +107,18 @@ export const parseThreadListResponse = (value: unknown): CodexAppServerThreadLis
   };
 };
 
-export const parseThreadReadResponse = (value: unknown): CodexAppServerThread => {
+export const parseThreadReadResponse = (value: JsonBoundaryInput): CodexAppServerThread => {
   const payload = requireRecord(value, "Codex thread/read response");
   const thread = requireRecord(payload.thread, "Codex thread/read response thread");
   requireString(thread.id, "Codex thread/read response thread id");
   requireString(thread.cwd, "Codex thread/read response thread cwd");
   parseThreadStatus(thread.status, "Codex thread/read response thread");
-  return thread as unknown as CodexAppServerThread;
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexAppServerThread`.
+  return thread as CodexAppServerThread;
 };
 
 export const parseThreadTurnsListResponse = (
-  value: unknown,
+  value: JsonBoundaryInput,
 ): CodexAppServerThreadTurnsListResponse => {
   const payload = requireRecord(value, "Codex thread/turns/list response");
   if (!Array.isArray(payload.data)) {
@@ -135,6 +140,7 @@ export const parseThreadTurnsListResponse = (
       requireRecord(item, `${itemsContext}[${itemIndex}]`);
     }
   }
+  // SAFETY: The preceding runtime guard establishes `CodexAppServerThreadTurnsListResponse` before this assertion.
   return {
     data: payload.data,
     nextCursor: parseCursor(payload.nextCursor, "Codex thread/turns/list nextCursor"),

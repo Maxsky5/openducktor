@@ -1,5 +1,6 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 export function ensurePromiseRejectionEventPolyfill(): void {
-  if (typeof globalThis.PromiseRejectionEvent !== "undefined") {
+  if (!hasRuntimeType(globalThis.PromiseRejectionEvent, "undefined")) {
     return;
   }
 

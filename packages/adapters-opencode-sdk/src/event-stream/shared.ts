@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
@@ -129,7 +130,7 @@ const readParentExternalSessionIdFromRecord = (
 
   for (const key of PARENT_EXTERNAL_SESSION_ID_KEYS) {
     const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       return value;
     }
   }
@@ -151,7 +152,7 @@ const readLifecycleParentExternalSessionId = (info: JsonValue | undefined): stri
   if (parentExternalSessionId?.trim()) {
     return parentExternalSessionId;
   }
-  if (typeof asUnknownRecord(info)?.parentID === "string") {
+  if (hasRuntimeType(asUnknownRecord(info)?.parentID, "string")) {
     throw new Error(
       "OpenCode session lifecycle event has malformed info.parentID lineage; expected a non-blank string.",
     );
@@ -269,13 +270,14 @@ const normalizePartDeltaField = (field: string): string => {
 export const applyDeltaToPart = (part: Part, field: string, delta: string): Part | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
-  if (existing !== undefined && typeof existing !== "string") {
+  if (existing !== undefined && !hasRuntimeType(existing, "string")) {
     return null;
   }
 
+  // SAFETY: The preceding runtime guard establishes `Part` before this assertion.
   return {
     ...part,
-    [normalizedField]: `${typeof existing === "string" ? existing : ""}${delta}`,
+    [normalizedField]: `${hasRuntimeType(existing, "string") ? existing : ""}${delta}`,
   } as Part;
 };
 

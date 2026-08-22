@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, hasRuntimeType } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   normalizePathForComparison,
@@ -109,7 +109,7 @@ const normalizeToolInputForSession = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = nextInput[key];
-    if (typeof value !== "string") {
+    if (!hasRuntimeType(value, "string")) {
       continue;
     }
     const rewritten = rewriteSessionPath(session, value);
@@ -134,7 +134,7 @@ const readOnlyToolPathValues = (
 
   for (const key of SESSION_PATH_INPUT_KEYS) {
     const value = toolInput[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       paths.push(value);
     }
   }
@@ -189,6 +189,7 @@ const findReadOnlyPathPolicyViolation = async (
   return null;
 };
 
+// SAFETY: The runtime adapter builds this value from the contract fields required by `readonly string[]`.
 export const authorizeClaudeToolUse = ({
   blockedPath,
   canonicalizePath = realpath,
@@ -341,27 +342,55 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         requestId,
         requestType: permissionRequestTypeForTool(toolName),
         title: options.title ?? options.displayName ?? `Approve ${toolName}`,
-        ...(options.description ? { summary: options.description } : {}),
-        ...(options.decisionReason ? { details: options.decisionReason } : {}),
-        ...(blockedPath ? { affectedPaths: [blockedPath] } : {}),
-        ...(command
-          ? {
+        ...(() => {
+          if (options.description) {
+            return { summary: options.description };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (options.decisionReason) {
+            return { details: options.decisionReason };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (blockedPath) {
+            return { affectedPaths: [blockedPath] };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (command) {
+            return {
               command: {
                 command,
                 workingDirectory: session.input.workingDirectory,
               },
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
         tool: {
           name: toolName,
-          ...(options.displayName ? { title: options.displayName } : {}),
+          ...(() => {
+            if (options.displayName) {
+              return { title: options.displayName };
+            }
+            return {};
+          })(),
           input: effectiveToolInput,
         },
         mutation,
         supportedReplyOutcomes: ["approve_once", "reject"],
         metadata: {
           runtime: "claude",
-          ...(options.agentID ? { agentId: options.agentID } : {}),
+          ...(() => {
+            if (options.agentID) {
+              return { agentId: options.agentID };
+            }
+            return {};
+          })(),
         },
         ...claudeSubagentPendingInputRoute(session, options.agentID),
       };
@@ -422,7 +451,12 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       session,
       toolName,
       toolInput: parseClaudeJsonRecord(toolInput, "claudeToolInput"),
-      ...(options.blockedPath ? { blockedPath: options.blockedPath } : {}),
+      ...(() => {
+        if (options.blockedPath) {
+          return { blockedPath: options.blockedPath };
+        }
+        return {};
+      })(),
       canonicalizePath,
     });
     return authorization instanceof Promise

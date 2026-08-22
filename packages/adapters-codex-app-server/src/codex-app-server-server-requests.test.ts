@@ -29,6 +29,7 @@ const createSession = (
   taskId: "task-1",
 });
 
+// SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
 const createRequestContext = ({
   events,
   pendingInput = new CodexPendingInputState(),
@@ -91,7 +92,12 @@ const mcpToolApprovalRequest = ({
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      ...(includeToolTitle ? { tool_title: toolName } : {}),
+      ...(() => {
+        if (includeToolTitle) {
+          return { tool_title: toolName };
+        }
+        return {};
+      })(),
       persist: ["session"],
     },
   },
@@ -639,6 +645,7 @@ describe("handleCodexServerRequest", () => {
     const bindActiveTurnId = mock(() => true);
     const flushQueuedUserMessagesLater = mock(() => undefined);
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       handleCodexServerRequest(
         createRequestContext({
@@ -745,9 +752,11 @@ describe("handleCodexServerRequest", () => {
       new Set(),
     );
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const firstPart = firstEvents.find(
       (event) => (event as { type?: string }).type === "assistant_part",
     ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const secondPart = secondEvents.find(
       (event) => (event as { type?: string }).type === "assistant_part",
     ) as { part: { messageId: string; partId: string; callId: string; metadata: unknown } };

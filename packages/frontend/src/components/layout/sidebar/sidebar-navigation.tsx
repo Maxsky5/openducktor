@@ -4,6 +4,8 @@ import { NavLink, useLocation } from "react-router";
 import { preloadAgentsPage } from "@/pages";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
 
+interface ROUTEPRELOADERSContract extends Partial<Record<NavigationRoute, () => void>> {}
+
 const NAV_ITEMS = [
   { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },
   { to: "/agents", icon: Bot, label: "Agents", requiresRepo: true },
@@ -21,7 +23,7 @@ type SidebarNavigationState = {
   committedLocationKey: string;
 };
 
-const ROUTE_PRELOADERS: Partial<Record<NavigationRoute, () => void>> = {
+const ROUTE_PRELOADERS: ROUTEPRELOADERSContract = {
   "/agents": preloadAgentsPage,
 };
 

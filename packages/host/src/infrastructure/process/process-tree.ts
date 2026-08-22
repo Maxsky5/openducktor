@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { type ChildProcess, execFile } from "node:child_process";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
@@ -115,13 +116,22 @@ const runProcessCommand: ProcessCommandRunner = (command, args) =>
       { encoding: "buffer", windowsHide: true },
       (error, stdout, stderr) => {
         const status =
-          error && "code" in error && typeof error.code === "number" ? error.code : error ? 1 : 0;
+          error && "code" in error && hasRuntimeType(error.code, "number")
+            ? error.code
+            : error
+              ? 1
+              : 0;
         resume(
           Effect.succeed({
             status,
             stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
             stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
-            ...(error ? { error } : {}),
+            ...(() => {
+              if (error) {
+                return { error };
+              }
+              return {};
+            })(),
           }),
         );
       },
@@ -168,7 +178,12 @@ export const processTreeHasChildren = (
             status: result.status,
             stderr: result.stderr.toString("utf8").trim(),
           },
-          ...(result.error ? { cause: result.error } : {}),
+          ...(() => {
+            if (result.error) {
+              return { cause: result.error };
+            }
+            return {};
+          })(),
         }),
       );
     }
@@ -213,7 +228,12 @@ const inspectProcessTreeSignalTargets = (
             status: result.status,
             stderr: result.stderr.toString("utf8").trim(),
           },
-          ...(result.error ? { cause: result.error } : {}),
+          ...(() => {
+            if (result.error) {
+              return { cause: result.error };
+            }
+            return {};
+          })(),
         }),
       );
     }

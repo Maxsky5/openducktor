@@ -16,16 +16,7 @@ export function useAgentStudioQuerySync({
   navigationType,
   searchParams,
   setSearchParams,
-}: UseAgentStudioQuerySyncArgs): {
-  taskIdParam: string;
-  sessionExternalIdParam: string | null;
-  hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
-  isRepoNavigationBoundaryPending: boolean;
-  navigationPersistenceError: Error | null;
-  retryNavigationPersistence: () => void;
-  updateQuery: (updates: AgentStudioQueryUpdate) => void;
-} {
+}: UseAgentStudioQuerySyncArgs) {
   const { navigation, setNavigation, updateQuery } = useNavigationUrlSync({
     navigationType,
     searchParams,
@@ -51,5 +42,14 @@ export function useAgentStudioQuerySync({
     navigationPersistenceError: persistenceError,
     retryNavigationPersistence: retryPersistenceRestore,
     updateQuery,
+  } satisfies {
+    taskIdParam: string;
+    sessionExternalIdParam: string | null;
+    hasExplicitRoleParam: boolean;
+    roleFromQuery: AgentRole;
+    isRepoNavigationBoundaryPending: boolean;
+    navigationPersistenceError: Error | null;
+    retryNavigationPersistence: () => void;
+    updateQuery: (updates: AgentStudioQueryUpdate) => void;
   };
 }

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerScriptState } from "@openducktor/contracts";
@@ -12,7 +13,7 @@ import {
   DEV_SERVER_EMPTY_REASON,
 } from "./agent-studio-dev-server-panel";
 
-if (typeof document === "undefined") {
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
@@ -212,6 +213,7 @@ describe("AgentStudioDevServerPanel", () => {
     );
 
     try {
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const button = screen.getByTestId(
         "agent-studio-dev-server-start-button",
       ) as HTMLButtonElement;
@@ -244,6 +246,7 @@ describe("AgentStudioDevServerPanel", () => {
     );
 
     try {
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const button = screen.getByTestId(
         "agent-studio-dev-server-start-button",
       ) as HTMLButtonElement;

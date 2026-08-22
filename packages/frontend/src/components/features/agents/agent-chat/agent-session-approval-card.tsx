@@ -6,7 +6,11 @@ import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
 import type { JsonValue } from "@openducktor/contracts";
 
-const APPROVAL_OUTCOME_LABELS: Partial<Record<RuntimeApprovalReplyOutcome, string>> = {
+interface APPROVALOUTCOMELABELSContract extends Partial<
+  Record<RuntimeApprovalReplyOutcome, string>
+> {}
+
+const APPROVAL_OUTCOME_LABELS: APPROVALOUTCOMELABELSContract = {
   approve_once: "Approve once",
   approve_turn: "Approve for turn",
   approve_session: "Approve for session",

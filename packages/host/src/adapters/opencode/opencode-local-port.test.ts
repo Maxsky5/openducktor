@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createTcpServer, type Server } from "node:net";
@@ -11,7 +12,7 @@ const listen = (server: Server, port = 0): Promise<number> =>
     server.listen(port, "127.0.0.1", () => {
       server.off("error", onError);
       const address = server.address();
-      if (!address || typeof address === "string") {
+      if (!address || hasRuntimeType(address, "string")) {
         reject(new Error("server did not expose a TCP address"));
         return;
       }

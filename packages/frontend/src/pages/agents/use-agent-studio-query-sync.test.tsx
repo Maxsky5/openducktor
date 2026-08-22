@@ -445,6 +445,7 @@ describe("useAgentStudioQuerySync", () => {
         throw new Error("Expected persisted context payload after unmount cleanup");
       }
 
+      // SAFETY: This test controls the fixture and supplies `{ taskId?: string; sessionExternalId?: string; role?: string; }` used by this case.
       const parsed = JSON.parse(stored) as {
         taskId?: string;
         sessionExternalId?: string;

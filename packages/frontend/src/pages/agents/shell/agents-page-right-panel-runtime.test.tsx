@@ -7,6 +7,10 @@ import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
 
+interface QueryClientRefContract {
+  current: QueryClient | null;
+}
+
 enableReactActEnvironment();
 
 type RuntimeModule = typeof import("./agents-page-right-panel-runtime");
@@ -54,6 +58,7 @@ afterEach(async () => {
   if (!realRefreshModule) {
     return;
   }
+  // SAFETY: This test controls the fixture and supplies `RefreshModule` used by this case.
   await restoreMockedModules([
     [
       "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh",
@@ -79,7 +84,7 @@ test("observes builder mutations while the file explorer tab is active", () => {
 });
 
 test("invalidates the visible file when the panel is hidden", async () => {
-  const queryClientRef: { current: QueryClient | null } = { current: null };
+  const queryClientRef: QueryClientRefContract = { current: null };
   const selectedFile = {
     rootPath: "/repo/worktrees/task-1",
     relativePath: "src/index.ts",

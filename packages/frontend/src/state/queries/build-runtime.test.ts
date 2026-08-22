@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -81,7 +82,7 @@ describe("build runtime queries", () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
     const setTimeoutMock = mock((handler: TimerHandler, _delay?: number) => {
-      if (typeof handler !== "function") {
+      if (!hasRuntimeType(handler, "function")) {
         throw new Error("Expected timeout callback function");
       }
       return originalSetTimeout(() => {
@@ -92,8 +93,11 @@ describe("build runtime queries", () => {
       originalClearTimeout(timeoutId);
     });
 
-    globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
-    globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
+    Object.defineProperty(globalThis, "setTimeout", { configurable: true, value: setTimeoutMock });
+    Object.defineProperty(globalThis, "clearTimeout", {
+      configurable: true,
+      value: clearTimeoutMock,
+    });
 
     try {
       await expect(
@@ -111,8 +115,14 @@ describe("build runtime queries", () => {
       );
       expect(setTimeoutMock).toHaveBeenCalledWith(expect.any(Function), TASK_WORKTREE_TIMEOUT_MS);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
+      Object.defineProperty(globalThis, "setTimeout", {
+        configurable: true,
+        value: originalSetTimeout,
+      });
+      Object.defineProperty(globalThis, "clearTimeout", {
+        configurable: true,
+        value: originalClearTimeout,
+      });
     }
   });
 });

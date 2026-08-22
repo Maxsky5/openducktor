@@ -4,6 +4,7 @@ import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-t
 import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionQuestionActions } from "./use-agent-session-question-actions";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;

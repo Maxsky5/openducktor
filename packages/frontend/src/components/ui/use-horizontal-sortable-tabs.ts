@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   closestCenter,
   type DragEndEvent,
@@ -24,6 +25,7 @@ export const horizontalTabSortTransition = {
 };
 
 const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };
+// SAFETY: The surrounding boundary constructs or validates every member required by `[typeof restrictToHorizontalAxis]`.
 const horizontalTabModifiers = [restrictToHorizontalAxis] as [typeof restrictToHorizontalAxis];
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
@@ -39,7 +41,9 @@ export const useHorizontalSortableTabs = ({
   itemIds: string[];
   onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
 }) => {
-  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+  const PrimarySensor = hasRuntimeType(globalThis.PointerEvent, "function")
+    ? PointerSensor
+    : MouseSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: { distance: 6 },

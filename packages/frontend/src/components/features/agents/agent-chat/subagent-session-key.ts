@@ -41,7 +41,12 @@ export const toSubagentTranscriptTarget = ({
 
   return {
     ...identity,
-    ...(parentSession.sessionScope ? { sessionScope: parentSession.sessionScope } : {}),
+    ...(() => {
+      if (parentSession.sessionScope) {
+        return { sessionScope: parentSession.sessionScope };
+      }
+      return {};
+    })(),
   };
 };
 

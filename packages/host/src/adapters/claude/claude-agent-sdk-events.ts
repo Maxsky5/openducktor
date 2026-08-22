@@ -200,14 +200,32 @@ export const handleClaudeSdkMessage = ({
         toolName: message.tool_name,
         toolUseId: message.tool_use_id,
         message: message.message,
-        ...(input ? { input } : {}),
+        ...(() => {
+          if (input) {
+            return { input };
+          }
+          return {};
+        })(),
         metadata: {
           source: "permission_denied",
-          ...(message.agent_id ? { agentId: message.agent_id } : {}),
-          ...(message.decision_reason_type
-            ? { decisionReasonType: message.decision_reason_type }
-            : {}),
-          ...(message.decision_reason ? { decisionReason: message.decision_reason } : {}),
+          ...(() => {
+            if (message.agent_id) {
+              return { agentId: message.agent_id };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (message.decision_reason_type) {
+              return { decisionReasonType: message.decision_reason_type };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (message.decision_reason) {
+              return { decisionReason: message.decision_reason };
+            }
+            return {};
+          })(),
         },
       },
     });
@@ -270,7 +288,12 @@ const handleAssistantMessage = ({
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
     settleClaudeStreamedAssistantText({
       emit,
-      ...(responseId ? { preserveMessageId: responseId } : {}),
+      ...(() => {
+        if (responseId) {
+          return { preserveMessageId: responseId };
+        }
+        return {};
+      })(),
       session,
       timestamp,
     });
@@ -346,7 +369,12 @@ const handleAssistantMessage = ({
       session.pendingSubagentAssistantMessage = {
         messageId: assistantMessageId,
         text,
-        ...(assistantModel ? { model: assistantModel } : {}),
+        ...(() => {
+          if (assistantModel) {
+            return { model: assistantModel };
+          }
+          return {};
+        })(),
       };
       return;
     }
@@ -360,7 +388,12 @@ const handleAssistantMessage = ({
         timestamp,
         messageId,
         message: text,
-        ...(assistantModel ? { model: assistantModel } : {}),
+        ...(() => {
+          if (assistantModel) {
+            return { model: assistantModel };
+          }
+          return {};
+        })(),
       });
       settleClaudeStreamedAssistantText({
         emit,

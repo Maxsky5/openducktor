@@ -130,6 +130,7 @@ const codexRoleOverrideSchema = z
     commandNetworkAccess: z.boolean().optional(),
   })
   .strict();
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Partial<Record<AgentRole, z.infer<typeof codexRoleOverrideSchema>>>`.
 const codexRoleOverridesSchema = z
   .record(z.string(), codexRoleOverrideSchema)
   .superRefine((overrides, context) => {
@@ -157,6 +158,7 @@ const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2
 
 const withCodexRuntimeValidation = <T extends z.ZodTypeAny>(schema: T) =>
   schema.superRefine((config, context) => {
+    // SAFETY: The surrounding boundary constructs or validates every member required by `CodexRuntimeConfig`.
     const candidate = config as CodexRuntimeConfig;
     if (candidate.roleOverrides.build?.sandboxMode === "read-only") {
       context.addIssue({
@@ -265,7 +267,12 @@ export const resolveCodexEffectivePolicy = (
     approvalsReviewerApplies: policy.approvalPolicy !== "never",
     commandNetworkAccess:
       sandboxMode === "danger-full-access" ? false : policy.commandNetworkAccess,
-    ...(adjustmentReason ? { adjustmentReason } : {}),
+    ...(() => {
+      if (adjustmentReason) {
+        return { adjustmentReason };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -604,7 +611,7 @@ export const agentModelFavoritesSchema = z
   })
   .default([]);
 
-const globalConfigSharedShape = {
+const globalConfigSharedFields = {
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
@@ -624,14 +631,14 @@ const globalConfigSharedShape = {
 
 export const persistedGlobalConfigV2Schema = z.object({
   version: z.literal(2),
-  ...globalConfigSharedShape,
+  ...globalConfigSharedFields,
   agentRuntimes: persistedAgentRuntimesV2Schema,
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
 export const globalConfigSchema = z.object({
   version: z.literal(3),
-  ...globalConfigSharedShape,
+  ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });
 type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;

@@ -7,6 +7,11 @@ export const buildDefaultFactory = (): ClientFactory => {
   return (input) =>
     createOpencodeClient({
       baseUrl: input.runtimeEndpoint,
-      ...(input.workingDirectory ? { directory: input.workingDirectory } : {}),
+      ...(() => {
+        if (input.workingDirectory) {
+          return { directory: input.workingDirectory };
+        }
+        return {};
+      })(),
     });
 };

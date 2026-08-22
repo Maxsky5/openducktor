@@ -22,6 +22,7 @@ import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surfac
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
+// SAFETY: This scope populates or freezes the value as `readonly AgentSessionTodoItem[]` before it can escape.
 const EMPTY_TODOS = Object.freeze([]) as readonly AgentSessionTodoItem[];
 
 type UseSessionTranscriptSurfaceModelArgs = {

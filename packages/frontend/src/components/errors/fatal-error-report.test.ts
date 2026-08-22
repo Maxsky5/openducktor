@@ -160,7 +160,8 @@ describe("logFatalError", () => {
 
   beforeEach(() => {
     consoleErrorMock = mock(() => {});
-    console.error = consoleErrorMock as unknown as typeof console.error;
+    // SAFETY: This test controls the fixture and supplies `typeof console.error` used by this case.
+    console.error = consoleErrorMock as typeof console.error;
   });
 
   afterEach(() => {
@@ -174,10 +175,12 @@ describe("logFatalError", () => {
     logFatalError(report, rawError);
 
     expect(consoleErrorMock).toHaveBeenCalledTimes(1);
+    // SAFETY: This test controls the fixture and supplies `unknown[]` used by this case.
     const args = consoleErrorMock.mock.calls[0] as unknown[];
     expect(args[0]).toContain("[AppCrashShell]");
     expect(args[0]).toContain("boundary");
 
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const context = args[args.length - 1] as {
       source?: string;
       timestamp?: string;
@@ -197,7 +200,9 @@ describe("logFatalError", () => {
 
     logFatalError(report, rawError, componentStack);
 
+    // SAFETY: This test controls the fixture and supplies `unknown[]` used by this case.
     const args = consoleErrorMock.mock.calls[0] as unknown[];
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const context = args[args.length - 1] as {
       source?: string;
       timestamp?: string;

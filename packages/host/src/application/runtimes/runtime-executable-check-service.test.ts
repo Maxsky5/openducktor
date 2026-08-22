@@ -7,7 +7,9 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
 import { createRuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
-const paths: Record<RuntimeKind, string> = {
+interface PathsContract extends Record<RuntimeKind, string> {}
+
+const paths: PathsContract = {
   opencode: "/tools/opencode",
   codex: "/tools/codex",
   claude: "/tools/claude",
@@ -20,6 +22,7 @@ const toolDiscovery: ToolDiscoveryPort = {
         new HostDependencyError({ dependency: "codex", message: "codex is not installed" }),
       );
     }
+    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     return Effect.succeed({
       displayLabel: "System PATH",
       path: paths[toolId as RuntimeKind],
@@ -161,6 +164,7 @@ describe("runtime executable check service", () => {
           toolDiscovery: {
             ...toolDiscovery,
             discoverTool(toolId) {
+              // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
               return Effect.succeed({
                 displayLabel: "System PATH",
                 path: paths[toolId as RuntimeKind],

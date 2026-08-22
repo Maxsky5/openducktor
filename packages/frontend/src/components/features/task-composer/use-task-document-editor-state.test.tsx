@@ -5,6 +5,7 @@ import {
   useTaskDocumentEditorState,
 } from "./use-task-document-editor-state";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -281,6 +282,7 @@ describe("useTaskDocumentEditorState", () => {
     expect(harness.getLatest().documents.spec.error).toContain("first failure");
 
     await harness.run(async () => {
+      // SAFETY: This test creates the DOM fixture that supplies `TaskDocumentSection` before this lookup.
       await harness.getLatest().loadSection("spec" as TaskDocumentSection, true);
     });
     await harness.waitFor((state) => state.documents.spec.loaded);

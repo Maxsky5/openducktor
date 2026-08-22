@@ -32,17 +32,16 @@ export type ClaudeTodoProjectionState = {
   todosById: ClaudeTodoState;
 };
 
-export const claudeTodoToolPresentation = (
-  todos: readonly AgentSessionTodoItem[],
-): { input: Record<string, JsonValue>; text: "Plan updated" } => ({
-  input: {
-    todos: todos.map((todo) => ({
-      step: todo.content,
-      status: todo.status,
-    })),
-  },
-  text: "Plan updated",
-});
+export const claudeTodoToolPresentation = (todos: readonly AgentSessionTodoItem[]) =>
+  ({
+    input: {
+      todos: todos.map((todo) => ({
+        step: todo.content,
+        status: todo.status,
+      })),
+    },
+    text: "Plan updated",
+  }) satisfies { input: Record<string, JsonValue>; text: "Plan updated" };
 
 type ClaudeTaskToolResultInput = {
   input: Record<string, JsonValue> | undefined;

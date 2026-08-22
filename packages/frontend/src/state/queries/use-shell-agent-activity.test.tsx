@@ -39,7 +39,12 @@ const createActivitySession = (
   }
   return {
     externalSessionId: session.externalSessionId,
-    ...(session.title ? { title: session.title } : {}),
+    ...(() => {
+      if (session.title) {
+        return { title: session.title };
+      }
+      return {};
+    })(),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
@@ -125,6 +130,7 @@ const createActivityStore = (
 
 let currentVisibleTasks: Array<{ id: string; title: string }> = [];
 
+// SAFETY: This test controls the fixture and supplies `TasksStateContextValue["tasks"]` used by this case.
 const createTasksStateValue = (): TasksStateContextValue => ({
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,

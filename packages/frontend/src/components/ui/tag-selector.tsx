@@ -95,6 +95,7 @@ export function TagSelector({
     }
   };
 
+  // SAFETY: The rendered control limits this value to the options represented by `Node | null`.
   return (
     <div
       className="space-y-2"

@@ -3,6 +3,7 @@ import packageJson from "../package.json";
 import { configureBrowserRuntimeConfig } from "./browser-config";
 import { createBrowserShellBridge } from "./browser-shell-bridge";
 import { validateExternalBrowserUrl } from "./browser-url-validation";
+import { createFetchFixture } from "./test-support";
 
 class TaskEventSource {
   static instance: TaskEventSource | null = null;
@@ -23,7 +24,7 @@ class TaskEventSource {
   close(): void {}
 
   emit(type: string, data: string): void {
-    this.listeners.get(type)?.({ data } as MessageEvent<string> as Event);
+    this.listeners.get(type)?.(new MessageEvent(type, { data }));
   }
 
   hasListener(type: string): boolean {
@@ -93,7 +94,7 @@ describe("browser shell bridge", () => {
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
-    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+    globalThis.fetch = createFetchFixture(fetchMock);
     const bridge = createBrowserShellBridge();
     const reconcile = mock(() => {});
     bridge.client.reconcileExternalTaskSyncEvent = reconcile;

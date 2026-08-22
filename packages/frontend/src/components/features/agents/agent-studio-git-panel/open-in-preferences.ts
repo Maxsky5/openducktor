@@ -1,4 +1,8 @@
-import { type SystemOpenInToolId, systemOpenInToolIdValues } from "@openducktor/contracts";
+import {
+  type SystemOpenInToolId,
+  systemOpenInToolIdValues,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 
 type PersistedOpenInPreference = {
@@ -13,7 +17,7 @@ const isSystemOpenInToolId = (value: string): value is SystemOpenInToolId =>
 const openInPreferencesStorageKey = (): string => toRightPanelStorageKey();
 
 export function readPreferredOpenInTool(): SystemOpenInToolId | null {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     return null;
   }
 
@@ -26,12 +30,13 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
     }
 
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
+    if (!parsed || !hasRuntimeType(parsed, "object")) {
       return null;
     }
 
+    // SAFETY: The preceding runtime guard establishes `PersistedOpenInPreference` before this assertion.
     const toolId = (parsed as PersistedOpenInPreference).openInToolId;
-    if (typeof toolId !== "string" || !isSystemOpenInToolId(toolId)) {
+    if (!hasRuntimeType(toolId, "string") || !isSystemOpenInToolId(toolId)) {
       return null;
     }
 
@@ -46,7 +51,7 @@ export function readPreferredOpenInTool(): SystemOpenInToolId | null {
 }
 
 export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     return;
   }
 
@@ -54,9 +59,10 @@ export function persistPreferredOpenInTool(toolId: SystemOpenInToolId): void {
 
   try {
     const raw = globalThis.localStorage.getItem(storageKey);
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `unknown` at this boundary.
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
     const nextValue =
-      parsed && typeof parsed === "object"
+      parsed && hasRuntimeType(parsed, "object")
         ? { ...parsed, openInToolId: toolId }
         : { openInToolId: toolId };
     globalThis.localStorage.setItem(storageKey, JSON.stringify(nextValue));

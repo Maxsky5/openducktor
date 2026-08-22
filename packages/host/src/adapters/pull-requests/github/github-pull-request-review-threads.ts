@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   GitProviderRepository,
   JsonValue,
@@ -123,7 +124,7 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 `;
 
 const toNullableNumber = (value: JsonValue | undefined): number | null =>
-  typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+  hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0 ? value : null;
 
 const toLineRange = (
   startLine: number | null,
@@ -138,7 +139,7 @@ const toReviewThreadComment = (
   isResolved: boolean,
 ): ParsedReviewThreadComment | null => {
   const payload = requireGithubObject(payloadValue, field);
-  const body = typeof payload.body === "string" ? payload.body : "";
+  const body = hasRuntimeType(payload.body, "string") ? payload.body : "";
   const patch = toNullableGithubString(payload.diffHunk);
   const currentLine = toNullableNumber(payload.line);
   const originalLine = toNullableNumber(payload.originalLine);

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
@@ -87,11 +88,7 @@ export function useAgentStudioDocuments({
   selectedSessionIdentity,
   loadedSession,
   selectedTask,
-}: UseAgentStudioDocumentsArgs): {
-  specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
-  planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
-  qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
-} {
+}: UseAgentStudioDocumentsArgs) {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
     taskId || null,
@@ -234,12 +231,14 @@ export function useAgentStudioDocuments({
 
       const completionInfo =
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
+      // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
       const toolInput =
-        typeof meta.input === "object" && meta.input !== null
+        hasRuntimeType(meta.input, "object") && meta.input !== null
           ? (meta.input as Record<string, JsonValue>)
           : null;
       const inputMarkdown = toolInput?.[target.inputKey];
-      const hasInputMarkdown = typeof inputMarkdown === "string" && inputMarkdown.trim().length > 0;
+      const hasInputMarkdown =
+        hasRuntimeType(inputMarkdown, "string") && inputMarkdown.trim().length > 0;
 
       let effectiveUpdatedAtTimestamp = target.state.updatedAt
         ? parseTimestamp(target.state.updatedAt)
@@ -284,5 +283,9 @@ export function useAgentStudioDocuments({
     specDoc,
     planDoc,
     qaDoc,
+  } satisfies {
+    specDoc: ReturnType<typeof useTaskDocuments>["specDoc"];
+    planDoc: ReturnType<typeof useTaskDocuments>["planDoc"];
+    qaDoc: ReturnType<typeof useTaskDocuments>["qaDoc"];
   };
 }

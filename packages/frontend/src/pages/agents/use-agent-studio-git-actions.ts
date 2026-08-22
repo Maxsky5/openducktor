@@ -121,7 +121,12 @@ export function useAgentStudioGitActions({
     refreshDiffData,
     clearActionErrors,
     setRebaseError,
-    ...(onResolveGitConflict ? { onResolveGitConflict } : {}),
+    ...(() => {
+      if (onResolveGitConflict) {
+        return { onResolveGitConflict };
+      }
+      return {};
+    })(),
   });
 
   const ensureGitActionsUnlocked = useCallback(

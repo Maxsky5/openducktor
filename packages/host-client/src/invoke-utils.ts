@@ -1,4 +1,4 @@
-import { jsonValueSchema, type HostInvokeFailure } from "@openducktor/contracts";
+import { jsonValueSchema, type HostInvokeFailure, hasRuntimeType } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -27,7 +27,7 @@ export const toCommandArgs = <T>(parsed: T): Record<string, JsonValue> => {
     throw new Error("Host command arguments must be a JSON object.");
   }
   const value = jsonValueSchema.parse(JSON.parse(serialized));
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (value === null || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw new Error("Host command arguments must be a JSON object.");
   }
   return value;
@@ -53,15 +53,17 @@ export const parseArray = <T>(
 /**
  * Parse the canonical `{ ok: boolean }` ack shape returned by host mutations.
  */
+// SAFETY: The preceding runtime guard establishes `{ ok?: JsonValue }` before this assertion.
 export const parseOkResult = (payload: JsonValue | undefined, command: string): OkResult => {
   if (
     !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { ok?: JsonValue }).ok !== "boolean"
+    !hasRuntimeType(payload, "object") ||
+    !hasRuntimeType((payload as { ok?: JsonValue }).ok, "boolean")
   ) {
     throw new Error(`Expected { ok: boolean } payload from host command ${command}`);
   }
 
+  // SAFETY: The preceding runtime guard establishes `{ ok: boolean }` before this assertion.
   return {
     ok: (payload as { ok: boolean }).ok,
   };
@@ -70,19 +72,21 @@ export const parseOkResult = (payload: JsonValue | undefined, command: string): 
 /**
  * Parse the canonical `{ updatedAt: string }` document-write result from the host.
  */
+// SAFETY: The preceding runtime guard establishes the asserted shape before this assertion.
 export const parseUpdatedAtResult = (
   payload: JsonValue | undefined,
   command: string,
 ): UpdatedAtResult => {
   if (
     !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { updatedAt?: JsonValue }).updatedAt !== "string" ||
+    !hasRuntimeType(payload, "object") ||
+    !hasRuntimeType((payload as { updatedAt?: JsonValue }).updatedAt, "string") ||
     (payload as { updatedAt: string }).updatedAt.trim().length === 0
   ) {
     throw new Error(`Expected { updatedAt: string } payload from host command ${command}`);
   }
 
+  // SAFETY: The preceding runtime guard establishes `{ updatedAt: string }` before this assertion.
   return {
     updatedAt: (payload as { updatedAt: string }).updatedAt,
   };

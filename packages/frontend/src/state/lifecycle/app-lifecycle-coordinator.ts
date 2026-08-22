@@ -148,11 +148,12 @@ export const startRepositoryLoad = <TimerHandle>({
         dismissTaskStorePreparationToast();
       }
 
-      let taskLoadError: unknown = null;
+      let taskLoadResult: { error: unknown } | null;
       try {
         await loadWorkspaceTasks(repoPath);
+        taskLoadResult = null;
       } catch (error) {
-        taskLoadError = error;
+        taskLoadResult = { error };
       }
 
       if (!taskStoreCheck.repoStoreHealth.isReady) {
@@ -164,8 +165,8 @@ export const startRepositoryLoad = <TimerHandle>({
         }
       }
 
-      if (taskLoadError !== null) {
-        throw taskLoadError;
+      if (taskLoadResult !== null) {
+        throw taskLoadResult.error;
       }
 
       if (!repoStoreHealth && hadTaskStorePreparationToast && isActive()) {

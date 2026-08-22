@@ -19,24 +19,52 @@ const loadNodeFetch = async (): Promise<CommandFetchRequest> => {
   });
 
   return async (input, init) => {
-    type UndiciRequestInput = ConstructorParameters<typeof UndiciRequest>[0];
     type UndiciRequestInit = ConstructorParameters<typeof UndiciRequest>[1];
 
+    const sourceRequest =
+      input instanceof globalThis.Request && init === undefined
+        ? input
+        : new globalThis.Request(input, init);
     let request: InstanceType<typeof UndiciRequest>;
-    if (input instanceof globalThis.Request && !(input instanceof UndiciRequest)) {
-      request = new UndiciRequest(input.url, input as unknown as UndiciRequestInit);
-      if (init) {
-        request = new UndiciRequest(request, init as UndiciRequestInit);
-      }
+    if (sourceRequest instanceof UndiciRequest) {
+      request = sourceRequest;
     } else {
-      request = new UndiciRequest(input as UndiciRequestInput, init as UndiciRequestInit);
+      const body = sourceRequest.body
+        ? new Uint8Array(await sourceRequest.arrayBuffer())
+        : undefined;
+      const requestInit: UndiciRequestInit = {
+        cache: sourceRequest.cache,
+        credentials: sourceRequest.credentials,
+        headers: Array.from(sourceRequest.headers.entries()),
+        integrity: sourceRequest.integrity,
+        keepalive: sourceRequest.keepalive,
+        method: sourceRequest.method,
+        mode: sourceRequest.mode,
+        redirect: sourceRequest.redirect,
+        referrer: sourceRequest.referrer,
+        referrerPolicy: sourceRequest.referrerPolicy,
+        signal: sourceRequest.signal,
+        ...(() => {
+          if (body) {
+            return { body, duplex: "half" };
+          }
+          return {};
+        })(),
+      };
+      request = new UndiciRequest(sourceRequest.url, requestInit);
     }
-    return (await fetch(request, { dispatcher })) as unknown as Response;
+    const response = await fetch(request, { dispatcher });
+    if (!(response instanceof globalThis.Response)) {
+      throw new TypeError(
+        "Undici returned a response that does not implement the host Response API.",
+      );
+    }
+    return response;
   };
 };
 
 const fetchOpenCodeCommandRequest: CommandFetchRequest = async (input, init) => {
-  if (typeof window !== "undefined") {
+  if (globalThis.window !== undefined) {
     return globalThis.fetch(input, init);
   }
   nodeFetchPromise ??= loadNodeFetch();

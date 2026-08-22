@@ -24,13 +24,23 @@ const createFileError = (input: {
   new TaskAssetError({
     operation: input.operation,
     code: input.code,
-    ...(input.taskId ? { taskId: input.taskId } : {}),
+    ...(() => {
+      if (input.taskId) {
+        return { taskId: input.taskId };
+      }
+      return {};
+    })(),
     assetIds: input.assetIds ?? [],
     failedPhase: input.phase,
     durableState: "unchanged",
     retryAllowed: true,
     message: input.message,
-    ...(input.cause === undefined ? {} : { cause: input.cause }),
+    ...(() => {
+      if (input.cause === undefined) {
+        return {};
+      }
+      return { cause: input.cause };
+    })(),
   });
 
 export const validateTaskAssetTaskContext = (
@@ -38,8 +48,8 @@ export const validateTaskAssetTaskContext = (
   taskId: string,
   operation: TaskAssetFileOperation,
 ): Effect.Effect<void, TaskAssetError> => {
-  const workspace = taskAssetRenderContextSchema.shape.workspaceId.safeParse(workspaceId);
-  const task = taskAssetRenderContextSchema.shape.taskId.safeParse(taskId);
+  const workspace = taskAssetRenderContextSchema["shape"].workspaceId.safeParse(workspaceId);
+  const task = taskAssetRenderContextSchema["shape"].taskId.safeParse(taskId);
   if (!workspace.success || !task.success) {
     return Effect.fail(
       createFileError({

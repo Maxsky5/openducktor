@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import {
   type AgentChatComposerAttachment,
@@ -59,7 +60,7 @@ const getDraftStorage = (): DraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
-  if (typeof globalThis.localStorage === "undefined") {
+  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     throw new Error("Chat draft persistence is unavailable because localStorage is missing.");
   }
   return globalThis.localStorage;
@@ -356,7 +357,7 @@ export const clearAgentChatDraft = (
   const key = toAgentChatDraftStorageKey(identity);
   const entry = draftEntries.get(key);
   if (
-    typeof options?.onlyIfVersion === "number" &&
+    hasRuntimeType(options?.onlyIfVersion, "number") &&
     entry &&
     entry.userVersion !== options.onlyIfVersion
   ) {

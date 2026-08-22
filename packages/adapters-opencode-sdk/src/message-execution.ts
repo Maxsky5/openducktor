@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
   type AgentUserMessageDisplayPart,
@@ -220,12 +221,30 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
         messageID: messageId,
-        ...(session.input.systemPrompt.trim().length > 0
-          ? { system: session.input.systemPrompt }
-          : {}),
-        ...(modelInput.model ? { model: modelInput.model } : {}),
-        ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-        ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+        ...(() => {
+          if (session.input.systemPrompt.trim().length > 0) {
+            return { system: session.input.systemPrompt };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (modelInput.model) {
+            return { model: modelInput.model };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (modelInput.variant) {
+            return { variant: modelInput.variant };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (modelInput.agent) {
+            return { agent: modelInput.agent };
+          }
+          return {};
+        })(),
         tools,
         parts: promptParts,
       };
@@ -256,9 +275,24 @@ const prepareSlashCommandSend = (
           messageID: messageId,
           command: slashCommandRequest.command,
           arguments: slashCommandRequest.arguments,
-          ...(commandModel ? { model: commandModel } : {}),
-          ...(modelInput.variant ? { variant: modelInput.variant } : {}),
-          ...(modelInput.agent ? { agent: modelInput.agent } : {}),
+          ...(() => {
+            if (commandModel) {
+              return { model: commandModel };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (modelInput.variant) {
+              return { variant: modelInput.variant };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (modelInput.agent) {
+              return { agent: modelInput.agent };
+            }
+            return {};
+          })(),
         },
         { fetch: fetchOpenCodeCommand },
       );
@@ -280,7 +314,7 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
         new Error("OpenCode session compaction requires a selected provider and model."),
       );
     }
-    if (typeof session.client.session.summarize !== "function") {
+    if (!hasRuntimeType(session.client.session.summarize, "function")) {
       throw toOpenCodeRequestError(
         "compact session",
         new Error("OpenCode runtime client does not expose session summarization."),
@@ -387,15 +421,23 @@ export const sendUserMessage = async (input: {
     ? {
         messageId,
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
-        ...(queuedAttachmentParts.length > 0
-          ? {
+        ...(() => {
+          if (queuedAttachmentParts.length > 0) {
+            return {
               attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
                 input.request.parts,
                 model ?? undefined,
               ),
-            }
-          : {}),
-        ...(queuedAttachmentParts.length > 0 ? { attachmentParts: queuedAttachmentParts } : {}),
+            };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (queuedAttachmentParts.length > 0) {
+            return { attachmentParts: queuedAttachmentParts };
+          }
+          return {};
+        })(),
       }
     : null;
 
@@ -427,7 +469,12 @@ export const sendUserMessage = async (input: {
       message: serializeAgentUserMessagePartsToText(input.request.parts),
       parts: toAdmittedUserDisplayParts(input.request.parts),
       state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
-      ...(model ? { model } : {}),
+      ...(() => {
+        if (model) {
+          return { model };
+        }
+        return {};
+      })(),
     };
   } catch (error) {
     if (queuedEntry) {

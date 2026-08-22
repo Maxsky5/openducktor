@@ -14,6 +14,7 @@ const originalRevokeObjectUrl = URL.revokeObjectURL;
 const configureAttachmentPreviewShellBridge = (
   resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
 ): void => {
+  // SAFETY: This test controls the fixture and supplies `ShellBridge["client"]` used by this case.
   configureShellBridge({
     client: {} as ShellBridge["client"],
     subscribeRunEvents: async () => () => {},

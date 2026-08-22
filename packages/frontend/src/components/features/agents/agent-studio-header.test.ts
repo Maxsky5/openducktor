@@ -10,11 +10,13 @@ import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-heade
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
+// SAFETY: This test controls the fixture and supplies `typeof requestAnimationFrame` used by this case.
 const immediateRequestAnimationFrame = ((callback: FrameRequestCallback): number => {
   callback(0);
   return 1;
 }) as typeof requestAnimationFrame;
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -23,6 +25,7 @@ const immediateRequestAnimationFrame = ((callback: FrameRequestCallback): number
 
 beforeEach(() => {
   globalThis.requestAnimationFrame = immediateRequestAnimationFrame;
+  // SAFETY: This test controls the fixture and supplies `typeof cancelAnimationFrame` used by this case.
   globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
 });
 
@@ -1075,6 +1078,7 @@ describe("AgentStudioHeader", () => {
   });
 
   test("throws for invalid workflow tones instead of masking them as blocked", () => {
+    // SAFETY: This test creates the DOM fixture that supplies `never` before this lookup.
     expect(() =>
       renderToStaticMarkup(
         createElement(AgentStudioHeader, {

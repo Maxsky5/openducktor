@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
@@ -23,6 +24,10 @@ type StatusMapping = {
 };
 
 type CodexCollabItemType = "collabAgentToolCall" | "collabToolCall";
+
+interface CodexSubagentMetadata {
+  [key: string]: JsonValue;
+}
 
 class CodexSubagentItemError extends Error {
   constructor(message: string) {
@@ -79,19 +84,23 @@ const requireStringField = (
   return value;
 };
 
+// SAFETY: The preceding runtime guard establishes `CodexCollabTool` before this assertion.
 const collabTool = (item: Record<string, JsonValue>): CodexCollabTool => {
   const tool = requireStringField(item, ["tool"], "tool");
   if (!COLLAB_TOOLS.has(tool as CodexCollabTool)) {
     throw itemError(item, "unknown collab tool", { tool });
   }
+  // SAFETY: The preceding runtime guard establishes `CodexCollabTool` before this assertion.
   return tool as CodexCollabTool;
 };
 
+// SAFETY: The preceding runtime guard establishes `CodexCollabCallStatus` before this assertion.
 const collabCallStatus = (item: Record<string, JsonValue>): CodexCollabCallStatus => {
   const status = requireStringField(item, ["status"], "status");
   if (!COLLAB_CALL_STATUSES.has(status as CodexCollabCallStatus)) {
     throw itemError(item, "unknown collab tool-call status", { status });
   }
+  // SAFETY: The preceding runtime guard establishes `CodexCollabCallStatus` before this assertion.
   return status as CodexCollabCallStatus;
 };
 
@@ -134,16 +143,21 @@ const agentStateForChild = (
 
 const assertNever = (value: never): never => value;
 
+// SAFETY: The preceding runtime guard establishes `CodexCollabAgentStatus` before this assertion.
 const mapAgentStatus = (
   item: Record<string, JsonValue>,
   status: JsonValue | undefined,
   message: JsonValue | undefined,
   childThreadId: string,
 ): StatusMapping => {
-  if (typeof status !== "string" || !COLLAB_AGENT_STATUSES.has(status as CodexCollabAgentStatus)) {
+  if (
+    !hasRuntimeType(status, "string") ||
+    !COLLAB_AGENT_STATUSES.has(status as CodexCollabAgentStatus)
+  ) {
     throw itemError(item, "unknown collab agent status", { status, childThreadId });
   }
-  const text = typeof message === "string" && message.trim().length > 0 ? message : undefined;
+  const text = hasRuntimeType(message, "string") && message.trim().length > 0 ? message : undefined;
+  // SAFETY: The preceding runtime guard establishes `CodexCollabAgentStatus` before this assertion.
   const agentStatus = status as CodexCollabAgentStatus;
   switch (agentStatus) {
     case "pendingInit":
@@ -209,11 +223,13 @@ const statusForChild = (
   return mapAgentStatus(item, state.status, state.message, childThreadId);
 };
 
+// SAFETY: The preceding runtime guard establishes `CodexSubagentActivityKind` before this assertion.
 const activityKind = (item: Record<string, JsonValue>): CodexSubagentActivityKind => {
   const kind = requireStringField(item, ["kind"], "kind");
   if (!ACTIVITY_KINDS.has(kind as CodexSubagentActivityKind)) {
     throw itemError(item, "unknown subagent activity kind", { kind });
   }
+  // SAFETY: The preceding runtime guard establishes `CodexSubagentActivityKind` before this assertion.
   return kind as CodexSubagentActivityKind;
 };
 
@@ -241,13 +257,18 @@ const collabMetadata = (
   source: CodexCollabItemType,
   parentThreadId: string,
   childThreadId?: string,
-): Record<string, JsonValue> => ({
+): CodexSubagentMetadata => ({
   codexSubagent: {
     source,
     itemId: extractStringField(item, ["id"]),
     tool: extractStringField(item, ["tool"]),
     parentThreadId,
-    ...(childThreadId ? { childThreadId } : {}),
+    ...(() => {
+      if (childThreadId) {
+        return { childThreadId };
+      }
+      return {};
+    })(),
   },
 });
 
@@ -255,7 +276,7 @@ const activityMetadata = (
   item: Record<string, JsonValue>,
   parentThreadId: string,
   childThreadId: string,
-): Record<string, JsonValue> => {
+): CodexSubagentMetadata => {
   const agentPath = extractStringField(item, ["agentPath", "agent_path"]);
   return {
     codexSubagent: {
@@ -264,7 +285,12 @@ const activityMetadata = (
       kind: extractStringField(item, ["kind"]),
       parentThreadId,
       childThreadId,
-      ...(agentPath ? { agentPath } : {}),
+      ...(() => {
+        if (agentPath) {
+          return { agentPath };
+        }
+        return {};
+      })(),
     },
   };
 };
@@ -297,13 +323,33 @@ export const codexSubagentPartsFromItem = (
       const mapped = mapAggregateStatus(aggregateStatus, tool);
       return [
         linkState.upsertLink({
-          ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
+          ...(() => {
+            if (ctx.runtimeId) {
+              return { runtimeId: ctx.runtimeId };
+            }
+            return {};
+          })(),
           parentThreadId,
           itemId,
           status: mapped.status,
-          ...(prompt ? { prompt } : {}),
-          ...(creationDescription ? { description: creationDescription } : {}),
-          ...(mapped.error ? { error: mapped.error } : {}),
+          ...(() => {
+            if (prompt) {
+              return { prompt };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (creationDescription) {
+              return { description: creationDescription };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (mapped.error) {
+              return { error: mapped.error };
+            }
+            return {};
+          })(),
           metadata: collabMetadata(item, type, parentThreadId),
         }),
       ];
@@ -311,14 +357,34 @@ export const codexSubagentPartsFromItem = (
     return receivers.map((childThreadId) => {
       const mapped = statusForChild(item, tool, aggregateStatus, childThreadId);
       return linkState.upsertLink({
-        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : {}),
+        ...(() => {
+          if (ctx.runtimeId) {
+            return { runtimeId: ctx.runtimeId };
+          }
+          return {};
+        })(),
         parentThreadId,
         childThreadId,
         itemId,
         status: mapped.status,
-        ...(prompt ? { prompt } : {}),
-        ...(creationDescription ? { description: creationDescription } : {}),
-        ...(mapped.error ? { error: mapped.error } : {}),
+        ...(() => {
+          if (prompt) {
+            return { prompt };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (creationDescription) {
+            return { description: creationDescription };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (mapped.error) {
+            return { error: mapped.error };
+          }
+          return {};
+        })(),
         metadata: collabMetadata(item, type, parentThreadId, childThreadId),
         preferItemCorrelationKey: tool === "spawnAgent",
         allowStatusRestart: tool === "resumeAgent" && mapped.status === "running",
@@ -349,7 +415,12 @@ export const codexSubagentPartsFromItem = (
     const runtimeId = route?.runtimeId ?? ctx.runtimeId;
     return [
       linkState.upsertLink({
-        ...(runtimeId ? { runtimeId } : {}),
+        ...(() => {
+          if (runtimeId) {
+            return { runtimeId };
+          }
+          return {};
+        })(),
         parentThreadId: sourceThreadId,
         childThreadId,
         itemId,

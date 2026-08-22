@@ -1,3 +1,4 @@
+import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
@@ -11,13 +12,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
     const actions = createSessionActions({ updateSession: () => null });
 
-    expect(typeof actions.sendAgentMessage).toBe("function");
-    expect(typeof actions.startAgentSession).toBe("function");
-    expect(typeof actions.stopAgentSession).toBe("function");
+    expect(runtimeTypeName(actions.sendAgentMessage)).toBe("function");
+    expect(runtimeTypeName(actions.startAgentSession)).toBe("function");
+    expect(runtimeTypeName(actions.stopAgentSession)).toBe("function");
   });
 
   test("uses live workspace refs for session start stale checks", async () => {
     const adapter = new OpencodeSdkAdapter();
+    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const actions = createSessionActions({
       adapter,

@@ -23,11 +23,7 @@ export function useAgentStudioSelectionActions({
   sessionsForTask,
   canPrepareMessageFirstSession,
   selectAgentStudioSelection,
-}: UseAgentStudioSelectionActionsArgs): {
-  handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
-  handleSessionSelectionChange: (nextValue: string) => void;
-  handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
-} {
+}: UseAgentStudioSelectionActionsArgs) {
   const findSessionByValue = useCallback(
     (sessionValue: string): AgentSessionSummary | null =>
       sessionsForTask.find((session) => agentSessionIdentityKey(session) === sessionValue) ?? null,
@@ -96,5 +92,9 @@ export function useAgentStudioSelectionActions({
     handleWorkflowStepSelect,
     handleSessionSelectionChange,
     handlePrepareMessageFirstSession,
+  } satisfies {
+    handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
+    handleSessionSelectionChange: (nextValue: string) => void;
+    handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
   };
 }

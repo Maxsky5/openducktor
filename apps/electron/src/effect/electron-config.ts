@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { ElectronValidationError, errorMessage } from "./electron-errors";
@@ -71,6 +72,7 @@ export const readPackageVersionEffect = (
 export const readPackageVersion = (packageJsonPath: string): string => {
   let packageJson: { version?: unknown };
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `{ version?: unknown; }` at this boundary.
     packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
       version?: unknown;
     };
@@ -82,7 +84,7 @@ export const readPackageVersion = (packageJsonPath: string): string => {
       cause,
     });
   }
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+  if (!hasRuntimeType(packageJson.version, "string") || packageJson.version.length === 0) {
     throw new ElectronValidationError({
       operation: "electron.config.read-package-version",
       message: `Missing package version in ${packageJsonPath}`,

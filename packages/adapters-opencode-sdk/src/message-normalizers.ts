@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
@@ -61,7 +62,11 @@ const normalizeSourceText = (
   const textValue = readUnknownProp(record, "value");
   const start = readNumberProp(record, ["start"]);
   const end = readNumberProp(record, ["end"]);
-  if (typeof textValue !== "string" || typeof start !== "number" || typeof end !== "number") {
+  if (
+    !hasRuntimeType(textValue, "string") ||
+    !hasRuntimeType(start, "number") ||
+    !hasRuntimeType(end, "number")
+  ) {
     return undefined;
   }
   return {
@@ -161,7 +166,12 @@ const normalizeFileReferencePart = (
       name,
       kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
     },
-    ...(sourceText ? { sourceText } : {}),
+    ...(() => {
+      if (sourceText) {
+        return { sourceText };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -175,7 +185,7 @@ type OpenCodeAgentPart = {
 const normalizeSubagentReferencePart = (
   part: OpenCodeAgentPart,
 ): AgentUserMessageDisplayPart | null => {
-  const name = typeof part.name === "string" ? part.name.trim() : "";
+  const name = hasRuntimeType(part.name, "string") ? part.name.trim() : "";
   if (name.length === 0) {
     return null;
   }
@@ -188,7 +198,12 @@ const normalizeSubagentReferencePart = (
   return {
     kind: "subagent_reference",
     subagent,
-    ...(sourceText ? { sourceText } : {}),
+    ...(() => {
+      if (sourceText) {
+        return { sourceText };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -231,6 +246,7 @@ export const normalizeUserMessageDisplayParts = (
     }
 
     if (part.type === "agent") {
+      // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeAgentPart`.
       const subagentReference = normalizeSubagentReferencePart(part as OpenCodeAgentPart);
       if (subagentReference) {
         normalizedParts.push(subagentReference);
@@ -344,7 +360,7 @@ export const readTextFromMessageInfo = (info: JsonValue | undefined): string => 
     readUnknownProp(record, "text") ??
     readUnknownProp(record, "content") ??
     readUnknownProp(readRecordProp(record, "message"), "text");
-  return typeof direct === "string" ? direct : "";
+  return hasRuntimeType(direct, "string") ? direct : "";
 };
 
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
@@ -363,15 +379,25 @@ export const readMessageModelSelection = (
   const modelId = readUnknownProp(record, "modelID") ?? readUnknownProp(nestedModel, "modelID");
   const variant = readUnknownProp(record, "variant");
   const profileId = readUnknownProp(record, "agent");
-  if (typeof providerId !== "string" || typeof modelId !== "string") {
+  if (!hasRuntimeType(providerId, "string") || !hasRuntimeType(modelId, "string")) {
     return undefined;
   }
 
   return {
     providerId,
     modelId,
-    ...(typeof variant === "string" && variant.trim().length > 0 ? { variant } : {}),
-    ...(typeof profileId === "string" && profileId.trim().length > 0 ? { profileId } : {}),
+    ...(() => {
+      if (hasRuntimeType(variant, "string") && variant.trim().length > 0) {
+        return { variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(profileId, "string") && profileId.trim().length > 0) {
+        return { profileId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -386,7 +412,7 @@ type TokenBreakdown = {
 };
 
 const toFiniteNumber = (value: JsonValue | undefined): number | null => {
-  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+  if (!hasRuntimeType(value, "number") || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
   return value;
@@ -407,21 +433,51 @@ const readTokenBreakdown = (value: JsonValue | undefined): TokenBreakdown | unde
   const cache =
     cacheRead !== undefined || cacheWrite !== undefined
       ? {
-          ...(cacheRead !== undefined ? { read: cacheRead } : {}),
-          ...(cacheWrite !== undefined ? { write: cacheWrite } : {}),
+          ...(() => {
+            if (cacheRead !== undefined) {
+              return { read: cacheRead };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (cacheWrite !== undefined) {
+              return { write: cacheWrite };
+            }
+            return {};
+          })(),
         }
       : undefined;
 
   return {
-    ...(input !== undefined ? { input } : {}),
-    ...(output !== undefined ? { output } : {}),
-    ...(reasoning !== undefined ? { reasoning } : {}),
-    ...(cache ? { cache } : {}),
+    ...(() => {
+      if (input !== undefined) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (output !== undefined) {
+        return { output };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (reasoning !== undefined) {
+        return { reasoning };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (cache) {
+        return { cache };
+      }
+      return {};
+    })(),
   };
 };
 
 const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number => {
-  if (!breakdown || typeof breakdown !== "object") {
+  if (!breakdown || !hasRuntimeType(breakdown, "object")) {
     return 0;
   }
   const input = toFiniteNumber(breakdown.input) ?? 0;
@@ -454,7 +510,7 @@ export const extractMessageTotalTokens = (
   parts: NormalizablePart[] | JsonValue[],
 ): number | undefined => {
   const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
-  if (typeof infoTokens === "number" && infoTokens > 0) {
+  if (hasRuntimeType(infoTokens, "number") && infoTokens > 0) {
     return infoTokens;
   }
 
@@ -465,7 +521,7 @@ export const extractMessageTotalTokens = (
       continue;
     }
     const partTokens = toTokenTotal(readUnknownProp(parsedPart.data, "tokens"));
-    if (typeof partTokens === "number" && partTokens > maxPartTokens) {
+    if (hasRuntimeType(partTokens, "number") && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }
   }

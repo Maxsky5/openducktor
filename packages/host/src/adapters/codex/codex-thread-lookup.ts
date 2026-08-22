@@ -7,7 +7,7 @@ import { parseThreadReadResponse } from "./codex-app-server-response-parsers";
 type CodexThreadReaderPort = Pick<CodexAppServerPort, "request">;
 
 const parseCodexThread = (
-  value: unknown,
+  value: Parameters<typeof parseThreadReadResponse>[0],
   runtimeId: string,
   threadId: string,
 ): Effect.Effect<CodexAppServerThread, HostValidationError> =>

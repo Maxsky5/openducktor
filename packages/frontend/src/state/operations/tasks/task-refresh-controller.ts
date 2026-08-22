@@ -39,9 +39,12 @@ export const createTaskRefreshController = ({
   const getRefreshPromise = (
     repoPath: string,
     refreshTaskData: (repoPath: string) => Promise<void>,
-  ): { promise: Promise<void>; joinedExisting: boolean } => {
+  ) => {
     if (inFlightRefresh?.repoPath === repoPath) {
-      return { promise: inFlightRefresh.promise, joinedExisting: true };
+      return { promise: inFlightRefresh.promise, joinedExisting: true } satisfies {
+        promise: Promise<void>;
+        joinedExisting: boolean;
+      };
     }
 
     const promise = refreshTaskData(repoPath).finally(() => {
@@ -50,7 +53,10 @@ export const createTaskRefreshController = ({
       }
     });
     inFlightRefresh = { repoPath, promise };
-    return { promise, joinedExisting: false };
+    return { promise, joinedExisting: false } satisfies {
+      promise: Promise<void>;
+      joinedExisting: boolean;
+    };
   };
 
   return {

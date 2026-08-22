@@ -37,15 +37,16 @@ class ResumeFailingTransport extends RecordingTransport {
   }
 }
 
+// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
 const localSessions = (
   adapter: CodexAppServerAdapter,
 ): { has(externalSessionId: string): boolean } =>
-  (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
-    .localSessions;
+  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
 
 const markSessionUnbound = (adapter: CodexAppServerAdapter, externalSessionId: string): void => {
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   const session = (
-    adapter as unknown as {
+    adapter as {
       localSessions: {
         get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
       };
@@ -446,6 +447,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
   test("rejects a start without session scope before runtime side effects", async () => {
     const { adapter, requireRepoRuntime, transportFactory } = createHarness();
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       adapter.startSession({
         repoPath: "/repo",

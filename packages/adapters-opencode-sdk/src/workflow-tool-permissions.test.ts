@@ -59,6 +59,7 @@ describe("workflow-tool-permissions", () => {
     expect(findFinalExactAction(rules, "runtime_plan_alias")).toBe("ask");
   });
 
+  // SAFETY: This test controls the fixture and supplies `AgentRole[]` used by this case.
   test("keeps approval prompts out of every workflow role policy", () => {
     for (const role of Object.keys(AGENT_ROLE_TOOL_POLICY) as AgentRole[]) {
       const rules = buildRoleScopedPermissionRules({

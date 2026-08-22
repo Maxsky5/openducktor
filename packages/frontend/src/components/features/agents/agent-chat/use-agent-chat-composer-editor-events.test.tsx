@@ -1,5 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  createDataTransferItemFixture,
+  createDataTransferItemListFixture,
+  createFileListFixture,
+  createFocusedFixture,
+} from "@/test-utils/focused-fixture";
 import { type AgentChatComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import type {
@@ -7,6 +13,7 @@ import type {
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -42,38 +49,39 @@ const createBeforeInputEvent = (
   inputType: string,
   data: string | null = null,
 ) => {
-  return {
+  return createFocusedFixture<React.FormEvent<HTMLDivElement>>({
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    nativeEvent: {
+    nativeEvent: createFocusedFixture<InputEvent>({
       inputType,
       data,
-    },
-  } as unknown as React.FormEvent<HTMLDivElement>;
+    }),
+  });
 };
 
 const createPasteEvent = (root: HTMLDivElement, file: File) => {
-  return {
+  return createFocusedFixture<React.ClipboardEvent<HTMLDivElement>>({
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    clipboardData: {
-      items: [
-        {
+    clipboardData: createFocusedFixture<DataTransfer>({
+      items: createDataTransferItemListFixture([
+        createDataTransferItemFixture({
           kind: "file",
           type: file.type,
-          getAsFile: () => file,
-        },
-      ],
-      files: [file],
+          file,
+        }),
+      ]),
+      files: createFileListFixture([file]),
       types: ["Files"],
       getData: mock(() => ""),
-    },
-  } as unknown as React.ClipboardEvent<HTMLDivElement>;
+    }),
+  });
 };
 
 const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
+  // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
   const root = document.createElement("div") as HTMLDivElement;
   const sourceDraft = overrides.draft ?? createDraft();
   const activeSelection = overrides.activeSelection ?? createActiveSelection();

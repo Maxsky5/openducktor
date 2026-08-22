@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   closestCenter,
   DndContext,
@@ -233,7 +234,9 @@ export function WorkspaceRail({
   const activeDragWorkspace = activeWorkspaceId
     ? (workspaces.find((workspace) => workspace.workspaceId === activeWorkspaceId) ?? null)
     : null;
-  const PrimarySensor = typeof globalThis.PointerEvent === "function" ? PointerSensor : MouseSensor;
+  const PrimarySensor = hasRuntimeType(globalThis.PointerEvent, "function")
+    ? PointerSensor
+    : MouseSensor;
   const sensors = useSensors(
     useSensor(PrimarySensor, {
       activationConstraint: {

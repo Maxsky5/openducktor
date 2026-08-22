@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AssistantTurnTimingState,
@@ -25,7 +26,7 @@ export type SessionTurnTiming = {
 };
 
 const toTimestampMs = (timestamp: string | number): number | undefined => {
-  if (typeof timestamp === "number") {
+  if (hasRuntimeType(timestamp, "number")) {
     return Number.isFinite(timestamp) ? timestamp : undefined;
   }
 
@@ -49,8 +50,9 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const current = timingBySession[sessionKey]?.activityStartedAtMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
-        activityStartedAtMs:
-          typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+        activityStartedAtMs: hasRuntimeType(current, "number")
+          ? Math.min(current, timestampMs)
+          : timestampMs,
       };
     },
     recordTurnUserMessageTimestamp: (sessionKey, timestamp) => {
@@ -59,8 +61,9 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
         return timingBySession[sessionKey]?.userAnchorAtMs;
       }
       const current = timingBySession[sessionKey]?.userAnchorAtMs;
-      const userAnchorAtMs =
-        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+      const userAnchorAtMs = hasRuntimeType(current, "number")
+        ? Math.min(current, timestampMs)
+        : timestampMs;
       timingBySession[sessionKey] = {
         ...timingBySession[sessionKey],
         userAnchorAtMs,
@@ -87,11 +90,24 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       return resolveAssistantTurnDurationMs({
         completedAtMs,
-        ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
-        ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
-        ...(typeof previousAssistantCompletedAtMs === "number"
-          ? { previousAssistantCompletedAtMs }
-          : {}),
+        ...(() => {
+          if (hasRuntimeType(activityStartedAtMs, "number")) {
+            return { activityStartedAtMs };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(userAnchorAtMs, "number")) {
+            return { userAnchorAtMs };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(previousAssistantCompletedAtMs, "number")) {
+            return { previousAssistantCompletedAtMs };
+          }
+          return {};
+        })(),
       });
     },
     clearTurnDuration: (sessionKey, completedTimestamp) => {
@@ -100,7 +116,7 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const nextTiming = { ...timingBySession[sessionKey] };
       delete nextTiming.activityStartedAtMs;
       delete nextTiming.userAnchorAtMs;
-      if (typeof completedAtMs === "number") {
+      if (hasRuntimeType(completedAtMs, "number")) {
         nextTiming.previousAssistantCompletedAtMs = completedAtMs;
       }
       if (Object.keys(nextTiming).length === 0) {

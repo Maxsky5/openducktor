@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
@@ -31,7 +32,12 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       message: event.message,
       parts: event.displayParts,
       state: event.state,
-      ...(event.model ? { model: event.model } : {}),
+      ...(() => {
+        if (event.model) {
+          return { model: event.model };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -42,9 +48,24 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       timestamp,
       messageId: event.messageId,
       message: event.message,
-      ...(typeof event.totalTokens === "number" ? { totalTokens: event.totalTokens } : {}),
-      ...(typeof event.contextWindow === "number" ? { contextWindow: event.contextWindow } : {}),
-      ...(event.model ? { model: event.model } : {}),
+      ...(() => {
+        if (hasRuntimeType(event.totalTokens, "number")) {
+          return { totalTokens: event.totalTokens };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(event.contextWindow, "number")) {
+          return { contextWindow: event.contextWindow };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (event.model) {
+          return { model: event.model };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -54,7 +75,12 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       externalSessionId: event.threadId,
       timestamp,
       channel: event.channel,
-      ...(event.messageId ? { messageId: event.messageId } : {}),
+      ...(() => {
+        if (event.messageId) {
+          return { messageId: event.messageId };
+        }
+        return {};
+      })(),
       delta: event.delta,
     };
   }
@@ -81,7 +107,12 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       type: "session_compaction_started",
       externalSessionId: event.threadId,
       timestamp,
-      ...(event.messageId ? { messageId: event.messageId } : {}),
+      ...(() => {
+        if (event.messageId) {
+          return { messageId: event.messageId };
+        }
+        return {};
+      })(),
       message: event.message,
     };
   }
@@ -91,7 +122,12 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       type: "session_compacted",
       externalSessionId: event.threadId,
       timestamp,
-      ...(event.messageId ? { messageId: event.messageId } : {}),
+      ...(() => {
+        if (event.messageId) {
+          return { messageId: event.messageId };
+        }
+        return {};
+      })(),
       message: event.message,
     };
   }

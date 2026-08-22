@@ -9,6 +9,7 @@ import {
   workspaceFileTreeSchema,
   workspaceTextFileReadResultSchema,
   workspaceTextFileWriteResultSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 
@@ -20,13 +21,13 @@ type WorkspaceFileTreeInput = {
 
 const normalizeWorkspaceFileTreeInput = (
   input: string | WorkspaceFileTreeInput,
-): WorkspaceFileTreeInput => (typeof input === "string" ? { rootPath: input } : input);
+): WorkspaceFileTreeInput => (hasRuntimeType(input, "string") ? { rootPath: input } : input);
 
 const filesystemListDirectory = async (
   invokeFn: InvokeFn,
   input?: string | FilesystemListDirectoryInput,
 ): Promise<DirectoryListing> => {
-  const args = typeof input === "string" ? { path: input } : input;
+  const args = hasRuntimeType(input, "string") ? { path: input } : input;
   const payload = await invokeFn(
     "filesystem_list_directory",
     args === undefined ? undefined : toCommandArgs(args),
@@ -41,7 +42,12 @@ const filesystemListTree = async (
   const treeInput = normalizeWorkspaceFileTreeInput(input);
   const payload = await invokeFn("filesystem_list_tree", {
     rootPath: treeInput.rootPath,
-    ...(treeInput.targetBranch ? { targetBranch: treeInput.targetBranch } : {}),
+    ...(() => {
+      if (treeInput.targetBranch) {
+        return { targetBranch: treeInput.targetBranch };
+      }
+      return {};
+    })(),
   });
   return workspaceFileTreeSchema.parse(payload);
 };

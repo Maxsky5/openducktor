@@ -7,11 +7,36 @@ const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
   return {
     kind: "user" as const,
     state: event.state,
-    ...(model?.providerId ? { providerId: model.providerId } : {}),
-    ...(model?.modelId ? { modelId: model.modelId } : {}),
-    ...(model?.variant ? { variant: model.variant } : {}),
-    ...(model?.profileId ? { profileId: model.profileId } : {}),
-    ...(parts.length > 0 ? { parts } : {}),
+    ...(() => {
+      if (model?.providerId) {
+        return { providerId: model.providerId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (model?.modelId) {
+        return { modelId: model.modelId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (model?.variant) {
+        return { variant: model.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (model?.profileId) {
+        return { profileId: model.profileId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (parts.length > 0) {
+        return { parts };
+      }
+      return {};
+    })(),
   };
 };
 

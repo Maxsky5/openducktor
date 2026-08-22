@@ -2,6 +2,7 @@ import {
   type AgentSessionRecord,
   agentSessionRecordSchema,
   type JsonValue,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
@@ -79,7 +80,7 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
     row.labelsJson,
     [],
     (value) => {
-      if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+      if (!Array.isArray(value) || value.some((entry) => !hasRuntimeType(entry, "string"))) {
         return Effect.fail(
           new SqliteTaskStoreDataError({
             message: "SQLite labels_json must be an array of strings.",

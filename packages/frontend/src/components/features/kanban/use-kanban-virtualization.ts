@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -136,7 +137,7 @@ let viewportSyncFrameHandle: number | null = null;
 let hasViewportWindowListeners = false;
 
 const scheduleViewportSubscribersSync = (): void => {
-  if (typeof window === "undefined" || viewportSyncFrameHandle !== null) {
+  if (hasRuntimeType(globalThis.window, "undefined") || viewportSyncFrameHandle !== null) {
     return;
   }
 
@@ -153,7 +154,7 @@ const onViewportWindowEvent = (): void => {
 };
 
 const retainViewportWindowListeners = (): void => {
-  if (typeof window === "undefined" || hasViewportWindowListeners) {
+  if (hasRuntimeType(globalThis.window, "undefined") || hasViewportWindowListeners) {
     return;
   }
 
@@ -164,7 +165,7 @@ const retainViewportWindowListeners = (): void => {
 
 const releaseViewportWindowListeners = (): void => {
   if (
-    typeof window === "undefined" ||
+    hasRuntimeType(globalThis.window, "undefined") ||
     !hasViewportWindowListeners ||
     viewportSubscribers.size > 0 ||
     viewportScrollContainers.size > 0
@@ -208,6 +209,7 @@ const releaseViewportScrollContainer = (container: HTMLElement): void => {
 const registerViewportSubscriber = (subscriber: KanbanViewportSubscriber): (() => void) => {
   retainViewportWindowListeners();
 
+  // SAFETY: The selector targets markup that this component owns and that supplies `HTMLElement | null`.
   const scrollContainer = subscriber.element.closest(
     "[data-main-scroll-container='true']",
   ) as HTMLElement | null;
@@ -288,14 +290,15 @@ export function useKanbanVirtualization({
       totalHeight: virtualLayout.totalHeight,
       viewportStart: -VIRTUAL_OVERSCAN_PX,
       viewportEnd:
-        (typeof window === "undefined" ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX : window.innerHeight) +
-        VIRTUAL_OVERSCAN_PX,
+        (hasRuntimeType(globalThis.window, "undefined")
+          ? INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX
+          : window.innerHeight) + VIRTUAL_OVERSCAN_PX,
     }),
   );
 
   const syncViewportRef = useRef<() => void>(() => {});
   syncViewportRef.current = () => {
-    if (!shouldVirtualize || typeof window === "undefined") {
+    if (!shouldVirtualize || hasRuntimeType(globalThis.window, "undefined")) {
       return;
     }
 
@@ -306,6 +309,7 @@ export function useKanbanVirtualization({
 
     const { itemOffsets, itemHeights: latestItemHeights, totalHeight } = layoutRef.current;
     const rect = viewportElement.getBoundingClientRect();
+    // SAFETY: The selector targets markup that this component owns and that supplies `HTMLElement | null`.
     const scrollContainer = viewportElement.closest(
       "[data-main-scroll-container='true']",
     ) as HTMLElement | null;
@@ -335,7 +339,7 @@ export function useKanbanVirtualization({
   };
 
   useEffect(() => {
-    if (!shouldVirtualize || typeof window === "undefined" || !containerElement) {
+    if (!shouldVirtualize || hasRuntimeType(globalThis.window, "undefined") || !containerElement) {
       return;
     }
 
@@ -348,13 +352,17 @@ export function useKanbanVirtualization({
   }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
-    if (!shouldVirtualize || !containerElement || typeof ResizeObserver === "undefined") {
+    if (
+      !shouldVirtualize ||
+      !containerElement ||
+      hasRuntimeType(globalThis.ResizeObserver, "undefined")
+    ) {
       return;
     }
 
     let frameHandle: number | null = null;
     const scheduleMeasurementInvalidation = (): void => {
-      if (typeof window === "undefined") {
+      if (hasRuntimeType(globalThis.window, "undefined")) {
         dispatchMeasurement({ type: "invalidate" });
         return;
       }
@@ -377,7 +385,7 @@ export function useKanbanVirtualization({
     observer.observe(containerElement);
     return () => {
       observer.disconnect();
-      if (frameHandle !== null && typeof window !== "undefined") {
+      if (frameHandle !== null && !hasRuntimeType(globalThis.window, "undefined")) {
         window.cancelAnimationFrame(frameHandle);
       }
     };

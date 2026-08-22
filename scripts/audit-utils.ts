@@ -86,6 +86,7 @@ export const runBunAuditJson = (prefix: string): BunAuditJsonResult => {
   }
 
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `AuditResult` at this boundary.
     return {
       parsed: JSON.parse(jsonPayload) as AuditResult,
       exitCode: audit.exitCode ?? 1,

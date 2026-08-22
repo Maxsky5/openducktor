@@ -53,7 +53,9 @@ describe("task domain policy", () => {
       throw new Error("Expected transition validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
+      // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
       expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toContain("human_review -> blocked");
     }
   });
@@ -78,7 +80,9 @@ describe("task domain policy", () => {
       throw new Error("Expected epic completion validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
+      // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
       expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toContain("Epic cannot be completed");
     }
   });
@@ -181,7 +185,9 @@ describe("task domain policy", () => {
       throw new Error("Expected manual close validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
+      // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
       expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toContain("is already closed");
     }
   });
@@ -212,7 +218,9 @@ describe("task domain policy", () => {
       throw new Error("Expected manual close validation to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(TaskPolicyError);
+      // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
       expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toContain("Epic cannot be completed");
     }
   });

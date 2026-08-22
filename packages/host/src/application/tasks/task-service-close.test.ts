@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionRecord,
@@ -102,7 +103,7 @@ const createTaskStore = (
   calls: string[] = [],
   sessionsByTaskId: Record<string, AgentSessionRecord[]> = {},
 ): TaskStorePort =>
-  ({
+  createFocusedTestService<TaskStorePort>({
     listTasks: () => Effect.succeed(tasks),
     getTaskMetadata: (input: { taskId: string }) =>
       Effect.succeed(createMetadata(sessionsByTaskId[input.taskId] ?? [])),
@@ -116,29 +117,29 @@ const createTaskStore = (
       const updated = { ...current, status, updatedAt: "2026-05-10T12:00:00.000Z" };
       return Effect.succeed(updated);
     },
-  }) as unknown as TaskStorePort;
+  });
 
 const createSettingsConfig = (existingPaths = new Set<string>()): SettingsConfigPort =>
-  ({
+  createFocusedTestService<SettingsConfigPort>({
     defaultWorktreeBasePath: () => "/worktrees/repo",
     defaultRepoWorktreeBasePath: () => "/worktrees/repo",
     resolveConfiguredPath: (path: string) => path,
     canonicalizePath: (path: string) => Effect.succeed(path),
     pathExists: (path: string) => Effect.succeed(existingPaths.has(path)),
     join: (...paths: string[]) => paths.join("/"),
-  }) as unknown as SettingsConfigPort;
+  });
 
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
-  ({
+  createFocusedTestService<WorkspaceSettingsService>({
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
-  }) as unknown as WorkspaceSettingsService;
+  });
 
 const createTaskWorktreeService = (workingDirectory: string | null): TaskWorktreeService => ({
   getTaskWorktree: () => Effect.succeed(workingDirectory ? { workingDirectory } : null),
 });
 
 const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
-  ({
+  createFocusedTestService<WorktreeFilePort>({
     resolveWorktreePath: (_repoPath: string, worktreePath: string) => worktreePath,
     resolvePathWithinRoot: (root: string, candidate: string) =>
       Effect.succeed({
@@ -156,16 +157,22 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
       calls.push(`remove-path:${path}`);
       return Effect.succeed(undefined);
     },
-  }) as unknown as WorktreeFilePort;
+  });
 
 const createDevServerService = (calls: string[] = []): DevServerService =>
-  ({
-    stop: (input: { taskId: string }) => {
-      const { taskId } = input;
+  createFocusedTestService<DevServerService>({
+    stop: (input) => {
+      const { repoPath, taskId } = input;
       calls.push(`stop-dev:${taskId}`);
-      return Effect.succeed({ stopped: [] });
+      return Effect.succeed({
+        repoPath,
+        taskId,
+        worktreePath: null,
+        scripts: [],
+        updatedAt: "2026-05-10T11:30:00.000Z",
+      });
     },
-  }) as unknown as DevServerService;
+  });
 
 const createGitPort = (input: {
   calls?: string[];
@@ -174,7 +181,7 @@ const createGitPort = (input: {
   deleteBranchFails?: boolean;
   registered?: boolean;
 }): GitPort =>
-  ({
+  createFocusedTestService<GitPort>({
     canonicalizePath: (path: string) => Effect.succeed(path),
     isGitRepository: () => Effect.succeed(true),
     shareGitCommonDirectory: () => Effect.succeed(true),
@@ -182,7 +189,12 @@ const createGitPort = (input: {
     listBranches: () => Effect.succeed(input.branches ?? []),
     getCurrentBranch: () =>
       Effect.succeed({
-        name: Object.hasOwn(input, "currentBranch") ? input.currentBranch : "odt/task-1",
+        detached: false,
+        ...(Object.hasOwn(input, "currentBranch")
+          ? input.currentBranch
+            ? { name: input.currentBranch }
+            : {}
+          : { name: "odt/task-1" }),
       }),
     removeWorktree: (_repoPath: string, worktreePath: string) => {
       input.calls?.push(`remove-worktree:${worktreePath}`);
@@ -200,7 +212,7 @@ const createGitPort = (input: {
       }
       return Effect.succeed(undefined);
     },
-  }) as unknown as GitPort;
+  });
 
 describe("TaskService.closeTask", () => {
   test("closes an open task without local cleanup and preserves returned metadata", async () => {
@@ -629,7 +641,7 @@ describe("TaskService.closeTask", () => {
       releaseMetadataRead = resolve;
     });
     const baseTaskStore = createTaskStore([task()]);
-    const taskStore = {
+    const taskStore = createFocusedTestService<TaskStorePort>({
       ...baseTaskStore,
       getTaskMetadata: () =>
         Effect.promise(async () => {
@@ -637,7 +649,7 @@ describe("TaskService.closeTask", () => {
           await metadataReadReleased;
           return createMetadata();
         }),
-    } as TaskStorePort;
+    });
     const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
     const service = createTaskService({
       taskStore,

@@ -5,7 +5,9 @@ import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 import { hasMarkdownSyntaxHint } from "./agent-chat-markdown-hints";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 
-const PLAIN_TEXT_CLASSES: Record<MarkdownRendererVariant, string> = {
+interface PLAINTEXTCLASSESContract extends Record<MarkdownRendererVariant, string> {}
+
+const PLAIN_TEXT_CLASSES: PLAINTEXTCLASSESContract = {
   compact: "text-[13px] leading-relaxed text-foreground",
   document: "leading-6 py-4 text-foreground",
 };

@@ -403,6 +403,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         effectiveWorktreeBasePath: "/repo/worktrees",
       },
     ];
+    // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>` used by this case.
     host.workspaceGetRepoConfig = async () =>
       ({
         workspaceId: "repo",
@@ -579,6 +580,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
+    // SAFETY: This test controls the fixture and supplies `HookArgs & { input?: string }` used by this case.
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",

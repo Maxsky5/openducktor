@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -50,7 +51,7 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
   );
 
 const readString = (value: JsonValue | undefined): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  hasRuntimeType(value, "string") && value.trim().length > 0 ? value.trim() : null;
 
 const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
@@ -58,20 +59,26 @@ const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[
   }
   const options: ClaudeAskUserQuestionOption[] = [];
   for (const option of value) {
-    if (!option || typeof option !== "object") {
+    if (!option || !hasRuntimeType(option, "object")) {
       return null;
     }
+    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
     const record = option as Record<string, JsonValue>;
     const label = readString(record.label);
     const description = readString(record.description);
     if (!label || !description) {
       return null;
     }
-    const preview = typeof record.preview === "string" ? record.preview : undefined;
+    const preview = hasRuntimeType(record.preview, "string") ? record.preview : undefined;
     options.push({
       label,
       description,
-      ...(preview ? { preview } : {}),
+      ...(() => {
+        if (preview) {
+          return { preview };
+        }
+        return {};
+      })(),
     });
   }
   return options;
@@ -89,9 +96,10 @@ const parseClaudeAskUserQuestionInput = (
   const eventQuestions: Question[] = [];
   const questionTexts = new Set<string>();
   for (const rawQuestion of rawQuestions) {
-    if (!rawQuestion || typeof rawQuestion !== "object") {
+    if (!rawQuestion || !hasRuntimeType(rawQuestion, "object")) {
       return null;
     }
+    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
     const record = rawQuestion as Record<string, JsonValue>;
     const question = readString(record.question);
     const header = readString(record.header);
@@ -134,10 +142,7 @@ export const buildClaudeAskUserQuestionResult = ({
 }: {
   answers: readonly string[][];
   payload: ClaudeAskUserQuestionPayload;
-}): {
-  questions: ClaudeAskUserQuestion[];
-  answers: Record<string, string>;
-} => {
+}) => {
   const answersByQuestion: Record<string, string> = {};
   payload.sdkQuestions.forEach((question, index) => {
     answersByQuestion[question.question] = answerString(answers[index] ?? []);
@@ -146,6 +151,9 @@ export const buildClaudeAskUserQuestionResult = ({
   return {
     questions: payload.sdkQuestions,
     answers: answersByQuestion,
+  } satisfies {
+    questions: ClaudeAskUserQuestion[];
+    answers: Record<string, string>;
   };
 };
 

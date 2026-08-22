@@ -1,3 +1,5 @@
+import { hasRuntimeType } from "@openducktor/contracts";
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -30,7 +32,7 @@ const createCleanupHarness = ({
 }: CleanupHarnessInput) => {
   const calls: string[] = [];
   let resolvedPathIndex = 0;
-  const gitPort = {
+  const gitPort = createFocusedTestService<GitPort>({
     isRegisteredWorktree(repoPath: string, worktreePath: string) {
       return Effect.sync(() => {
         calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
@@ -51,12 +53,12 @@ const createCleanupHarness = ({
           : Effect.void;
       });
     },
-  } as unknown as GitPort;
-  const settingsConfig = {
+  });
+  const settingsConfig = createFocusedTestService<SettingsConfigPort>({
     join: (...paths: string[]) => paths.join("/"),
     pathExists: () =>
-      Effect.sync(() => (typeof pathExists === "function" ? pathExists() : pathExists)),
-  } as unknown as SettingsConfigPort;
+      Effect.sync(() => (hasRuntimeType(pathExists, "function") ? pathExists() : pathExists)),
+  });
   const worktreeFiles: WorktreeFilePort = {
     ensureDirectory: () => Effect.void,
     copyConfiguredPaths: () => Effect.void,

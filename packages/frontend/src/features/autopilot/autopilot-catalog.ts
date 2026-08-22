@@ -8,6 +8,11 @@ import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openduckto
 import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import type { SessionLaunchActionId } from "@/features/session-start/session-start-launch-options";
 
+interface AUTOPILOTACTIONDEFINITIONSContract extends Record<
+  AutopilotActionId,
+  AutopilotActionDefinition
+> {}
+
 export const AUTOPILOT_DISABLED_VALUE = "disabled" as const;
 
 export type AutopilotSelectValue = AutopilotActionId | typeof AUTOPILOT_DISABLED_VALUE;
@@ -39,7 +44,7 @@ export type AutopilotEventDefinition = {
   availableActionIds: AutopilotActionId[];
 };
 
-export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotActionDefinition> = {
+export const AUTOPILOT_ACTION_DEFINITIONS: AUTOPILOTACTIONDEFINITIONSContract = {
   startPlanner: {
     id: "startPlanner",
     label: "Start Planner",

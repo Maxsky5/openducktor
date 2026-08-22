@@ -123,7 +123,12 @@ export function useAgentChatComposerModel({
       isReadOnly: composer.isReadOnly,
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
-      ...(composer.pendingSendItems ? { pendingSendItems: composer.pendingSendItems } : {}),
+      ...(() => {
+        if (composer.pendingSendItems) {
+          return { pendingSendItems: composer.pendingSendItems };
+        }
+        return {};
+      })(),
       draftScope: composer.draftScope,
       onSend: async (draft: AgentChatComposerDraft): Promise<boolean> => {
         scrollToBottomOnSendRef.current?.();
@@ -136,13 +141,19 @@ export function useAgentChatComposerModel({
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
-      ...(composer.selectedModelDescriptor !== undefined
-        ? { selectedModelDescriptor: composer.selectedModelDescriptor }
-        : {}),
+      ...(() => {
+        if (composer.selectedModelDescriptor !== undefined) {
+          return { selectedModelDescriptor: composer.selectedModelDescriptor };
+        }
+        return {};
+      })(),
       isSelectionCatalogLoading: composer.isSelectionCatalogLoading,
-      ...(composer.supportsProfiles !== undefined
-        ? { supportsProfiles: composer.supportsProfiles }
-        : {}),
+      ...(() => {
+        if (composer.supportsProfiles !== undefined) {
+          return { supportsProfiles: composer.supportsProfiles };
+        }
+        return {};
+      })(),
       supportsAttachments: composer.supportsAttachments,
       supportsSlashCommands: composer.supportsSlashCommands,
       supportsFileSearch: composer.supportsFileSearch,

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "./runtime-type";
 import { z } from "zod";
 import type { JsonValue } from "./json-types";
 
@@ -18,7 +19,7 @@ const normalizeLooseTodoEntry = (
   fallbackId: string,
   options: ParseAgentSessionTodoPayloadOptions,
 ): AgentSessionTodoPayloadRecord | null => {
-  if (options.allowStringEntries && typeof entry === "string") {
+  if (options.allowStringEntries && hasRuntimeType(entry, "string")) {
     const content = entry.trim();
     if (!content) {
       return null;
@@ -26,20 +27,20 @@ const normalizeLooseTodoEntry = (
     return { id: fallbackId, content };
   }
 
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+  if (!entry || !hasRuntimeType(entry, "object") || Array.isArray(entry)) {
     return null;
   }
 
   const id =
-    (typeof entry.id === "string" ? entry.id.trim() : "") ||
-    (typeof entry.todoId === "string" ? entry.todoId.trim() : "") ||
+    (hasRuntimeType(entry.id, "string") ? entry.id.trim() : "") ||
+    (hasRuntimeType(entry.todoId, "string") ? entry.todoId.trim() : "") ||
     fallbackId;
   const content = (
-    typeof entry.content === "string"
+    hasRuntimeType(entry.content, "string")
       ? entry.content
-      : typeof entry.text === "string"
+      : hasRuntimeType(entry.text, "string")
         ? entry.text
-        : typeof entry.title === "string"
+        : hasRuntimeType(entry.title, "string")
           ? entry.title
           : ""
   ).trim();
@@ -50,9 +51,24 @@ const normalizeLooseTodoEntry = (
   return {
     id,
     content,
-    ...(typeof entry.status === "string" ? { status: entry.status } : {}),
-    ...(typeof entry.priority === "string" ? { priority: entry.priority } : {}),
-    ...(typeof entry.completed === "boolean" ? { completed: entry.completed } : {}),
+    ...(() => {
+      if (hasRuntimeType(entry.status, "string")) {
+        return { status: entry.status };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(entry.priority, "string")) {
+        return { priority: entry.priority };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(entry.completed, "boolean")) {
+        return { completed: entry.completed };
+      }
+      return {};
+    })(),
   };
 };
 

@@ -8,11 +8,11 @@ import {
   registerElectronLocalAttachmentPreviewProtocol,
 } from "./electron-local-attachment-preview";
 
-const captureThrown = (action: () => unknown): unknown => {
+const captureThrown = (action: () => void): Error => {
   try {
     action();
   } catch (error) {
-    return error;
+    return error instanceof Error ? error : new Error(String(error));
   }
   throw new Error("Expected action to fail.");
 };

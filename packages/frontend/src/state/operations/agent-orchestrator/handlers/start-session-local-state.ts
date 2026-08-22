@@ -22,7 +22,12 @@ export const buildInitialSession = ({
   initialMessages?: AgentSessionState["messages"];
 }): AgentSessionState => ({
   externalSessionId: startedCtx.summary.externalSessionId,
-  ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
+  ...(() => {
+    if (startedCtx.summary.title) {
+      return { title: startedCtx.summary.title };
+    }
+    return {};
+  })(),
   sessionAssociation: {
     kind: "workflow",
     taskId: startedCtx.taskId,

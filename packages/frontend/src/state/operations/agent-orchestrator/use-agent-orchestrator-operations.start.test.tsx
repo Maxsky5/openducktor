@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -278,6 +279,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   test("reuses an in-memory session after it has been started", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
+    // SAFETY: This test controls the fixture and supplies `(typeof persistedSessionFixture)[]` used by this case.
     let persistedSessions = [] as (typeof persistedSessionFixture)[];
 
     const originalSpecGet = host.specGet;
@@ -408,6 +410,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
     let persistedBatchListCalls = 0;
     let persistedSingleListCalls = 0;
+    // SAFETY: This test controls the fixture and supplies `(typeof persistedSessionFixture)[]` used by this case.
     let persistedSessions = [] as (typeof persistedSessionFixture)[];
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
@@ -740,18 +743,18 @@ describe("use-agent-orchestrator-operations start and send", () => {
         agentDefaults: {},
       });
 
-      let staleError: unknown = null;
+      const staleError = createFocusedFixture<{ current: unknown }>({ current: null });
       try {
         await startPromise;
       } catch (error) {
-        staleError = error;
+        staleError.current = error;
       }
 
-      if (!(staleError instanceof Error)) {
+      if (!(staleError.current instanceof Error)) {
         throw new Error("Expected stale start to reject with Error");
       }
 
-      expect(staleError.message).toContain("Workspace changed while starting session.");
+      expect(staleError.current.message).toContain("Workspace changed while starting session.");
       expect(startCalls).toBe(0);
     } finally {
       await harness.unmount();

@@ -30,22 +30,22 @@ export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 const isPlainObject = (value: JsonValue | undefined): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const normalizeLegacyTaskMetadataPayload = (value: JsonValue | undefined): unknown => {
+const normalizeLegacyTaskMetadataPayload = (value: JsonValue | undefined) => {
   if (!isPlainObject(value)) {
-    return value;
+    return value satisfies unknown;
   }
 
   const payload = value;
   const delivery = payload.delivery;
   if (!isPlainObject(delivery)) {
-    return value;
+    return value satisfies unknown;
   }
 
   return {
     ...payload,
     pullRequest: payload.pullRequest ?? delivery.linkedPullRequest,
     directMerge: payload.directMerge ?? delivery.directMerge,
-  };
+  } satisfies unknown;
 };
 
 export const taskMetadataPayloadSchema = z.preprocess(

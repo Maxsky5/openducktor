@@ -4,6 +4,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 
+// SAFETY: This test controls the fixture and supplies `ClaudeSessionContext` used by this case.
 const session = { runtimeId: "runtime-1" } as ClaudeSessionContext;
 
 const statusEvent = (timestamp: string): ClaudeAgentSdkEvent => ({

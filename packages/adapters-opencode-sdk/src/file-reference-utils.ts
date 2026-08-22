@@ -1,6 +1,10 @@
 import { type AgentFileReference, detectAgentFileReferenceKind } from "@openducktor/core";
 
-const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+interface IMAGEMIMEBYEXTENSIONContract extends Record<string, string> {}
+
+interface VIDEOMIMEBYEXTENSIONContract extends Record<string, string> {}
+
+const IMAGE_MIME_BY_EXTENSION: IMAGEMIMEBYEXTENSIONContract = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -12,7 +16,7 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   avif: "image/avif",
 };
 
-const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
+const VIDEO_MIME_BY_EXTENSION: VIDEOMIMEBYEXTENSIONContract = {
   mp4: "video/mp4",
   mov: "video/quicktime",
   webm: "video/webm",

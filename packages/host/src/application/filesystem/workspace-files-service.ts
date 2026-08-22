@@ -22,6 +22,8 @@ import {
   type WorkspaceTextFileWriteError,
 } from "./workspace-text-file-service";
 
+interface GITSTATUSPRIORITYContract extends Record<WorkspaceFileGitStatus, number> {}
+
 export type WorkspaceFilesService = {
   listTree(input: {
     rootPath: string;
@@ -50,6 +52,7 @@ const compareWorkspacePaths = (left: string, right: string): number => {
   return insensitive === 0 ? left.localeCompare(right) : insensitive;
 };
 
+// SAFETY: The preceding runtime guard establishes `WorkspaceFileGitStatus` before this assertion.
 const normalizeGitStatus = (
   status: string | null | undefined,
 ): Effect.Effect<WorkspaceFileGitStatus | null, HostValidationError> => {
@@ -57,6 +60,7 @@ const normalizeGitStatus = (
     return Effect.succeed(null);
   }
   if (PIERRE_GIT_STATUSES.has(status as WorkspaceFileGitStatus)) {
+    // SAFETY: The preceding runtime guard establishes `WorkspaceFileGitStatus` before this assertion.
     return Effect.succeed(status as WorkspaceFileGitStatus);
   }
   if (status === "copied") {
@@ -73,7 +77,7 @@ const normalizeGitStatus = (
     }),
   );
 };
-const GIT_STATUS_PRIORITY: Record<WorkspaceFileGitStatus, number> = {
+const GIT_STATUS_PRIORITY: GITSTATUSPRIORITYContract = {
   ignored: 0,
   modified: 1,
   untracked: 2,

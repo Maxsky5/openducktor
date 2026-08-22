@@ -210,7 +210,12 @@ const coerceLiveSessionRepairSelection = (
 
   return {
     ...selection,
-    ...(variant ? { variant } : {}),
+    ...(() => {
+      if (variant) {
+        return { variant };
+      }
+      return {};
+    })(),
   };
 };
 

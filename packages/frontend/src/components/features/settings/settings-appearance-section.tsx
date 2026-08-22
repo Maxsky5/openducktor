@@ -27,6 +27,7 @@ const horizontalScrollbarVisibilityOptions: {
   label: horizontalScrollbarVisibilityLabels[value],
 }));
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `HorizontalScrollbarVisibility`.
 const isHorizontalScrollbarVisibility = (value: string): value is HorizontalScrollbarVisibility =>
   HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES.includes(value as HorizontalScrollbarVisibility);
 

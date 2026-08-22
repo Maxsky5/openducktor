@@ -1,3 +1,5 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -16,7 +18,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
     const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
-    const service = {
+    const service = createFocusedTestService<WorkspaceSettingsService>({
       listWorkspaces() {
         return Effect.tryPromise({
           try: async () => {
@@ -201,11 +203,21 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               theme: "light",
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
-              chat: { showThinkingMessages: false },
+              appearance: { horizontalScrollbarVisibility: "system" },
+              chat: {
+                showThinkingMessages: false,
+                expandFileDiffsByDefault: false,
+                diffStyle: "split",
+                diffIndicators: "bars",
+                diffHeight: "full",
+                lineOverflow: "wrap",
+                hunkSeparators: "metadata",
+              },
               reusablePrompts: [],
               kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
               autopilot: { rules: [] },
-              agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+              agentModelFavorites: [],
               workspaces: {},
               globalPromptOverrides: {},
             };
@@ -241,11 +253,19 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
               appearance: { horizontalScrollbarVisibility: "system" },
-              chat: { showThinkingMessages: false },
+              chat: {
+                showThinkingMessages: false,
+                expandFileDiffsByDefault: false,
+                diffStyle: "split",
+                diffIndicators: "bars",
+                diffHeight: "full",
+                lineOverflow: "wrap",
+                hunkSeparators: "metadata",
+              },
               reusablePrompts: [],
               kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
               autopilot: { rules: [] },
-              agentRuntimes: { opencode: { enabled: true }, codex: { enabled: false } },
+              agentRuntimes: DEFAULT_AGENT_RUNTIMES,
               agentModelFavorites: [
                 { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
               ],
@@ -287,7 +307,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-    } as unknown as WorkspaceSettingsService;
+    });
     const router = createHostCommandRouter({
       handlers: createWorkspaceSettingsCommandHandlers(service),
     });
@@ -386,7 +406,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ]);
   });
   test("rejects malformed settings command arguments", async () => {
-    const service = {
+    const service = createFocusedTestService<WorkspaceSettingsService>({
       listWorkspaces() {
         return Effect.tryPromise({
           try: async () => {
@@ -543,7 +563,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             }),
         });
       },
-    } as unknown as WorkspaceSettingsService;
+    });
     const router = createHostCommandRouter({
       handlers: createWorkspaceSettingsCommandHandlers(service),
     });

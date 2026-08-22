@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
@@ -44,7 +45,7 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 export const extractText = (value: JsonValue | undefined): string | null => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return value;
   }
   if (!isPlainObject(value)) {
@@ -52,7 +53,7 @@ export const extractText = (value: JsonValue | undefined): string | null => {
   }
   for (const key of ["text", "message", "content", "summary", "delta"]) {
     const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
       return candidate;
     }
   }
@@ -81,7 +82,7 @@ export const extractStringField = (value: JsonValue | undefined, keys: string[])
   }
   for (const key of keys) {
     const candidate = value[key];
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+    if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
       return candidate;
     }
   }
@@ -94,7 +95,7 @@ export const extractNumberField = (value: JsonValue | undefined, keys: string[])
   }
   for (const key of keys) {
     const candidate = value[key];
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    if (hasRuntimeType(candidate, "number") && Number.isFinite(candidate)) {
       return candidate;
     }
   }
@@ -121,7 +122,7 @@ export const stringifyJsonValue = (value: JsonValue | undefined): string | null 
   if (value === undefined || value === null) {
     return null;
   }
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return value;
   }
   try {
@@ -194,6 +195,10 @@ export const isCodexContextualUserMessage = (payload: Record<string, JsonValue>)
 const stripShellQuotes = (value: string): string =>
   value.replace(/^[']|^["]/, "").replace(/[']$|["]$/, "");
 
+interface SearchCommandInput {
+  [key: string]: JsonValue;
+}
+
 export const readPathFromCommand = (command: string): string | null => {
   const sedMatch = command.match(/\bsed\s+(?:-n\s+)?['"]?[^'"\s]+['"]?\s+(.+)$/);
   const catMatch = command.match(/\bcat\s+(.+)$/);
@@ -201,11 +206,11 @@ export const readPathFromCommand = (command: string): string | null => {
   return rawPath ? stripShellQuotes(rawPath.trim()) : null;
 };
 
-export const searchInputFromCommand = (command: string): Record<string, JsonValue> => {
-  const input: Record<string, JsonValue> = { command };
+export const searchInputFromCommand = (command: string) => {
+  const input: SearchCommandInput = { command };
   const rgMatch = command.match(/\brg\s+(?:-[^\s]+\s+)*(?:['"]([^'"]+)['"]|(\S+))(?:\s+(.+))?$/);
   if (!rgMatch) {
-    return input;
+    return input satisfies Record<string, JsonValue>;
   }
   const query = rgMatch[1] ?? rgMatch[2];
   const path = rgMatch[3]?.trim();
@@ -215,7 +220,7 @@ export const searchInputFromCommand = (command: string): Record<string, JsonValu
   if (path) {
     input.path = stripShellQuotes(path);
   }
-  return input;
+  return input satisfies Record<string, JsonValue>;
 };
 
 export const codexNamespacedToolName = (namespace: string | null, tool: string): string => {

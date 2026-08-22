@@ -40,5 +40,10 @@ export const acceptedUserMessageForInput = (
   message: serializeAgentUserMessagePartsToText(input.parts),
   parts: [],
   state: "read",
-  ...(input.model ? { model: input.model } : {}),
+  ...(() => {
+    if (input.model) {
+      return { model: input.model };
+    }
+    return {};
+  })(),
 });

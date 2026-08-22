@@ -39,7 +39,12 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
 
   return {
     ...toAgentSessionIdentity(session),
-    ...(session.title ? { title: session.title } : {}),
+    ...(() => {
+      if (session.title) {
+        return { title: session.title };
+      }
+      return {};
+    })(),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),

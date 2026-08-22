@@ -324,7 +324,12 @@ export class CodexPendingInputState {
       )
       .map((entry) => ({
         request: entry.request,
-        ...(entry.route ? { route: entry.route } : {}),
+        ...(() => {
+          if (entry.route) {
+            return { route: entry.route };
+          }
+          return {};
+        })(),
       }));
   }
 
@@ -357,7 +362,12 @@ export class CodexPendingInputState {
       )
       .map((entry) => ({
         request: entry.request,
-        ...(entry.route ? { route: entry.route } : {}),
+        ...(() => {
+          if (entry.route) {
+            return { route: entry.route };
+          }
+          return {};
+        })(),
       }));
   }
 

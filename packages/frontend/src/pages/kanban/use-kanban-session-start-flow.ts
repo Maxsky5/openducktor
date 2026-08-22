@@ -34,6 +34,7 @@ import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigati
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `Record<AgentRole, string>`.
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
@@ -203,7 +204,12 @@ export function useKanbanSessionStartFlow({
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
             humanRequestChangesTask,
-            ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
+            ...(() => {
+              if (setTaskTargetBranch) {
+                return { setTaskTargetBranch };
+              }
+              return {};
+            })(),
             openSessionInAgentStudio,
           });
           return session;
@@ -368,11 +374,19 @@ export function useKanbanSessionStartFlow({
             taskId: request.taskId,
             role: request.role,
             launchActionId: request.launchActionId,
-            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
+            ...(() => {
+              if (request.initialStartMode) {
+                return { initialStartMode: request.initialStartMode };
+              }
+              return {};
+            })(),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSession !== undefined
-              ? { initialSourceSession: request.initialSourceSession }
-              : {}),
+            ...(() => {
+              if (request.initialSourceSession !== undefined) {
+                return { initialSourceSession: request.initialSourceSession };
+              }
+              return {};
+            })(),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,

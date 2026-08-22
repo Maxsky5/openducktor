@@ -6,6 +6,8 @@ import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
 import type { JsonValue } from "@openducktor/contracts";
 
+type SerializableTestValue = object | string | number | boolean | null | undefined;
+
 const createDependencies = ({
   commandActivity,
   commandDelayMs = 0,
@@ -18,18 +20,18 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  pullRequestViewResponse?: unknown;
-  reviewThreadNodes?: unknown[];
-  reviewThreadResponse?: (args: string[]) => unknown;
+  pullRequestViewResponse?: SerializableTestValue;
+  reviewThreadNodes?: SerializableTestValue[];
+  reviewThreadResponse?: (args: string[]) => SerializableTestValue;
   checksResponse?: {
     ok: boolean;
-    stdout: unknown;
+    stdout: SerializableTestValue;
     rawStdout?: string;
     stderr?: string;
     exitCode?: number | null;
   };
 } = {}): GithubCommandDependencies => {
-  const succeed = (stdout: JsonValue | undefined) =>
+  const succeed = <Payload>(stdout: Payload) =>
     Effect.gen(function* () {
       if (commandActivity) {
         commandActivity.active += 1;
@@ -79,6 +81,7 @@ const createDependencies = ({
       }
       if (command.includes("api graphql")) {
         if (command.includes("PullRequestReviewOverview")) {
+          // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
           const view = pullRequestViewResponse as Record<string, JsonValue>;
           // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
           return succeed({
@@ -125,6 +128,7 @@ const createDependencies = ({
     },
   };
 
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   return {
     resolveGithubCommand: () =>
       Effect.succeed({
@@ -138,35 +142,36 @@ const createDependencies = ({
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
 
-const defaultPullRequestViewResponse = (): unknown => ({
-  number: 42,
-  title: "Rework panel",
-  url: "https://github.com/openai/openducktor/pull/42",
-  state: "OPEN",
-  isDraft: false,
-  comments: [
-    {
-      id: "comment-1",
-      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-      body: "Please check spacing.",
-      url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
-      createdAt: "2026-07-08T10:00:00Z",
-      updatedAt: "2026-07-08T10:01:00Z",
-    },
-  ],
-  reviews: [
-    {
-      id: "review-1",
-      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-      body: "Changes requested.",
-      state: "CHANGES_REQUESTED",
-      url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
-      createdAt: "2026-07-08T10:02:00Z",
-      submittedAt: "2026-07-08T10:02:00Z",
-      updatedAt: "2026-07-08T10:02:00Z",
-    },
-  ],
-});
+const defaultPullRequestViewResponse = () =>
+  ({
+    number: 42,
+    title: "Rework panel",
+    url: "https://github.com/openai/openducktor/pull/42",
+    state: "OPEN",
+    isDraft: false,
+    comments: [
+      {
+        id: "comment-1",
+        author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+        body: "Please check spacing.",
+        url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
+        createdAt: "2026-07-08T10:00:00Z",
+        updatedAt: "2026-07-08T10:01:00Z",
+      },
+    ],
+    reviews: [
+      {
+        id: "review-1",
+        author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+        body: "Changes requested.",
+        state: "CHANGES_REQUESTED",
+        url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
+        createdAt: "2026-07-08T10:02:00Z",
+        submittedAt: "2026-07-08T10:02:00Z",
+        updatedAt: "2026-07-08T10:02:00Z",
+      },
+    ],
+  }) satisfies unknown;
 
 const defaultReviewThreadNodes = [
   {
@@ -459,6 +464,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("uses the full review history", async () => {
     const provider = createGithubPullRequestReviewReader();
+    // SAFETY: This test controls the fixture and supplies `{ reviews: unknown[]; }` used by this case.
     const pullRequestViewResponse = defaultPullRequestViewResponse() as {
       reviews: unknown[];
     };
@@ -496,6 +502,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
     const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
+    // SAFETY: This test controls the fixture and supplies `{ reviews: unknown[]; }` used by this case.
     const pullRequestViewResponse = defaultPullRequestViewResponse() as {
       reviews: unknown[];
     };
@@ -966,7 +973,7 @@ describe("createGithubPullRequestReviewReader", () => {
   test("loads every review thread and comment page", async () => {
     const commands: string[][] = [];
     const provider = createGithubPullRequestReviewReader();
-    const reviewThreadResponse = (args: string[]): unknown => {
+    const reviewThreadResponse = (args: string[]) => {
       const command = args.join(" ");
       if (command.includes("PullRequestReviewThreadComments")) {
         expect(command).toContain("threadId=thread-1");
@@ -993,7 +1000,7 @@ describe("createGithubPullRequestReviewReader", () => {
               },
             },
           },
-        };
+        } satisfies unknown;
       }
       if (command.includes("threadsCursor=threads-page-2")) {
         return {
@@ -1027,7 +1034,7 @@ describe("createGithubPullRequestReviewReader", () => {
               },
             },
           },
-        };
+        } satisfies unknown;
       }
       return {
         data: {
@@ -1060,7 +1067,7 @@ describe("createGithubPullRequestReviewReader", () => {
             },
           },
         },
-      };
+      } satisfies unknown;
     };
 
     const context = await Effect.runPromise(
@@ -1167,6 +1174,7 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewReader();
+    // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
     const malformedView = {
       ...(defaultPullRequestViewResponse() as Record<string, JsonValue>),
       url: "not-a-url",

@@ -41,6 +41,7 @@ export const userMessageMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const messageId = codexItemId(input.item, `${ctx.threadId}-user-${input.index}`);
+    const timestamp = ctx.timestamp ?? input.timestamp;
     return {
       handled: true,
       events: [
@@ -49,9 +50,12 @@ export const userMessageMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "user_message",
           threadId: ctx.threadId,
-          ...((ctx.timestamp ?? input.timestamp)
-            ? { timestamp: ctx.timestamp ?? input.timestamp }
-            : {}),
+          ...(() => {
+            if (timestamp) {
+              return { timestamp };
+            }
+            return {};
+          })(),
           raw: input.item,
           messageId,
           message,
@@ -84,6 +88,7 @@ export const assistantMessageMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
     const messageId = codexItemId(input.item, `${ctx.threadId}-assistant-${input.index}`);
+    const timestamp = ctx.timestamp ?? input.timestamp;
     return {
       handled: true,
       events: [
@@ -92,9 +97,12 @@ export const assistantMessageMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "assistant_message",
           threadId: ctx.threadId,
-          ...((ctx.timestamp ?? input.timestamp)
-            ? { timestamp: ctx.timestamp ?? input.timestamp }
-            : {}),
+          ...(() => {
+            if (timestamp) {
+              return { timestamp };
+            }
+            return {};
+          })(),
           raw: input.item,
           messageId,
           message,
@@ -106,9 +114,12 @@ export const assistantMessageMapper: CodexEventMapper = {
                 source: ctx.source,
                 mapper: "assistant_message",
                 threadId: ctx.threadId,
-                ...((ctx.timestamp ?? input.timestamp)
-                  ? { timestamp: ctx.timestamp ?? input.timestamp }
-                  : {}),
+                ...(() => {
+                  if (timestamp) {
+                    return { timestamp };
+                  }
+                  return {};
+                })(),
                 raw: input.item,
                 part: terminalHistoryPart(messageId),
               },

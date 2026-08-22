@@ -27,8 +27,18 @@ export const roleDefaultSelectionFor = (
     runtimeKind,
     providerId: roleDefault.providerId,
     modelId: roleDefault.modelId,
-    ...(roleDefault.variant ? { variant: roleDefault.variant } : {}),
-    ...(roleDefault.profileId ? { profileId: roleDefault.profileId } : {}),
+    ...(() => {
+      if (roleDefault.variant) {
+        return { variant: roleDefault.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (roleDefault.profileId) {
+        return { profileId: roleDefault.profileId };
+      }
+      return {};
+    })(),
   };
 };
 

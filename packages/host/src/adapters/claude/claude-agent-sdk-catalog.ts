@@ -333,7 +333,12 @@ export const toClaudeSlashCommandCatalog = (
               id: command.name,
               trigger: command.name,
               title: command.name,
-              ...(command.description ? { description: command.description } : {}),
+              ...(() => {
+                if (command.description) {
+                  return { description: command.description };
+                }
+                return {};
+              })(),
               source: isClaudeSkillCommand(command) ? ("skill" as const) : ("command" as const),
               hints: command.argumentHint ? [command.argumentHint] : [],
             },
@@ -374,7 +379,12 @@ export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalo
         name: skill.name,
         path: skill.name,
         title: skill.name,
-        ...(skill.description ? { description: skill.description } : {}),
+        ...(() => {
+          if (skill.description) {
+            return { description: skill.description };
+          }
+          return {};
+        })(),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
@@ -387,7 +397,12 @@ const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
         id: agent.name,
         name: agent.name,
         label: agent.name,
-        ...(agent.description ? { description: agent.description } : {}),
+        ...(() => {
+          if (agent.description) {
+            return { description: agent.description };
+          }
+          return {};
+        })(),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
@@ -433,6 +448,7 @@ export const searchClaudeWorkspaceFiles = async (
       visited += 1;
       const haystack = `${entry.name}\n${relativePath}`.toLowerCase();
       if (haystack.includes(queryText)) {
+        // SAFETY: The preceding runtime guard establishes `AgentFileSearchResult["kind"]` before this assertion.
         results.push({
           id: relativePath,
           path: relativePath,

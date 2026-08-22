@@ -18,6 +18,14 @@ import {
   taskFixture,
 } from "./start-session.test-helpers";
 
+interface SessionsRefContract {
+  current: AgentSessionCollection;
+}
+
+interface SessionsRefContract521 {
+  current: AgentSessionCollection;
+}
+
 const sessionFixture = (
   overrides: Parameters<typeof baseSessionFixture>[0],
 ): ReturnType<typeof baseSessionFixture> =>
@@ -236,7 +244,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       variant: "medium",
       profileId: "Sisyphus",
     };
-    const sessionsRef: { current: AgentSessionCollection } = {
+    const sessionsRef: SessionsRefContract = {
       current: createAgentSessionCollection([
         sessionFixture({
           externalSessionId: "external-reused",
@@ -518,7 +526,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const sessionsRef: { current: AgentSessionCollection } = {
+    const sessionsRef: SessionsRefContract521 = {
       current: createAgentSessionCollection([
         sessionFixture({
           externalSessionId: "existing-spec-ext",

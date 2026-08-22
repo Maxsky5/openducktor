@@ -175,6 +175,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("does not duplicate normalized final assistant text repeated by a successful result", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -215,6 +216,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("hydrates peer responses as intermediate and the closing task response as final", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -447,6 +449,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("finalizes result text repeated by an intermediate assistant response", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -493,6 +496,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("removes Claude history messages retracted by supersedes and refusal fallback notices", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -572,6 +576,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("hydrates repeated same-text result-only replies across separate user turns", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({

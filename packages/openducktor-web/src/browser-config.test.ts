@@ -12,6 +12,7 @@ type OriginValidationCase = {
   errorIncludes?: string;
 };
 
+// SAFETY: This test controls the fixture and supplies `OriginValidationCase[]` used by this case.
 const loadOriginValidationCases = async (): Promise<OriginValidationCase[]> =>
   (await Bun.file(
     new URL("./browser-origin-validation-cases.json", import.meta.url),

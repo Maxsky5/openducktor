@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeResultLifecycleOutcome } from "./claude-agent-sdk-result-lifecycle";
 import type { ClaudeSessionActivity } from "./claude-agent-sdk-types";
@@ -35,10 +36,10 @@ const hasPendingInput = (session: ClaudeLifecycleSession): boolean => {
 };
 
 const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
+  hasRuntimeType(session.pendingUserTurnCount, "number") ? session.pendingUserTurnCount : 0;
 
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  typeof session.activeSdkUserTurnCount === "number" ? session.activeSdkUserTurnCount : 0;
+  hasRuntimeType(session.activeSdkUserTurnCount, "number") ? session.activeSdkUserTurnCount : 0;
 
 const emitSessionIdle = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
   if (session.activity === "idle") {

@@ -85,6 +85,7 @@ describe("OpenRepositoryModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect(((await screen.findByLabelText("Repository path")) as HTMLInputElement).value).toBe(
       "/repo",
     );
@@ -133,7 +134,9 @@ describe("OpenRepositoryModal", () => {
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     const closeButton = screen.getByRole("button", { name: "Close" });
     const recentButton = screen.getByRole("button", { name: /Existing/ });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((closeButton as HTMLButtonElement).disabled).toBe(true);
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((recentButton as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -141,8 +144,11 @@ describe("OpenRepositoryModal", () => {
     addWorkspaceResult.reject(new Error("Repository open failed"));
 
     await screen.findByText("Repository open failed");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((closeButton as HTMLButtonElement).disabled).toBe(false);
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((recentButton as HTMLButtonElement).disabled).toBe(false);
     unmount();
   });

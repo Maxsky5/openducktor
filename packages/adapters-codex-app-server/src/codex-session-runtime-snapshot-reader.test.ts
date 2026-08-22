@@ -28,6 +28,7 @@ const createInventory = (thread: CodexThreadSnapshot): CodexThreadInventory => (
   threadsById: new Map([[thread.id, thread]]),
 });
 
+// SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createDeps = (
   inventory: CodexThreadInventory,
   sessions: CodexSessionState[] = [],
@@ -75,6 +76,7 @@ describe("Codex session runtime snapshot reader", () => {
     };
     const deps = createDeps(inventory, [localSession]);
     let inventoryReadCount = 0;
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     deps.threadInventory = {
       read: async () => {
         inventoryReadCount += 1;

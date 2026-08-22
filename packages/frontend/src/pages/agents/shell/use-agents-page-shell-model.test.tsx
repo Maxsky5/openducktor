@@ -35,6 +35,11 @@ import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import type { useAgentStudioSessionActions } from "../use-agent-studio-session-actions";
 
+interface RepoSettingsStateContract {
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+}
+
 enableReactActEnvironment();
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
@@ -201,10 +206,7 @@ let tasksState: TasksStateContextValue = {
 };
 let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
-let repoSettingsState: {
-  repoSettings: RepoSettingsInput | null;
-  isLoadingRepoSettings: boolean;
-} = {
+let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
   isLoadingRepoSettings: false,
 };

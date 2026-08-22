@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionMessages } from "../../../types/agent-orchestrator";
 import { type SessionMessageOwner, updateSessionMessagesByRole } from "./support/messages";
 
@@ -49,20 +50,23 @@ export const settleDanglingTodoToolMessages = (
       return message;
     }
 
-    const errorText =
-      outcome === "error"
-        ? options?.errorMessage?.trim() || meta.error || "Tool failed"
-        : meta.error;
+    const errorText = options?.errorMessage?.trim() || meta.error || "Tool failed";
     const updatedStatus: ToolStatus = outcome === "error" ? "error" : "completed";
     const updatedMeta = {
       ...meta,
       status: updatedStatus,
-      ...(typeof meta.endedAtMs === "number"
-        ? {}
-        : typeof endedAtMs === "number"
-          ? { endedAtMs }
-          : {}),
-      ...(updatedStatus === "error" ? { error: errorText } : {}),
+      ...(() => {
+        if (hasRuntimeType(meta.endedAtMs, "number")) {
+          return {};
+        }
+        return hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : {};
+      })(),
+      ...(() => {
+        if (updatedStatus === "error") {
+          return { error: errorText };
+        }
+        return {};
+      })(),
     };
 
     return {
@@ -71,9 +75,24 @@ export const settleDanglingTodoToolMessages = (
       content: formatToolContent({
         tool: meta.tool,
         status: updatedStatus,
-        ...(meta.title ? { title: meta.title } : {}),
-        ...(meta.output ? { output: meta.output } : {}),
-        ...(updatedStatus === "error" ? { error: errorText } : {}),
+        ...(() => {
+          if (meta.title) {
+            return { title: meta.title };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (meta.output) {
+            return { output: meta.output };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (updatedStatus === "error") {
+            return { error: errorText };
+          }
+          return {};
+        })(),
       }),
       meta: updatedMeta,
     };

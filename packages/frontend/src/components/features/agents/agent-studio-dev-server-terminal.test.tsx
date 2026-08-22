@@ -1,10 +1,16 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { IDisposable, ITerminalAddon } from "@xterm/xterm";
 import { render, waitFor } from "@testing-library/react";
 import { AgentStudioDevServerTerminal } from "./agent-studio-dev-server-terminal";
 
-if (typeof document === "undefined") {
+interface CapturedOptionsContract {
+  disableStdin?: boolean;
+  fontFamily?: string;
+}
+
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
@@ -78,7 +84,7 @@ describe("AgentStudioDevServerTerminal", () => {
     });
     const dispose = mock(() => {});
     const onRendererError = mock(() => {});
-    let capturedOptions: { disableStdin?: boolean; fontFamily?: string } = {};
+    let capturedOptions: CapturedOptionsContract = {};
     const createTerminalBinding = (
       container: HTMLElement,
       options: { disableStdin?: boolean; fontFamily?: string },

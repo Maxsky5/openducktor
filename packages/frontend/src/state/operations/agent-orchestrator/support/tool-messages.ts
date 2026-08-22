@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -15,21 +16,25 @@ export const normalizeToolInput = (
   return Object.keys(input).length > 0 ? input : undefined;
 };
 
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, JsonValue>`.
 export const normalizeToolText = (value: JsonValue | undefined): string | undefined => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
     return String(value);
   }
   if (Array.isArray(value) && value.length === 0) {
     return undefined;
   }
-  if (typeof value === "object" && Object.keys(value as Record<string, JsonValue>).length === 0) {
+  if (
+    hasRuntimeType(value, "object") &&
+    Object.keys(value as Record<string, JsonValue>).length === 0
+  ) {
     return undefined;
   }
   try {
@@ -93,6 +98,7 @@ export const resolveToolMessageId = (
   return byRunningTool?.id ?? fallbackId;
 };
 
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `Record<string, JsonValue>` at this boundary.
 export const normalizeSessionErrorMessage = (value: string): string => {
   const trimmed = value.trim();
   const withoutQuotes = trimmed
@@ -105,20 +111,23 @@ export const normalizeSessionErrorMessage = (value: string): string => {
   }
 
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     const parsed = JSON.parse(withoutQuotes) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
-    if (!parsed || typeof parsed !== "object") {
+    if (!parsed || !hasRuntimeType(parsed, "object")) {
       return withoutQuotes;
     }
+    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
     const record = parsed as Record<string, JsonValue>;
-    if (typeof record.message === "string" && record.message.trim().length > 0) {
+    if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
       return record.message.trim();
     }
     const nestedError = record.error;
     if (
       nestedError &&
-      typeof nestedError === "object" &&
-      typeof (nestedError as Record<string, JsonValue>).message === "string"
+      hasRuntimeType(nestedError, "object") &&
+      hasRuntimeType((nestedError as Record<string, JsonValue>).message, "string")
     ) {
+      // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
       return String((nestedError as Record<string, JsonValue>).message).trim();
     }
     return withoutQuotes;

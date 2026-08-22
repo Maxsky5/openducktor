@@ -5,22 +5,23 @@ export const setAgentSessionRequestValue = <Value>(
   sessionKey: string,
   requestId: string,
   value: Value,
-): AgentSessionRequestState<Value> => ({
-  ...source,
-  [sessionKey]: {
-    ...source[sessionKey],
-    [requestId]: value,
-  },
-});
+) =>
+  ({
+    ...source,
+    [sessionKey]: {
+      ...source[sessionKey],
+      [requestId]: value,
+    },
+  }) satisfies AgentSessionRequestState<Value>;
 
 export const removeAgentSessionRequestValue = <Value>(
   source: AgentSessionRequestState<Value>,
   sessionKey: string,
   requestId: string,
-): AgentSessionRequestState<Value> => {
+) => {
   const sessionRequests = source[sessionKey];
   if (!sessionRequests || !(requestId in sessionRequests)) {
-    return source;
+    return source satisfies AgentSessionRequestState<Value>;
   }
 
   const nextSessionRequests = { ...sessionRequests };
@@ -31,7 +32,7 @@ export const removeAgentSessionRequestValue = <Value>(
   } else {
     next[sessionKey] = nextSessionRequests;
   }
-  return next;
+  return next satisfies AgentSessionRequestState<Value>;
 };
 
 export const selectPendingAgentSessionRequestValues = <Value>(

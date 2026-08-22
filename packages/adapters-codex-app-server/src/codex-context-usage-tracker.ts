@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { extractThreadIdFromParams } from "./codex-app-server-requests";
 import { isPlainObject } from "./codex-app-server-shared";
 import { extractCodexTokenUsageTotals } from "./codex-app-server-transcript";
@@ -7,6 +8,7 @@ import type { CodexNotificationRecord, CodexSessionContextUsage } from "./types"
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
 
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `[string, string]` at this boundary.
 const parseContextUsageKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
 
 const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextUsage | null => {
@@ -19,7 +21,7 @@ const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextU
   }
   if (
     usage.last.totalTokens !== 0 ||
-    typeof usage.total.totalTokens !== "number" ||
+    !hasRuntimeType(usage.total.totalTokens, "number") ||
     !Number.isFinite(usage.total.totalTokens) ||
     usage.total.totalTokens < 0
   ) {
@@ -29,13 +31,18 @@ const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextU
   if (
     contextWindow !== null &&
     contextWindow !== undefined &&
-    (typeof contextWindow !== "number" || contextWindow <= 0)
+    (!hasRuntimeType(contextWindow, "number") || contextWindow <= 0)
   ) {
     return null;
   }
   return {
     totalTokens: 0,
-    ...(typeof contextWindow === "number" ? { contextWindow } : {}),
+    ...(() => {
+      if (hasRuntimeType(contextWindow, "number")) {
+        return { contextWindow };
+      }
+      return {};
+    })(),
   };
 };
 

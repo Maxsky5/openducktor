@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { JsonValue } from "@openducktor/contracts";
 import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
@@ -66,7 +67,7 @@ export const hasTerminalStopSignalInParts = (
   return parts.some(
     (part) =>
       part.type === "step-finish" &&
-      typeof part.reason === "string" &&
+      hasRuntimeType(part.reason, "string") &&
       isTerminalStepFinishReason(part.reason),
   );
 };
@@ -126,12 +127,42 @@ export const updateMessageMetadata = (
 
   session.messageMetadataById.set(messageId, {
     timestamp,
-    ...(model ? { model } : {}),
-    ...(parentId ? { parentId } : {}),
-    ...(text ? { text } : {}),
-    ...(hasStopSignal !== undefined ? { hasStopSignal } : {}),
-    ...(totalTokens !== undefined ? { totalTokens } : {}),
-    ...(displayParts ? { displayParts } : {}),
+    ...(() => {
+      if (model) {
+        return { model };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (parentId) {
+        return { parentId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (text) {
+        return { text };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasStopSignal !== undefined) {
+        return { hasStopSignal };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (totalTokens !== undefined) {
+        return { totalTokens };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (displayParts) {
+        return { displayParts };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -151,14 +182,21 @@ export const normalizeMessagePart = (
   messageId: string,
   externalSessionId: string,
 ): Part => {
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `Part`.
   return {
     ...(rawPartRecord as Part),
-    ...(readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])
-      ? {}
-      : { sessionID: externalSessionId }),
-    ...(readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])
-      ? {}
-      : { messageID: messageId }),
+    ...(() => {
+      if (readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])) {
+        return {};
+      }
+      return { sessionID: externalSessionId };
+    })(),
+    ...(() => {
+      if (readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])) {
+        return {};
+      }
+      return { messageID: messageId };
+    })(),
   } as Part;
 };
 

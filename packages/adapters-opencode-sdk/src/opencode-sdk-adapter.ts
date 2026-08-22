@@ -2,6 +2,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type RuntimeKind,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { asUnknownRecord } from "./guards";
 import type {
@@ -209,7 +210,12 @@ export class OpencodeSdkAdapter
       startedMessage: `Started ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      ...(() => {
+        if (this.logEvent) {
+          return { logEvent: this.logEvent };
+        }
+        return {};
+      })(),
     });
   }
 
@@ -272,7 +278,12 @@ export class OpencodeSdkAdapter
       startedMessage: `Resumed ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      ...(() => {
+        if (this.logEvent) {
+          return { logEvent: this.logEvent };
+        }
+        return {};
+      })(),
     });
   }
 
@@ -350,7 +361,12 @@ export class OpencodeSdkAdapter
       subscribeToEvents: false,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      ...(() => {
+        if (this.logEvent) {
+          return { logEvent: this.logEvent };
+        }
+        return {};
+      })(),
     });
 
     try {
@@ -364,7 +380,12 @@ export class OpencodeSdkAdapter
         sessionInput,
         now: this.now,
         emit: this.emit.bind(this),
-        ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+        ...(() => {
+          if (this.logEvent) {
+            return { logEvent: this.logEvent };
+          }
+          return {};
+        })(),
       });
     } catch (error) {
       const session = this.sessions.get(input.externalSessionId);
@@ -426,7 +447,12 @@ export class OpencodeSdkAdapter
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
-      ...(input.runtimeHistoryAnchor ? { messageID: input.runtimeHistoryAnchor } : {}),
+      ...(() => {
+        if (input.runtimeHistoryAnchor) {
+          return { messageID: input.runtimeHistoryAnchor };
+        }
+        return {};
+      })(),
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
@@ -473,7 +499,12 @@ export class OpencodeSdkAdapter
       startedMessage: `Forked ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(this.logEvent ? { logEvent: this.logEvent } : {}),
+      ...(() => {
+        if (this.logEvent) {
+          return { logEvent: this.logEvent };
+        }
+        return {};
+      })(),
     });
   }
 
@@ -488,7 +519,12 @@ export class OpencodeSdkAdapter
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       now: this.now,
-      ...(input.directories ? { directories: input.directories } : {}),
+      ...(() => {
+        if (input.directories) {
+          return { directories: input.directories };
+        }
+        return {};
+      })(),
     });
     const existingExternalSessionIds = new Set(
       snapshots.map((snapshot) => snapshot.externalSessionId),
@@ -498,7 +534,12 @@ export class OpencodeSdkAdapter
       runtimeId: runtimeClientInput.runtimeId,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      ...(input.directories ? { directories: input.directories } : {}),
+      ...(() => {
+        if (input.directories) {
+          return { directories: input.directories };
+        }
+        return {};
+      })(),
       existingExternalSessionIds,
     });
     const liveSnapshots = snapshots.map((snapshot) =>
@@ -634,8 +675,18 @@ export class OpencodeSdkAdapter
     const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
-      ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
-      ...(preservedDisplayPartsByMessageId.size > 0 ? { preservedDisplayPartsByMessageId } : {}),
+      ...(() => {
+        if (hasRuntimeType(input.limit, "number")) {
+          return { limit: input.limit };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (preservedDisplayPartsByMessageId.size > 0) {
+          return { preservedDisplayPartsByMessageId };
+        }
+        return {};
+      })(),
     };
 
     return loadSessionHistory(this.createClient, this.now, historyInput);
@@ -746,8 +797,18 @@ export class OpencodeSdkAdapter
         session,
         request: input,
         tools,
-        ...(messageId ? { messageId } : {}),
-        ...(admission ? { admission: admission.promise } : {}),
+        ...(() => {
+          if (messageId) {
+            return { messageId };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (admission) {
+            return { admission: admission.promise };
+          }
+          return {};
+        })(),
       });
       const timestamp = this.now();
       const event: AcceptedAgentUserMessage = {
@@ -790,7 +851,12 @@ export class OpencodeSdkAdapter
     const session = requireSession(this.sessions, input.externalSessionId);
     session.input = {
       ...session.input,
-      ...(input.model ? { model: input.model } : {}),
+      ...(() => {
+        if (input.model) {
+          return { model: input.model };
+        }
+        return {};
+      })(),
     };
     if (!input.model) {
       delete session.input.model;
@@ -935,14 +1001,19 @@ export class OpencodeSdkAdapter
           serverName: event.serverName,
           workingDirectory: event.workingDirectory,
           status: event.status,
-          ...(event.errorDetails ? { errorDetails: event.errorDetails } : {}),
+          ...(() => {
+            if (event.errorDetails) {
+              return { errorDetails: event.errorDetails };
+            }
+            return {};
+          })(),
         });
       },
     });
 
     if (
       session.workflowToolSelectionCache &&
-      typeof session.workflowToolSelectionCachedAt === "number" &&
+      hasRuntimeType(session.workflowToolSelectionCachedAt, "number") &&
       nowMs - session.workflowToolSelectionCachedAt < WORKFLOW_TOOL_CACHE_TTL_MS
     ) {
       return session.workflowToolSelectionCache;

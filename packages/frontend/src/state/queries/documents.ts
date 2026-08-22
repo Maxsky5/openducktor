@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { TaskDocumentPayload } from "@/types/task-documents";
 import { host } from "../operations/host";
@@ -130,7 +131,7 @@ export const removeCachedTaskDocumentQueries = (
     if (
       scope !== documentQueryKeys.all[0] ||
       cachedRepoPath !== repoPath ||
-      typeof cachedTaskId !== "string" ||
+      !hasRuntimeType(cachedTaskId, "string") ||
       !taskIdSet.has(cachedTaskId)
     ) {
       continue;
@@ -157,7 +158,7 @@ export const invalidateCachedTaskDocumentQueries = async (
       return (
         scope === documentQueryKeys.all[0] &&
         cachedRepoPath === repoPath &&
-        typeof cachedTaskId === "string" &&
+        hasRuntimeType(cachedTaskId, "string") &&
         taskIdSet.has(cachedTaskId)
       );
     },

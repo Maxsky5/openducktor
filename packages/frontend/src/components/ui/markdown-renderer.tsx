@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 
+interface MARKDOWNCLASSESContract extends Record<MarkdownRendererVariant, string> {}
+
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
 const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
@@ -36,7 +38,7 @@ type MarkdownRendererProps = {
 const REMARK_PLUGINS = [remarkGfm];
 const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
 
-const MARKDOWN_CLASSES: Record<MarkdownRendererVariant, string> = {
+const MARKDOWN_CLASSES: MARKDOWNCLASSESContract = {
   compact: cn(
     "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
     "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-foreground",

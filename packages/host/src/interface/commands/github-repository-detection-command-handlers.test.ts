@@ -12,6 +12,7 @@ import { createGithubRepositoryDetectionCommandHandlers } from "./github-reposit
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
+// SAFETY: This test controls the fixture and supplies `GithubRepositoryDetectionService` used by this case.
 const createGithubRepositoryDetectionServiceFake = (
   service: GithubRepositoryDetectionService,
 ): GithubRepositoryDetectionService => service as GithubRepositoryDetectionService;

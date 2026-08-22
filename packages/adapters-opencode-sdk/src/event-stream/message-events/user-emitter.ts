@@ -25,9 +25,19 @@ export const persistUserMessageMetadata = (input: {
       : input.metadata?.model
         ? { model: input.metadata.model }
         : {}),
-    ...(input.metadata?.parentId ? { parentId: input.metadata.parentId } : {}),
+    ...(() => {
+      if (input.metadata?.parentId) {
+        return { parentId: input.metadata.parentId };
+      }
+      return {};
+    })(),
     text: input.visible,
-    ...(input.displayParts.length > 0 ? { displayParts: input.displayParts } : {}),
+    ...(() => {
+      if (input.displayParts.length > 0) {
+        return { displayParts: input.displayParts };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -106,7 +116,12 @@ export const emitUserMessage = (
     message: input.message,
     parts: input.parts,
     state: input.state,
-    ...(input.model ? { model: input.model } : {}),
+    ...(() => {
+      if (input.model) {
+        return { model: input.model };
+      }
+      return {};
+    })(),
   });
   session.emittedUserMessageSignatures.set(input.messageId, signature);
   session.emittedUserMessageStates.set(input.messageId, input.state);
@@ -135,7 +150,12 @@ export const emitKnownUserMessage = (
     message: content.visible,
     parts: content.displayParts,
     state: input.state,
-    ...(input.model ? { model: input.model } : {}),
+    ...(() => {
+      if (input.model) {
+        return { model: input.model };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -156,7 +176,12 @@ export const emitAdmittedUserMessage = (
     session,
     messageId: input.messageId,
     timestamp: input.timestamp,
-    ...(input.model ? { model: input.model } : {}),
+    ...(() => {
+      if (input.model) {
+        return { model: input.model };
+      }
+      return {};
+    })(),
     visible: input.message,
     displayParts: input.parts,
   });

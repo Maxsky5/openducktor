@@ -69,6 +69,7 @@ export function SettingsAutopilotSection({
                 searchPlaceholder="Search actions..."
                 triggerClassName="justify-between"
                 onValueChange={(value) => {
+                  // SAFETY: The surrounding boundary constructs or validates every member required by `AutopilotSelectValue`.
                   onUpdateAutopilot((current) =>
                     setAutopilotRuleAction(
                       current,

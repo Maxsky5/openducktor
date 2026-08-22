@@ -11,7 +11,12 @@ export const preferredMessageTimestamp = (
   }
   return {
     timestamp: preferred.timestamp,
-    ...(preferred.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+    ...(() => {
+      if (preferred.timestampIsApproximate) {
+        return { timestampIsApproximate: true };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -21,10 +26,16 @@ export const applyMessageTimestamp = <T extends AgentChatMessage>(
 ): T => {
   const { timestampIsApproximate: _discardedAccuracy, ...messageWithoutTimestampAccuracy } =
     message;
+  // SAFETY: The surrounding boundary constructs or validates every member required by `T`.
   return {
     ...messageWithoutTimestampAccuracy,
     timestamp: timestamp.timestamp,
-    ...(timestamp.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+    ...(() => {
+      if (timestamp.timestampIsApproximate) {
+        return { timestampIsApproximate: true };
+      }
+      return {};
+    })(),
   } as T;
 };
 

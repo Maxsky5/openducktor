@@ -7,7 +7,12 @@ import {
 
 type BridgeErrorPayload = OdtToolErrorPayload & Record<string, JsonValue>;
 
-const isRecord = (cause: unknown): cause is Record<string, unknown> =>
+type BridgeErrorSource = {
+  code?: unknown;
+  details?: unknown;
+};
+
+const isRecord = (cause: unknown): cause is BridgeErrorSource =>
   typeof cause === "object" && cause !== null && !Array.isArray(cause);
 
 const isJsonRecord = (value: JsonValue): value is Record<string, JsonValue> =>

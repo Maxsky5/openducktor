@@ -349,7 +349,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                       ref: route.ref,
                       nativeRequestId: route.nativeRequestId,
                       outcome: input.outcome,
-                      ...(input.message ? { message: input.message } : {}),
+                      ...(() => {
+                        if (input.message) {
+                          return { message: input.message };
+                        }
+                        return {};
+                      })(),
                     }),
                   catch: (cause) =>
                     toHostOperationError(cause, "opencode-live-session.reply-approval", {

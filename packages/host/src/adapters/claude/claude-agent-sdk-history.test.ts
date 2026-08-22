@@ -131,6 +131,7 @@ describe("claude-agent-sdk-history", () => {
   });
 
   test("marks the current Claude success result shape final", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         {
@@ -157,6 +158,7 @@ describe("claude-agent-sdk-history", () => {
   });
 
   test("hydrates failed Claude results as session errors", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         {
@@ -191,6 +193,7 @@ describe("claude-agent-sdk-history", () => {
   });
 
   test("does not hydrate current context usage from Claude result totals", () => {
+    // SAFETY: This test creates the DOM fixture that supplies `Parameters<typeof toClaudeHistoryMessages>[0]` before this lookup.
     const history = toClaudeHistoryMessages(
       [
         {

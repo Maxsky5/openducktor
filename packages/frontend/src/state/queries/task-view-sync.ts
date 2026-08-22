@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { isCancelledError, type QueryClient } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
@@ -48,11 +49,12 @@ const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string) =>
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
-        typeof taskId !== "string"
+        !hasRuntimeType(taskId, "string")
       ) {
         return [];
       }
       if (section === "spec" || section === "plan") {
+        // SAFETY: The preceding runtime guard establishes `TaskDocumentSection` before this assertion.
         return [{ queryKey: query.queryKey, section: section as TaskDocumentSection, taskId }];
       }
       if (section === "qa-report") {

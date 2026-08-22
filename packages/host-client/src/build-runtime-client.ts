@@ -41,6 +41,7 @@ import {
   taskSessionBootstrapSchema,
   taskStoreCheckSchema,
   taskWorktreeSummarySchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray, parseOkResult } from "./invoke-utils";
@@ -84,8 +85,18 @@ const readRuntimeEnsureFailureEnvelope = (
 
   return {
     failureKind: value.failureKind,
-    ...(value.message !== undefined ? { message: value.message } : {}),
-    ...(value.error !== undefined ? { error: value.error } : {}),
+    ...(() => {
+      if (value.message !== undefined) {
+        return { message: value.message };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (value.error !== undefined) {
+        return { error: value.error };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -104,7 +115,12 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
     return {
       message: cause.message,
       failureKind: cause.failureKind,
-      ...(cause.cause !== undefined ? { cause: cause.cause } : {}),
+      ...(() => {
+        if (cause.cause !== undefined) {
+          return { cause: cause.cause };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -125,7 +141,12 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
   return {
     message,
     failureKind: failureEnvelope.failureKind,
-    ...(cause !== undefined ? { cause } : {}),
+    ...(() => {
+      if (cause !== undefined) {
+        return { cause };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -262,7 +283,12 @@ const codexAppServerRequest = async (
     toCommandArgs({
       runtimeId,
       method,
-      ...(params !== undefined ? { params } : {}),
+      ...(() => {
+        if (params !== undefined) {
+          return { params };
+        }
+        return {};
+      })(),
     }),
   );
 };
@@ -290,7 +316,12 @@ const taskSessionBootstrapPrepare = async (
     taskId,
     role,
     runtimeKind,
-    ...(targetWorkingDirectory ? { targetWorkingDirectory } : {}),
+    ...(() => {
+      if (targetWorkingDirectory) {
+        return { targetWorkingDirectory };
+      }
+      return {};
+    })(),
   });
   return taskSessionBootstrapSchema.parse(payload);
 };
@@ -312,7 +343,7 @@ const taskSessionStartupLeasePrepare = async (
   role: AgentRole,
 ): Promise<string> => {
   const payload = await invokeFn("task_session_startup_lease_prepare", { repoPath, taskId, role });
-  if (typeof payload !== "string" || !payload.trim()) {
+  if (!hasRuntimeType(payload, "string") || !payload.trim()) {
     throw new Error("task_session_startup_lease_prepare returned an invalid lease id.");
   }
   return payload;

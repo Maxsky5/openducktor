@@ -126,42 +126,90 @@ const toLivePendingApproval = (
   requestId: request.requestId,
   requestType: request.requestType,
   title: request.title,
-  ...(request.summary !== undefined ? { summary: request.summary } : {}),
-  ...(request.details !== undefined ? { details: request.details } : {}),
-  ...(request.affectedPaths !== undefined ? { affectedPaths: [...request.affectedPaths] } : {}),
-  ...(request.command
-    ? {
+  ...(() => {
+    if (request.summary !== undefined) {
+      return { summary: request.summary };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.details !== undefined) {
+      return { details: request.details };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.affectedPaths !== undefined) {
+      return { affectedPaths: [...request.affectedPaths] };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.command) {
+      return {
         command: {
           command: request.command.command,
-          ...(request.command.workingDirectory !== undefined
-            ? { workingDirectory: request.command.workingDirectory }
-            : {}),
+          ...(() => {
+            if (request.command.workingDirectory !== undefined) {
+              return { workingDirectory: request.command.workingDirectory };
+            }
+            return {};
+          })(),
         },
-      }
-    : {}),
-  ...(request.action
-    ? {
+      };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.action) {
+      return {
         action: {
           name: request.action.name,
-          ...(request.action.description !== undefined
-            ? { description: request.action.description }
-            : {}),
+          ...(() => {
+            if (request.action.description !== undefined) {
+              return { description: request.action.description };
+            }
+            return {};
+          })(),
         },
-      }
-    : {}),
-  ...(request.tool
-    ? {
+      };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.tool) {
+      return {
         tool: {
           name: request.tool.name,
-          ...(request.tool.title !== undefined ? { title: request.tool.title } : {}),
-          ...(request.tool.input !== undefined ? { input: request.tool.input } : {}),
+          ...(() => {
+            if (request.tool.title !== undefined) {
+              return { title: request.tool.title };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (request.tool.input !== undefined) {
+              return { input: request.tool.input };
+            }
+            return {};
+          })(),
         },
-      }
-    : {}),
-  ...(request.mutation !== undefined ? { mutation: request.mutation } : {}),
-  ...(request.supportedReplyOutcomes !== undefined
-    ? { supportedReplyOutcomes: [...request.supportedReplyOutcomes] }
-    : {}),
+      };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.mutation !== undefined) {
+      return { mutation: request.mutation };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (request.supportedReplyOutcomes !== undefined) {
+      return { supportedReplyOutcomes: [...request.supportedReplyOutcomes] };
+    }
+    return {};
+  })(),
 });
 
 const toLivePendingQuestion = (
@@ -175,8 +223,18 @@ const toLivePendingQuestion = (
       label: option.label,
       description: option.description,
     })),
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
-    ...(question.custom !== undefined ? { custom: question.custom } : {}),
+    ...(() => {
+      if (question.multiple !== undefined) {
+        return { multiple: question.multiple };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (question.custom !== undefined) {
+        return { custom: question.custom };
+      }
+      return {};
+    })(),
   })),
 });
 
@@ -205,18 +263,24 @@ export class CodexAppServerAdapter
     this.runtimeEvents = new CodexRuntimeSessionEvents({
       ...runtimeEventSubscription,
       respondServerRequest: options.respondServerRequest,
-      ...(options.onLiveSessionMutation
-        ? {
+      ...(() => {
+        if (options.onLiveSessionMutation) {
+          return {
             onLiveSessionMutation: async (mutation) =>
               options.onLiveSessionMutation?.({
                 ...mutation,
                 snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
               }),
-          }
-        : {}),
-      ...(options.onCatalogInvalidated
-        ? { onCatalogInvalidated: options.onCatalogInvalidated }
-        : {}),
+          };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (options.onCatalogInvalidated) {
+          return { onCatalogInvalidated: options.onCatalogInvalidated };
+        }
+        return {};
+      })(),
       sessions: {
         get: (externalSessionId) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
@@ -393,7 +457,12 @@ export class CodexAppServerAdapter
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : {}),
+      ...(() => {
+        if (input.systemPrompt) {
+          return { developerInstructions: input.systemPrompt };
+        }
+        return {};
+      })(),
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     });
@@ -713,11 +782,19 @@ export class CodexAppServerAdapter
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...("systemPrompt" in input && input.systemPrompt
-        ? { developerInstructions: input.systemPrompt }
-        : {}),
+      ...(() => {
+        if ("systemPrompt" in input && input.systemPrompt) {
+          return { developerInstructions: input.systemPrompt };
+        }
+        return {};
+      })(),
       excludeTurns: true,
-      ...(model ? { model: toTransportModelSelection(model).model } : {}),
+      ...(() => {
+        if (model) {
+          return { model: toTransportModelSelection(model).model };
+        }
+        return {};
+      })(),
     });
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -780,7 +857,12 @@ export class CodexAppServerAdapter
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
         outcome: input.outcome,
-        ...(input.message !== undefined ? { message: input.message } : {}),
+        ...(() => {
+          if (input.message !== undefined) {
+            return { message: input.message };
+          }
+          return {};
+        })(),
       });
     return session instanceof Promise ? session.then(reply) : reply(session);
   }
@@ -936,7 +1018,12 @@ export class CodexAppServerAdapter
       }),
       title: session.summary.title ?? session.threadId,
       startedAt: session.summary.startedAt,
-      ...(route ? { parentExternalSessionId: route.parentExternalSessionId } : {}),
+      ...(() => {
+        if (route) {
+          return { parentExternalSessionId: route.parentExternalSessionId };
+        }
+        return {};
+      })(),
       pendingApprovals,
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
@@ -1138,7 +1225,12 @@ export class CodexAppServerAdapter
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
-      ...(this.options.logSessionPolicy ? { logSessionPolicy: this.options.logSessionPolicy } : {}),
+      ...(() => {
+        if (this.options.logSessionPolicy) {
+          return { logSessionPolicy: this.options.logSessionPolicy };
+        }
+        return {};
+      })(),
     };
   }
 

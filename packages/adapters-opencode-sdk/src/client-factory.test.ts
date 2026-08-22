@@ -1,10 +1,11 @@
+import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { buildDefaultFactory, nowIso } from "./client-factory";
 
 describe("client-factory", () => {
   test("nowIso returns a parseable ISO string", () => {
     const value = nowIso();
-    expect(typeof value).toBe("string");
+    expect(runtimeTypeName(value)).toBe("string");
     expect(value.includes("T")).toBe(true);
     expect(Number.isNaN(Date.parse(value))).toBe(false);
   });
@@ -16,7 +17,8 @@ describe("client-factory", () => {
       workingDirectory: "/",
     });
 
-    expect(typeof client.session.create).toBe("function");
-    expect(typeof (client.global as { event?: unknown }).event).toBe("function");
+    expect(runtimeTypeName(client.session.create)).toBe("function");
+    // SAFETY: This test controls the fixture and supplies `{ event?: unknown }` used by this case.
+    expect(runtimeTypeName((client.global as { event?: unknown }).event)).toBe("function");
   });
 });

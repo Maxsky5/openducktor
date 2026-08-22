@@ -1,3 +1,4 @@
+import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
@@ -86,12 +87,12 @@ const importRuntimeModule = (specifier: string): Promise<SqliteRuntimeModule> =>
 
 const isSqliteValue = (value: SqliteValue): boolean =>
   value === null ||
-  typeof value === "bigint" ||
-  typeof value === "number" ||
-  typeof value === "string" ||
+  hasRuntimeType(value, "bigint") ||
+  hasRuntimeType(value, "number") ||
+  hasRuntimeType(value, "string") ||
   value instanceof Uint8Array;
 
-const unsupportedSqliteDriverShape = (
+const unsupportedSqliteDriver = (
   operation: string,
   message: string,
   details: Readonly<Record<string, JsonValue>>,
@@ -109,12 +110,16 @@ const rowValues = (row: SqliteRow): Effect.Effect<SqliteValueRow, HostOperationE
   }
 
   return Effect.fail(
-    unsupportedSqliteDriverShape(
+    unsupportedSqliteDriver(
       "sqlite.readValues",
       "node:sqlite returned a row value that is not supported by OpenDucktor.",
       {
         valueTypes: values.map((value) =>
-          value === null ? "null" : value instanceof Uint8Array ? "Uint8Array" : typeof value,
+          value === null
+            ? "null"
+            : value instanceof Uint8Array
+              ? "Uint8Array"
+              : runtimeTypeName(value),
         ),
       },
     ),
@@ -137,11 +142,9 @@ const loadBunSqliteModule = (): Effect.Effect<BunSqliteModule, HostOperationErro
     const sqlite = yield* importSqliteModule(bunSqliteModuleSpecifier);
     if (!isBunSqliteModule(sqlite)) {
       return yield* Effect.fail(
-        unsupportedSqliteDriverShape(
-          "sqlite.loadBunModule",
-          "bun:sqlite did not expose Database.",
-          { specifier: bunSqliteModuleSpecifier },
-        ),
+        unsupportedSqliteDriver("sqlite.loadBunModule", "bun:sqlite did not expose Database.", {
+          specifier: bunSqliteModuleSpecifier,
+        }),
       );
     }
     return sqlite;
@@ -152,7 +155,7 @@ const loadNodeSqliteModule = (): Effect.Effect<NodeSqliteModule, HostOperationEr
     const sqlite = yield* importSqliteModule(nodeSqliteModuleSpecifier);
     if (!isNodeSqliteModule(sqlite)) {
       return yield* Effect.fail(
-        unsupportedSqliteDriverShape(
+        unsupportedSqliteDriver(
           "sqlite.loadNodeModule",
           "node:sqlite did not expose DatabaseSync.",
           { specifier: nodeSqliteModuleSpecifier },

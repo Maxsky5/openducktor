@@ -2,6 +2,7 @@ import type { AgentPromptTemplateId, RepoPromptOverrides } from "@openducktor/co
 
 const trimPromptTemplate = (template: string): string => template.trim();
 
+// SAFETY: Object.entries reads this RepoPromptOverrides object, so each tuple keeps its indexed key and value types.
 export const preparePromptOverridesForSave = (
   overrides: RepoPromptOverrides,
 ): RepoPromptOverrides => {

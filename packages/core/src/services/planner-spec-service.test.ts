@@ -2,10 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { PlannerTools } from "../types/planner";
 import { PlannerSpecService } from "./planner-spec-service";
 
-const createToolsMock = (): {
-  tools: PlannerTools;
-  calls: Array<{ taskId: string; markdown: string }>;
-} => {
+const createToolsMock = () => {
   const calls: Array<{ taskId: string; markdown: string }> = [];
   const tools: PlannerTools = {
     async setSpec(input) {
@@ -16,7 +13,10 @@ const createToolsMock = (): {
       return { updatedAt: "2026-02-17T12:00:00Z" };
     },
   };
-  return { tools, calls };
+  return { tools, calls } satisfies {
+    tools: PlannerTools;
+    calls: Array<{ taskId: string; markdown: string }>;
+  };
 };
 
 describe("PlannerSpecService", () => {

@@ -55,13 +55,7 @@ export function useAgentStudioPageModels({
   chatSettings,
   runtimeDefinitions,
   composer,
-}: UseAgentStudioPageModelsArgs): {
-  activeTabValue: string;
-  agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
-  agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
-  taskExecutionDocumentPanelModel: ReturnType<typeof buildTaskExecutionDocumentPanelModel>;
-  agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
-} {
+}: UseAgentStudioPageModelsArgs) {
   const agentStudioReady = selectedSession.selectedSession.runtimeReadiness.state === "ready";
   const agentStudioTaskTabsModel = useMemo(
     () =>
@@ -145,5 +139,11 @@ export function useAgentStudioPageModels({
     agentStudioHeaderModel,
     taskExecutionDocumentPanelModel,
     agentChatModel,
+  } satisfies {
+    activeTabValue: string;
+    agentStudioTaskTabsModel: AgentStudioTaskTabsModel;
+    agentStudioHeaderModel: ReturnType<typeof useAgentStudioHeaderModel>;
+    taskExecutionDocumentPanelModel: ReturnType<typeof buildTaskExecutionDocumentPanelModel>;
+    agentChatModel: ReturnType<typeof useAgentStudioChatModel>;
   };
 }

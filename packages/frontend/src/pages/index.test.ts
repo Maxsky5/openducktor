@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { ComponentType } from "react";
 import { createCachedPageLoader } from "./index";
 
+// SAFETY: This test controls the fixture and supplies `ComponentType` used by this case.
 const TestPage = (() => null) as ComponentType;
 
 describe("createCachedPageLoader", () => {

@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { FileDiff } from "@openducktor/contracts";
@@ -119,7 +120,7 @@ const createFakeGitPort = ({
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
 } = {}): GitPort =>
-  ({
+  createFocusedTestService<GitPort>({
     isGitRepository: () => Effect.succeed(isRepository),
     getRepositoryRoot: () => Effect.succeed(repositoryRoot),
     listFiles: () => Effect.succeed(files),
@@ -127,7 +128,7 @@ const createFakeGitPort = ({
     getDiff: () => Effect.succeed(diffs),
     listChangedFiles: () =>
       Effect.succeed(changedFiles ?? diffs.map((diff) => ({ path: diff.file, status: diff.type }))),
-  }) as unknown as GitPort;
+  });
 
 describe("createWorkspaceFilesService", () => {
   test("lists git-tracked files, parent directories, and compatible git status", async () => {

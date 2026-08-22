@@ -1,4 +1,4 @@
-import { agentRoleSchema } from "@openducktor/contracts";
+import { agentRoleSchema, hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type {
   AgentSessionDeleteInput,
@@ -79,7 +79,7 @@ export const parseListAgentSessionsForTasksInput = (
   }
   const taskIds = record.taskIds.map((taskId, index) => {
     const field = `taskIds[${index}]`;
-    if (typeof taskId !== "string") {
+    if (!hasRuntimeType(taskId, "string")) {
       throw new HostValidationError({
         message: `${field} must be a string.`,
         field,
@@ -154,7 +154,12 @@ export const parseCreateTaskInput = (input: JsonValue | undefined): CreateTaskUs
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     task: parseCreateInput(record.input),
-    ...(descriptionAssets ? { descriptionAssets } : {}),
+    ...(() => {
+      if (descriptionAssets) {
+        return { descriptionAssets };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -181,7 +186,12 @@ export const parseUpdateTaskInput = (input: JsonValue | undefined): UpdateTaskIn
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     patch,
-    ...(descriptionAssets ? { descriptionAssets } : {}),
+    ...(() => {
+      if (descriptionAssets) {
+        return { descriptionAssets };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -252,7 +262,7 @@ export const parseTaskSessionBootstrapPrepareInput = (
     });
   }
   const targetWorkingDirectory =
-    typeof record.targetWorkingDirectory === "string" && record.targetWorkingDirectory.trim()
+    hasRuntimeType(record.targetWorkingDirectory, "string") && record.targetWorkingDirectory.trim()
       ? record.targetWorkingDirectory.trim()
       : undefined;
   return {
@@ -260,7 +270,12 @@ export const parseTaskSessionBootstrapPrepareInput = (
     taskId: requireString(record.taskId, "taskId"),
     runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
     role: parsedRole.data,
-    ...(targetWorkingDirectory ? { targetWorkingDirectory } : {}),
+    ...(() => {
+      if (targetWorkingDirectory) {
+        return { targetWorkingDirectory };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -307,7 +322,7 @@ export const parseTaskSessionStartupLeaseFinalizeInput = (
 
 export const parseBuildBlockedInput = (input: JsonValue | undefined): BuildBlockedInput => {
   const record = requireRecord(input, "build_blocked input");
-  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+  const reason = hasRuntimeType(record.reason, "string") ? record.reason.trim() : "";
   if (!reason) {
     throw new HostValidationError({
       message: "build_blocked requires a non-empty reason",
@@ -331,7 +346,12 @@ export const parseBuildCompletedInput = (input: JsonValue | undefined): BuildCom
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
-    ...(summary === undefined ? {} : { summary }),
+    ...(() => {
+      if (summary === undefined) {
+        return {};
+      }
+      return { summary };
+    })(),
   };
 };
 
@@ -345,6 +365,11 @@ export const parseOptionalNoteInput = (
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
-    ...(note === undefined ? {} : { note }),
+    ...(() => {
+      if (note === undefined) {
+        return {};
+      }
+      return { note };
+    })(),
   };
 };

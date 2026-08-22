@@ -15,6 +15,7 @@ import {
   settingsSnapshotSchema,
   type WorkspaceRecord,
   workspaceRecordSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
@@ -67,13 +68,14 @@ export type ResolvedLocalAttachment = {
 };
 
 const parseStagedLocalAttachment = (payload: JsonValue | undefined): StagedLocalAttachment => {
-  if (!payload || typeof payload !== "object") {
+  if (!payload || !hasRuntimeType(payload, "object")) {
     throw new Error("Expected staged local attachment payload from host command");
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const candidate = payload as Record<string, JsonValue>;
   const path = candidate.path;
-  if (typeof path !== "string" || path.trim().length === 0) {
+  if (!hasRuntimeType(path, "string") || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
   }
 

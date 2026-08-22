@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { QueryClient } from "@tanstack/react-query";
@@ -14,22 +15,28 @@ import {
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
   type useAgentStudioBuildToolsWorktreeSnapshot,
 } from "./use-agent-studio-build-tools-worktree-snapshot";
-import type { JsonValue } from "@openducktor/contracts";
 
 enableReactActEnvironment();
-if (typeof document === "undefined") {
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
 const refreshDiffMock = mock(async (_mode?: string) => {});
 const setDiffScopeMock = mock((_scope: "target" | "uncommitted") => {});
-const useAgentStudioDiffDataMock = mock((args: Record<string, JsonValue>): DiffDataState => ({
+type SnapshotDependencies = Parameters<
+  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
+>[0];
+type UseDiffData = NonNullable<SnapshotDependencies["useDiffData"]>;
+type UseDevServerPanel = NonNullable<SnapshotDependencies["useDevServerPanel"]>;
+
+const useAgentStudioDiffDataMock = mock((args: Parameters<UseDiffData>[0]): DiffDataState => ({
   branch: "feature/task-24",
-  worktreePath: (args.worktreePath as string | null) ?? null,
+  worktreePath: args.worktreePath,
   targetBranch: "origin/main",
   diffScope: "uncommitted",
   gitConflict: null,
@@ -49,36 +56,29 @@ const useAgentStudioDiffDataMock = mock((args: Record<string, JsonValue>): DiffD
   diffHash: null,
   uncommittedFileCount: 0,
   isLoading: Boolean(args.isWorktreeResolutionResolving),
-  error: (args.worktreeResolutionError as string | null) ?? null,
+  error: args.worktreeResolutionError,
   refresh: refreshDiffMock,
   setDiffScope: setDiffScopeMock,
 }));
-const useAgentStudioDevServerPanelMock = mock((args: Record<string, JsonValue>) => ({
-  mode: "unconfigured" as const,
-  repoPath: args.repoPath,
-  taskId: args.taskId,
-  enabled: args.enabled,
-}));
+const useAgentStudioDevServerPanelMock = mock((args: Parameters<UseDevServerPanel>[0]) =>
+  createFocusedFixture<ReturnType<UseDevServerPanel>>({
+    mode: "empty",
+    repoPath: args.repoPath,
+    taskId: args.taskId,
+  }),
+);
 const taskWorktreeGetMock = mock(
   async (_repoPath: string, _taskId: string): Promise<{ workingDirectory: string } | null> => ({
     workingDirectory: "/repo/.worktrees/task-24",
   }),
 );
 
-type SnapshotDependencies = Parameters<
-  typeof createAgentStudioBuildToolsWorktreeSnapshotHookForTest
->[0];
-
 const useSnapshotHookForTest = createAgentStudioBuildToolsWorktreeSnapshotHookForTest({
   taskWorktreeHost: {
     taskWorktreeGet: taskWorktreeGetMock,
   },
-  useDiffData: useAgentStudioDiffDataMock as unknown as NonNullable<
-    SnapshotDependencies["useDiffData"]
-  >,
-  useDevServerPanel: useAgentStudioDevServerPanelMock as unknown as NonNullable<
-    SnapshotDependencies["useDevServerPanel"]
-  >,
+  useDiffData: useAgentStudioDiffDataMock,
+  useDevServerPanel: useAgentStudioDevServerPanelMock,
 });
 
 type UseSnapshotHook = typeof useAgentStudioBuildToolsWorktreeSnapshot;

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
 import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
@@ -58,11 +59,24 @@ const resolvePartModelSelection = (
     return {
       providerId: existingMessage.meta.providerId,
       modelId: existingMessage.meta.modelId,
-      ...(existingMessage.meta.variant ? { variant: existingMessage.meta.variant } : {}),
-      ...(existingMessage.meta.profileId ? { profileId: existingMessage.meta.profileId } : {}),
-      ...(current.selectedModel?.runtimeKind
-        ? { runtimeKind: current.selectedModel.runtimeKind }
-        : {}),
+      ...(() => {
+        if (existingMessage.meta.variant) {
+          return { variant: existingMessage.meta.variant };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (existingMessage.meta.profileId) {
+          return { profileId: existingMessage.meta.profileId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (current.selectedModel?.runtimeKind) {
+          return { runtimeKind: current.selectedModel.runtimeKind };
+        }
+        return {};
+      })(),
     };
   }
 
@@ -109,8 +123,18 @@ const upsertLiveAssistantMessage = ({
     timestamp: existingMessage?.timestamp ?? timestamp,
     meta: {
       ...assistantMeta,
-      ...(partId ? { partId } : {}),
-      ...(sourceMessageId ? { sourceMessageId } : {}),
+      ...(() => {
+        if (partId) {
+          return { partId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (sourceMessageId) {
+          return { sourceMessageId };
+        }
+        return {};
+      })(),
     },
   };
   return {
@@ -178,8 +202,18 @@ const handleTextPart = (
       },
       model: resolvePartModelSelection(context, prepared, part.messageId),
       messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
-      ...(usesPartIdentity ? { partId: part.partId, sourceMessageId: part.messageId } : {}),
-      ...(usesPartIdentity && sourceMessage ? { replacedMessageId: part.messageId } : {}),
+      ...(() => {
+        if (usesPartIdentity) {
+          return { partId: part.partId, sourceMessageId: part.messageId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (usesPartIdentity && sourceMessage) {
+          return { replacedMessageId: part.messageId };
+        }
+        return {};
+      })(),
       text: part.text,
       timestamp: event.timestamp,
     });
@@ -238,17 +272,60 @@ const handleSubagentPart = (
       correlationKey: part.correlationKey,
       sourceMessageId: part.messageId,
       status: part.status,
-      ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
-      ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
-      ...(typeof part.description === "string" ? { description: part.description } : {}),
-      ...(typeof part.error === "string" ? { error: part.error } : {}),
-      ...(typeof part.externalSessionId === "string"
-        ? { externalSessionId: part.externalSessionId }
-        : {}),
-      ...(part.executionMode ? { executionMode: part.executionMode } : {}),
-      ...(part.metadata ? { metadata: part.metadata } : {}),
-      ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-      ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+      ...(() => {
+        if (hasRuntimeType(part.agent, "string")) {
+          return { agent: part.agent };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.prompt, "string")) {
+          return { prompt: part.prompt };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.description, "string")) {
+          return { description: part.description };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.error, "string")) {
+          return { error: part.error };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.externalSessionId, "string")) {
+          return { externalSessionId: part.externalSessionId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (part.executionMode) {
+          return { executionMode: part.executionMode };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (part.metadata) {
+          return { metadata: part.metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.startedAtMs, "number")) {
+          return { startedAtMs: part.startedAtMs };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(part.endedAtMs, "number")) {
+          return { endedAtMs: part.endedAtMs };
+        }
+        return {};
+      })(),
     };
     return {
       ...prepared,
@@ -270,7 +347,8 @@ export const handleAssistantPart = (
   const recordsTurnActivity = part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part);
   if (recordsTurnActivity) {
     const activityTimestamp =
-      (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
+      (part.kind === "tool" || part.kind === "subagent") &&
+      hasRuntimeType(part.startedAtMs, "number")
         ? part.startedAtMs
         : event.timestamp;
     context.turn.recordTurnActivityTimestamp(context.session.key, activityTimestamp);

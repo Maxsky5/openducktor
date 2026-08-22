@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -12,7 +13,7 @@ const frontendSrc = path.resolve(__dirname, "../frontend/src");
 
 function readPackageVersion(packageJsonPath = path.resolve(__dirname, "package.json")): string {
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
+  if (!hasRuntimeType(packageJson.version, "string") || packageJson.version.length === 0) {
     throw new Error(`Missing package version in ${packageJsonPath}`);
   }
   return packageJson.version;

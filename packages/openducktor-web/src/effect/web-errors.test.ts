@@ -17,7 +17,7 @@ describe("web Effect boundary errors", () => {
       message: "Multiple Effect failures crossed the web boundary.",
       details: { failureMessages: ["first failed", "second failed"] },
     });
-    expect(Reflect.get(error, "cause")).toEqual({ failures: [firstFailure, secondFailure] });
+    expect(error.cause).toEqual({ failures: [firstFailure, secondFailure] });
   });
 
   test("returns one typed failure unchanged", () => {
@@ -41,6 +41,6 @@ describe("web Effect boundary errors", () => {
       _tag: "WebOperationError",
       details: { defect: true, failureMessages: ["name failed"] },
     });
-    expect(Reflect.get(error, "cause")).toBe(cause);
+    expect(error.cause).toBe(cause);
   });
 });

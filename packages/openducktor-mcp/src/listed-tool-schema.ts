@@ -10,7 +10,8 @@ export type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 
-const removeWorkspaceId = (jsonSchema: Record<string, JsonValue>): Record<string, JsonValue> => {
+const removeWorkspaceId = (jsonSchema: Record<string, JsonValue>) => {
+  // SAFETY: The surrounding boundary constructs or validates every member required by `Record< string, JsonValue >`.
   const { workspaceId: _workspaceId, ...properties } = jsonSchema.properties as Record<
     string,
     JsonValue
@@ -19,10 +20,13 @@ const removeWorkspaceId = (jsonSchema: Record<string, JsonValue>): Record<string
   return {
     ...jsonSchema,
     properties,
-    ...(Array.isArray(jsonSchema.required)
-      ? { required: jsonSchema.required.filter((key) => key !== "workspaceId") }
-      : {}),
-  };
+    ...(() => {
+      if (Array.isArray(jsonSchema.required)) {
+        return { required: jsonSchema.required.filter((key) => key !== "workspaceId") };
+      }
+      return {};
+    })(),
+  } satisfies Record<string, JsonValue>;
 };
 
 export const getListedToolInputSchema = (

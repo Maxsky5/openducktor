@@ -122,13 +122,24 @@ export const createTaskDocumentUseCases = ({
 
       return {
         markdown: metadata.qaReport.markdown,
-        ...(metadata.qaReport.updatedAt !== undefined
-          ? { updatedAt: metadata.qaReport.updatedAt }
-          : {}),
-        ...(metadata.qaReport.revision !== undefined
-          ? { revision: metadata.qaReport.revision }
-          : {}),
-        ...(metadata.qaReport.error !== undefined ? { error: metadata.qaReport.error } : {}),
+        ...(() => {
+          if (metadata.qaReport.updatedAt !== undefined) {
+            return { updatedAt: metadata.qaReport.updatedAt };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (metadata.qaReport.revision !== undefined) {
+            return { revision: metadata.qaReport.revision };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (metadata.qaReport.error !== undefined) {
+            return { error: metadata.qaReport.error };
+          }
+          return {};
+        })(),
       };
     });
   },

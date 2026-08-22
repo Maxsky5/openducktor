@@ -257,18 +257,23 @@ describe("AgentRuntimesSection", () => {
     );
 
     try {
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("tab", { name: /OpenCode/i }) as HTMLButtonElement).disabled).toBe(
         false,
       );
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("switch", { name: "Enabled" }) as HTMLButtonElement).disabled).toBe(
         false,
       );
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
         (screen.getByRole("textbox", { name: "Executable path" }) as HTMLInputElement).disabled,
       ).toBe(false);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("button", { name: "Browse" }) as HTMLButtonElement).disabled).toBe(
         false,
       );
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
       ).toBe(true);

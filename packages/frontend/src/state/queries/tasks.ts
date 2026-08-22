@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
@@ -52,7 +53,12 @@ const invalidateRepoTaskDataQueries = (
   return queryClient.invalidateQueries({
     queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
-    ...(options?.refetchType ? { refetchType: options.refetchType } : {}),
+    ...(() => {
+      if (options?.refetchType) {
+        return { refetchType: options.refetchType };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -82,9 +88,10 @@ const cachedKanbanQueryKeysForRepo = (
         queryKey[0] === taskQueryKeys.all[0] &&
         queryKey[1] === "repo-data" &&
         queryKey[2] === repoPath &&
-        typeof queryKey[3] === "number" &&
+        hasRuntimeType(queryKey[3], "number") &&
         queryKey[3] >= 0
       ) {
+        // SAFETY: The preceding runtime guard establishes `ReturnType<typeof taskQueryKeys.repoData>` before this assertion.
         keys.push(queryKey as ReturnType<typeof taskQueryKeys.repoData>);
       }
       return keys;
@@ -103,7 +110,12 @@ export const refreshCachedKanbanQueries = async (
     cachedQueryKeys.map(([, , , doneVisibleDays]) =>
       queryClient.fetchQuery({
         ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
-        ...(force ? { staleTime: 0 } : {}),
+        ...(() => {
+          if (force) {
+            return { staleTime: 0 };
+          }
+          return {};
+        })(),
       }),
     ),
   );
@@ -122,5 +134,4 @@ const invalidateRepoTaskListQueries = (
 export const invalidateRepoTaskQueries = (
   queryClient: QueryClient,
   repoPath: string,
-): Promise<unknown> =>
-  invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" });
+): Promise<void> => invalidateRepoTaskListQueries(queryClient, repoPath, { refetchType: "none" });

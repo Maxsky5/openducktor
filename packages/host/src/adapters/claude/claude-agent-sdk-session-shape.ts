@@ -26,7 +26,12 @@ export const createClaudeSessionSummary = (
     externalSessionId: sessionInput.externalSessionId,
     runtimeKind: "claude",
     workingDirectory: input.workingDirectory,
-    ...(sessionInput.title ? { title: sessionInput.title } : {}),
+    ...(() => {
+      if (sessionInput.title) {
+        return { title: sessionInput.title };
+      }
+      return {};
+    })(),
     sessionAssociation,
     startedAt,
     status: "starting",
@@ -77,7 +82,12 @@ export const toClaudeDisplayParts = (
             name: part.command.trigger,
             path: part.command.trigger,
             title: part.command.title,
-            ...(part.command.description ? { description: part.command.description } : {}),
+            ...(() => {
+              if (part.command.description) {
+                return { description: part.command.description };
+              }
+              return {};
+            })(),
           },
           sourceText: offsetSourceText,
         });
@@ -91,7 +101,12 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "file_reference",
           file: part.file,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
+          ...(() => {
+            if (offsetSourceText) {
+              return { sourceText: offsetSourceText };
+            }
+            return {};
+          })(),
         });
         continue;
       }
@@ -99,7 +114,12 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "skill_mention",
           skill: part.skill,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
+          ...(() => {
+            if (offsetSourceText) {
+              return { sourceText: offsetSourceText };
+            }
+            return {};
+          })(),
         });
         continue;
       }
@@ -107,7 +127,12 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "subagent_reference",
           subagent: part.subagent,
-          ...(offsetSourceText ? { sourceText: offsetSourceText } : {}),
+          ...(() => {
+            if (offsetSourceText) {
+              return { sourceText: offsetSourceText };
+            }
+            return {};
+          })(),
         });
       }
     }
@@ -142,9 +167,12 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
   return toAgentSessionRuntimeSnapshot({
     ref,
     snapshot: {
-      ...(session.parentExternalSessionId
-        ? { parentExternalSessionId: session.parentExternalSessionId }
-        : {}),
+      ...(() => {
+        if (session.parentExternalSessionId) {
+          return { parentExternalSessionId: session.parentExternalSessionId };
+        }
+        return {};
+      })(),
       title: session.summary.title ?? "Claude session",
       startedAt: session.startedAt,
       runtimeActivity,

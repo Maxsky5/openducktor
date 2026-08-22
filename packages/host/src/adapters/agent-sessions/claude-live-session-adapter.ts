@@ -7,6 +7,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
@@ -100,11 +101,11 @@ const requireRuntime = (
   });
 };
 
-const parseOutput = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseOutput = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>

@@ -15,12 +15,15 @@ import {
   type Theme,
   type WorkspaceRecord,
   workspaceRecordSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
 import { HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { JsonValue } from "@openducktor/contracts";
+
+interface NextWorkspacesContract extends Record<string, RepoConfig> {}
 
 export type WorkspaceSettingsError = HostInvariantError | HostValidationError | SettingsConfigError;
 
@@ -66,19 +69,20 @@ export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
 const requireRecord = (value: JsonValue | undefined, label: string): Record<string, JsonValue> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw new HostValidationError({ message: `${label} must be an object.` });
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   return value as Record<string, JsonValue>;
 };
 const requireString = (value: JsonValue | undefined, label: string): string => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw new HostValidationError({ message: `${label} must be a string.` });
   }
   return value;
 };
 const requireStringArray = (value: JsonValue | undefined, label: string): string[] => {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+  if (!Array.isArray(value) || value.some((entry) => !hasRuntimeType(entry, "string"))) {
     throw new HostValidationError({ message: `${label} must be an array of strings.` });
   }
   // SAFETY: the check above guarantees every entry is a string.
@@ -130,14 +134,12 @@ const normalizeWorktreeCopyPaths = (value: JsonValue | undefined): string[] =>
     .filter(Boolean);
 const normalizeRepoConfigInput = (input: Record<string, JsonValue | undefined>): RepoConfig => {
   const rawWorktreeBasePath = normalizeOptionalNonEmptyString(input.worktreeBasePath);
-  const rawBranchPrefix =
-    typeof input.branchPrefix === "string"
-      ? input.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX
-      : input.branchPrefix;
-  const rawDefaultRuntimeKind =
-    typeof input.defaultRuntimeKind === "string"
-      ? input.defaultRuntimeKind.trim()
-      : input.defaultRuntimeKind;
+  const rawBranchPrefix = hasRuntimeType(input.branchPrefix, "string")
+    ? input.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX
+    : input.branchPrefix;
+  const rawDefaultRuntimeKind = hasRuntimeType(input.defaultRuntimeKind, "string")
+    ? input.defaultRuntimeKind.trim()
+    : input.defaultRuntimeKind;
   return repoConfigSchema.parse({
     ...input,
     defaultRuntimeKind: rawDefaultRuntimeKind,
@@ -279,7 +281,7 @@ export const validateAndNormalizeRepoConfig = (
       try: () =>
         normalizeRepoConfigInput({
           // SAFETY: `parsed` was validated by repoConfigSchema.parse inside normalizeRepoConfigInput.
-          ...(parsed as unknown as Record<string, JsonValue>),
+          ...(parsed as Record<string, JsonValue>),
           repoPath: canonicalRepoPath,
         }),
       catch: (cause) =>
@@ -325,6 +327,7 @@ export const saveAndReturnWorkspaceRecord = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
+    // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
     const parsed = yield* Effect.try({
       try: () => globalConfigSchema.parse(config) as LoadedGlobalConfig,
       catch: (cause) =>
@@ -396,11 +399,11 @@ export const buildMergedRepoConfig = (
   existing: RepoConfig,
   update: Record<string, JsonValue>,
   includeHooks: boolean,
-): Record<string, JsonValue | undefined> => {
+) => {
   // SAFETY: `existing` came from repoConfigSchema.parse, so its fields are JSON-compatible at
   // runtime; the merged record is re-validated by repoConfigSchema.parse in
   // normalizeRepoConfigInput before use.
-  const base = existing as unknown as Record<string, JsonValue>;
+  const base = existing as Record<string, JsonValue>;
   return {
     ...base,
     workspaceId,
@@ -418,7 +421,7 @@ export const buildMergedRepoConfig = (
     worktreeCopyPaths: optionalUpdateValue(update, "worktreeCopyPaths", base.worktreeCopyPaths),
     promptOverrides: optionalUpdateValue(update, "promptOverrides", base.promptOverrides),
     agentDefaults: optionalUpdateValue(update, "agentDefaults", base.agentDefaults),
-  };
+  } satisfies Record<string, JsonValue | undefined>;
 };
 export const normalizeSnapshotWorkspaces = (
   settingsConfig: SettingsConfigPort,
@@ -426,7 +429,7 @@ export const normalizeSnapshotWorkspaces = (
   snapshotWorkspaces: Record<string, RepoConfig>,
 ) =>
   Effect.gen(function* () {
-    const nextWorkspaces: Record<string, RepoConfig> = { ...config.workspaces };
+    const nextWorkspaces: NextWorkspacesContract = { ...config.workspaces };
     for (const workspaceId of Object.keys(snapshotWorkspaces)) {
       if (!config.workspaces[workspaceId]) {
         return yield* Effect.fail(
@@ -441,7 +444,7 @@ export const normalizeSnapshotWorkspaces = (
     for (const [workspaceId, repoConfig] of Object.entries(snapshotWorkspaces)) {
       const normalizedRepoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
         // SAFETY: `repoConfig` was validated by settingsSnapshotSchema.parse at the save boundary.
-        ...(repoConfig as unknown as Record<string, JsonValue>),
+        ...(repoConfig as Record<string, JsonValue>),
         workspaceId,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(

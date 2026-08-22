@@ -25,9 +25,11 @@ describe("shared test fixtures", () => {
   });
 
   test("rejects legacy session association sentinel fields at runtime", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() => createAgentSessionFixture({ taskId: "" } as never)).toThrow(
       "Agent session fixture overrides must declare sessionAssociation instead of taskId.",
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() => createAgentSessionFixture({ role: null } as never)).toThrow(
       "Agent session fixture overrides must declare sessionAssociation instead of role.",
     );

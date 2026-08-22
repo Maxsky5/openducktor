@@ -1,3 +1,4 @@
+import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "./types";
 
 const createClient: ClientFactory = () => {
+  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   return {} as OpencodeClient;
 };
 
@@ -73,7 +75,7 @@ describe("types", () => {
     };
 
     expect(sessionRecord.summary.externalSessionId).toBe("external-session-1");
-    expect(typeof options.createClient).toBe("function");
-    expect(typeof options.logEvent).toBe("function");
+    expect(runtimeTypeName(options.createClient)).toBe("function");
+    expect(runtimeTypeName(options.logEvent)).toBe("function");
   });
 });

@@ -62,6 +62,7 @@ export const createSessionDependenciesFixture = (
   };
 };
 
+// SAFETY: This test drives the failure path that supplies `RuntimeDependencies["adapter"]` before this assertion.
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({

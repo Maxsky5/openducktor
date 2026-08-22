@@ -16,15 +16,7 @@ export function useTaskDeleteDialog({
   hasSubtasks,
   onOpenChange,
   onDelete,
-}: UseTaskDeleteDialogOptions): {
-  isDeleteDialogOpen: boolean;
-  isDeletePending: boolean;
-  deleteError: string | null;
-  openDeleteDialog: () => void;
-  closeDeleteDialog: () => void;
-  handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
-  confirmDelete: () => void;
-} {
+}: UseTaskDeleteDialogOptions) {
   const canDelete = task !== null && onDelete !== undefined;
   const runDelete = useCallback((): Promise<void> => {
     if (task === null || onDelete === undefined) {
@@ -47,5 +39,13 @@ export function useTaskDeleteDialog({
     closeDeleteDialog: dialog.closeDialog,
     handleDeleteDialogOpenChange: dialog.handleDialogOpenChange,
     confirmDelete: dialog.confirm,
+  } satisfies {
+    isDeleteDialogOpen: boolean;
+    isDeletePending: boolean;
+    deleteError: string | null;
+    openDeleteDialog: () => void;
+    closeDeleteDialog: () => void;
+    handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
+    confirmDelete: () => void;
   };
 }

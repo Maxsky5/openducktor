@@ -417,6 +417,7 @@ describe("ModelPicker", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
     });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     const search = screen.getByPlaceholderText("Search models...") as HTMLInputElement;
     fireEvent.change(search, { target: { value: "gpt" } });
     const star = screen.getByRole("button", { name: "Add GPT Five to favorites" });

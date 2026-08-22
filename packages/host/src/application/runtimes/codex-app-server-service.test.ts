@@ -6,10 +6,7 @@ import { createCodexAppServerService as createEffectCodexAppServerService } from
 const createCodexAppServerService = (
   ...args: Parameters<typeof createEffectCodexAppServerService>
 ) => createEffectCodexAppServerService(...args);
-const createPort = (): {
-  calls: unknown[];
-  port: CodexAppServerPort & CodexSessionHistoryPort;
-} => {
+const createPort = () => {
   const calls: unknown[] = [];
   return {
     calls,
@@ -39,6 +36,9 @@ const createPort = (): {
         return Effect.void;
       },
     },
+  } satisfies {
+    calls: unknown[];
+    port: CodexAppServerPort & CodexSessionHistoryPort;
   };
 };
 describe("createCodexAppServerService", () => {

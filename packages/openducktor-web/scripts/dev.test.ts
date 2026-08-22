@@ -6,6 +6,7 @@ import {
   resolveWebCliStopSignal,
   shouldDetachWebProcessGroup,
 } from "./dev";
+import { createTimerFixture } from "../src/test-support";
 
 describe("web dev script", () => {
   test("launches the workspace CLI with forwarded arguments", () => {
@@ -40,7 +41,7 @@ describe("web dev script", () => {
   });
 
   test("keeps the supervisor alive while waiting for the child CLI to stop", async () => {
-    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
+    const timer = createTimerFixture();
     const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
     let capturedCallback: (() => void) | null = null;
     let finishOperation: () => void = () => {};
@@ -64,6 +65,7 @@ describe("web dev script", () => {
     finishOperation();
     await keepAlivePromise;
     expect(clearedTimers).toEqual([timer]);
+    clearTimeout(timer);
   });
 
   test("uses persistent signal handlers so duplicate wrapper signals do not terminate by default", () => {

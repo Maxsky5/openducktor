@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage, AgentChatMessageMeta } from "@/types/agent-orchestrator";
 import {
   applyPreferredMessageTimestamp,
@@ -11,6 +12,8 @@ import {
   type SessionMessageOwner,
   upsertSessionMessage,
 } from "./messages";
+
+interface SUBAGENTSTATUSPRECEDENCEContract extends Record<SubagentMeta["status"], number> {}
 
 export type SubagentMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
 export type SubagentMessage = AgentChatMessage & {
@@ -30,7 +33,7 @@ export const isSubagentMessage = (
   return message?.role === "system" && message.meta?.kind === "subagent";
 };
 
-const SUBAGENT_STATUS_PRECEDENCE: Record<SubagentMeta["status"], number> = {
+const SUBAGENT_STATUS_PRECEDENCE: SUBAGENTSTATUSPRECEDENCEContract = {
   pending: 0,
   running: 1,
   completed: 2,
@@ -55,8 +58,8 @@ const isLaterSubagentRestart = (
   incomingMeta: SubagentMeta,
 ): boolean =>
   incomingMeta.status === "running" &&
-  typeof existingMeta?.endedAtMs === "number" &&
-  typeof incomingMeta.startedAtMs === "number" &&
+  hasRuntimeType(existingMeta?.endedAtMs, "number") &&
+  hasRuntimeType(incomingMeta.startedAtMs, "number") &&
   incomingMeta.startedAtMs > existingMeta.endedAtMs;
 
 const isPreviousRunTerminalUpdate = (
@@ -65,8 +68,8 @@ const isPreviousRunTerminalUpdate = (
 ): boolean =>
   existingMeta?.status === "running" &&
   isTerminalSubagentStatus(incomingMeta.status) &&
-  typeof existingMeta.startedAtMs === "number" &&
-  typeof incomingMeta.endedAtMs === "number" &&
+  hasRuntimeType(existingMeta.startedAtMs, "number") &&
+  hasRuntimeType(incomingMeta.endedAtMs, "number") &&
   incomingMeta.endedAtMs < existingMeta.startedAtMs;
 
 export const formatSubagentContent = (meta: {
@@ -102,7 +105,12 @@ export const createSubagentMessage = ({
     role: "system",
     content: formatSubagentContent(meta),
     timestamp,
-    ...(timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+    ...(() => {
+      if (timestampIsApproximate) {
+        return { timestampIsApproximate: true };
+      }
+      return {};
+    })(),
     meta,
   };
 };
@@ -122,8 +130,8 @@ const canLinkSessionScopedSubagentToPartScopedRow = (
     isSessionScopedSubagentKey(incoming.correlationKey) &&
     !candidate.meta.externalSessionId &&
     isPartScopedSubagentKey(candidate.meta.correlationKey) &&
-    typeof incoming.agent === "string" &&
-    typeof incoming.prompt === "string" &&
+    hasRuntimeType(incoming.agent, "string") &&
+    hasRuntimeType(incoming.prompt, "string") &&
     candidate.meta.agent === incoming.agent &&
     candidate.meta.prompt === incoming.prompt,
   );
@@ -144,7 +152,7 @@ const findLastSubagentMessage = (
 const resolveSubagentMessageUpdateTarget = (
   owner: SessionMessageOwner,
   incoming: Pick<SubagentMeta, "correlationKey" | "externalSessionId" | "agent" | "prompt">,
-): { message: SubagentMessage | undefined; duplicateMessageId: string | null } => {
+) => {
   const correlationMessage = findLastSubagentMessage(
     owner,
     (message) => message.meta.correlationKey === incoming.correlationKey,
@@ -174,7 +182,10 @@ const resolveSubagentMessageUpdateTarget = (
       ? sessionMessage.id
       : null;
 
-  return { message, duplicateMessageId };
+  return { message, duplicateMessageId } satisfies {
+    message: SubagentMessage | undefined;
+    duplicateMessageId: string | null;
+  };
 };
 
 const mergeSubagentMeta = (
@@ -202,13 +213,13 @@ const mergeSubagentMeta = (
   } else if (
     existingMeta?.status === "running" &&
     incomingMeta.status === "running" &&
-    typeof existingMeta.startedAtMs === "number" &&
-    typeof incomingMeta.startedAtMs === "number"
+    hasRuntimeType(existingMeta.startedAtMs, "number") &&
+    hasRuntimeType(incomingMeta.startedAtMs, "number")
   ) {
     startedAtMs = Math.max(existingMeta.startedAtMs, incomingMeta.startedAtMs);
   } else if (
-    typeof existingMeta?.startedAtMs === "number" &&
-    typeof incomingMeta.startedAtMs === "number"
+    hasRuntimeType(existingMeta?.startedAtMs, "number") &&
+    hasRuntimeType(incomingMeta.startedAtMs, "number")
   ) {
     startedAtMs = Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs);
   } else {
@@ -219,8 +230,8 @@ const mergeSubagentMeta = (
   if (isRestart || isPreviousRunUpdate) {
     endedAtMs = undefined;
   } else if (
-    typeof existingMeta?.endedAtMs === "number" &&
-    typeof incomingMeta.endedAtMs === "number"
+    hasRuntimeType(existingMeta?.endedAtMs, "number") &&
+    hasRuntimeType(incomingMeta.endedAtMs, "number")
   ) {
     endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
   } else if (isTerminalSubagentStatus(status)) {
@@ -245,17 +256,67 @@ const mergeSubagentMeta = (
     kind: "subagent",
     partId: incomingMeta.partId,
     correlationKey: incomingMeta.correlationKey,
-    ...(sourceMessageId ? { sourceMessageId } : {}),
+    ...(() => {
+      if (sourceMessageId) {
+        return { sourceMessageId };
+      }
+      return {};
+    })(),
     status,
-    ...(typeof agent === "string" ? { agent } : {}),
-    ...(typeof prompt === "string" ? { prompt } : {}),
-    ...(typeof description === "string" ? { description } : {}),
-    ...(typeof error === "string" ? { error } : {}),
-    ...(typeof externalSessionId === "string" ? { externalSessionId } : {}),
-    ...(executionMode ? { executionMode } : {}),
-    ...(metadata ? { metadata } : {}),
-    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    ...(() => {
+      if (hasRuntimeType(agent, "string")) {
+        return { agent };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(prompt, "string")) {
+        return { prompt };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(description, "string")) {
+        return { description };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(error, "string")) {
+        return { error };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(externalSessionId, "string")) {
+        return { externalSessionId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (executionMode) {
+        return { executionMode };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(startedAtMs, "number")) {
+        return { startedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(endedAtMs, "number")) {
+        return { endedAtMs };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -277,7 +338,7 @@ export const upsertSubagentMessage = ({
   const nextMeta = mergeSubagentMeta(
     existingMessage?.meta ?? null,
     incomingMeta,
-    typeof startedAtMsFallback === "number" ? { startedAtMsFallback } : undefined,
+    hasRuntimeType(startedAtMsFallback, "number") ? { startedAtMsFallback } : undefined,
   );
   const ownerWithoutDuplicate =
     duplicateMessageId === null
@@ -311,7 +372,12 @@ export const mergeSubagentMessages = (
     createSubagentMessage({
       id: loadedMessage.id,
       timestamp: loadedMessage.timestamp,
-      ...(loadedMessage.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
+      ...(() => {
+        if (loadedMessage.timestampIsApproximate) {
+          return { timestampIsApproximate: true };
+        }
+        return {};
+      })(),
       meta: nextMeta,
     }),
     loadedMessage,
@@ -470,11 +536,11 @@ const matchesLoadedSubagentActivity = (
 
   return (
     existingMessage.timestamp === incomingMessage.timestamp &&
-    typeof existingAgent === "string" &&
-    typeof incomingAgent === "string" &&
+    hasRuntimeType(existingAgent, "string") &&
+    hasRuntimeType(incomingAgent, "string") &&
     existingAgent === incomingAgent &&
-    typeof existingPrompt === "string" &&
-    typeof incomingPrompt === "string" &&
+    hasRuntimeType(existingPrompt, "string") &&
+    hasRuntimeType(incomingPrompt, "string") &&
     existingPrompt === incomingPrompt
   );
 };

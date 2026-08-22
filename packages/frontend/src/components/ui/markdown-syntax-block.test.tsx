@@ -1,9 +1,11 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { JsonValue } from "@openducktor/contracts";
 
+// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -193,7 +195,7 @@ describe("MarkdownSyntaxBlock", () => {
     console.error = (...args: unknown[]): void => {
       const [firstArg] = args;
       if (
-        typeof firstArg === "string" &&
+        hasRuntimeType(firstArg, "string") &&
         firstArg.startsWith("Failed to lazy-load language grammar for 'yaml':")
       ) {
         return;

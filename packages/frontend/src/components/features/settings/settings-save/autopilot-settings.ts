@@ -16,6 +16,7 @@ export const prepareAutopilotSettingsForSave = (
   return {
     rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
       const explicitRule = rulesByEvent.get(eventId);
+      // SAFETY: The surrounding boundary constructs or validates every member required by `AutopilotActionId[]`.
       const actionIds = (explicitRule?.actionIds ?? []).filter(
         (actionId, index, list) => list.indexOf(actionId) === index,
       ) as AutopilotActionId[];

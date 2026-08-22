@@ -4,6 +4,7 @@ import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-
 
 describe("claude-agent-sdk-history subagents", () => {
   test("places a completed subagent response after tool work that followed its forwarded text", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -164,6 +165,7 @@ describe("claude-agent-sdk-history subagents", () => {
   });
 
   test("hydrates Claude task system entries as anchored subagent parts", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -227,6 +229,7 @@ describe("claude-agent-sdk-history subagents", () => {
 
   test("anchors nested Claude task system entries to the selected subagent transcript", () => {
     const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -561,6 +564,7 @@ describe("claude-agent-sdk-history subagents", () => {
   });
 
   test("settles every background Agent in a grouped stopped notification", () => {
+    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         ...["agent-1", "agent-2"].flatMap((_agentId, index) => {

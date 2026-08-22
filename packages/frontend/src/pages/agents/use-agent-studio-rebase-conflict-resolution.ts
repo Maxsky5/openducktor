@@ -66,12 +66,18 @@ export function useAgentStudioRebaseConflictResolution({
         message: request.message,
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        ...(request.existingSessionOptions.length > 0
-          ? { existingSessionOptions: request.existingSessionOptions }
-          : {}),
-        ...(request.initialSourceSession !== undefined
-          ? { initialSourceSession: request.initialSourceSession }
-          : {}),
+        ...(() => {
+          if (request.existingSessionOptions.length > 0) {
+            return { existingSessionOptions: request.existingSessionOptions };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (request.initialSourceSession !== undefined) {
+            return { initialSourceSession: request.initialSourceSession };
+          }
+          return {};
+        })(),
       }),
     [startSessionRequest],
   );

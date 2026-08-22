@@ -164,8 +164,18 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
         const transport = yield* requireTransport(runtimeId);
         yield* transport.respond({
           requestId,
-          ...(result !== undefined ? { result } : {}),
-          ...(error !== undefined ? { error } : {}),
+          ...(() => {
+            if (result !== undefined) {
+              return { result };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (error !== undefined) {
+              return { error };
+            }
+            return {};
+          })(),
         });
       });
     },

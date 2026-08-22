@@ -1,6 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { KanbanColumnId } from "@openducktor/core";
 
+interface TASKSTATUSPRESENTATIONContract extends Record<
+  TaskCard["status"],
+  TaskStatusPresentation
+> {}
+
 type KanbanLaneTheme = {
   boardSurfaceClass: string;
   headerSurfaceClass: string;
@@ -24,7 +29,7 @@ const DEFAULT_LANE_THEME: KanbanLaneTheme = {
   emptyStateClass: "border-input/80 bg-card/70 text-muted-foreground",
 };
 
-const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentation> = {
+const TASK_STATUS_PRESENTATION: TASKSTATUSPRESENTATIONContract = {
   open: {
     label: "Backlog",
     badgeClassName: "border-input bg-muted text-foreground",

@@ -25,12 +25,14 @@ describe("subscribeElectronHostEvent", () => {
         throw new Error("Expected Electron host event listener.");
       }
 
+      // SAFETY: This test controls the fixture and supplies `IpcRendererEvent` used by this case.
       receive(
         {} as IpcRendererEvent,
         JSON.parse(
           '{"channel":"openducktor://dev-server-event","payload":{"type":"not-a-dev-event"}}',
         ),
       );
+      // SAFETY: This test controls the fixture and supplies `IpcRendererEvent` used by this case.
       receive({} as IpcRendererEvent, {
         channel: "openducktor://run-event",
         payload: { runId: "run-1" },

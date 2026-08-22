@@ -17,6 +17,7 @@ import {
   type CodexAppServerCurrentTimeReadResponse,
   type CodexAppServerRequestId,
   type JsonValue,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
@@ -44,10 +45,10 @@ export const appendCapturedStderr = (current: string, line: string): string => {
 };
 
 export const extractErrorMessage = (value: JsonValue | undefined): string => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return value;
   }
-  if (isJsonRecord(value) && typeof value.message === "string") {
+  if (isJsonRecord(value) && hasRuntimeType(value.message, "string")) {
     return value.message;
   }
   return JSON.stringify(value ?? null);
@@ -93,7 +94,7 @@ export function parseStreamMessage(
   message: Record<string, JsonValue>,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage {
-  if (typeof message.method !== "string" || message.method.trim().length === 0) {
+  if (!hasRuntimeType(message.method, "string") || message.method.trim().length === 0) {
     throw new HostValidationError({
       message: `Codex app-server ${kind} for ${runtimeId} is missing a method`,
       field: "method",
@@ -108,7 +109,7 @@ export function parseStreamMessage(
     });
   }
   if (kind === "server_request") {
-    if (typeof message.id !== "number" && typeof message.id !== "string") {
+    if (!hasRuntimeType(message.id, "number") && !hasRuntimeType(message.id, "string")) {
       throw new HostValidationError({
         message: `Codex app-server server request for ${runtimeId} is missing an id`,
         field: "id",

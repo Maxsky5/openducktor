@@ -149,11 +149,12 @@ const createClaudeSessionOperations = (
 export const createRuntimeSessionOperations = ({
   codexAppServer,
   claudeAgentSdk,
-}: CreateRuntimeSessionOperationsInput = {}): RuntimeSessionOperationsByKind => ({
-  opencode: createOpenCodeSessionOperations(),
-  codex: createCodexSessionOperations(codexAppServer),
-  claude: createClaudeSessionOperations(claudeAgentSdk),
-});
+}: CreateRuntimeSessionOperationsInput = {}) =>
+  ({
+    opencode: createOpenCodeSessionOperations(),
+    codex: createCodexSessionOperations(codexAppServer),
+    claude: createClaudeSessionOperations(claudeAgentSdk),
+  }) satisfies RuntimeSessionOperationsByKind;
 
 type StopRuntimeSessionInput = {
   input: RuntimeSessionStopInput;

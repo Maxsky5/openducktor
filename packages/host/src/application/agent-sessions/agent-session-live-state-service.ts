@@ -30,6 +30,7 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Cause, Effect, Exit } from "effect";
+import type { z } from "zod";
 import {
   type HostError,
   HostInvariantError,
@@ -111,11 +112,11 @@ export type CreateAgentSessionLiveStateServiceInput = {
   readonly coordinator?: LiveStateCoordinator;
 };
 
-const parseAdapterOutput = <Output>(
-  schema: { parse(value: unknown): Output },
-  value: unknown,
+const parseAdapterOutput = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
   operation: string,
-): Effect.Effect<Output, HostValidationError> =>
+): Effect.Effect<z.output<Schema>, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(value),
     catch: (cause) =>

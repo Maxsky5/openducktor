@@ -6,6 +6,7 @@ import {
 } from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
+// SAFETY: This test controls the fixture and supplies `ClaudeSession` used by this case.
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   ({
     activeSdkUserTurnCount: 0,

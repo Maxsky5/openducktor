@@ -66,7 +66,12 @@ function ReadyInlineWorkspaceCreationForm({
     initialPickerOpen: true,
   });
   const folderPicker = useInlineFolderPickerController({
-    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : {}),
+    ...(() => {
+      if (workspaceCreation.repoPath) {
+        return { initialPath: workspaceCreation.repoPath };
+      }
+      return {};
+    })(),
     requireGitRepo: true,
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,
@@ -196,6 +201,7 @@ describe("WorkspaceCreationForm", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Repository is already configured as Existing.",
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect(
       (screen.getByRole("button", { name: /^open repository$/i }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -209,11 +215,14 @@ describe("WorkspaceCreationForm", () => {
     renderForm({ addWorkspace, onSuccess });
     await chooseRepository();
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((screen.getByLabelText("Workspace ID") as HTMLInputElement).value).toBe("repo");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((screen.getByLabelText("Workspace name") as HTMLInputElement).value).toBe("repo");
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
 
     const busyButton = await screen.findByRole("button", { name: "Opening repository..." });
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
     expect((busyButton as HTMLButtonElement).disabled).toBe(true);
     expect(addWorkspace).toHaveBeenCalledWith({
       repoPath: "/repo",
@@ -256,6 +265,7 @@ describe("WorkspaceCreationForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
     await screen.findByText("Repository open failed");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
     expect((screen.getByLabelText("Repository path") as HTMLInputElement).value).toBe("/repo");
     fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
 

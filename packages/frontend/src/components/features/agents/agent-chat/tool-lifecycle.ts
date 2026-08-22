@@ -1,21 +1,23 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import type { JsonValue } from "@openducktor/contracts";
 
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
 const hasMeaningfulInputValue = (value: JsonValue | undefined): boolean => {
-  if (typeof value === "string") {
+  if (hasRuntimeType(value, "string")) {
     return value.trim().length > 0;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulInputValue(entry));
   }
-  if (!value || typeof value !== "object") {
+  if (!value || !hasRuntimeType(value, "object")) {
     return false;
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   return Object.values(value as Record<string, JsonValue>).some((entry) =>
     hasMeaningfulInputValue(entry),
   );

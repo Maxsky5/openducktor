@@ -148,12 +148,13 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  const assets = createNodeTaskAssetServices({
-    ...(configuredTaskStore ? { configuredTaskStore } : {}),
+  const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
-  });
+  };
+  if (configuredTaskStore) Object.assign(taskAssetServiceInput, { configuredTaskStore });
+  const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
@@ -213,7 +214,12 @@ export const createNodeEffectHostCommandRouter = (
       }),
       processEnv,
       runtimeDistribution,
-      ...(clientVersion ? { clientVersion } : {}),
+      ...(() => {
+        if (clientVersion) {
+          return { clientVersion };
+        }
+        return {};
+      })(),
       resolveMcpBridgeConnection: (runtimeInput) =>
         resolveWorkspaceRuntimeMcpBridgeConnection(
           resolvedMcpHostBridge,
@@ -264,12 +270,13 @@ export const createNodeEffectHostCommandRouter = (
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
-  const devServerService = createDevServerService({
-    ...(eventBus ? { eventBus } : {}),
+  const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
-  });
+  };
+  if (eventBus) Object.assign(devServerServiceInput, { eventBus });
+  const devServerService = createDevServerService(devServerServiceInput);
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
   });

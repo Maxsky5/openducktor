@@ -9,6 +9,7 @@ const pressEnter = (element: HTMLElement): void => {
     if (element.tagName === "BUTTON") {
       fireEvent.click(element);
     } else {
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
       fireEvent.submit(element.closest("form") as HTMLFormElement);
     }
   }

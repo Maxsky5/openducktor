@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -57,6 +58,7 @@ const fileViewerMock = mock(
   ),
 );
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -139,7 +141,7 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  if (typeof previousActEnvironmentValue === "undefined") {
+  if (hasRuntimeType(previousActEnvironmentValue, "undefined")) {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;

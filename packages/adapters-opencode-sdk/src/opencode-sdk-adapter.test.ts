@@ -4,6 +4,7 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeInstanceSummary,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
@@ -37,18 +38,18 @@ const sessionRuntimeRef = (
   ...overrides,
 });
 
-const createDeferred = <T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (cause: unknown) => void;
-} => {
+const createDeferred = <T>() => {
   let resolve: (value: T) => void = () => undefined;
   let reject: (cause: unknown) => void = () => undefined;
   const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
     reject = promiseReject;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve, reject } satisfies {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (cause: unknown) => void;
+  };
 };
 
 const defaultRepoPath = "/repo";
@@ -136,6 +137,7 @@ const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
 test("rejects non-OpenCode runtime policy bindings at the adapter boundary", async () => {
   const adapter = new OpencodeSdkAdapter();
 
+  // SAFETY: This test controls the fixture and supplies `never` used by this case.
   await expect(
     adapter.startSession({
       repoPath: "/repo",
@@ -165,6 +167,7 @@ test("rejects fork policy mismatches before runtime side effects", async () => {
   });
   const adapter = new OpencodeSdkAdapter({ createClient });
 
+  // SAFETY: This test controls the fixture and supplies `never` used by this case.
   await expect(
     adapter.forkSession({
       repoPath: "/repo",
@@ -212,7 +215,8 @@ test("rejects missing resume scope before runtime side effects", async () => {
   ).rejects.toThrow("Cannot resume OpenCode session without session context.");
   expect(createClient).toHaveBeenCalledTimes(0);
   expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
-  expect((adapter as unknown as TestAdapterInternals).sessions.size).toBe(0);
+  // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+  expect((adapter as TestAdapterInternals).sessions.size).toBe(0);
 });
 
 test("loads unbound session history without applying a session policy", async () => {
@@ -247,24 +251,7 @@ const makeMockClient = (
     };
     permissionListData?: unknown[];
   } = {},
-): {
-  client: OpencodeClient;
-  createCalls: unknown[];
-  abortCalls: unknown[];
-  getCalls: unknown[];
-  listCalls: unknown[];
-  statusCalls: unknown[];
-  permissionListCalls: unknown[];
-  permissionReplyCalls: unknown[];
-  questionListCalls: unknown[];
-  questionReplyCalls: unknown[];
-  updateCalls: unknown[];
-  forkCalls: unknown[];
-  promptAsyncCalls: unknown[];
-  mcpStatusCalls: unknown[];
-  mcpConnectCalls: unknown[];
-  toolIdCalls: unknown[];
-} => {
+) => {
   const createCalls: unknown[] = [];
   const abortCalls: unknown[] = [];
   const getCalls: unknown[] = [];
@@ -281,6 +268,7 @@ const makeMockClient = (
   const mcpConnectCalls: unknown[] = [];
   const toolIdCalls: unknown[] = [];
 
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   const client = {
     session: {
       create: async (input?: JsonValue | undefined) => {
@@ -352,8 +340,9 @@ const makeMockClient = (
       },
       status: async (input?: JsonValue | undefined) => {
         statusCalls.push(input);
+        // SAFETY: This test controls the fixture and supplies `{ directory?: string }` used by this case.
         const directory =
-          typeof input === "object" && input !== null && "directory" in input
+          hasRuntimeType(input, "object") && input !== null && "directory" in input
             ? (input as { directory?: string }).directory
             : undefined;
         return {
@@ -381,8 +370,9 @@ const makeMockClient = (
     permission: {
       list: async (input?: JsonValue | undefined) => {
         permissionListCalls.push(input);
+        // SAFETY: This test controls the fixture and supplies `{ directory?: string }` used by this case.
         const directory =
-          typeof input === "object" && input !== null && "directory" in input
+          hasRuntimeType(input, "object") && input !== null && "directory" in input
             ? (input as { directory?: string }).directory
             : undefined;
         return {
@@ -410,8 +400,9 @@ const makeMockClient = (
     question: {
       list: async (input?: JsonValue | undefined) => {
         questionListCalls.push(input);
+        // SAFETY: This test controls the fixture and supplies `{ directory?: string }` used by this case.
         const directory =
-          typeof input === "object" && input !== null && "directory" in input
+          hasRuntimeType(input, "object") && input !== null && "directory" in input
             ? (input as { directory?: string }).directory
             : undefined;
         return {
@@ -469,7 +460,7 @@ const makeMockClient = (
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  } as OpencodeClient;
 
   return {
     client,
@@ -488,6 +479,23 @@ const makeMockClient = (
     mcpStatusCalls,
     mcpConnectCalls,
     toolIdCalls,
+  } satisfies {
+    client: OpencodeClient;
+    createCalls: unknown[];
+    abortCalls: unknown[];
+    getCalls: unknown[];
+    listCalls: unknown[];
+    statusCalls: unknown[];
+    permissionListCalls: unknown[];
+    permissionReplyCalls: unknown[];
+    questionListCalls: unknown[];
+    questionReplyCalls: unknown[];
+    updateCalls: unknown[];
+    forkCalls: unknown[];
+    promptAsyncCalls: unknown[];
+    mcpStatusCalls: unknown[];
+    mcpConnectCalls: unknown[];
+    toolIdCalls: unknown[];
   };
 };
 
@@ -661,7 +669,8 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as TestAdapterInternals;
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const adapterInternals = adapter as TestAdapterInternals;
     const events: AgentEvent[] = [];
     await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
@@ -696,16 +705,19 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as TestAdapterInternals;
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const adapterInternals = adapter as TestAdapterInternals;
     const session = adapterInternals.sessions.get("external-session-1");
     expect(session).toBeDefined();
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
+    // SAFETY: This test controls the fixture and supplies `never[]` used by this case.
     session.pendingSubagentInputEventsByExternalSessionId.set("child-a", [
       { type: "approval_required", requestId: "request-1" },
       { type: "question_required", requestId: "request-2" },
     ] as never[]);
+    // SAFETY: This test controls the fixture and supplies `never[]` used by this case.
     session.pendingSubagentInputEventsByExternalSessionId.set("child-b", [
       { type: "question_required", requestId: "request-1" },
     ] as never[]);
@@ -722,10 +734,11 @@ describe("opencode-sdk-adapter", () => {
 
   test("startSession fails fast when the sdk client lacks global event streaming", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const unsupportedClient = {
       ...mock.client,
       global: {},
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => unsupportedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -741,9 +754,8 @@ describe("opencode-sdk-adapter", () => {
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");
-    expect((adapter as unknown as TestAdapterInternals).sessions.has("external-session-1")).toBe(
-      false,
-    );
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    expect((adapter as TestAdapterInternals).sessions.has("external-session-1")).toBe(false);
   });
 
   test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
@@ -762,6 +774,7 @@ describe("opencode-sdk-adapter", () => {
       { openducktor: { status: "connected" } },
     ];
     let statusResponseIndex = 0;
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const client = {
       ...mock.client,
       mcp: {
@@ -783,7 +796,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: ["odt_read_task"], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => client,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -798,7 +811,7 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const adapterInternals = adapter as unknown as {
+    const adapterInternals = adapter satisfies {
       sessions: Map<string, SessionRecord>;
       resolveSessionToolSelection: (session: SessionRecord) => Promise<Record<string, boolean>>;
     };
@@ -917,6 +930,7 @@ describe("opencode-sdk-adapter", () => {
       ],
       error: undefined,
     }));
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const createClient = mock(() => ({
       command: { list },
     })) as () => OpencodeClient;
@@ -952,6 +966,7 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("listAvailableSlashCommands propagates catalog loader failures", async () => {
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const adapter = new OpencodeSdkAdapter({
       createClient: (() => ({})) as () => OpencodeClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -968,6 +983,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("accepts equivalent repo paths when validating resolved runtimes", async () => {
     const list = mock(async () => ({ data: [], error: undefined }));
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const createClient = mock(() => ({
       command: { list },
     })) as () => OpencodeClient;
@@ -992,6 +1008,7 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("listAvailableSlashCommands rejects stdio runtime connections before creating a client", async () => {
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const createClient = mock(() => ({}) as OpencodeClient);
     const adapter = new OpencodeSdkAdapter({
       createClient,
@@ -1040,6 +1057,7 @@ describe("opencode-sdk-adapter", () => {
       data: [{ name: "reviewer", description: "Review changes", mode: "subagent" }],
       error: undefined,
     }));
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const createClient = mock(() => ({ app: { agents } })) as () => OpencodeClient;
     const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
 
@@ -1071,6 +1089,7 @@ describe("opencode-sdk-adapter", () => {
       data: ["src/", "src/index.ts"],
       error: undefined,
     }));
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const createClient = mock(() => ({
       find: { files },
     })) as () => OpencodeClient;
@@ -1113,6 +1132,7 @@ describe("opencode-sdk-adapter", () => {
   });
 
   test("searchFiles propagates catalog loader failures", async () => {
+    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
     const adapter = new OpencodeSdkAdapter({
       createClient: (() => ({})) as () => OpencodeClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1190,6 +1210,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots preserves OpenCode parent session evidence", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const parentChildClient = {
       ...mock.client,
       session: {
@@ -1251,7 +1272,7 @@ describe("opencode-sdk-adapter", () => {
           };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => parentChildClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1288,6 +1309,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("readSessionRuntimeSnapshot trusts runtime idle after the runtime lists the session", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const idleStatusClient = {
       ...mock.client,
       session: {
@@ -1334,7 +1356,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleStatusClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1369,6 +1391,7 @@ describe("opencode-sdk-adapter", () => {
     const mcpStatusCalls: unknown[] = [];
     const toolIdCalls: unknown[] = [];
     const promptAsyncCalls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const activeDuringToolSelectionClient = {
       ...mock.client,
       session: {
@@ -1414,7 +1437,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: ["odt_read_task"], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => activeDuringToolSelectionClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1465,6 +1488,7 @@ describe("opencode-sdk-adapter", () => {
     const mock = makeMockClient();
     const promptAsyncCalls: unknown[] = [];
     let runtimeStatus: "idle" | "busy" = "idle";
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const acceptedPromptClient = {
       ...mock.client,
       session: {
@@ -1504,7 +1528,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => acceptedPromptClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1561,6 +1585,7 @@ describe("opencode-sdk-adapter", () => {
   test("sendUserMessage starts a new turn when an idle session retains its last assistant id", async () => {
     const mock = makeMockClient();
     const promptAsyncCalls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const idleSessionClient = {
       ...mock.client,
       session: {
@@ -1610,13 +1635,14 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleSessionClient,
       now: () => "2026-02-22T12:00:00.000Z",
     });
     const unsubscribe = await adapter.subscribeEvents(sessionRuntimeRef(), () => {});
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!session) {
       throw new Error("Expected the idle session to be retained.");
     }
@@ -1642,6 +1668,7 @@ describe("opencode-sdk-adapter", () => {
     const promptAsyncStarted = createDeferred<void>();
     const promptAsyncDeferred = createDeferred<{ data: undefined; error: undefined }>();
     let runtimeStatus: "idle" | "busy" = "idle";
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const promptPendingClient = {
       ...mock.client,
       session: {
@@ -1681,7 +1708,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => promptPendingClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1733,6 +1760,7 @@ describe("opencode-sdk-adapter", () => {
   test("sendUserMessage queued behind an active assistant does not hold idle snapshots awaiting a new turn", async () => {
     const mock = makeMockClient();
     const promptAsyncCalls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const queuedSendClient = {
       ...mock.client,
       session: {
@@ -1772,7 +1800,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => queuedSendClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1787,7 +1815,8 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1821,6 +1850,7 @@ describe("opencode-sdk-adapter", () => {
     const mock = makeMockClient();
     const commandCalls: unknown[] = [];
     const commandStarted = createDeferred<{ messageID: string }>();
+    // SAFETY: This test drives the failure path that supplies `OpencodeClient` before this assertion.
     const slashCommandClient = {
       ...mock.client,
       session: {
@@ -1832,10 +1862,10 @@ describe("opencode-sdk-adapter", () => {
         command: async (input?: JsonValue | undefined) => {
           commandCalls.push(input);
           const messageID =
-            typeof input === "object" && input !== null && !Array.isArray(input)
+            hasRuntimeType(input, "object") && input !== null && !Array.isArray(input)
               ? input.messageID
               : undefined;
-          if (typeof messageID !== "string") {
+          if (!hasRuntimeType(messageID, "string")) {
             throw new Error("Expected slash command input to include messageID.");
           }
           commandStarted.resolve({ messageID });
@@ -1863,7 +1893,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => slashCommandClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1890,9 +1920,8 @@ describe("opencode-sdk-adapter", () => {
       ],
     });
     const { messageID } = await commandStarted.promise;
-    const admittedSession = (adapter as unknown as TestAdapterInternals).sessions.get(
-      "external-session-1",
-    );
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const admittedSession = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!admittedSession) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1905,7 +1934,8 @@ describe("opencode-sdk-adapter", () => {
       workingDirectory: defaultWorkingDirectory,
       externalSessionId: "external-session-1",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
 
     expect(snapshot).toMatchObject({ availability: "runtime", classification: "idle" });
     expect(session?.isAwaitingRuntimeTurnStart).toBe(false);
@@ -1914,6 +1944,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("sendUserMessage queued behind an active assistant preserves an existing await marker", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const queuedSendClient = {
       ...mock.client,
       session: {
@@ -1927,7 +1958,7 @@ describe("opencode-sdk-adapter", () => {
       tool: {
         ids: async () => ({ data: ["odt_read_task"], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => queuedSendClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -1941,7 +1972,8 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -1960,6 +1992,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("readSessionRuntimeSnapshot does not synthesize local runtime snapshot for another working directory", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const emptyListClient = {
       ...mock.client,
       session: {
@@ -1969,7 +2002,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2003,6 +2036,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots includes local runtime sessions before runtime list catches up", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const emptyListClient = {
       ...mock.client,
       session: {
@@ -2012,7 +2046,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2049,6 +2083,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("local-only runtime snapshots preserve the awaiting turn marker", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const emptyListClient = {
       ...mock.client,
       session: {
@@ -2058,7 +2093,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2072,7 +2107,8 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -2097,6 +2133,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("live idle runtime snapshots stay suppressed while awaiting turn start", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const idleLiveClient = {
       ...mock.client,
       session: {
@@ -2135,7 +2172,7 @@ describe("opencode-sdk-adapter", () => {
           return { data: [], error: undefined };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => idleLiveClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2149,7 +2186,8 @@ describe("opencode-sdk-adapter", () => {
       runtimePolicy: opencodeRuntimePolicy,
       systemPrompt: "system",
     });
-    const session = (adapter as unknown as TestAdapterInternals).sessions.get("external-session-1");
+    // SAFETY: This test controls the fixture and supplies `TestAdapterInternals` used by this case.
+    const session = (adapter as TestAdapterInternals).sessions.get("external-session-1");
     if (!session) {
       throw new Error("Expected test session to be registered.");
     }
@@ -2167,6 +2205,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots includes observed existing sessions before runtime list catches up", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const emptyListClient = {
       ...mock.client,
       session: {
@@ -2178,7 +2217,7 @@ describe("opencode-sdk-adapter", () => {
         messages: async () => ({ data: [], error: undefined }),
         children: async () => ({ data: [], error: undefined }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => emptyListClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2214,6 +2253,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots rejects malformed pending approval payloads", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       permission: {
@@ -2231,7 +2271,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2247,6 +2287,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots rejects malformed pending question payloads", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       question: {
@@ -2268,7 +2309,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2312,6 +2353,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots normalizes trailing separators in directory filters", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const trailingDirectoryClient = {
       ...mock.client,
       session: {
@@ -2331,7 +2373,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => trailingDirectoryClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2365,6 +2407,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots fails fast on malformed runtime statuses", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       session: {
@@ -2378,7 +2421,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2394,6 +2437,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots rejects non-object session status maps", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       session: {
@@ -2403,7 +2447,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2419,6 +2463,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots normalizes directory keys for status lookups", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const whitespaceClient = {
       ...mock.client,
       session: {
@@ -2438,7 +2483,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => whitespaceClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2470,6 +2515,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots rejects sessions with invalid directories", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       session: {
@@ -2489,7 +2535,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2507,6 +2553,7 @@ describe("opencode-sdk-adapter", () => {
 
   test("listSessionRuntimeSnapshots rejects sessions with malformed titles", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
       ...mock.client,
       session: {
@@ -2525,7 +2572,7 @@ describe("opencode-sdk-adapter", () => {
           error: undefined,
         }),
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => malformedClient,
       now: () => "2026-02-22T12:00:00.000Z",
@@ -2543,14 +2590,16 @@ describe("opencode-sdk-adapter", () => {
 
   test("readSessionRuntimeSnapshot includes pending permissions and questions", async () => {
     const mock = makeMockClient();
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const questionfulClient = {
       ...mock.client,
       question: {
         ...mock.client.question,
         list: async (input?: JsonValue | undefined) => {
           mock.questionListCalls.push(input);
+          // SAFETY: This test controls the fixture and supplies `{ directory?: string }` used by this case.
           const directory =
-            typeof input === "object" && input !== null && "directory" in input
+            hasRuntimeType(input, "object") && input !== null && "directory" in input
               ? (input as { directory?: string }).directory
               : undefined;
           return {
@@ -2575,7 +2624,7 @@ describe("opencode-sdk-adapter", () => {
           };
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => questionfulClient,
       now: () => "2026-02-22T12:00:00.000Z",

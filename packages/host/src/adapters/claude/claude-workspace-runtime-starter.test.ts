@@ -90,6 +90,7 @@ const createLiveSessionDependencies = ({
 } = {}) => {
   const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
   let remainingReleaseFailures = releaseFailures;
+  // SAFETY: This test controls the fixture and supplies `AgentSessionLiveAdapterPort` used by this case.
   const adapter = {} as AgentSessionLiveAdapterPort;
   const liveSessionLifecycle: RuntimeLiveSessionLifecyclePort = {
     registerRuntimeAdapter: () =>

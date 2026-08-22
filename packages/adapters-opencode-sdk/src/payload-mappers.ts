@@ -1,5 +1,9 @@
 import type { JsonValue } from "@openducktor/contracts";
-import { jsonValueSchema, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
 import {
@@ -11,7 +15,7 @@ const ATTACHMENT_MODALITIES = ["image", "audio", "video", "pdf"] as const;
 
 type ProviderCatalogModel = {
   name?: string | undefined;
-  variants?: Record<string, unknown> | undefined;
+  variants?: Record<string, JsonValue> | undefined;
   limit?: { context?: number | undefined; output?: number | undefined } | undefined;
   capabilities?:
     | {
@@ -23,13 +27,15 @@ type ProviderCatalogModel = {
   modalities?: { input?: string[] | undefined } | undefined;
 };
 
-export const normalizeModelInput = (
-  model: AgentModelSelection | undefined,
-): {
+interface NormalizedModelInput {
   model?: { providerID: string; modelID: string };
   variant?: string;
   agent?: string;
-} => {
+}
+
+export const normalizeModelInput = (
+  model: AgentModelSelection | undefined,
+): NormalizedModelInput => {
   if (!model) {
     return {};
   }
@@ -39,12 +45,24 @@ export const normalizeModelInput = (
       providerID: model.providerId,
       modelID: model.modelId,
     },
-    ...(model.variant ? { variant: model.variant } : {}),
-    ...(model.profileId ? { agent: model.profileId } : {}),
+    ...(() => {
+      if (model.variant) {
+        return { variant: model.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (model.profileId) {
+        return { agent: model.profileId };
+      }
+      return {};
+    })(),
   };
 };
 
-export const resolveAssistantResponseMessageId = (payload: unknown): string | null => {
+export const resolveAssistantResponseMessageId = (
+  payload: Parameters<typeof jsonValueSchema.safeParse>[0],
+): string | null => {
   const parsed = jsonValueSchema.safeParse(payload);
   if (!parsed.success) {
     return null;
@@ -54,7 +72,7 @@ export const resolveAssistantResponseMessageId = (payload: unknown): string | nu
     return null;
   }
   const infoId = readUnknownProp(readRecordProp(payloadRecord, "info"), "id");
-  if (typeof infoId === "string" && infoId.trim().length > 0) {
+  if (hasRuntimeType(infoId, "string") && infoId.trim().length > 0) {
     return infoId.trim();
   }
 
@@ -68,7 +86,7 @@ export const resolveAssistantResponseMessageId = (payload: unknown): string | nu
       continue;
     }
     const messageId = readUnknownProp(partRecord, "messageID");
-    if (typeof messageId === "string" && messageId.trim().length > 0) {
+    if (hasRuntimeType(messageId, "string") && messageId.trim().length > 0) {
       return messageId.trim();
     }
   }
@@ -123,7 +141,9 @@ const normalizeModelAttachmentSupport = (
   return undefined;
 };
 
-export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog => {
+export const mapProviderListToCatalog = (
+  payload: Parameters<typeof opencodeProviderCatalogPayloadSchema.parse>[0],
+): AgentModelCatalog => {
   const parsed: ParsedOpencodeProviderCatalog = opencodeProviderCatalogPayloadSchema.parse(payload);
   const defaults = { ...parsed.default };
 
@@ -148,11 +168,24 @@ export const mapProviderListToCatalog = (payload: unknown): AgentModelCatalog =>
         modelId,
         modelName: rawModel.name ?? modelId,
         variants,
-        ...(typeof contextWindow === "number" && Number.isFinite(contextWindow)
-          ? { contextWindow }
-          : {}),
-        ...(typeof outputLimit === "number" && Number.isFinite(outputLimit) ? { outputLimit } : {}),
-        ...(attachmentSupport ? { attachmentSupport } : {}),
+        ...(() => {
+          if (hasRuntimeType(contextWindow, "number") && Number.isFinite(contextWindow)) {
+            return { contextWindow };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(outputLimit, "number") && Number.isFinite(outputLimit)) {
+            return { outputLimit };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (attachmentSupport) {
+            return { attachmentSupport };
+          }
+          return {};
+        })(),
       };
     });
   });

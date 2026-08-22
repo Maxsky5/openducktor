@@ -1,3 +1,4 @@
+import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -13,7 +14,7 @@ const githubPayloadValueType = (value: JsonValue | undefined): string => {
   if (Array.isArray(value)) {
     return "array";
   }
-  return typeof value;
+  return runtimeTypeName(value);
 };
 
 export const parseGithubJson = (payload: string, responseLabel: string): JsonValue => {
@@ -59,7 +60,7 @@ export const toNullableGithubObject = (
 };
 
 export const toNullableGithubString = (value: JsonValue | undefined): string | null =>
-  typeof value === "string" && value.trim().length > 0 ? value : null;
+  hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
 
 export const requireGithubString = (value: JsonValue | undefined, field: string): string => {
   const parsed = toNullableGithubString(value);
@@ -73,7 +74,7 @@ export const requireGithubString = (value: JsonValue | undefined, field: string)
 };
 
 export const requireGithubBoolean = (value: JsonValue | undefined, field: string): boolean => {
-  if (typeof value !== "boolean") {
+  if (!hasRuntimeType(value, "boolean")) {
     throw new HostValidationError({
       field,
       message: `GitHub pull request review field '${field}' is missing or invalid.`,

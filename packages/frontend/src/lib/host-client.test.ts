@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   configureShellBridge,
   createDisabledAppUpdateBridge,
@@ -24,7 +25,7 @@ const createRuntimeInstanceSummary = (runtimeId: string): RuntimeInstanceSummary
 });
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  client: {} as HostClient,
+  client: createFocusedFixture<HostClient>({}),
   subscribeRunEvents: async () => () => {},
   subscribeDevServerEvents: async () => ({
     transportEpoch: "test:0",
@@ -69,7 +70,9 @@ describe("host-client", () => {
   test("forwards task stream subscriptions and terminal failures to the active shell bridge", async () => {
     const listener = mock(() => {});
     const terminalFailure = new Error("stream terminated");
-    const onTerminalFailure = mock((_cause: unknown) => {});
+    const onTerminalFailure = mock((cause: unknown) => {
+      void cause;
+    });
     const unsubscribe = mock(() => {});
     const acknowledge = mock(async () => {});
     const subscribeTaskStream = mock(async (_input, receivedFrame, receivedTerminalFailure) => {
@@ -105,7 +108,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: firstRuntimeEnsure } as unknown as HostClient,
+        client: createFocusedFixture<HostClient>({ runtimeEnsure: firstRuntimeEnsure }),
       }),
     );
 
@@ -117,7 +120,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: secondRuntimeEnsure } as unknown as HostClient,
+        client: createFocusedFixture<HostClient>({ runtimeEnsure: secondRuntimeEnsure }),
       }),
     );
 
@@ -135,13 +138,14 @@ describe("host-client", () => {
     );
     configureShellBridge(
       createTestShellBridge({
-        client: { runtimeEnsure: shellRuntimeEnsure } as unknown as HostClient,
+        client: createFocusedFixture<HostClient>({ runtimeEnsure: shellRuntimeEnsure }),
       }),
     );
 
     const { hostClient } = await import("./host-client");
     const originalRuntimeEnsure = hostClient.runtimeEnsure;
 
+    // SAFETY: This test controls the fixture and supplies `HostClient["runtimeEnsure"]` used by this case.
     hostClient.runtimeEnsure = overrideRuntimeEnsure as HostClient["runtimeEnsure"];
     try {
       await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({

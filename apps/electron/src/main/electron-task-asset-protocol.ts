@@ -34,6 +34,7 @@ export const registerElectronTaskAssetProtocol = (input: {
       if (!exit.value) {
         return errorResponse(404);
       }
+      // SAFETY: The surrounding boundary constructs or validates every member required by `ArrayBuffer`.
       const body = exit.value.bytes.buffer.slice(
         exit.value.bytes.byteOffset,
         exit.value.bytes.byteOffset + exit.value.bytes.byteLength,

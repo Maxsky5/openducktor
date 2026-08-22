@@ -1,5 +1,6 @@
 import type { JsonValue } from "@openducktor/contracts";
 
+// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
 export const createEventTestSession = (activity: "idle" | "running" = "running") => ({
   acceptedUserMessages: [] as unknown[],
   activeBackgroundSubagentTaskIds: new Set<string>(),

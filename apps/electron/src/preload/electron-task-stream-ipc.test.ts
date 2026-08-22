@@ -155,7 +155,9 @@ describe("Electron preload task stream API", () => {
         listeners.get(channel)?.delete(listener);
       },
     );
-    const onTerminalFailure = mock((_cause: unknown) => {});
+    const onTerminalFailure = mock((cause: unknown) => {
+      void cause;
+    });
     const api = createElectronTaskStreamApi({ invoke, off, on });
     const subscription = await api.subscribe({ cursor: null }, () => {}, onTerminalFailure);
     const dispatch = (channel: string, value: JsonValue | undefined): void => {
@@ -216,7 +218,9 @@ describe("Electron preload task stream API", () => {
         listeners.get(channel)?.delete(listener);
       },
     );
-    const onTerminalFailure = mock((_cause: unknown) => {});
+    const onTerminalFailure = mock((cause: unknown) => {
+      void cause;
+    });
     const api = createElectronTaskStreamApi({ invoke, off, on });
     const pendingSubscription = api.subscribe({ cursor: null }, () => {}, onTerminalFailure);
     const dispatch = (value: JsonValue | undefined): void => {

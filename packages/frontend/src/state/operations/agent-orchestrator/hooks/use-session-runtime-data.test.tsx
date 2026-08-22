@@ -15,6 +15,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import { createSessionMessagesState } from "../support/messages";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;

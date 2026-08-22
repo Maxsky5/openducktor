@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
@@ -24,6 +25,8 @@ import {
 import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
+
+interface MetadataContract extends Record<string, JsonValue> {}
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -115,14 +118,15 @@ const emitCompletedSubagentAssistantMessage = (
   if (!childSession || !pending) {
     return;
   }
-  emit({
+  const message: Extract<AgentEvent, { type: "assistant_message" }> = {
     type: "assistant_message",
     externalSessionId: childSession.externalSessionId,
     timestamp,
     messageId: pending.messageId,
     message: pending.text,
-    ...(pending.model ? { model: pending.model } : {}),
-  });
+  };
+  if (pending.model) Object.assign(message, { model: pending.model });
+  emit(message);
   settleClaudeStreamedAssistantText({
     emit,
     preserveMessageId: pending.messageId,
@@ -188,24 +192,23 @@ export const emitClaudeAgentToolResultSubagentPart = ({
         ) ?? `Claude subagent ${agentId} failed.`)
       : undefined;
   const endedAtMs = timestampMs(timestamp);
-  const totalDurationMs =
-    typeof structuredResult.totalDurationMs === "number" ? structuredResult.totalDurationMs : null;
+  const totalDurationMs = hasRuntimeType(structuredResult.totalDurationMs, "number")
+    ? structuredResult.totalDurationMs
+    : null;
   const startedAtMs =
     totalDurationMs === null ? undefined : Math.max(0, endedAtMs - totalDurationMs);
-  const metadata: Record<string, JsonValue> = {
+  const metadata: MetadataContract = {
     agentId,
     sourceToolUseId: toolUseId,
-    ...(structuredResult.resolvedModel ? { resolvedModel: structuredResult.resolvedModel } : {}),
-    ...(totalDurationMs === null ? {} : { totalDurationMs }),
-    ...(typeof structuredResult.totalTokens === "number"
-      ? { totalTokens: structuredResult.totalTokens }
-      : {}),
-    ...(structuredResult.outputFile ? { outputFile: structuredResult.outputFile } : {}),
-    ...(typeof structuredResult.canReadOutputFile === "boolean"
-      ? { canReadOutputFile: structuredResult.canReadOutputFile }
-      : {}),
-    ...(structuredResult.sessionUrl ? { sessionUrl: structuredResult.sessionUrl } : {}),
   };
+  if (structuredResult.resolvedModel) metadata.resolvedModel = structuredResult.resolvedModel;
+  if (totalDurationMs !== null) metadata.totalDurationMs = totalDurationMs;
+  if (hasRuntimeType(structuredResult.totalTokens, "number"))
+    metadata.totalTokens = structuredResult.totalTokens;
+  if (structuredResult.outputFile) metadata.outputFile = structuredResult.outputFile;
+  if (hasRuntimeType(structuredResult.canReadOutputFile, "boolean"))
+    metadata.canReadOutputFile = structuredResult.canReadOutputFile;
+  if (structuredResult.sessionUrl) metadata.sessionUrl = structuredResult.sessionUrl;
   const messageId =
     session.toolMessageIdsByCallId.get(toolUseId) ??
     (taskId ? session.subagentMessageIdsByTaskId.get(taskId) : undefined) ??
@@ -223,12 +226,42 @@ export const emitClaudeAgentToolResultSubagentPart = ({
       status,
       externalSessionId,
       executionMode,
-      ...(agent ? { agent } : {}),
-      ...(prompt ? { prompt } : {}),
-      ...(description ? { description } : {}),
-      ...(error ? { error } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-      ...(status === "running" ? {} : { endedAtMs }),
+      ...(() => {
+        if (agent) {
+          return { agent };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (prompt) {
+          return { prompt };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (description) {
+          return { description };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (error) {
+          return { error };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(startedAtMs, "number")) {
+          return { startedAtMs };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (status === "running") {
+          return {};
+        }
+        return { endedAtMs };
+      })(),
       metadata,
     },
   });
@@ -377,6 +410,7 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
+    // SAFETY: The runtime adapter builds this value from the contract fields required by `Record<string, JsonValue>`.
     const patch = message.patch as Record<string, JsonValue>;
     const error =
       readStringProp(patch, "error") ??
@@ -431,23 +465,19 @@ export const handleClaudeSubagentSystemMessage = ({
   const agentId =
     (resolvedToolUseId ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId) : undefined) ??
     message.task_id;
-  emitSubagentPart(
-    emit,
-    session,
-    agentId,
-    resolvedToolUseId,
+  const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {
+    endedAtMs: timestampMs(timestamp),
+  };
+  if (notificationError) Object.assign(details, { error: notificationError });
+  if (message.output_file)
+    Object.assign(details, { metadata: { outputFile: message.output_file } });
+  const status =
     message.status === "failed"
       ? "error"
       : message.status === "stopped"
         ? "cancelled"
-        : "completed",
-    timestamp,
-    {
-      ...(notificationError ? { error: notificationError } : {}),
-      endedAtMs: timestampMs(timestamp),
-      ...(message.output_file ? { metadata: { outputFile: message.output_file } } : {}),
-    },
-  );
+        : "completed";
+  emitSubagentPart(emit, session, agentId, resolvedToolUseId, status, timestamp, details);
   if (message.status === "completed") {
     emitCompletedSubagentAssistantMessage(emit, session, resolvedToolUseId, timestamp);
   }

@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constants";
 
+interface SectionErrorCountByIdContract extends Partial<Record<RepositorySectionId, number>> {}
+
 type SettingsSidebarProps = {
   section: SettingsSectionId;
   disabled: boolean;
@@ -91,7 +93,7 @@ export function RepositorySidebar({
       repoErrorCountByWorkspaceId[workspace.workspaceId] = errorCount;
     }
   }
-  const sectionErrorCountById: Partial<Record<RepositorySectionId, number>> = {
+  const sectionErrorCountById: SectionErrorCountByIdContract = {
     prompts: selectedRepoPromptValidationErrorCount,
     scripts: selectedRepoScriptValidationErrorCount,
   };

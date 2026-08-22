@@ -132,6 +132,7 @@ export const createCodexExecutableProbe = ({
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.buildCommand", { executablePath }),
         });
+        // SAFETY: The runtime adapter builds this value from the contract fields required by `CodexChildProcess`.
         const child = yield* Effect.try({
           try: () =>
             spawn(command.command, command.args, {

@@ -71,6 +71,7 @@ describe("main menu template", () => {
     if (!click) {
       throw new Error("Expected Check for Updates menu item click handler.");
     }
+    // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
     (click as () => void)();
     expect(onCheckForUpdates).toHaveBeenCalled();
   });

@@ -5,6 +5,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import { probeCodexSessionStatus } from "./codex-session-status-probe";
 
+// SAFETY: This test controls the fixture and supplies `CodexAppServerRequestResult` used by this case.
 const codexResult = (value: JsonValue | undefined) =>
   Effect.succeed(value as CodexAppServerRequestResult);
 
@@ -92,6 +93,7 @@ describe("probeCodexSessionStatus", () => {
   });
 
   test("fails fast when Codex returns an unsupported thread status", async () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(probeThreadStatus({ status: { type: "paused" } as never })).rejects.toThrow(
       "Codex thread/read response thread has unsupported Codex thread status: paused",
     );

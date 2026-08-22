@@ -666,14 +666,16 @@ describe("createElectronHostCommandRouter", () => {
           });
           const failureReported = yield* Deferred.make<unknown>();
           let settingsReadFails = false;
+          // SAFETY: This test controls the fixture and supplies `GlobalConfig` used by this case.
           const settingsConfig: SettingsConfigPort = {
             ...createSettingsConfig(),
             readConfig: () =>
               settingsReadFails
-                ? Effect.succeed({ workspaces: null } as unknown as GlobalConfig)
+                ? Effect.succeed({ workspaces: null } as GlobalConfig)
                 : Effect.succeed(null),
           };
           const { eventBus } = createEventBus();
+          // SAFETY: This test controls the fixture and supplies `NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>` used by this case.
           const router = createElectronEffectHostCommandRouter({
             eventBus,
             filesystem: createFilesystem(),
@@ -1108,6 +1110,7 @@ describe("createElectronHostCommandRouter", () => {
       detached: false,
       revision: "def456",
     });
+    // SAFETY: This test controls the fixture and supplies `{ snapshot: unknown }` used by this case.
     await expect(
       router.invoke("git_reset_worktree_selection", {
         repoPath: "/repo",

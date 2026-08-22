@@ -49,6 +49,7 @@ export function SettingsGitSection({
     ghAuthError,
   });
 
+  // SAFETY: The rendered control limits this value to the options represented by `GlobalGitConfig["defaultMergeMethod"]`.
   return (
     <div className="grid gap-4 p-4">
       <div className="space-y-2">

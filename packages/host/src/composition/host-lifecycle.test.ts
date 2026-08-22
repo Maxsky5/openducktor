@@ -159,6 +159,7 @@ describe("host lifecycle shutdown", () => {
       operation: "runtimeRegistry.stopAllRuntimes",
       message: "runtime child is still running",
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const step = createStopRuntimesStep(
       {
         stopAllRuntimes: () => Effect.fail(runtimeError),

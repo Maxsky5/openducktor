@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import type {
@@ -66,10 +67,11 @@ const toOpencodeRuntimeActivity = (status: JsonValue | undefined): AgentSessionR
   if (status === undefined || status === null) {
     return "idle";
   }
-  if (typeof status !== "object" || !("type" in status)) {
+  if (!hasRuntimeType(status, "object") || !("type" in status)) {
     throw new Error("Malformed live agent session status payload from Opencode.");
   }
 
+  // SAFETY: The preceding runtime guard establishes `{ type?: JsonValue }` before this assertion.
   const type = (status as { type?: JsonValue }).type;
   if (type === "busy") {
     return "running";
@@ -89,7 +91,7 @@ const toOpencodeSessionStatusMap = (
   payload: JsonValue | undefined,
   directory: string,
 ): Record<string, JsonValue> => {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+  if (!hasRuntimeType(payload, "object") || payload === null || Array.isArray(payload)) {
     throw new Error(
       `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
     );
@@ -100,7 +102,7 @@ const toOpencodeSessionStatusMap = (
 };
 
 const normalizeSessionDirectory = (directory: JsonValue | undefined): string | undefined => {
-  if (typeof directory !== "string") {
+  if (!hasRuntimeType(directory, "string")) {
     return undefined;
   }
   let normalized = directory.trim();
@@ -242,7 +244,7 @@ const requireSessionDirectory = (directory: JsonValue | undefined, sessionId: st
 };
 
 const requireSessionTitle = (title: JsonValue | undefined, sessionId: string): string => {
-  if (typeof title === "string") {
+  if (hasRuntimeType(title, "string")) {
     return title;
   }
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing title.`);
@@ -255,7 +257,7 @@ const readParentExternalSessionId = (session: Session): string | undefined => {
 
 const mergeOpencodePendingInputBySession = (
   entries: OpencodeLiveSessionPendingInputBySessionId[],
-): OpencodeLiveSessionPendingInputBySessionId => {
+) => {
   const merged: OpencodeLiveSessionPendingInputBySessionId = {};
 
   for (const entry of entries) {
@@ -268,7 +270,7 @@ const mergeOpencodePendingInputBySession = (
     }
   }
 
-  return merged;
+  return merged satisfies OpencodeLiveSessionPendingInputBySessionId;
 };
 
 export const listOpencodeRuntimeSnapshotSources = async ({
@@ -327,7 +329,12 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     return {
       externalSessionId: session.id,
       sessionAssociation: { kind: "unbound" },
-      ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
+      ...(() => {
+        if (parentExternalSessionId) {
+          return { parentExternalSessionId };
+        }
+        return {};
+      })(),
       title: requireSessionTitle(session.title, session.id),
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),

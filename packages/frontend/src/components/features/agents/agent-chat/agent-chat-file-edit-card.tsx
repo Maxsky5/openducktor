@@ -9,11 +9,16 @@ import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 
+interface STATUSCONFIGContract extends Record<
+  string,
+  { icon: typeof FileText; color: string; badge: string }
+> {}
+
 type AgentChatFileEditCardProps = {
   data: FileEditData;
 };
 
-const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badge: string }> = {
+const STATUS_CONFIG: STATUSCONFIGContract = {
   modified: { icon: FileText, color: "text-blue-400", badge: "M" },
   added: { icon: FilePlus, color: "text-green-400", badge: "A" },
   deleted: { icon: FileX, color: "text-red-400", badge: "D" },

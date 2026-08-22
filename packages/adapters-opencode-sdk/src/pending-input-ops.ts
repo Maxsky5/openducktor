@@ -103,8 +103,18 @@ const normalizePendingQuestion = (
     header: question.header,
     question: question.question,
     options: question.options,
-    ...(question.multiple === undefined ? {} : { multiple: question.multiple }),
-    ...(question.custom === undefined ? {} : { custom: question.custom }),
+    ...(() => {
+      if (question.multiple === undefined) {
+        return {};
+      }
+      return { multiple: question.multiple };
+    })(),
+    ...(() => {
+      if (question.custom === undefined) {
+        return {};
+      }
+      return { custom: question.custom };
+    })(),
   })),
 });
 
@@ -165,7 +175,12 @@ export const replyApproval = async (
     directory: session.input.workingDirectory,
     requestID: input.requestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(input.message ? { message: input.message } : {}),
+    ...(() => {
+      if (input.message) {
+        return { message: input.message };
+      }
+      return {};
+    })(),
   });
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);

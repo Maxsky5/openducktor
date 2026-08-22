@@ -166,6 +166,7 @@ describe("workspaceFileTreeQueryOptions", () => {
     });
     await waitFor(() => expect(result.current.mutation.isError).toBe(true));
     expect(mutationError).toBeInstanceOf(Error);
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((mutationError as Error).message).toBe("The file changed after it was loaded.");
     expect(result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(key)).toEqual(
       baseline,

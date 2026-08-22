@@ -33,6 +33,7 @@ describe("createOpenCodeExecutableProbe", () => {
       },
       spawnProcess(command, args) {
         spawnCalls.push({ command, args });
+        // SAFETY: This test controls the fixture and supplies `never` used by this case.
         return child as never;
       },
     });
@@ -56,6 +57,7 @@ describe("createOpenCodeExecutableProbe", () => {
       stdout: new PassThrough(),
       stderr: new PassThrough(),
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const probe = createOpenCodeExecutableProbe({
       portAllocator: () => Effect.succeed(4567),
       spawnProcess: () => child as never,
@@ -75,6 +77,7 @@ describe("createOpenCodeExecutableProbe", () => {
       stdout: new PassThrough(),
       stderr: new PassThrough(),
     });
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const probe = createOpenCodeExecutableProbe({
       portAllocator: () => Effect.succeed(4567),
       processTreeTerminator: () => Effect.void,

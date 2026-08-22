@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { JsonValue } from "@openducktor/contracts";
 import type { IpcMainInvokeEvent } from "electron";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 
@@ -10,15 +11,12 @@ const request = {
   args: { repoPath: "/workspace" },
 };
 
-type ElectronHostInvokeHandler = (event: IpcMainInvokeEvent, request: unknown) => Promise<unknown>;
+type ElectronHostInvokeHandler = (
+  event: IpcMainInvokeEvent,
+  request: JsonValue | undefined,
+) => Promise<JsonValue>;
 
-const createRegisteredHandler = (): {
-  channel: string | undefined;
-  handler: ElectronHostInvokeHandler;
-  ipcMain: {
-    handle(channel: string, handler: ElectronHostInvokeHandler): void;
-  };
-} => {
+const createRegisteredHandler = () => {
   let channel: string | undefined;
   let handler: ElectronHostInvokeHandler | undefined;
 
@@ -38,14 +36,16 @@ const createRegisteredHandler = (): {
         handler = registeredHandler;
       },
     },
+  } satisfies {
+    channel: string | undefined;
+    handler: ElectronHostInvokeHandler;
+    ipcMain: {
+      handle(channel: string, handler: ElectronHostInvokeHandler): void;
+    };
   };
 };
 
-const createDeferred = <Value>(): {
-  promise: Promise<Value>;
-  reject(cause: unknown): void;
-  resolve(value: Value): void;
-} => {
+const createDeferred = <Value>() => {
   let reject: (cause: unknown) => void = () => {};
   let resolve: (value: Value) => void = () => {};
   const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
@@ -53,7 +53,11 @@ const createDeferred = <Value>(): {
     reject = rejectPromise;
   });
 
-  return { promise, reject, resolve };
+  return { promise, reject, resolve } satisfies {
+    promise: Promise<Value>;
+    reject(cause: unknown): void;
+    resolve(value: Value): void;
+  };
 };
 
 describe("Electron host invoke IPC handler", () => {

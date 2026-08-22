@@ -88,6 +88,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         }),
       ]),
     );
+    // SAFETY: This test controls the fixture and supplies `{ tools: Record<string, boolean>; }` used by this case.
     const promptTools = (
       mock.session.promptAsyncCalls[0] as {
         tools: Record<string, boolean>;

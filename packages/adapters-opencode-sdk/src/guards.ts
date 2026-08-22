@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 
 export type UnknownRecord = Record<string, JsonValue>;
@@ -58,7 +59,7 @@ export const readStringProp = (
 
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === "string" && value.length > 0) {
+    if (hasRuntimeType(value, "string") && value.length > 0) {
       return value;
     }
   }
@@ -76,7 +77,7 @@ export const readNumberProp = (
 
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value) && !Number.isNaN(value)) {
+    if (hasRuntimeType(value, "number") && Number.isFinite(value) && !Number.isNaN(value)) {
       return value;
     }
   }
@@ -94,7 +95,7 @@ export const readBooleanProp = (
 
   for (const key of keys) {
     const value = record[key];
-    if (typeof value === "boolean") {
+    if (hasRuntimeType(value, "boolean")) {
       return value;
     }
   }
@@ -112,7 +113,7 @@ export const readStringArrayProp = (
 
   const stringArray: string[] = [];
   for (const value of values) {
-    if (typeof value !== "string") {
+    if (!hasRuntimeType(value, "string")) {
       return undefined;
     }
     stringArray.push(value);

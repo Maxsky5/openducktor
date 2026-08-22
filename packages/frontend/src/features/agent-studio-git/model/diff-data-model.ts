@@ -1,6 +1,10 @@
 import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
 import type { DiffScope, DiffScopeState } from "../contracts";
 
+interface NextByScopeContract extends Record<DiffScope, ScopeSnapshot> {}
+
+interface NextByScopeContract344 extends Record<DiffScope, ScopeSnapshot> {}
+
 export type DiffBatchState = {
   byScope: Record<DiffScope, ScopeSnapshot>;
   loadedByScope: Record<DiffScope, boolean>;
@@ -228,12 +232,7 @@ export const applySummarySnapshot = ({
   summaryFields: ScopeSummaryFields;
   requestSequence: number;
   latestSharedSequence: number;
-}): {
-  invalidatedScopes: DiffScope[];
-  nextState: DiffBatchState;
-  nextLatestSharedSequence: number;
-  shouldReloadFullScope: boolean;
-} => {
+}) => {
   const { sharedHashesChanged, shouldReloadFullScope } = getSummaryReloadDecision(
     state,
     scope,
@@ -242,7 +241,7 @@ export const applySummarySnapshot = ({
   const previousSummarySnapshot = state.byScope[scope];
 
   let didChange = false;
-  const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+  const nextByScope: NextByScopeContract = {
     ...state.byScope,
   };
   const nextFetchedScopeSnapshot: ScopeSnapshot = {
@@ -305,6 +304,11 @@ export const applySummarySnapshot = ({
     nextState: finalizeCompletedState(state, nextByScope, nextLoadedByScope, didChange),
     nextLatestSharedSequence,
     shouldReloadFullScope,
+  } satisfies {
+    invalidatedScopes: DiffScope[];
+    nextState: DiffBatchState;
+    nextLatestSharedSequence: number;
+    shouldReloadFullScope: boolean;
   };
 };
 
@@ -339,12 +343,9 @@ export const applyFullSnapshot = ({
   snapshot: ScopeSnapshot;
   requestSequence: number;
   latestSharedSequence: number;
-}): {
-  nextState: DiffBatchState;
-  nextLatestSharedSequence: number;
-} => {
+}) => {
   let didChange = false;
-  const nextByScope: Record<DiffScope, ScopeSnapshot> = {
+  const nextByScope: NextByScopeContract344 = {
     ...state.byScope,
   };
   const previousFetchedScopeSnapshot = state.byScope[scope];
@@ -388,6 +389,9 @@ export const applyFullSnapshot = ({
   return {
     nextState: finalizeCompletedState(state, nextByScope, nextLoadedByScope, didChange),
     nextLatestSharedSequence,
+  } satisfies {
+    nextState: DiffBatchState;
+    nextLatestSharedSequence: number;
   };
 };
 

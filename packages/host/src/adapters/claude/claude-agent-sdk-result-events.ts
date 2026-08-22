@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import {
@@ -77,7 +78,7 @@ export const handleClaudeResultMessage = ({
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
   const resultText =
-    "result" in message && typeof message.result === "string" ? message.result.trim() : "";
+    "result" in message && hasRuntimeType(message.result, "string") ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
   if (!handledManualCompaction && shouldFinalize) {
@@ -87,9 +88,9 @@ export const handleClaudeResultMessage = ({
     clearClaudeManualCompaction(session);
     const errors = "errors" in message && Array.isArray(message.errors) ? message.errors : [];
     const resultMessage =
-      "result" in message && typeof message.result === "string" ? message.result.trim() : "";
+      "result" in message && hasRuntimeType(message.result, "string") ? message.result.trim() : "";
     const terminalReason =
-      "terminal_reason" in message && typeof message.terminal_reason === "string"
+      "terminal_reason" in message && hasRuntimeType(message.terminal_reason, "string")
         ? message.terminal_reason
         : undefined;
     emit({
@@ -122,7 +123,7 @@ export const handleClaudeResultMessage = ({
 };
 
 const pendingUserTurnCount = (session: ClaudeResultEventSession): number => {
-  return typeof session.pendingUserTurnCount === "number" ? session.pendingUserTurnCount : 0;
+  return hasRuntimeType(session.pendingUserTurnCount, "number") ? session.pendingUserTurnCount : 0;
 };
 
 const acceptedUserTurnCount = (session: ClaudeResultEventSession): number => {
@@ -145,6 +146,7 @@ const resultModelForCompletedTurn = (
   completedUserTurnIndex: number,
   duplicatesAssistantTextFromSameTurn: boolean,
 ): AgentModelSelection | undefined => {
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `| { model?: AgentModelSelection } | undefined`.
   const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
     | { model?: AgentModelSelection }
     | undefined;
@@ -193,9 +195,24 @@ export const emitClaudePermissionDeniedToolPart = ({
       messageId,
       text: permission.message,
       tool: toolName,
-      ...(input ? { input } : {}),
-      ...(permission.metadata ? { metadata: permission.metadata } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+      ...(() => {
+        if (input) {
+          return { input };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (permission.metadata) {
+          return { metadata: permission.metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(startedAtMs, "number")) {
+          return { startedAtMs };
+        }
+        return {};
+      })(),
     }),
   });
 };
@@ -213,7 +230,7 @@ const emitSuccessfulResultText = ({
   if (isFailedClaudeResult(message)) {
     return;
   }
-  const text = typeof message.result === "string" ? message.result.trim() : "";
+  const text = hasRuntimeType(message.result, "string") ? message.result.trim() : "";
   const duplicatesAssistantTextFromSameTurn =
     text === session.lastAssistantText &&
     session.lastAssistantTextTurnIndex === completedUserTurnIndex;
@@ -225,6 +242,7 @@ const emitSuccessfulResultText = ({
     completedUserTurnIndex,
     duplicatesAssistantTextFromSameTurn,
   );
+  // SAFETY: The preceding runtime guard establishes `| { model?: unknown } | undefined` before this assertion.
   const acceptedTurn = session.acceptedUserMessages?.[completedUserTurnIndex - 1] as
     | { model?: unknown }
     | undefined;
@@ -262,6 +280,11 @@ const emitSuccessfulResultText = ({
     timestamp,
     messageId,
     message: text,
-    ...(resultModel ? { model: resultModel } : {}),
+    ...(() => {
+      if (resultModel) {
+        return { model: resultModel };
+      }
+      return {};
+    })(),
   });
 };

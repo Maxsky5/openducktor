@@ -23,11 +23,13 @@ export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
 
+// SAFETY: The preceding runtime guard establishes `AgentToolName` before this assertion.
 const resolveCanonicalOdtWorkflowToolName = (toolId: string): AgentToolName | null => {
   if (!ODT_WORKFLOW_TOOL_SET.has(toolId as AgentToolName)) {
     return null;
   }
 
+  // SAFETY: The preceding runtime guard establishes `AgentToolName` before this assertion.
   return toolId as AgentToolName;
 };
 
@@ -97,7 +99,7 @@ export const buildRoleScopedOdtToolSelection = (
     includeCanonicalDefaults?: boolean;
     workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical;
   },
-): Record<string, boolean> => {
+) => {
   const allowed = new Set(AGENT_ROLE_TOOL_POLICY[role]);
   const selection: Record<string, boolean> = {};
   const includeCanonicalDefaults = options?.includeCanonicalDefaults ?? true;
@@ -126,5 +128,5 @@ export const buildRoleScopedOdtToolSelection = (
     selection[trimmedToolId] = allowed.has(normalizedTool);
   }
 
-  return selection;
+  return selection satisfies Record<string, boolean>;
 };

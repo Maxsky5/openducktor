@@ -1,4 +1,6 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, test } from "bun:test";
+import { createInvalidFixture } from "@/test-utils/focused-fixture";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelSelection, StartAgentSessionInput } from "@openducktor/core";
@@ -549,6 +551,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     if (!persistedRecord) {
       throw new Error("Expected persisted record to be captured.");
     }
+    // SAFETY: This test controls the fixture and supplies `AgentSessionRecord` used by this case.
     const persistedSessionRecord = persistedRecord as AgentSessionRecord;
 
     expect(persistedSessionRecord.externalSessionId).toBe("external-1");
@@ -574,7 +577,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     });
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -1414,12 +1417,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const selectedModel = (() => {
         if (runtimeKind === undefined) {
           const { runtimeKind: _runtimeKind, ...selectionWithoutRuntime } = BUILD_SELECTION;
-          return selectionWithoutRuntime as AgentModelSelection;
+          return createInvalidFixture<AgentModelSelection>(selectionWithoutRuntime);
         }
-        return {
+        return createInvalidFixture<AgentModelSelection>({
           ...BUILD_SELECTION,
           runtimeKind,
-        } as unknown as AgentModelSelection;
+        });
       })();
 
       const { start } = createStartSessionTestHarness({

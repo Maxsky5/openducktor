@@ -23,6 +23,7 @@ import {
 
 export { invokeStopAgentSession };
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, string>`.
 const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
@@ -124,7 +125,12 @@ export function useAgentChatSurfaceModel({
     () => ({
       chatSettings,
       thread: threadModel,
-      ...(composerModel ? { composer: composerModel } : {}),
+      ...(() => {
+        if (composerModel) {
+          return { composer: composerModel };
+        }
+        return {};
+      })(),
     }),
     [chatSettings, composerModel, threadModel],
   );

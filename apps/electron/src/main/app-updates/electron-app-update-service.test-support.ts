@@ -1,5 +1,8 @@
 import { mock } from "bun:test";
-import { createElectronAppUpdateService } from "./electron-app-update-service";
+import {
+  createElectronAppUpdateService,
+  type ElectronAppUpdateScheduler,
+} from "./electron-app-update-service";
 import type {
   ElectronAppUpdaterAdapter,
   ElectronUpdaterCheckResult,
@@ -12,7 +15,7 @@ type FakeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEven
 
 export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
-  configureError: unknown = null;
+  configureError = null satisfies unknown;
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
   disposeCalls = 0;
   downloadCalls = 0;
@@ -67,9 +70,11 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   ): () => void {
     const listeners =
       this.listeners.get(eventName) ?? new Set<(payload: FakeUpdaterEventPayload) => void>();
+    // SAFETY: This test controls the fixture and supplies `(payload: FakeUpdaterEventPayload) => void` used by this case.
     listeners.add(listener as (payload: FakeUpdaterEventPayload) => void);
     this.listeners.set(eventName, listeners);
     return () => {
+      // SAFETY: This test controls the fixture and supplies `(payload: FakeUpdaterEventPayload) => void` used by this case.
       listeners.delete(listener as (payload: FakeUpdaterEventPayload) => void);
     };
   }
@@ -110,22 +115,22 @@ export const flushAsyncWork = async (): Promise<void> => {
 export const createFakeScheduler = () => {
   const intervals: FakeScheduledInterval[] = [];
   const timeouts: FakeScheduledTimeout[] = [];
-  const scheduler = {
+  const scheduler: ElectronAppUpdateScheduler<FakeScheduledInterval, FakeScheduledTimeout> = {
     setInterval(callback: () => void, intervalMs: number): FakeScheduledInterval {
       const interval = { callback, cleared: false, intervalMs };
       intervals.push(interval);
       return interval;
     },
-    clearInterval(handle: object): void {
-      (handle as FakeScheduledInterval).cleared = true;
+    clearInterval(handle: FakeScheduledInterval): void {
+      handle.cleared = true;
     },
     setTimeout(callback: () => void, timeoutMs: number): FakeScheduledTimeout {
       const timeout = { callback, cleared: false, timeoutMs };
       timeouts.push(timeout);
       return timeout;
     },
-    clearTimeout(handle: object): void {
-      (handle as FakeScheduledTimeout).cleared = true;
+    clearTimeout(handle: FakeScheduledTimeout): void {
+      handle.cleared = true;
     },
   };
 

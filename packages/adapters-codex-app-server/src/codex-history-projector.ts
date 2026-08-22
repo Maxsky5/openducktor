@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionHistoryMessage } from "@openducktor/core";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
@@ -19,7 +20,12 @@ export const projectCodexCanonicalEventsToHistory = (
         displayParts: event.displayParts,
         state: event.state,
         parts: [],
-        ...(resolvedModel ? { model: resolvedModel } : {}),
+        ...(() => {
+          if (resolvedModel) {
+            return { model: resolvedModel };
+          }
+          return {};
+        })(),
       });
       continue;
     }
@@ -31,9 +37,24 @@ export const projectCodexCanonicalEventsToHistory = (
         timestamp,
         text: event.message,
         parts: [],
-        ...(resolvedModel ? { model: resolvedModel } : {}),
-        ...(typeof event.totalTokens === "number" ? { totalTokens: event.totalTokens } : {}),
-        ...(typeof event.contextWindow === "number" ? { contextWindow: event.contextWindow } : {}),
+        ...(() => {
+          if (resolvedModel) {
+            return { model: resolvedModel };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(event.totalTokens, "number")) {
+            return { totalTokens: event.totalTokens };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (hasRuntimeType(event.contextWindow, "number")) {
+            return { contextWindow: event.contextWindow };
+          }
+          return {};
+        })(),
       });
       continue;
     }
@@ -48,7 +69,12 @@ export const projectCodexCanonicalEventsToHistory = (
           timestamp,
           text: "",
           parts: [event.part],
-          ...(model ? { model } : {}),
+          ...(() => {
+            if (model) {
+              return { model };
+            }
+            return {};
+          })(),
         });
       }
       continue;
@@ -61,7 +87,12 @@ export const projectCodexCanonicalEventsToHistory = (
         timestamp,
         text: "",
         parts: [part],
-        ...(model ? { model } : {}),
+        ...(() => {
+          if (model) {
+            return { model };
+          }
+          return {};
+        })(),
       });
       continue;
     }

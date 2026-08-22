@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 export type TaskExecutionCiCommentFilters = {
   hideResolved: boolean;
 };
@@ -13,19 +14,20 @@ const parseFilters = (raw: string | null): TaskExecutionCiCommentFilters => {
   }
 
   const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsed || !hasRuntimeType(parsed, "object")) {
     throw new Error("Persisted CI comment filters are invalid.");
   }
 
+  // SAFETY: The preceding runtime guard establishes `{ hideResolved?: unknown }` before this assertion.
   const hideResolved = (parsed as { hideResolved?: unknown }).hideResolved;
-  if (typeof hideResolved !== "boolean") {
+  if (!hasRuntimeType(hideResolved, "boolean")) {
     throw new Error("Persisted CI comment filters are invalid.");
   }
   return { hideResolved };
 };
 
 export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilters => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     return DEFAULT_CI_COMMENT_FILTERS;
   }
 
@@ -39,7 +41,7 @@ export const readTaskExecutionCiCommentFilters = (): TaskExecutionCiCommentFilte
 export const persistTaskExecutionCiCommentFilters = (
   filters: TaskExecutionCiCommentFilters,
 ): void => {
-  if (typeof globalThis.localStorage === "undefined") {
+  if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     return;
   }
 

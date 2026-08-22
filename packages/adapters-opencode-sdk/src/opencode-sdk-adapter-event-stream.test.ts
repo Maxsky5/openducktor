@@ -12,6 +12,7 @@ import {
 
 describe("OpencodeSdkAdapter event stream", () => {
   test("maps message.updated events into assistant parts and assistant message", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       {
@@ -54,7 +55,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
     ];
 
@@ -94,6 +95,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("emits session_idle from the authoritative runtime idle event", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       {
@@ -124,11 +126,11 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "session.idle",
         properties: { sessionID: "session-opencode-1" },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({ streamEvents });
@@ -150,6 +152,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps terminal assistant metadata onto previously streamed text parts", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.part.updated",
@@ -163,7 +166,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "message.updated",
         properties: {
@@ -186,7 +189,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({ streamEvents });
@@ -220,6 +223,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("does not re-emit assistant streaming events after idle is already preserved", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
@@ -251,7 +255,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "message.part.delta",
         properties: {
@@ -261,7 +265,7 @@ describe("OpencodeSdkAdapter event stream", () => {
           field: "text",
           delta: " later",
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({ streamEvents });
@@ -286,6 +290,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       sessionStatusEvent({ type: "idle" }, "session-opencode-1"),
@@ -307,7 +312,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "message.part.updated",
         properties: {
@@ -320,7 +325,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({ streamEvents });
@@ -351,6 +356,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("does not finalize previously streamed assistant text without a stop signal", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.part.updated",
@@ -364,7 +370,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             time: { start: 1, end: 1 },
           },
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "message.updated",
         properties: {
@@ -386,7 +392,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({ streamEvents });
@@ -408,6 +414,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps acknowledged user message.updated events into user_message", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -426,7 +433,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -463,6 +470,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps user message parts into user_message when message.updated omits text", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.part.updated",
@@ -475,7 +483,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             text: "Generate the pull request",
           },
         },
-      } as unknown as Event,
+      } as Event,
       {
         type: "message.updated",
         properties: {
@@ -492,7 +500,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           },
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -529,6 +537,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("includes step-finish total tokens on assistant part events", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -558,7 +567,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -595,6 +604,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps completed MCP tool part with isError=true as error status", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       {
@@ -628,7 +638,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -664,6 +674,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps flattened MCP tool error JSON output as error status", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),
       {
@@ -704,7 +715,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -746,6 +757,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps todowrite tool part with ended timing to completed even when status is pending", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -781,7 +793,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -818,6 +830,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps todo.updated events into session_todos_updated", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "todo.updated",
@@ -838,7 +851,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({
@@ -879,6 +892,7 @@ describe("OpencodeSdkAdapter event stream", () => {
   });
 
   test("maps todo.updated events with missing id/status aliases", async () => {
+    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "todo.updated",
@@ -896,7 +910,7 @@ describe("OpencodeSdkAdapter event stream", () => {
             },
           ],
         },
-      } as unknown as Event,
+      } as Event,
     ];
 
     const mock = makeMockClient({

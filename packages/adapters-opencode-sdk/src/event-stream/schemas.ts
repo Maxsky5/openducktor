@@ -1,4 +1,4 @@
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 import { z } from "zod";
 import { asUnknownRecord, type UnknownRecord } from "../guards";
 import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
@@ -262,8 +262,18 @@ const toParsedQuestionAsked = (properties: {
     header: question.header,
     question: question.question,
     options: question.options,
-    ...(question.multiple !== undefined ? { multiple: question.multiple } : {}),
-    ...(question.custom !== undefined ? { custom: question.custom } : {}),
+    ...(() => {
+      if (question.multiple !== undefined) {
+        return { multiple: question.multiple };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (question.custom !== undefined) {
+        return { custom: question.custom };
+      }
+      return {};
+    })(),
   })),
 });
 
@@ -293,8 +303,18 @@ export const parseSessionControlEvent = (event: Event): ParsedSessionControlEven
           requestId: parsed.properties.id,
           permission: parsed.properties.action,
           patterns: parsed.properties.resources,
-          ...(parsed.properties.save ? { save: parsed.properties.save } : {}),
-          ...(parsed.properties.metadata ? { metadata: parsed.properties.metadata } : {}),
+          ...(() => {
+            if (parsed.properties.save) {
+              return { save: parsed.properties.save };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (parsed.properties.metadata) {
+              return { metadata: parsed.properties.metadata };
+            }
+            return {};
+          })(),
         },
       };
     }
@@ -375,7 +395,7 @@ export const readEventPart = (properties: UnknownRecord): UnknownRecord | undefi
 
 export const readMessageCompletedAt = (info: UnknownRecord): number | undefined => {
   const time = asUnknownRecord(info.time);
-  if (!time || typeof time.completed !== "number") {
+  if (!time || !hasRuntimeType(time.completed, "number")) {
     return undefined;
   }
   return time.completed;

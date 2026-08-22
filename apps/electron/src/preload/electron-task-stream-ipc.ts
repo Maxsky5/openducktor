@@ -22,7 +22,7 @@ import {
 } from "../shared/electron-bridge-contract";
 
 type ElectronIpcRendererLike = {
-  invoke(channel: string, value: JsonValue | undefined): Promise<unknown>;
+  invoke(channel: string, value: JsonValue | undefined): Promise<JsonValue | undefined>;
   off(
     channel: string,
     listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,

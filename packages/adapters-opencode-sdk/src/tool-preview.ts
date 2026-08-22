@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
@@ -25,7 +26,7 @@ const readTrimmedString = (
   }
   for (const key of keys) {
     const value = source[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       return value.trim();
     }
   }
@@ -184,7 +185,7 @@ const summarizeOdtMutation = (
   if (tool === "odt_set_pull_request") {
     const providerId = readTrimmedString(input, ["providerId"]);
     const number =
-      typeof input?.number === "number" && Number.isFinite(input.number)
+      hasRuntimeType(input?.number, "number") && Number.isFinite(input.number)
         ? `#${input.number}`
         : null;
     const taskId = readTrimmedString(input, ["taskId"]);

@@ -150,6 +150,7 @@ describe("useOnboardingRuntimeSetup", () => {
 
       await waitFor(() => expect(attempts).toBe(2));
       await screen.findByRole("heading", { name: "OpenCode" });
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -194,6 +195,7 @@ describe("useOnboardingRuntimeSetup", () => {
 
       await waitFor(() => expect(attempts).toBe(2));
       await screen.findByRole("heading", { name: "OpenCode" });
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -235,6 +237,7 @@ describe("useOnboardingRuntimeSetup", () => {
       });
       await screen.findByText("Runtime validation failed");
       expect(screen.queryByText("Coding agent setup could not load")).toBeNull();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
         (
           within(opencodeSection()).getByRole("textbox", {
@@ -242,6 +245,7 @@ describe("useOnboardingRuntimeSetup", () => {
           }) as HTMLInputElement
         ).disabled,
       ).toBe(false);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (within(opencodeSection()).getByRole("switch", { name: "Enabled" }) as HTMLButtonElement)
           .disabled,
@@ -349,6 +353,7 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -395,6 +400,7 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -438,6 +444,7 @@ describe("useOnboardingRuntimeSetup", () => {
       });
       await screen.findByText("Runtime discovery failed");
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         false,
       );
@@ -514,15 +521,19 @@ describe("useOnboardingRuntimeSetup", () => {
       fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
       await screen.findByRole("button", { name: "Scanning..." });
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       const pathInput = screen.getByLabelText("Executable path", {
         selector: "#runtime-executable-opencode",
       }) as HTMLInputElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const enabledSwitch = within(opencodeSection()).getByRole("switch", {
         name: "Enabled",
       }) as HTMLButtonElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const browseButton = within(opencodeSection()).getByRole("button", {
         name: "Browse",
       }) as HTMLButtonElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const backButton = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
 
       expect(pathInput.disabled).toBe(true);
@@ -577,6 +588,7 @@ describe("useOnboardingRuntimeSetup", () => {
       });
 
       await waitFor(() => expect(requests).toEqual(["discover"]));
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
         (
           screen.getByLabelText("Executable path", {
@@ -649,6 +661,7 @@ describe("useOnboardingRuntimeSetup", () => {
         },
       );
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
         true,
       );
@@ -664,6 +677,7 @@ describe("useOnboardingRuntimeSetup", () => {
           ),
         );
       });
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -692,6 +706,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes, true);
+      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
       const kinds = Object.keys(input.paths) as RuntimeKind[];
       requests.push(kinds);
       if (input.paths.opencode === "/changed/opencode") return changedCheck.promise;
@@ -751,6 +766,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
+      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
       const kinds = Object.keys(input.paths) as RuntimeKind[];
       return {
         runtimes: kinds.map((kind) => {
@@ -797,6 +813,7 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
+      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
       const kinds = Object.keys(input.paths) as RuntimeKind[];
       return {
         runtimes: kinds.map((kind) => {
@@ -816,6 +833,7 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       const pathInput = screen.getByLabelText("Executable path", {
         selector: "#runtime-executable-opencode",
       }) as HTMLInputElement;
@@ -852,6 +870,7 @@ describe("useOnboardingRuntimeSetup", () => {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
       expect(screen.queryByText("Agent tools")).toBeNull();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
         expect(
           (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
@@ -905,15 +924,19 @@ describe("useOnboardingRuntimeSetup", () => {
 
       const heading = screen.getByRole("heading", { name: "Configure coding agents" });
       const stage = heading.closest('[data-slot="card"]');
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       const pathInput = screen.getByLabelText("Executable path", {
         selector: "#runtime-executable-opencode",
       }) as HTMLInputElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const enabledSwitch = within(opencodeSection()).getByRole("switch", {
         name: "Enabled",
       }) as HTMLButtonElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const scanButton = screen.getByRole("button", {
         name: "Scan for coding agents",
       }) as HTMLButtonElement;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const continueButton = screen.getByRole("button", {
         name: "Continue to workspace",
       }) as HTMLButtonElement;
@@ -960,9 +983,11 @@ describe("useOnboardingRuntimeSetup", () => {
       fireEvent.click(confirmButton);
 
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled,
       ).toBe(true);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
         true,
       );

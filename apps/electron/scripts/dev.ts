@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -92,7 +93,10 @@ const runStepEffect = (
   });
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+  hasRuntimeType(cause, "object") &&
+  cause !== null &&
+  "code" in cause &&
+  hasRuntimeType(cause.code, "string")
     ? cause.code
     : null;
 
@@ -235,7 +239,7 @@ const resolveElectronExecutablePath = (): string => String(nodeRequire("electron
 const runDevFileOperationEffect = (
   operation: string,
   filePath: string,
-  action: () => Promise<unknown>,
+  action: () => Promise<void>,
   details?: Record<string, JsonValue>,
 ): Effect.Effect<void, ElectronOperationError> =>
   Effect.tryPromise({
@@ -346,9 +350,9 @@ const prepareMacosDevElectronBundleEffect = (
       );
     };
 
-    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, () =>
-      mkdir(devRoot, { recursive: true }),
-    );
+    yield* runDevFileOperationEffect("electron.dev.create-macos-dev-root", devRoot, async () => {
+      await mkdir(devRoot, { recursive: true });
+    });
     if (shouldCopyBundle) {
       yield* runDevFileOperationEffect("electron.dev.remove-macos-dev-marker", markerPath, () =>
         rm(markerPath, { force: true }),
@@ -440,7 +444,7 @@ const startElectron = (
 
 export const stopElectronEffect = (
   electron: ManagedElectronProcess | null,
-  stopSleep: (durationMs: number) => Promise<unknown> = sleep,
+  stopSleep: (durationMs: number) => Promise<void> = sleep,
 ): Effect.Effect<void, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {

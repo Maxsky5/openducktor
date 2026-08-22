@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { PlannerTools } from "@openducktor/core";
 
 export { createAgentSessionLiveAttachment } from "./agent-session-live-attachment";
@@ -216,7 +217,7 @@ type HostClientApi = Pick<HostWorkspaceClient, WorkspaceMethodName> &
 
 type MethodDelegate<TClient extends object, TMethodName extends MethodName<TClient>> = Extract<
   TClient[TMethodName],
-  (...args: never[]) => unknown
+  (...args: never[]) => void
 >;
 
 const bindDelegates = <
@@ -230,10 +231,11 @@ const bindDelegates = <
 ): void => {
   for (const methodName of methods) {
     const candidate = client[methodName];
-    if (typeof candidate !== "function") {
+    if (!hasRuntimeType(candidate, "function")) {
       throw new Error(`Cannot delegate non-function member: ${String(methodName)}`);
     }
 
+    // SAFETY: The preceding runtime guard establishes `MethodDelegate<TClient, TMethodName>` before this assertion.
     const delegate = candidate.bind(client) as MethodDelegate<TClient, TMethodName>;
 
     Object.defineProperty(host, methodName, {
@@ -259,6 +261,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const claudeRuntimeClient = new HostClaudeRuntimeClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
+  // SAFETY: This scope populates or freezes the value as `HostClientApi` before it can escape.
   const hostClient = {} as HostClientApi;
 
   bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);

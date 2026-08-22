@@ -11,10 +11,12 @@ const createToolDiscovery = (
   failures: Partial<Record<RuntimeKind, ToolDiscoveryError>> = {},
 ): ToolDiscoveryPort => {
   const discover: ToolDiscoveryPort["discoverTool"] = (toolId) => {
+    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     const failure = failures[toolId as RuntimeKind];
     if (failure) {
       return Effect.fail(failure);
     }
+    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     const path = paths[toolId as RuntimeKind];
     if (!path) {
       return Effect.fail(

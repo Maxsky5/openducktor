@@ -12,6 +12,7 @@ export const assertSupportedClaudeLiveEffort = (
     return null;
   }
   if (LIVE_CLAUDE_EFFORT_LEVELS.has(model.variant)) {
+    // SAFETY: The preceding runtime guard establishes `"low" | "medium" | "high" | "xhigh"` before this assertion.
     return model.variant as "low" | "medium" | "high" | "xhigh";
   }
   throw new HostValidationError({

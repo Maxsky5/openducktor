@@ -1,20 +1,23 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type { RenderResult } from "@testing-library/react";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 type HookArgs = Parameters<typeof useKanbanVirtualization>[0];
 type HookState = ReturnType<typeof useKanbanVirtualization>;
 
+// SAFETY: This test controls the fixture and supplies `KanbanColumnData["tasks"]` used by this case.
 const createTasks = (count: number): KanbanColumnData["tasks"] =>
   Array.from({ length: count }, (_unused, index) => ({
     id: `task-${index}`,
@@ -39,6 +42,7 @@ const attachContainer = async (
   container?: Partial<HTMLDivElement>,
 ): Promise<void> => {
   await harness.run(() => {
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
     harness.getLatest().containerRef({
       getBoundingClientRect: () => ({ top: 0 }),
       closest: () => null,
@@ -104,6 +108,7 @@ const installMockWindow = ({
 }: {
   runAnimationFrameCallbacks?: boolean;
 } = {}) => {
+  // SAFETY: This test creates the DOM fixture that supplies `typeof globalThis & { window?: Window & typeof globalThis; }` before this lookup.
   const globalWithWindow = globalThis as typeof globalThis & {
     window?: Window & typeof globalThis;
   };
@@ -131,16 +136,17 @@ const installMockWindow = ({
   });
   const cancelAnimationFrame = mock((_handle: number) => {});
 
+  // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
   globalWithWindow.window = {
     innerHeight: 900,
-    addEventListener: addEventListener as unknown as Window["addEventListener"],
-    removeEventListener: removeEventListener as unknown as Window["removeEventListener"],
-    requestAnimationFrame: requestAnimationFrame as unknown as Window["requestAnimationFrame"],
-    cancelAnimationFrame: cancelAnimationFrame as unknown as Window["cancelAnimationFrame"],
+    addEventListener: addEventListener as Window["addEventListener"],
+    removeEventListener: removeEventListener as Window["removeEventListener"],
+    requestAnimationFrame: requestAnimationFrame as Window["requestAnimationFrame"],
+    cancelAnimationFrame: cancelAnimationFrame as Window["cancelAnimationFrame"],
   } as Window & typeof globalThis;
 
   const restore = (): void => {
-    if (typeof previousWindow === "undefined") {
+    if (hasRuntimeType(previousWindow, "undefined")) {
       delete globalWithWindow.window;
       return;
     }
@@ -158,6 +164,7 @@ const installMockWindow = ({
 };
 
 const installMockResizeObserver = () => {
+  // SAFETY: This test controls the fixture and supplies `typeof globalThis & { ResizeObserver?: typeof ResizeObserver; }` used by this case.
   const globalWithResizeObserver = globalThis as typeof globalThis & {
     ResizeObserver?: typeof ResizeObserver;
   };
@@ -182,17 +189,19 @@ const installMockResizeObserver = () => {
     }
   }
 
-  globalWithResizeObserver.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+  // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
+  globalWithResizeObserver.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
 
   const trigger = (): void => {
     // oxlint-disable-next-line unicorn/no-useless-spread -- callbacks can unsubscribe during delivery
     for (const callback of [...activeCallbacks]) {
+      // SAFETY: This test controls the fixture and supplies `ResizeObserver` used by this case.
       callback([], {} as ResizeObserver);
     }
   };
 
   const restore = (): void => {
-    if (typeof previousResizeObserver === "undefined") {
+    if (hasRuntimeType(previousResizeObserver, "undefined")) {
       delete globalWithResizeObserver.ResizeObserver;
       return;
     }
@@ -314,16 +323,18 @@ describe("useKanbanVirtualization", () => {
   test("recomputes viewport when measured heights change without scroll events", async () => {
     const mockWindow = installMockWindow();
     const harness = createHarness({ tasks: createTasks(30) });
-    const getBoundingClientRect = mock(() => ({ top: 120 }));
+    const getBoundingClientRect = mock(() => createFocusedFixture<DOMRect>({ top: 120 }));
 
     try {
       await harness.mount();
 
       await harness.run(() => {
-        harness.getLatest().containerRef({
-          getBoundingClientRect,
-          closest: () => null,
-        } as unknown as HTMLDivElement);
+        harness.getLatest().containerRef(
+          createFocusedFixture<HTMLDivElement>({
+            getBoundingClientRect,
+            closest: () => null,
+          }),
+        );
       });
 
       const callsBeforeMeasure = getBoundingClientRect.mock.calls.length;
@@ -365,15 +376,17 @@ describe("useKanbanVirtualization", () => {
     const mockWindow = installMockWindow({ runAnimationFrameCallbacks: true });
     const resizeObserver = installMockResizeObserver();
     const harness = createHarness({ tasks: createTasks(30) });
-    const getBoundingClientRect = mock(() => ({ top: 120 }));
+    const getBoundingClientRect = mock(() => createFocusedFixture<DOMRect>({ top: 120 }));
 
     try {
       await harness.mount();
       await harness.run(() => {
-        harness.getLatest().containerRef({
-          getBoundingClientRect,
-          closest: () => null,
-        } as unknown as HTMLDivElement);
+        harness.getLatest().containerRef(
+          createFocusedFixture<HTMLDivElement>({
+            getBoundingClientRect,
+            closest: () => null,
+          }),
+        );
       });
 
       const callsBeforeResize = getBoundingClientRect.mock.calls.length;
@@ -406,22 +419,24 @@ describe("useKanbanVirtualization", () => {
         _options?: boolean | EventListenerOptions,
       ) => {},
     );
-    const scrollContainer = {
+    const scrollContainer = createFocusedFixture<HTMLElement>({
       addEventListener: scrollContainerAddEventListener,
       removeEventListener: scrollContainerRemoveEventListener,
-      getBoundingClientRect: () => ({ top: 0 }),
+      getBoundingClientRect: () => createFocusedFixture<DOMRect>({ top: 0 }),
       clientHeight: 900,
-    } as unknown as HTMLElement;
+    });
     const harness = createPairHarness([{ tasks: createTasks(30) }, { tasks: createTasks(30) }]);
 
     try {
       await harness.mount();
       await harness.run(() => {
         for (const state of harness.getLatestStates()) {
-          state.containerRef({
-            getBoundingClientRect: () => ({ top: 0 }),
-            closest: () => scrollContainer,
-          } as unknown as HTMLDivElement);
+          state.containerRef(
+            createFocusedFixture<HTMLDivElement>({
+              getBoundingClientRect: () => createFocusedFixture<DOMRect>({ top: 0 }),
+              closest: () => scrollContainer,
+            }),
+          );
         }
       });
 

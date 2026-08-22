@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { compare, prerelease, valid } from "semver";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -24,24 +25,35 @@ const apiHeaders = {
 
 const GITHUB_RELEASE_REQUEST_TIMEOUT_MS = 15_000;
 
-const readObject = (value: JsonValue | undefined, description: string): object => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+const readObject = (
+  value: JsonValue | undefined,
+  description: string,
+): Record<string, JsonValue> => {
+  if (!hasRuntimeType(value, "object") || value === null || Array.isArray(value)) {
     throw new Error(`${description} is not an object.`);
   }
   return value;
 };
 
-const readString = (value: object, property: string, description: string): string => {
-  const propertyValue = Reflect.get(value, property);
-  if (typeof propertyValue !== "string" || propertyValue.length === 0) {
+const readString = (
+  value: Record<string, JsonValue>,
+  property: string,
+  description: string,
+): string => {
+  const propertyValue = value[property];
+  if (!hasRuntimeType(propertyValue, "string") || propertyValue.length === 0) {
     throw new Error(`${description} has no ${property}.`);
   }
   return propertyValue;
 };
 
-const readBoolean = (value: object, property: string, description: string): boolean => {
-  const propertyValue = Reflect.get(value, property);
-  if (typeof propertyValue !== "boolean") {
+const readBoolean = (
+  value: Record<string, JsonValue>,
+  property: string,
+  description: string,
+): boolean => {
+  const propertyValue = value[property];
+  if (!hasRuntimeType(propertyValue, "boolean")) {
     throw new Error(`${description} has no valid ${property}.`);
   }
   return propertyValue;

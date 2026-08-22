@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -11,15 +12,16 @@ export const requireRecord = (
   value: JsonValue | undefined,
   label: string,
 ): Record<string, JsonValue> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   return value as Record<string, JsonValue>;
 };
 
 export const requireString = (value: JsonValue | undefined, label: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -30,7 +32,7 @@ export const requireStringPreservingWhitespace = (
   value: JsonValue | undefined,
   label: string,
 ): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
 
@@ -41,7 +43,7 @@ export const optionalString = (value: JsonValue | undefined, label: string): str
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw invalidInput(`${label} must be a string when provided.`, label);
   }
 
@@ -56,7 +58,7 @@ export const optionalBoolean = (
   if (value === undefined || value === null) {
     return undefined;
   }
-  if (typeof value !== "boolean") {
+  if (!hasRuntimeType(value, "boolean")) {
     throw invalidInput(`${label} must be a boolean when provided.`, label);
   }
 

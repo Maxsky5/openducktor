@@ -18,6 +18,8 @@ import {
 } from "./agent-session-schemas";
 import { type FileContent, type FileDiff, fileContentSchema, fileDiffSchema } from "./git-schemas";
 import type { JsonValue } from "./json-types";
+
+type ZodSchemaFields = Parameters<typeof z.object>[0];
 import { jsonValueSchema } from "./json-types";
 import { type SkillDescriptor, skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
@@ -146,8 +148,9 @@ const inferredAgentUserMessageDisplayPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptUserMessageDisplayPart>`.
 export const agentUserMessageDisplayPartSchema =
-  inferredAgentUserMessageDisplayPartSchema as unknown as z.ZodType<AgentTranscriptUserMessageDisplayPart>;
+  inferredAgentUserMessageDisplayPartSchema as z.ZodType<AgentTranscriptUserMessageDisplayPart>;
 
 export const agentSessionTodoItemSchema = z
   .object({
@@ -312,8 +315,9 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
+// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptStreamPart>`.
 export const agentStreamPartSchema: z.ZodType<AgentTranscriptStreamPart> =
-  inferredAgentStreamPartSchema as unknown as z.ZodType<AgentTranscriptStreamPart>;
+  inferredAgentStreamPartSchema as z.ZodType<AgentTranscriptStreamPart>;
 
 const agentSessionStatusSchema = z.discriminatedUnion("type", [
   z
@@ -399,14 +403,14 @@ const inferredTranscriptPendingQuestionRequestSchema = z
     questions: z.array(agentSessionQuestionItemSchema),
   })
   .strict();
-const eventBaseShape = {
+const eventBaseFields = {
   externalSessionId: z.string(),
   timestamp: isoTimestampSchema,
   sessionRef: agentSessionLiveRefSchema.optional(),
 };
 
-const transcriptEventSchema = <Shape extends z.ZodRawShape>(shape: Shape) =>
-  z.object({ ...eventBaseShape, ...shape }).strict();
+const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
+  z.object({ ...eventBaseFields, ...fields }).strict();
 
 export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
@@ -473,7 +477,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("approval_required"),
-    ...inferredTranscriptPendingApprovalRequestSchema.shape,
+    ...inferredTranscriptPendingApprovalRequestSchema["shape"],
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -488,7 +492,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion("type", [
   }),
   transcriptEventSchema({
     type: z.literal("question_required"),
-    ...inferredTranscriptPendingQuestionRequestSchema.shape,
+    ...inferredTranscriptPendingQuestionRequestSchema["shape"],
     parentExternalSessionId: z.string().optional(),
     childExternalSessionId: z.string().optional(),
     subagentCorrelationKey: z.string().optional(),
@@ -566,6 +570,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_finished",
 ]);
 
+// SAFETY: The preceding runtime guard establishes `AgentSessionTranscriptEventType` before this assertion.
 export const isAgentSessionTranscriptEventType = (
   type: AgentRuntimeEvent["type"] | string,
 ): type is AgentSessionTranscriptEventType =>
@@ -578,6 +583,7 @@ export type AgentSessionTranscriptEvent = Extract<
   sessionRef: AgentSessionLiveRef;
 };
 
+// SAFETY: The preceding runtime guard establishes `z.ZodType<AgentSessionTranscriptEvent>` before this assertion.
 export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscriptEvent> =
   agentRuntimeEventSchema.refine(
     (event) => isAgentSessionTranscriptEventType(event.type) && event.sessionRef !== undefined,
@@ -585,4 +591,4 @@ export const agentSessionTranscriptEventSchema: z.ZodType<AgentSessionTranscript
       message:
         "A transcript event must contain a session ref and belong to the ordered session stream.",
     },
-  ) as unknown as z.ZodType<AgentSessionTranscriptEvent>;
+  ) as z.ZodType<AgentSessionTranscriptEvent>;

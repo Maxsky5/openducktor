@@ -63,6 +63,7 @@ const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
 const CODE_VIEW_NUMBER_COLUMN_PADDING = 1.25;
 const CODE_VIEW_CLASS_NAME = "h-full min-h-0 overflow-auto";
+// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
 const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
   "--diffs-dark-bg": CODE_VIEW_THEME_BACKGROUND.dark,
@@ -111,7 +112,7 @@ type CommittedFilePreviewSnapshot = {
   snapshot: FilePreviewSnapshot;
 };
 
-const getContentMetrics = (value: string): { numberColumnWidth: string } => {
+const getContentMetrics = (value: string) => {
   let lineCount = 1;
   for (let index = 0; index < value.length; index += 1) {
     const characterCode = value.charCodeAt(index);
@@ -122,7 +123,7 @@ const getContentMetrics = (value: string): { numberColumnWidth: string } => {
   const numberColumnWidth = String(lineCount).length + CODE_VIEW_NUMBER_COLUMN_PADDING;
   return {
     numberColumnWidth: `${numberColumnWidth}ch`,
-  };
+  } satisfies { numberColumnWidth: string };
 };
 
 const createFilePreviewSnapshot = (
@@ -573,7 +574,12 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editorOptions = useMemo<EditorOptions<undefined>>(() => {
     const clipboard = getShellBridge().editorClipboard;
     return {
-      ...(clipboard ? { clipboard } : {}),
+      ...(() => {
+        if (clipboard) {
+          return { clipboard };
+        }
+        return {};
+      })(),
       onAttach(attachedEditor) {
         attachedEditorRef.current = attachedEditor;
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });

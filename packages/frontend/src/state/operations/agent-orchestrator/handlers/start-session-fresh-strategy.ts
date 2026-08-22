@@ -38,7 +38,12 @@ export const executeFreshStart = async ({
   const resolved = await resolveFreshStartRuntimeContext({
     ctx,
     requestedRuntimeKind: selectedModelRuntimeKind,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
+    ...(() => {
+      if (targetWorkingDirectory !== undefined) {
+        return { targetWorkingDirectory };
+      }
+      return {};
+    })(),
     taskCard,
     deps,
   });

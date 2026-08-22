@@ -9,6 +9,8 @@ type Deferred<T> = {
   resolve: (value: T) => void;
 };
 
+type TestHostResult = object | string | number | boolean | null | undefined;
+
 const createDeferred = <T>(): Deferred<T> => {
   let resolve: (value: T) => void = () => {};
   const promise = new Promise<T>((nextResolve) => {
@@ -29,8 +31,9 @@ const metadata = (version: string) => ({
   agentSessions: [],
 });
 
+// SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createTaskClient = (
-  invoke: (command: string, args?: Record<string, JsonValue>) => Promise<unknown>,
+  invoke: (command: string, args?: Record<string, JsonValue>) => Promise<TestHostResult>,
 ) => new HostTaskClient(invoke as never, new TaskMetadataCache());
 
 const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEvent => ({
@@ -62,7 +65,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
   });
 
   test("does not let a pre-event in-flight read overwrite a post-event read", async () => {
-    const stale = createDeferred<unknown>();
+    const stale = createDeferred<TestHostResult>();
     let reads = 0;
     const client = createTaskClient((command) => {
       if (command !== "task_metadata_get") {
@@ -112,6 +115,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
       if (command !== "task_metadata_get") {
         throw new Error(`Unexpected command: ${command}`);
       }
+      // SAFETY: This test controls the fixture and supplies `string` used by this case.
       const taskId = args?.taskId as string;
       const nextRead = (readsByTaskId.get(taskId) ?? 0) + 1;
       readsByTaskId.set(taskId, nextRead);

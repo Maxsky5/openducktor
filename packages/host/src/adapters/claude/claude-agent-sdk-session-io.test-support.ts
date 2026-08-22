@@ -1,11 +1,40 @@
 import { mock } from "bun:test";
-import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKControlGetContextUsageResponse,
+  SDKMessage,
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
+
+export const createClaudeQueryFixture = (
+  query: Partial<ClaudeSession["query"]>,
+): ClaudeSession["query"] => {
+  // SAFETY: focused tests supply every Query member used by the production path under test.
+  return query as ClaudeSession["query"];
+};
+
+export const createClaudeContextUsageResponse = (
+  totalTokens: number,
+  maxTokens: number,
+): SDKControlGetContextUsageResponse => ({
+  agents: [],
+  apiUsage: null,
+  categories: [],
+  gridRows: [],
+  isAutoCompactEnabled: false,
+  maxTokens,
+  memoryFiles: [],
+  mcpTools: [],
+  model: "test-model",
+  percentage: maxTokens === 0 ? 0 : (totalTokens / maxTokens) * 100,
+  rawMaxTokens: maxTokens,
+  totalTokens,
+});
 
 export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   acceptedUserMessages: [],
@@ -26,7 +55,7 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
   pendingQuestions: new Map(),
   queuedSdkMessages: [],
   pendingUserTurnCount: 0,
-  query: {} as ClaudeSession["query"],
+  query: createClaudeQueryFixture({}),
   queue: new AsyncInputQueue<SDKUserMessage>(),
   runtimeId: "claude-runtime-1",
   startedAt: "2026-06-25T20:00:00.000Z",
@@ -55,61 +84,64 @@ const emptySdkMessages: SDKMessage[] = [];
 
 const defaultQueryControls = () => ({
   close: mock(() => {}),
-  getContextUsage: mock(async () => ({
-    totalTokens: 0,
-    maxTokens: 0,
-  })),
+  getContextUsage: mock(async () => createClaudeContextUsageResponse(0, 0)),
 });
 
 export const emptyClaudeQuery = (): ClaudeSession["query"] =>
-  Object.assign(
-    (async function* (): AsyncGenerator<SDKMessage> {
-      yield* emptySdkMessages;
-    })(),
-    defaultQueryControls(),
-  ) as unknown as ClaudeSession["query"];
+  createClaudeQueryFixture(
+    Object.assign(
+      (async function* (): AsyncGenerator<SDKMessage> {
+        yield* emptySdkMessages;
+      })(),
+      defaultQueryControls(),
+    ),
+  );
 
 export const claudeQueryWithMessages = (messages: SDKMessage[]): ClaudeSession["query"] =>
-  Object.assign(
-    (async function* (): AsyncGenerator<SDKMessage> {
-      yield* messages;
-    })(),
-    defaultQueryControls(),
-  ) as unknown as ClaudeSession["query"];
+  createClaudeQueryFixture(
+    Object.assign(
+      (async function* (): AsyncGenerator<SDKMessage> {
+        yield* messages;
+      })(),
+      defaultQueryControls(),
+    ),
+  );
 
-export const openClaudeQueryWithMessages = (
-  messages: SDKMessage[],
-): { query: ClaudeSession["query"]; release: () => void } => {
+export const openClaudeQueryWithMessages = (messages: SDKMessage[]) => {
   let release!: () => void;
   const openStream = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const query = Object.assign(
-    (async function* (): AsyncGenerator<SDKMessage> {
-      yield* messages;
-      await openStream;
-    })(),
-    {
-      ...defaultQueryControls(),
-      close: mock(() => {
-        release();
-      }),
-    },
-  ) as unknown as ClaudeSession["query"];
-  return { query, release };
+  const query = createClaudeQueryFixture(
+    Object.assign(
+      (async function* (): AsyncGenerator<SDKMessage> {
+        yield* messages;
+        await openStream;
+      })(),
+      {
+        ...defaultQueryControls(),
+        close: mock(() => {
+          release();
+        }),
+      },
+    ),
+  );
+  return { query, release } satisfies { query: ClaudeSession["query"]; release: () => void };
 };
 
 export const throwingClaudeQuery = (
   error: Error,
   messages: SDKMessage[] = emptySdkMessages,
 ): ClaudeSession["query"] =>
-  Object.assign(
-    (async function* (): AsyncGenerator<SDKMessage> {
-      yield* messages;
-      throw error;
-    })(),
-    defaultQueryControls(),
-  ) as unknown as ClaudeSession["query"];
+  createClaudeQueryFixture(
+    Object.assign(
+      (async function* (): AsyncGenerator<SDKMessage> {
+        yield* messages;
+        throw error;
+      })(),
+      defaultQueryControls(),
+    ),
+  );
 
 export const waitForTimers = async (): Promise<void> => {
   await Promise.resolve();

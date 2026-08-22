@@ -18,6 +18,7 @@ const createDatabasePath = async (): Promise<string> => {
 const readJournalMode = (databasePath: string): string => {
   const database = new Database(databasePath);
   try {
+    // SAFETY: This test controls the fixture and supplies `{ journal_mode: string }` used by this case.
     const result = database.query("PRAGMA journal_mode;").get() as { journal_mode: string };
     return result.journal_mode;
   } finally {

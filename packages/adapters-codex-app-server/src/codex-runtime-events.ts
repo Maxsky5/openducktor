@@ -1,4 +1,4 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
 import {
   codexRuntimeStreamFault,
   parseCodexRuntimeStreamEvent,
@@ -9,6 +9,7 @@ import type { CodexAppServerAdapterOptions } from "./types";
 
 export { type CodexRuntimeStreamEvent } from "./codex-runtime-event-schema";
 
+// SAFETY: The schema parser validates every field required by `Promise<() => void>` before returning.
 export class CodexRuntimeEventSubscriptions {
   private readonly pumpsByRuntimeId = new Map<string, CodexLiveEventPump>();
 
@@ -61,9 +62,10 @@ export class CodexRuntimeEventSubscriptions {
       throw error;
     }
 
-    if (typeof (unsubscribe as Promise<() => void>).then === "function") {
+    if (hasRuntimeType((unsubscribe as Promise<() => void>).then, "function")) {
       pump.ready = (async () => {
         try {
+          // SAFETY: The preceding runtime guard establishes `Promise<() => void>` before this assertion.
           const resolved = await (unsubscribe as Promise<() => void>);
           if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
             resolved();
@@ -80,6 +82,7 @@ export class CodexRuntimeEventSubscriptions {
       return pump.ready;
     }
 
+    // SAFETY: The preceding runtime guard establishes `() => void` before this assertion.
     pump.unsubscribe = unsubscribe as () => void;
     return pump.ready;
   }

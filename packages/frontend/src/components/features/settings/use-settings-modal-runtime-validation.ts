@@ -135,8 +135,18 @@ export const useSettingsModalRuntimeValidation = ({
     return buildRuntimeAvailabilityValidationState({
       runtimeDefinitions,
       snapshotDraft,
-      ...(runtimeExecutableResults ? { runtimeExecutableResults } : {}),
-      ...(checkingRuntimeKinds ? { checkingRuntimeKinds } : {}),
+      ...(() => {
+        if (runtimeExecutableResults) {
+          return { runtimeExecutableResults };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (checkingRuntimeKinds) {
+          return { checkingRuntimeKinds };
+        }
+        return {};
+      })(),
     });
   }, [checkingRuntimeKinds, runtimeDefinitions, runtimeExecutableResults, snapshotDraft]);
 };

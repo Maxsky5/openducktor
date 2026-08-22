@@ -15,6 +15,7 @@ tester.run(
       "// SAFETY: The parser established the UserId invariant.\nconst id = value as UserId;",
       "function parse(): UserId {\n// SAFETY: Validation above established the UserId invariant.\nreturn value as UserId;\n}",
       "const id = /* SAFETY: Validation established the invariant. */ value as UserId;",
+      "// SAFETY: The parser established the UserId invariant.\nexport const id = value as UserId;",
     ],
     invalid: [
       { code: "const id = value as UserId;", errors: [error] },

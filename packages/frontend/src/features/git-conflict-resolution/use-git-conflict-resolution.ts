@@ -102,8 +102,9 @@ export function useGitConflictResolution({
       const promptOverrides = await loadPromptOverrides(workspaceId);
       const message = buildGitConflictResolutionPrompt(taskContext.taskId, {
         overrides: promptOverrides,
-        ...(taskContext.task
-          ? {
+        ...(() => {
+          if (taskContext.task) {
+            return {
               task: {
                 title: taskContext.task.title,
                 issueType: taskContext.task.issueType,
@@ -111,11 +112,18 @@ export function useGitConflictResolution({
                 qaRequired: taskContext.task.aiReviewEnabled,
                 description: taskContext.task.description,
               },
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
         git: {
           operationLabel: getGitConflictCopy(conflict.operation).operationLabel,
-          ...(conflict.currentBranch ? { currentBranch: conflict.currentBranch } : {}),
+          ...(() => {
+            if (conflict.currentBranch) {
+              return { currentBranch: conflict.currentBranch };
+            }
+            return {};
+          })(),
           targetBranch: conflict.targetBranch,
           conflictedFiles: conflict.conflictedFiles,
           conflictOutput: conflict.output,

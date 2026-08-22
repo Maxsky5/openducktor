@@ -41,11 +41,7 @@ export const useModelSelectionActions = ({
   selectedModelSelection: AgentModelSelection | null;
   selectionCatalog: AgentModelCatalog | null;
   selectedRuntimeKind: RuntimeKind | null;
-}): {
-  handleSelectAgentProfile: (profileId: string) => void;
-  handleSelectModelPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
-  handleSelectVariant: (variant: string) => void;
-} => {
+}) => {
   const effectiveRuntimeKind = loadedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
   const applySelection = useCallback(
     (selection: AgentModelSelection | null): void => {
@@ -113,7 +109,12 @@ export const useModelSelectionActions = ({
       const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
       applySelection({
         ...selectionWithoutVariant,
-        ...(variants[0] ? { variant: variants[0] } : {}),
+        ...(() => {
+          if (variants[0]) {
+            return { variant: variants[0] };
+          }
+          return {};
+        })(),
       });
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection],
@@ -144,5 +145,9 @@ export const useModelSelectionActions = ({
     handleSelectAgentProfile,
     handleSelectModelPair,
     handleSelectVariant,
+  } satisfies {
+    handleSelectAgentProfile: (profileId: string) => void;
+    handleSelectModelPair: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
+    handleSelectVariant: (variant: string) => void;
   };
 };

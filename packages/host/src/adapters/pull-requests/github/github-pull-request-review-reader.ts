@@ -7,6 +7,7 @@ import {
   type PullRequestReviewContext,
   type JsonValue,
   pullRequestReviewContextSchema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
@@ -45,7 +46,7 @@ const isNoChecksReported = (result: {
   result.stderr.toLowerCase().includes("no checks reported");
 
 const normalizeCheckStatus = (state: JsonValue | undefined): PullRequestReviewCheckStatus => {
-  const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
+  const normalized = hasRuntimeType(state, "string") ? state.trim().toLowerCase() : "";
   if (
     normalized.includes("queued") ||
     normalized.includes("pending") ||
@@ -67,9 +68,9 @@ const normalizeCheckConclusion = (
   state: JsonValue | undefined,
 ): PullRequestReviewCheckConclusion | null => {
   const value =
-    typeof bucket === "string" && bucket.trim().length > 0
+    hasRuntimeType(bucket, "string") && bucket.trim().length > 0
       ? bucket.trim().toLowerCase()
-      : typeof state === "string"
+      : hasRuntimeType(state, "string")
         ? state.trim().toLowerCase()
         : "";
   if (!value || value === "pending" || value === "queued" || value === "in_progress") {

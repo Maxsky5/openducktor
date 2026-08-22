@@ -53,12 +53,15 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
 
   test("distinguishes unsupported languages from failed lazy loaders", async () => {
     const originalConsoleError = console.error;
-    const consoleError = mock((_message: string, _cause?: unknown) => {});
+    const consoleError = mock((_message: string, cause?: unknown) => {
+      void cause;
+    });
     const registerLanguage = mock((_language: string, _grammar: JsonValue) => {});
     const loadYamlLanguage = mock(async () => {
       throw new Error("bad grammar module");
     });
 
+    // SAFETY: This test controls the fixture and supplies `typeof console.error` used by this case.
     console.error = consoleError as typeof console.error;
     try {
       const registry = createMarkdownSyntaxLanguageRegistry({

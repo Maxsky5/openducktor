@@ -15,7 +15,7 @@ const OPENCODE_MESSAGE_ID_PATTERN = /^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/;
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
+  let reject!: (cause: unknown) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -44,6 +44,7 @@ const installSlashCommandAdmission = (
   Object.assign(mock.client.session, {
     command: async (input: { messageID: string }) => {
       mock.session.commandCalls.push(input);
+      // SAFETY: This test controls the fixture and supplies `Event` used by this case.
       runtimeEvents.resolve([
         {
           type: "message.updated",
@@ -141,7 +142,7 @@ describe("OpencodeSdkAdapter user message", () => {
       },
     });
     const session = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -249,6 +250,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const events: Array<{ type: string }> = [];
+    // SAFETY: This test controls the fixture and supplies `{ type: string }` used by this case.
     await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
       events.push(event as { type: string }),
     );
@@ -352,6 +354,7 @@ describe("OpencodeSdkAdapter user message", () => {
       (event): event is Extract<AgentEvent, { type: "user_message" }> =>
         event.type === "user_message",
     );
+    // SAFETY: This test controls the fixture and supplies `{ messageID?: string } | undefined` used by this case.
     const promptRequest = mock.session.promptAsyncCalls[0] as { messageID?: string } | undefined;
     expect(userEvents).toEqual([
       expect.objectContaining({
@@ -366,6 +369,7 @@ describe("OpencodeSdkAdapter user message", () => {
   });
 
   test("sendUserMessage keeps history loading out of the send path", async () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const oldUserMessage = {
       info: {
         id: "runtime-user-old",
@@ -523,6 +527,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     try {
       const command = await commandStarted.promise;
+      // SAFETY: This test controls the fixture and supplies `Event` used by this case.
       runtimeEvent.resolve({
         type: "message.updated",
         properties: {
@@ -687,7 +692,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           { streamTurnStatus: "active" | "idle"; isSendingUserMessage: boolean }
@@ -720,7 +725,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -755,7 +760,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -793,7 +798,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const sessions = (
-      adapter as unknown as {
+      adapter satisfies {
         sessions: Map<
           string,
           {
@@ -924,6 +929,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     expect(mock.tool.listCalls).toEqual([]);
     expect(mock.session.promptCalls).toHaveLength(0);
+    // SAFETY: This test controls the fixture and supplies `| { tools?: Record<string, boolean> } | undefined` used by this case.
     const promptAsyncCall = mock.session.promptAsyncCalls[0] as
       | { tools?: Record<string, boolean> }
       | undefined;

@@ -11,12 +11,15 @@ export const toRepositorySelectorOptions = (
       value: workspace.workspaceId,
       label: workspace.workspaceName,
       searchKeywords: [workspace.workspaceName, ...workspace.repoPath.split("/").filter(Boolean)],
-      ...(repoErrorCount > 0
-        ? {
+      ...(() => {
+        if (repoErrorCount > 0) {
+          return {
             accentColor: "hsl(var(--destructive))",
             secondaryLabel: `${repoErrorCount} error${repoErrorCount > 1 ? "s" : ""}`,
-          }
-        : {}),
+          };
+        }
+        return {};
+      })(),
     };
   });
 };

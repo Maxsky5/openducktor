@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
@@ -9,6 +10,7 @@ import {
   withAnimationFrameTestDriver,
 } from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { createFocusedFixture, createInvalidFixture } from "@/test-utils/focused-fixture";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
@@ -25,6 +27,7 @@ import {
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -56,12 +59,14 @@ const flush = async (): Promise<void> => {
 };
 
 const getGlobalWindow = (): Window | undefined => {
+  // SAFETY: This test creates the DOM fixture that supplies `{ window?: Window }` before this lookup.
   return (globalThis as { window?: Window }).window;
 };
 
 const setGlobalWindow = (value: Window | undefined): void => {
+  // SAFETY: This test creates the DOM fixture that supplies `{ window?: Window }` before this lookup.
   const target = globalThis as { window?: Window };
-  if (typeof value === "undefined") {
+  if (hasRuntimeType(value, "undefined")) {
     delete target.window;
     return;
   }
@@ -70,13 +75,13 @@ const setGlobalWindow = (value: Window | undefined): void => {
 };
 
 const createContainer = () => {
-  return {
+  return createFocusedFixture<HTMLDivElement>({
     addEventListener: mock(() => {}),
     clientHeight: 320,
     removeEventListener: mock(() => {}),
     scrollHeight: 2_000,
     scrollTop: 1_680,
-  } as unknown as HTMLDivElement;
+  });
 };
 
 type ScrollContainerMock = {
@@ -125,6 +130,7 @@ const triggerResizeObservers = (heightByElement = new Map<Element, number>()): v
       continue;
     }
 
+    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     controller.callback(
       Array.from(controller.observedElements).map((target) => ({
         borderBoxSize: [] as ResizeObserverSize[],
@@ -163,6 +169,7 @@ describe("AgentChatThread", () => {
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     globalThis.matchMedia = ((query: string) =>
       ({
         matches: false,
@@ -175,18 +182,21 @@ describe("AgentChatThread", () => {
         dispatchEvent: () => false,
       }) as MediaQueryList) as typeof matchMedia;
     animationFrameDriver.installAutoFlush();
-    globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
-    globalThis.IntersectionObserver = class MockIntersectionObserver {
-      disconnect(): void {}
+    // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
+    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
+    globalThis.IntersectionObserver = createInvalidFixture<typeof IntersectionObserver>(
+      class MockIntersectionObserver {
+        disconnect(): void {}
 
-      observe(): void {}
+        observe(): void {}
 
-      takeRecords(): IntersectionObserverEntry[] {
-        return [];
-      }
+        takeRecords(): IntersectionObserverEntry[] {
+          return [];
+        }
 
-      unobserve(): void {}
-    } as unknown as typeof IntersectionObserver;
+        unobserve(): void {}
+      },
+    );
   });
 
   afterEach(() => {
@@ -678,9 +688,11 @@ describe("AgentChatThread", () => {
     expect(bottomStack?.textContent).toContain("Todo");
     expect(bottomStack?.textContent).toContain("Analyze current styling");
     expect(bottomStack?.textContent).toContain("Read layout and pages");
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Input needed")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required"),
     );
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
     expect((bottomStack as HTMLDivElement).innerHTML.indexOf("Approval required")).toBeLessThan(
       (bottomStack as HTMLDivElement).innerHTML.indexOf("Todo"),
     );
@@ -1254,6 +1266,7 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDetailsElement | null` before this lookup.
     const toolDetails = rendered.container.querySelector(
       "details.group",
     ) as HTMLDetailsElement | null;
@@ -1301,6 +1314,7 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
+    // SAFETY: This test creates the DOM fixture that supplies `| (HTMLDivElement & ScrollContainerMock) | null` before this lookup.
     const containerNode = rendered.container.querySelector(".hide-scrollbar") as
       | (HTMLDivElement & ScrollContainerMock)
       | null;
@@ -1343,9 +1357,11 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo stack first appears", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = {
+    const syncBottomAfterComposerLayoutRef = createFocusedFixture<{
+      current: (() => void) | null;
+    }>({
       current: null,
-    } as { current: (() => void) | null };
+    });
     const session = buildSession();
     const model = {
       ...buildBaseModel(),
@@ -1402,9 +1418,11 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo panel expands", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = {
+    const syncBottomAfterComposerLayoutRef = createFocusedFixture<{
+      current: (() => void) | null;
+    }>({
       current: null,
-    } as { current: (() => void) | null };
+    });
     const session = buildSession();
     const model = {
       ...buildBaseModel(),

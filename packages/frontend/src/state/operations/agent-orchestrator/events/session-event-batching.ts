@@ -190,6 +190,7 @@ const mergeQueuedSessionEvents = <Item extends QueuedSessionEventBatchItem>(
       continue;
     }
 
+    // SAFETY: The surrounding boundary constructs or validates every member required by `Item`.
     entries[existingIndex] = {
       key,
       item: {

@@ -25,5 +25,6 @@ const inferredAgentSessionQuestionItemSchema = z
   })
   .strict();
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptQuestionItem>`.
 export const agentSessionQuestionItemSchema =
-  inferredAgentSessionQuestionItemSchema as unknown as z.ZodType<AgentTranscriptQuestionItem>;
+  inferredAgentSessionQuestionItemSchema as z.ZodType<AgentTranscriptQuestionItem>;

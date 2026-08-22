@@ -6,11 +6,13 @@ import {
   questionAskedEvent,
   runEventStreamWithSession,
 } from "./event-stream.test-support";
+import { createInvalidFixture } from "./test-fixture";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
 
+// SAFETY: This test controls the fixture and supplies `SubagentPart` used by this case.
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
     .filter(
@@ -26,7 +28,7 @@ const readSubagentEvents = (events: AgentEvent[]): SubagentPartEvent[] =>
   );
 
 const assistantRoleEvent = (messageId: string): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.updated",
     properties: {
       info: {
@@ -35,10 +37,10 @@ const assistantRoleEvent = (messageId: string): Event =>
         sessionID: "external-session-1",
       },
     },
-  }) as unknown as Event;
+  });
 
 const userRoleEvent = (messageId: string): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.updated",
     properties: {
       info: {
@@ -47,14 +49,14 @@ const userRoleEvent = (messageId: string): Event =>
         sessionID: "external-session-1",
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeAssistantSubtaskPartUpdatedEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: {
@@ -67,7 +69,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         description: input.description,
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeChildSessionCreatedEvent = (input: {
   childSessionId: string;
@@ -77,20 +79,30 @@ const makeChildSessionCreatedEvent = (input: {
 }): Event => {
   const parentExternalSessionId = input.parentExternalSessionId ?? "external-session-1";
   const parentPlacement = input.parentPlacement ?? "info";
-  return {
+  return createInvalidFixture<Event>({
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
-      ...(parentPlacement === "properties" ? { parentID: parentExternalSessionId } : {}),
+      ...(() => {
+        if (parentPlacement === "properties") {
+          return { parentID: parentExternalSessionId };
+        }
+        return {};
+      })(),
       info: {
         id: input.childSessionId,
-        ...(parentPlacement === "info" ? { parentID: parentExternalSessionId } : {}),
+        ...(() => {
+          if (parentPlacement === "info") {
+            return { parentID: parentExternalSessionId };
+          }
+          return {};
+        })(),
         time: {
           created: input.createdAtMs ?? Date.parse("2026-02-22T12:00:10.000Z"),
         },
       },
     },
-  } as unknown as Event;
+  });
 };
 
 const makeChildPermissionAskedEvent = (input: {
@@ -103,9 +115,12 @@ const makeChildPermissionAskedEvent = (input: {
     sessionId: input.childSessionId,
     permission: "read",
     patterns: ["omp.json"],
-    ...(input.parentExternalSessionId
-      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
-      : {}),
+    ...(() => {
+      if (input.parentExternalSessionId) {
+        return { properties: { info: { parentID: input.parentExternalSessionId } } };
+      }
+      return {};
+    })(),
   });
 
 const makeChildQuestionAskedEvent = (input: {
@@ -123,9 +138,12 @@ const makeChildQuestionAskedEvent = (input: {
         options: [{ label: "Current file", description: "Inspect only the requested file" }],
       },
     ],
-    ...(input.parentExternalSessionId
-      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
-      : {}),
+    ...(() => {
+      if (input.parentExternalSessionId) {
+        return { properties: { info: { parentID: input.parentExternalSessionId } } };
+      }
+      return {};
+    })(),
   });
 
 const makeSubagentToolPartUpdatedEvent = (input: {
@@ -141,9 +159,14 @@ const makeSubagentToolPartUpdatedEvent = (input: {
   const subagentIdentity = {
     agent: "build",
     prompt: "Inspect repo",
-    ...(input.childSessionId ? { externalSessionId: input.childSessionId } : {}),
+    ...(() => {
+      if (input.childSessionId) {
+        return { externalSessionId: input.childSessionId };
+      }
+      return {};
+    })(),
   };
-  return {
+  return createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: {
@@ -168,14 +191,17 @@ const makeSubagentToolPartUpdatedEvent = (input: {
                       externalSessionId: input.childSessionId,
                     }
                   : undefined,
-                ...(input.tool === "task" && input.childSessionId
-                  ? { metadata: { externalSessionId: input.childSessionId } }
-                  : {}),
+                ...(() => {
+                  if (input.tool === "task" && input.childSessionId) {
+                    return { metadata: { externalSessionId: input.childSessionId } };
+                  }
+                  return {};
+                })(),
               }),
         },
       },
     },
-  } as unknown as Event;
+  });
 };
 
 const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
@@ -184,7 +210,7 @@ const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
   callId: string;
   childSessionId: string;
 }): Event =>
-  ({
+  createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
       part: {
@@ -221,7 +247,7 @@ const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
         },
       },
     },
-  }) as unknown as Event;
+  });
 
 const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
   messageId: string;
@@ -232,7 +258,7 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
   text: string;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return {
+  return createInvalidFixture<Event>({
     type: "message.updated",
     properties: {
       info: {
@@ -261,7 +287,7 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
         ],
       },
     },
-  } as unknown as Event;
+  });
 };
 
 const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
@@ -275,27 +301,33 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   eventTimestampMs?: number;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return {
+  return createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
-      ...(input.eventTimestampMs !== undefined
-        ? {
+      ...(() => {
+        if (input.eventTimestampMs !== undefined) {
+          return {
             time: input.eventTimestampMs,
-          }
-        : {}),
+          };
+        }
+        return {};
+      })(),
       part: {
         id: input.partId,
         sessionID: "external-session-1",
         messageID: input.messageId,
         type: "text",
         synthetic: true,
-        ...(input.timestampMs !== undefined
-          ? {
+        ...(() => {
+          if (input.timestampMs !== undefined) {
+            return {
               time: {
                 end: input.timestampMs,
               },
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
         text: [
           `<task id="${input.childSessionId}" state="${input.state}">`,
           `<summary>${input.summary}</summary>`,
@@ -306,7 +338,7 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
         ].join("\n"),
       },
     },
-  } as unknown as Event;
+  });
 };
 
 describe("event-stream subagent correlation", () => {

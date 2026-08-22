@@ -1,7 +1,9 @@
 import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 
-const DEFAULT_WORKFLOW_BY_ROLE: Record<AgentRole, AgentWorkflowState> = {
+interface DEFAULTWORKFLOWBYROLEContract extends Record<AgentRole, AgentWorkflowState> {}
+
+const DEFAULT_WORKFLOW_BY_ROLE: DEFAULTWORKFLOWBYROLEContract = {
   spec: {
     required: false,
     canSkip: true,
@@ -44,14 +46,13 @@ export const roleWorkflowForTask = (
   return task.agentWorkflows[role];
 };
 
-export const buildRoleWorkflowMapForTask = (
-  task: TaskCard | null | undefined,
-): Record<AgentRole, AgentWorkflowState> => ({
-  spec: roleWorkflowForTask(task, "spec"),
-  planner: roleWorkflowForTask(task, "planner"),
-  build: roleWorkflowForTask(task, "build"),
-  qa: roleWorkflowForTask(task, "qa"),
-});
+export const buildRoleWorkflowMapForTask = (task: TaskCard | null | undefined) =>
+  ({
+    spec: roleWorkflowForTask(task, "spec"),
+    planner: roleWorkflowForTask(task, "planner"),
+    build: roleWorkflowForTask(task, "build"),
+    qa: roleWorkflowForTask(task, "qa"),
+  }) satisfies Record<AgentRole, AgentWorkflowState>;
 
 export const isRoleAvailableForTask = (
   task: TaskCard | null | undefined,

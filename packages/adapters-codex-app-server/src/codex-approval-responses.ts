@@ -48,10 +48,18 @@ const permissionsResponse = (
     permissions.fileSystem = {
       read: profile.fileSystem.read,
       write: profile.fileSystem.write,
-      ...(profile.fileSystem.globScanMaxDepth !== undefined
-        ? { globScanMaxDepth: profile.fileSystem.globScanMaxDepth }
-        : {}),
-      ...(profile.fileSystem.entries !== undefined ? { entries: profile.fileSystem.entries } : {}),
+      ...(() => {
+        if (profile.fileSystem.globScanMaxDepth !== undefined) {
+          return { globScanMaxDepth: profile.fileSystem.globScanMaxDepth };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (profile.fileSystem.entries !== undefined) {
+          return { entries: profile.fileSystem.entries };
+        }
+        return {};
+      })(),
     };
   }
   return { permissions, scope: outcome === "approve_session" ? "session" : "turn" };

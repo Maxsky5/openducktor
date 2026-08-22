@@ -219,7 +219,12 @@ const mergeSameMessageId = (
     const meta = {
       ...currentMessage.meta,
       ...loadedMessage.meta,
-      ...(parts ? { parts } : {}),
+      ...(() => {
+        if (parts) {
+          return { parts };
+        }
+        return {};
+      })(),
     };
     return applyPreferredMessageTimestamp(
       {
@@ -241,7 +246,12 @@ const mergeSameMessageId = (
       {
         ...currentMessage,
         ...loadedMessage,
-        ...(mergedMeta ? { meta: mergedMeta } : {}),
+        ...(() => {
+          if (mergedMeta) {
+            return { meta: mergedMeta };
+          }
+          return {};
+        })(),
       },
       loadedMessage,
       currentMessage,

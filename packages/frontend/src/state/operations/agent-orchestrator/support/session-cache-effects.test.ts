@@ -155,6 +155,7 @@ describe("createSessionCacheEffects", () => {
     const queryClient = createQueryClient();
     const invalidatedKeys: unknown[] = [];
     const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+    // SAFETY: This test controls the fixture and supplies `QueryClient["invalidateQueries"]` used by this case.
     queryClient.invalidateQueries = (async (filters = {}) => {
       invalidatedKeys.push(filters.queryKey);
       return originalInvalidateQueries({ ...filters, refetchType: "none" });

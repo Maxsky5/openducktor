@@ -35,10 +35,18 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
           ),
           providerId: session.selectedModel.providerId,
           modelId: session.selectedModel.modelId,
-          ...(session.selectedModel.variant ? { variant: session.selectedModel.variant } : {}),
-          ...(session.selectedModel.profileId
-            ? { profileId: session.selectedModel.profileId }
-            : {}),
+          ...(() => {
+            if (session.selectedModel.variant) {
+              return { variant: session.selectedModel.variant };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (session.selectedModel.profileId) {
+              return { profileId: session.selectedModel.profileId };
+            }
+            return {};
+          })(),
         }
       : null,
   };

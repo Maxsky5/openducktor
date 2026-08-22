@@ -1,6 +1,8 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
+interface REPOAGENTDEFAULTLABELSContract extends Record<RepoAgentDefaultRole, string> {}
+
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
 type RepoAgentDefaultDraft = {
@@ -11,7 +13,7 @@ type RepoAgentDefaultDraft = {
   profileId?: string | null | undefined;
 };
 
-const REPO_AGENT_DEFAULT_LABELS: Record<RepoAgentDefaultRole, string> = {
+const REPO_AGENT_DEFAULT_LABELS: REPOAGENTDEFAULTLABELSContract = {
   spec: "Specification",
   planner: "Planner",
   build: "Builder",
@@ -66,7 +68,17 @@ export const normalizeRepoAgentDefaultForSave = (
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
-    ...(variant ? { variant } : {}),
-    ...(profileId ? { profileId } : {}),
+    ...(() => {
+      if (variant) {
+        return { variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (profileId) {
+        return { profileId };
+      }
+      return {};
+    })(),
   };
 };

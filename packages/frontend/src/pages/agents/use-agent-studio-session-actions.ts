@@ -38,7 +38,9 @@ import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-
 
 export type { NewSessionStartDecision, NewSessionStartRequest } from "@/features/session-start";
 
+// SAFETY: This scope populates or freezes the value as `readonly AgentApprovalRequest[]` before it can escape.
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze([]) as readonly AgentApprovalRequest[];
+// SAFETY: This scope populates or freezes the value as `readonly AgentQuestionRequest[]` before it can escape.
 const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze([]) as readonly AgentQuestionRequest[];
 
 type UseAgentStudioSessionActionsArgs = {
@@ -174,7 +176,12 @@ export function useAgentStudioSessionActions({
     workspaceRepoPath,
     runSessionStartWorkflow,
     humanRequestChangesTask,
-    ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
+    ...(() => {
+      if (setTaskTargetBranch) {
+        return { setTaskTargetBranch };
+      }
+      return {};
+    })(),
     scheduleQueryUpdate,
   });
 

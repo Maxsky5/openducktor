@@ -64,6 +64,7 @@ export function expectedVersionForEntry(file: string, releaseVersion: string): s
 
 function readRootWorkspacePatterns(): string[] {
   const rootPackageJsonPath = resolve(workspaceRoot, "package.json");
+  // SAFETY: JSON.parse can only produce JSON data, which satisfies `{ workspaces?: unknown }` at this boundary.
   const parsed = JSON.parse(readFileSync(rootPackageJsonPath, "utf8")) as { workspaces?: unknown };
 
   if (!Array.isArray(parsed.workspaces)) {
@@ -114,6 +115,7 @@ function collectWorkspacePackageJsonPaths(): string[] {
 
 function readJsonVersion(relativePath: string): string {
   const absolutePath = resolve(workspaceRoot, relativePath);
+  // SAFETY: JSON.parse can only produce JSON data, which satisfies `{ version?: string }` at this boundary.
   const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as { version?: string };
   if (!parsed.version) {
     throw new Error(`Missing version in ${relativePath}`);
@@ -123,6 +125,7 @@ function readJsonVersion(relativePath: string): string {
 
 function writeJsonVersion(relativePath: string, version: string): void {
   const absolutePath = resolve(workspaceRoot, relativePath);
+  // SAFETY: JSON.parse can only produce JSON data, which satisfies `Record<string, JsonValue>` at this boundary.
   const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as Record<string, JsonValue>;
 
   if (parsed.version === version) {

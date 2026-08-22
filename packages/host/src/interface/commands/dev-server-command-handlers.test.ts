@@ -12,6 +12,7 @@ import { createDevServerCommandHandlers } from "./dev-server-command-handlers";
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
+// SAFETY: This test controls the fixture and supplies `DevServerService` used by this case.
 const createDevServerServiceFake = (service: DevServerService): DevServerService =>
   service as DevServerService;
 describe("createDevServerCommandHandlers", () => {

@@ -25,7 +25,12 @@ const createSession = (liveStatus?: CodexSessionState["liveStatus"]): CodexSessi
   threadId: "thread-1",
   workingDirectory: "/repo",
   taskId: "task-1",
-  ...(liveStatus ? { liveStatus } : {}),
+  ...(() => {
+    if (liveStatus) {
+      return { liveStatus };
+    }
+    return {};
+  })(),
 });
 
 const createThread = (status: "active" | "idle" = "active"): CodexThreadSnapshot => ({

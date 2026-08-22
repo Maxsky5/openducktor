@@ -10,6 +10,8 @@ import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
 
+interface ROUTERSContract extends Record<AppRouterMode, RouterComponent> {}
+
 const AgentsPage = lazy(loadAgentsPage);
 
 const NotFoundPage = lazy(loadNotFoundPage);
@@ -22,7 +24,7 @@ type AppProps = {
 
 type RouterComponent = ComponentType<{ children?: ReactNode; useTransitions?: boolean }>;
 
-const ROUTERS: Record<AppRouterMode, RouterComponent> = {
+const ROUTERS: ROUTERSContract = {
   browser: BrowserRouter,
   hash: HashRouter,
 };

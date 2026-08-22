@@ -92,12 +92,13 @@ const deriveWorkflowTone = (params: {
   return availability;
 };
 
-const createRoleRecord = <Value>(build: (role: AgentRole) => Value): Record<AgentRole, Value> => ({
-  spec: build("spec"),
-  planner: build("planner"),
-  build: build("build"),
-  qa: build("qa"),
-});
+const createRoleRecord = <Value>(build: (role: AgentRole) => Value) =>
+  ({
+    spec: build("spec"),
+    planner: build("planner"),
+    build: build("build"),
+    qa: build("qa"),
+  }) satisfies Record<AgentRole, Value>;
 
 const buildSessionsByRole = (
   sessionsForTask: AgentSessionWorkflowSummary[],
@@ -161,14 +162,14 @@ export const buildLatestSessionByTaskMap = (
   return next;
 };
 
-export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {
+export const buildRoleEnabledMapForTask = (task: TaskCard | null) => {
   const workflowsByRole = resolveRoleWorkflowMapForTask(task);
   return {
     spec: workflowsByRole.spec.available,
     planner: workflowsByRole.planner.available,
     build: workflowsByRole.build.available,
     qa: workflowsByRole.qa.available,
-  };
+  } satisfies Record<AgentRole, boolean>;
 };
 
 export const buildWorkflowStateByRole = (params: {
@@ -319,9 +320,12 @@ export const buildSessionCreateOptions = (params: {
       label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
       disabled: params.createSessionDisabled,
-      ...(params.createSessionDisabled
-        ? { disabledReason: "Wait for the current session to finish." }
-        : {}),
+      ...(() => {
+        if (params.createSessionDisabled) {
+          return { disabledReason: "Wait for the current session to finish." };
+        }
+        return {};
+      })(),
     });
   };
 

@@ -111,6 +111,7 @@ export const toAgentRuntimePolicyBinding = (input: {
   runtimePolicy: AgentSessionRuntimePolicy;
 }): AgentRuntimePolicyBinding => {
   assertAgentRuntimePolicyBinding(input, "bind runtime policy");
+  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentRuntimePolicyBinding`.
   return input as AgentRuntimePolicyBinding;
 };
 

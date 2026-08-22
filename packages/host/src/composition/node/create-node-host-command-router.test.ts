@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,19 +23,30 @@ const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
 );
 
+// SAFETY: This test controls the fixture and supplies `RuntimeRegistryPort` used by this case.
 const createRuntimeRegistry = (
   stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
 ): RuntimeRegistryPort =>
   ({
     stopAllRuntimes,
-  }) as unknown as RuntimeRegistryPort;
+  }) as RuntimeRegistryPort;
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
-  ({
-    ensureConnection: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
-    ensureExternalDiscoveryReady: () => Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
+  createFocusedTestService<McpHostBridgeServer>({
+    ensureConnection: () =>
+      Effect.succeed({
+        workspaceId: "workspace-1",
+        hostUrl: "http://127.0.0.1:5000",
+        hostToken: "test-token",
+      }),
+    ensureExternalDiscoveryReady: () =>
+      Effect.succeed({
+        workspaceId: "workspace-1",
+        hostUrl: "http://127.0.0.1:5000",
+        hostToken: "test-token",
+      }),
     close: () => Effect.succeed({ baseUrl: null, closed: false }),
-  }) as unknown as McpHostBridgeServer;
+  });
 
 const createEventBus = (): HostEventBusPort => ({
   publish() {},
@@ -64,7 +76,12 @@ const createRouter = (input: {
   runtimeRegistry?: RuntimeRegistryPort;
 }) =>
   createNodeEffectHostCommandRouter({
-    ...(input.eventBus ? { eventBus: input.eventBus } : {}),
+    ...(() => {
+      if (input.eventBus) {
+        return { eventBus: input.eventBus };
+      }
+      return {};
+    })(),
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
@@ -72,7 +89,7 @@ const createRouter = (input: {
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
-    taskStore: {} as TaskStorePort,
+    taskStore: createFocusedTestService<TaskStorePort>({}),
     terminalPty,
   });
 
@@ -92,13 +109,14 @@ describe("createNodeEffectHostCommandRouter", () => {
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
       taskEventPublicationReporter: { report: () => Effect.void },
-      taskStore: {} as TaskStorePort,
+      taskStore: createFocusedTestService<TaskStorePort>({}),
       terminalPty,
     });
 
     try {
       await Effect.runPromise(router.initialize());
 
+      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
       const payload = JSON.parse(
         await readFile(
           path.join(

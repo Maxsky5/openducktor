@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 export const readInputString = (
   input: Record<string, JsonValue> | undefined,
@@ -8,7 +9,7 @@ export const readInputString = (
   }
   for (const key of keys) {
     const value = input[key];
-    if (typeof value === "string" && value.trim().length > 0) {
+    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
       return value.trim();
     }
   }
@@ -20,7 +21,7 @@ export const extractPathFromInput = (
 ): string | null => {
   const candidate =
     input?.filePath ?? input?.file_path ?? input?.path ?? input?.file ?? input?.filename;
-  if (typeof candidate === "string") {
+  if (hasRuntimeType(candidate, "string")) {
     const normalized = candidate.trim();
     if (normalized.length > 0 && normalized !== ".") {
       return normalized;

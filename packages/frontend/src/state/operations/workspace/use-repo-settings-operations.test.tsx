@@ -12,6 +12,7 @@ import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 import type { JsonValue } from "@openducktor/contracts";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -53,6 +54,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
         throw new Error("Hook not mounted");
       }
       await sharedHarness.run(async () => {
+        // SAFETY: This test controls the fixture and supplies `HookResult` used by this case.
         await fn(latest as HookResult);
       });
     },
@@ -300,6 +302,7 @@ describe("use-repo-settings-operations", () => {
   test("loads repo settings into normalized form values", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
+    // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>` used by this case.
     const workspaceGetRepoConfig = mock(
       async () => createRepoConfig() as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>,
     );
@@ -392,6 +395,7 @@ describe("use-repo-settings-operations", () => {
           },
         },
       };
+      // SAFETY: This test controls the fixture and supplies `RepoSettingsInput` used by this case.
       await harness.getLatest().saveRepoSettings(input as RepoSettingsInput);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
@@ -612,6 +616,7 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
+      // SAFETY: This test controls the fixture and supplies `NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>` used by this case.
       await expect(
         harness.getLatest().saveRepoSettings({
           ...inputFixture,
@@ -622,7 +627,7 @@ describe("use-repo-settings-operations", () => {
               modelId: "gpt-5",
               variant: "",
               profileId: "",
-            } as unknown as NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
+            } as NonNullable<RepoSettingsInput["agentDefaults"]["spec"]>,
           },
         }),
       ).rejects.toThrow(
@@ -857,6 +862,7 @@ describe("use-repo-settings-operations", () => {
       if (!forwardedSnapshot) {
         throw new Error("Expected settings snapshot to be forwarded.");
       }
+      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       const parsedForwarded = forwardedSnapshot as {
         globalPromptOverrides: Record<string, JsonValue>;
         agentRuntimes: JsonValue;

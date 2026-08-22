@@ -20,6 +20,12 @@ import {
 } from "./runtime-session-operations";
 
 type TestRuntimeRegistryInput = CreateRuntimeRegistryInput & CreateRuntimeSessionOperationsInput;
+type FetchRequest = (
+  ...args: Parameters<typeof globalThis.fetch>
+) => ReturnType<typeof globalThis.fetch>;
+
+const fetchFixture = (request: FetchRequest): typeof globalThis.fetch =>
+  Object.assign(request, { preconnect: () => {} });
 
 const createRuntimeRegistry = ({
   codexAppServer,
@@ -28,8 +34,18 @@ const createRuntimeRegistry = ({
   ...input
 }: TestRuntimeRegistryInput = {}) => {
   const sessionOperationInput: CreateRuntimeSessionOperationsInput = {
-    ...(codexAppServer ? { codexAppServer } : {}),
-    ...(claudeAgentSdk ? { claudeAgentSdk } : {}),
+    ...(() => {
+      if (codexAppServer) {
+        return { codexAppServer };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (claudeAgentSdk) {
+        return { claudeAgentSdk };
+      }
+      return {};
+    })(),
   };
   return createEffectRuntimeRegistry({
     ...input,
@@ -747,23 +763,25 @@ describe("createRuntimeRegistry", () => {
       directory: string | null;
     }> = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = input instanceof Request ? input : null;
-      const url = new URL(request?.url ?? input.toString());
-      const method = init?.method ?? request?.method ?? "GET";
-      requests.push({
-        method,
-        pathname: url.pathname,
-        directory: url.searchParams.get("directory"),
-      });
-      if (method === "POST" && url.pathname === "/session/session-1/abort") {
-        return new Response("aborted", { status: 200 });
-      }
-      if (method === "GET" && url.pathname === "/session/status") {
-        return Response.json({ "session-1": { type: "busy" } });
-      }
-      return new Response("not found", { status: 404 });
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : null;
+        const url = new URL(request?.url ?? input.toString());
+        const method = init?.method ?? request?.method ?? "GET";
+        requests.push({
+          method,
+          pathname: url.pathname,
+          directory: url.searchParams.get("directory"),
+        });
+        if (method === "POST" && url.pathname === "/session/session-1/abort") {
+          return new Response("aborted", { status: 200 });
+        }
+        if (method === "GET" && url.pathname === "/session/status") {
+          return Response.json({ "session-1": { type: "busy" } });
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
     try {
       const endpoint = "http://127.0.0.1:4096";
       const registry = createRuntimeRegistry({
@@ -870,23 +888,25 @@ describe("createRuntimeRegistry", () => {
       directory: string | null;
     }> = [];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = input instanceof Request ? input : null;
-      const url = new URL(request?.url ?? input.toString());
-      const method = init?.method ?? request?.method ?? "GET";
-      requests.push({
-        method,
-        pathname: url.pathname,
-        directory: url.searchParams.get("directory"),
-      });
-      if (method === "GET" && url.pathname === "/mcp") {
-        return Response.json({ openducktor: { status: "connected" } });
-      }
-      if (method === "GET" && url.pathname === "/experimental/tool/ids") {
-        return Response.json(["odt_read_task", " odt_set_spec ", ""]);
-      }
-      return Response.json({ error: "not found" }, { status: 404 });
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : null;
+        const url = new URL(request?.url ?? input.toString());
+        const method = init?.method ?? request?.method ?? "GET";
+        requests.push({
+          method,
+          pathname: url.pathname,
+          directory: url.searchParams.get("directory"),
+        });
+        if (method === "GET" && url.pathname === "/mcp") {
+          return Response.json({ openducktor: { status: "connected" } });
+        }
+        if (method === "GET" && url.pathname === "/experimental/tool/ids") {
+          return Response.json(["odt_read_task", " odt_set_spec ", ""]);
+        }
+        return Response.json({ error: "not found" }, { status: 404 });
+      }),
+    );
     try {
       const registry = createRuntimeRegistry();
       const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
@@ -926,9 +946,11 @@ describe("createRuntimeRegistry", () => {
   });
   test("reports OpenCode MCP fetch timeouts as reconnecting probe results", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(async () => {
-      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
-    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchFixture(
+      mock(async () => {
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      }),
+    );
     try {
       const registry = createRuntimeRegistry();
       const probeMcpStatus = requireMethod(registry.probeMcpStatus, "probeMcpStatus");
@@ -985,6 +1007,7 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
+          // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
           const params = input.params as {
             threadId: "session-1" | "session-2" | "session-3" | "session-4" | "session-5";
           };

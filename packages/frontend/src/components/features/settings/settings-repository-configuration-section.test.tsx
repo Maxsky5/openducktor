@@ -29,6 +29,7 @@ describe("RepositoryConfigurationSection", () => {
     const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
       updaters.push(updater);
     });
+    // SAFETY: This test creates the DOM fixture that supplies `GitBranch[]` before this lookup.
     const rendered = render(
       createElement(RepositoryConfigurationSection, {
         selectedRepoConfig: repoConfig,

@@ -79,13 +79,7 @@ export const useChatComposerSlashCommands = ({
   loadSlashCommandsForRepo: (
     runtimeRef: RuntimeWorkingDirectoryRef,
   ) => Promise<AgentSlashCommandCatalog>;
-}): {
-  supportsSlashCommands: boolean;
-  slashCommandCatalog: AgentSlashCommandCatalog;
-  slashCommands: AgentSlashCommandCatalog["commands"];
-  slashCommandsError: string | null;
-  isSlashCommandsLoading: boolean;
-} => {
+}) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const slashCommandsQuery = useQuery(
@@ -135,5 +129,11 @@ export const useChatComposerSlashCommands = ({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+  } satisfies {
+    supportsSlashCommands: boolean;
+    slashCommandCatalog: AgentSlashCommandCatalog;
+    slashCommands: AgentSlashCommandCatalog["commands"];
+    slashCommandsError: string | null;
+    isSlashCommandsLoading: boolean;
   };
 };

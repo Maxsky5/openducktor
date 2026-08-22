@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { LocalAttachmentEntry, LocalAttachmentPort } from "../../ports/local-attachment-port";
@@ -26,7 +27,7 @@ export const readStagedAttachmentOriginalName = (entry: LocalAttachmentEntry): s
 const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean => {
   const visited = new Set<object>();
   let current: unknown = cause;
-  while (typeof current === "object" && current !== null) {
+  while (hasRuntimeType(current, "object") && current !== null) {
     if (visited.has(current)) {
       return false;
     }

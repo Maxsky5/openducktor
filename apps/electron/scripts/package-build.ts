@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Dirent } from "node:fs";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -174,7 +175,10 @@ export const resolveElectronBuilderEnv = (
 };
 
 const nodeErrorCode = (cause: unknown): string | null =>
-  typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
+  hasRuntimeType(cause, "object") &&
+  cause !== null &&
+  "code" in cause &&
+  hasRuntimeType(cause.code, "string")
     ? cause.code
     : null;
 
@@ -363,7 +367,12 @@ export const buildElectronPackageEffect = ({
     yield* runPackageCommandEffect({
       command: ["bun", "run", "build"],
       cwd: electronPackageDirectory,
-      ...(electronBuildEnv ? { env: electronBuildEnv } : {}),
+      ...(() => {
+        if (electronBuildEnv) {
+          return { env: electronBuildEnv };
+        }
+        return {};
+      })(),
       label: "Electron app build",
     });
     yield* runPackageCommandEffect({

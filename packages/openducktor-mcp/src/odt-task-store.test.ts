@@ -28,6 +28,7 @@ describe("OdtTaskStore", () => {
 
   test("delegates workspace-scoped execution using the startup workspace default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
@@ -55,6 +56,7 @@ describe("OdtTaskStore", () => {
     ];
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const payload = { assets: [] };
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
@@ -80,6 +82,7 @@ describe("OdtTaskStore", () => {
 
   test("tool input workspaceId overrides the startup default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
@@ -109,6 +112,7 @@ describe("OdtTaskStore", () => {
 
   test("workspace-scoped public tools work with only tool-input workspaceId", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
@@ -144,6 +148,7 @@ describe("OdtTaskStore", () => {
   });
 
   test("fails before delegation when no workspace can be resolved", async () => {
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
@@ -159,6 +164,7 @@ describe("OdtTaskStore", () => {
 
   test("getWorkspaces bypasses workspace resolution and delegates directly", async () => {
     let calls = 0;
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => {
@@ -201,6 +207,7 @@ describe("OdtTaskStore", () => {
   });
 
   test("accepts document-level decode errors on odt_read_task_documents", async () => {
+    // SAFETY: This test controls the fixture and supplies `OdtHostBridgeClientPort` used by this case.
     const client = {
       ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,

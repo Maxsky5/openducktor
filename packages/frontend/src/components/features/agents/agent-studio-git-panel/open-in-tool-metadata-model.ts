@@ -1,5 +1,7 @@
 import type { SystemOpenInToolId } from "@openducktor/contracts";
 
+interface OPENINTOOLMETADATAContract extends Record<SystemOpenInToolId, OpenInToolUiMetadata> {}
+
 export type OpenInToolFallbackKind = "finder" | "terminal" | "generic";
 
 type OpenInToolUiMetadata = {
@@ -7,7 +9,7 @@ type OpenInToolUiMetadata = {
   fallbackKind: OpenInToolFallbackKind;
 };
 
-const OPEN_IN_TOOL_METADATA: Record<SystemOpenInToolId, OpenInToolUiMetadata> = {
+const OPEN_IN_TOOL_METADATA: OPENINTOOLMETADATAContract = {
   finder: { label: "Finder", fallbackKind: "finder" },
   explorer: { label: "File Explorer", fallbackKind: "finder" },
   "xdg-open": { label: "Files", fallbackKind: "finder" },

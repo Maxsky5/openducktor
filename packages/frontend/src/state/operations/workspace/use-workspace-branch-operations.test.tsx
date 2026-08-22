@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
@@ -55,6 +56,7 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
       }
 
       await sharedHarness.run(async () => {
+        // SAFETY: This test controls the fixture and supplies `ReturnType<typeof useWorkspaceBranchOperations>` used by this case.
         await fn(latest as ReturnType<typeof useWorkspaceBranchOperations>);
       });
     },
@@ -813,19 +815,19 @@ describe("use-workspace-branch-operations", () => {
         throw new Error("refreshBranches promise was not captured");
       }
 
-      let caughtError: unknown = null;
+      const caughtError = createFocusedFixture<{ current: unknown }>({ current: null });
       const pendingRefresh = refreshPromise;
       await harness.run(async () => {
         currentBranchDeferred.reject(refreshError);
         try {
           await pendingRefresh;
         } catch (error) {
-          caughtError = error;
+          caughtError.current = error;
         }
         await flush();
       });
 
-      expect(caughtError).toBe(refreshError);
+      expect(caughtError.current).toBe(refreshError);
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       await harness.unmount();
@@ -873,7 +875,8 @@ describe("use-workspace-branch-operations", () => {
     const switchError = new Error("branch checkout failed");
     const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -920,6 +923,7 @@ describe("use-workspace-branch-operations", () => {
         description: "branch checkout failed",
       });
     } finally {
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       await harness.unmount();
     }
@@ -929,7 +933,8 @@ describe("use-workspace-branch-operations", () => {
     const branchListError = new Error("branch list unavailable");
     const originalToastError = toast.error;
     const toastError = mock(() => "toast-id");
-    (toast as { error: typeof toast.error }).error = toastError as unknown as typeof toast.error;
+    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -971,12 +976,12 @@ describe("use-workspace-branch-operations", () => {
         await value.refreshBranches();
       });
 
-      let caughtError: unknown = null;
+      const caughtError = createFocusedFixture<{ current: unknown }>({ current: null });
       await harness.run(async (value) => {
         try {
           await value.switchBranch("feature");
         } catch (error) {
-          caughtError = error;
+          caughtError.current = error;
         }
       });
 
@@ -986,7 +991,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "def456",
       });
       expect(harness.getLatest().branches).toEqual(initialBranches);
-      expect(caughtError).toBe(branchListError);
+      expect(caughtError.current).toBe(branchListError);
       expect(toastError).toHaveBeenCalledWith(
         "Branch switched, but failed to refresh branch list",
         {
@@ -994,6 +999,7 @@ describe("use-workspace-branch-operations", () => {
         },
       );
     } finally {
+      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
       (toast as { error: typeof toast.error }).error = originalToastError;
       await harness.unmount();
     }

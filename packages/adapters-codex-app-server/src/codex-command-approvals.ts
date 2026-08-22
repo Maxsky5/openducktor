@@ -22,6 +22,7 @@ const READ_ONLY_COMMAND_ACTION_TYPES = new Set<ReadOnlyCommandActionType>([
   "search",
 ]);
 
+// SAFETY: The preceding runtime guard establishes `ReadOnlyCommandActionType` before this assertion.
 const isReadOnlyCommandActionType = (value: string): value is ReadOnlyCommandActionType =>
   READ_ONLY_COMMAND_ACTION_TYPES.has(value as ReadOnlyCommandActionType);
 

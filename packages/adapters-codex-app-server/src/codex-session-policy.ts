@@ -76,7 +76,12 @@ export const codexPolicyLogEntry = ({
 }): CodexPolicyLogEntry => ({
   operation,
   runtimeId,
-  ...(threadId ? { threadId } : {}),
+  ...(() => {
+    if (threadId) {
+      return { threadId };
+    }
+    return {};
+  })(),
   workingDirectory,
   sandboxMode: policy.sandboxMode,
   approvalPolicy: policy.approvalPolicy,

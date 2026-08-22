@@ -75,9 +75,12 @@ export const toAgentSessionRuntimeSnapshot = (
     availability: "runtime",
     classification,
     ref,
-    ...(snapshot.parentExternalSessionId
-      ? { parentExternalSessionId: snapshot.parentExternalSessionId }
-      : {}),
+    ...(() => {
+      if (snapshot.parentExternalSessionId) {
+        return { parentExternalSessionId: snapshot.parentExternalSessionId };
+      }
+      return {};
+    })(),
     title: snapshot.title,
     startedAt: snapshot.startedAt,
     pendingApprovals: snapshot.pendingApprovals,

@@ -10,6 +10,7 @@ import {
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -192,14 +193,17 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
       const isAssistant = messageIndex % 2 === 1;
       return buildMessage(isAssistant ? "assistant" : "user", `Message ${messageIndex}`, {
         id: `message-${messageIndex}`,
-        ...(isAssistant
-          ? {
+        ...(() => {
+          if (isAssistant) {
+            return {
               meta: {
                 kind: "assistant" as const,
                 isFinal: messageIndex < 119,
               },
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
       });
     });
     const session = buildSession({

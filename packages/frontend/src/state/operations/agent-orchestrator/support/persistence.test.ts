@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createInvalidFixture } from "@/test-utils/focused-fixture";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -126,25 +127,26 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisted session records without a top-level runtime kind", () => {
-    const invalidRecord = { ...recordFixture } as Record<string, JsonValue>;
+    const invalidRecord = createInvalidFixture<Record<string, JsonValue>>({ ...recordFixture });
     delete invalidRecord.runtimeKind;
 
     expect(() =>
       fromPersistedSessionRecord({
         taskId: "task-1",
-        record: invalidRecord as unknown as AgentSessionRecord,
+        record: createInvalidFixture<AgentSessionRecord>(invalidRecord),
       }),
     ).toThrow("Persisted session 'external-1' is missing runtime kind.");
   });
 
   test("rejects persisted selected models without a runtime kind", () => {
-    const invalidRecord = {
+    // SAFETY: This test controls the fixture and supplies `NonNullable<AgentSessionRecord["selectedModel"]>` used by this case.
+    const invalidRecord = createInvalidFixture<AgentSessionRecord>({
       ...recordFixture,
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
-      } as unknown as NonNullable<AgentSessionRecord["selectedModel"]>,
-    };
+      } as NonNullable<AgentSessionRecord["selectedModel"]>,
+    });
 
     expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
       "Persisted session 'external-1' selected model is missing runtime kind.",
@@ -152,14 +154,14 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisted selected models whose runtime kind disagrees with the session", () => {
-    const invalidRecord = {
+    const invalidRecord = createInvalidFixture<AgentSessionRecord>({
       ...recordFixture,
       selectedModel: {
         runtimeKind: "claude-code",
         providerId: "openai",
         modelId: "gpt-5",
       },
-    } as unknown as AgentSessionRecord;
+    });
 
     expect(() => fromPersistedSessionRecord({ taskId: "task-1", record: invalidRecord })).toThrow(
       "Unsupported runtime kind 'claude-code'.",
@@ -167,12 +169,13 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisting selected models without a runtime kind", () => {
+    // SAFETY: This test controls the fixture and supplies `NonNullable<AgentSessionState["selectedModel"]>` used by this case.
     const session: AgentSessionState = {
       ...loadRecordFixture(),
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
-      } as unknown as NonNullable<AgentSessionState["selectedModel"]>,
+      } as NonNullable<AgentSessionState["selectedModel"]>,
     };
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
@@ -181,14 +184,14 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
-    const session = {
+    const session = createInvalidFixture<AgentSessionState>({
       ...loadRecordFixture(),
       selectedModel: {
         runtimeKind: "claude-code",
         providerId: "openai",
         modelId: "gpt-5",
       },
-    } as unknown as AgentSessionState;
+    });
 
     expect(() => toPersistedSessionRecord(session)).toThrow(
       "Unsupported runtime kind 'claude-code'.",

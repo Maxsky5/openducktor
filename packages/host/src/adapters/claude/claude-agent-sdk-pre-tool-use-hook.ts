@@ -45,7 +45,12 @@ export const createClaudePreToolUseHook = ({
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
           permissionDecisionReason: "OpenDucktor auto-approved this tool for the workflow role.",
-          ...(inputChanged ? { updatedInput: authorization.toolInput } : {}),
+          ...(() => {
+            if (inputChanged) {
+              return { updatedInput: authorization.toolInput };
+            }
+            return {};
+          })(),
         },
       };
     }

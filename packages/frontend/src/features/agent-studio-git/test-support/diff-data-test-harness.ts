@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
@@ -13,7 +14,7 @@ const actualHostOperationsModule = await import("@/state/operations/host");
 const actualHostClientModule = await import("@/lib/host-client");
 
 enableReactActEnvironment();
-if (typeof document === "undefined") {
+if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
@@ -129,7 +130,12 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     },
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
-    ...(status.gitConflict ? { gitConflict: status.gitConflict } : {}),
+    ...(() => {
+      if (status.gitConflict) {
+        return { gitConflict: status.gitConflict };
+      }
+      return {};
+    })(),
     snapshot: status.snapshot,
   };
 };

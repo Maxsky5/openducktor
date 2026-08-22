@@ -11,6 +11,7 @@ enableReactActEnvironment();
 
 const realTaskCreateModalControllerModule = { ...taskCreateModalControllerModule };
 
+// SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
 const controllerMock = {
   mode: "edit" as const,
   onDialogOpenChange: (_open: boolean) => {},
@@ -97,6 +98,7 @@ describe("TaskCreateModal", () => {
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
+    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
     const task = { id: "TASK-123" } as TaskCard;
     const rendered = render(
       createElement(TaskCreateModal, {
@@ -123,6 +125,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
+    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
     const task = { id: "TASK-123" } as TaskCard;
 
     try {
@@ -136,10 +139,12 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/created-task/)).toBeTruthy();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement | undefined` before this lookup.
       const closeButton = screen
         .getAllByRole("button", { name: "Close" })
         .find((button) => button.textContent === "Close") as HTMLButtonElement | undefined;
       expect(closeButton?.disabled).toBe(false);
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
       ).toBe(true);
@@ -157,6 +162,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
+    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
     const task = { id: "TASK-123" } as TaskCard;
 
     try {
@@ -170,6 +176,7 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
       ).toBe(true);

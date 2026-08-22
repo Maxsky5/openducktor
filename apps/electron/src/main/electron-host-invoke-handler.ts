@@ -3,7 +3,7 @@ import {
   ELECTRON_HOST_INVOKE_CHANNEL,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 import { hostInvokeFailureFromError, parseHostCommandResponse } from "@openducktor/host";
 import type { IpcMainInvokeEvent } from "electron";
 import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke";
@@ -11,7 +11,10 @@ import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (event: IpcMainInvokeEvent, request: unknown) => Promise<ElectronHostInvokeResponse>,
+    listener: (
+      event: IpcMainInvokeEvent,
+      request: Parameters<typeof jsonValueSchema.safeParse>[0],
+    ) => Promise<ElectronHostInvokeResponse>,
   ): void;
 };
 
@@ -31,7 +34,9 @@ type ValidatedElectronHostInvokeRequest = {
 const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostInvokeRequest => {
+const readElectronHostInvokeRequest = (
+  request: Parameters<typeof jsonValueSchema.safeParse>[0],
+): ValidatedElectronHostInvokeRequest => {
   const parsedRequest = jsonValueSchema.safeParse(request);
   if (!parsedRequest.success || !isRecord(parsedRequest.data)) {
     throw new ElectronValidationError({
@@ -40,7 +45,7 @@ const readElectronHostInvokeRequest = (request: unknown): ValidatedElectronHostI
       field: "request",
     });
   }
-  if (typeof parsedRequest.data.command !== "string") {
+  if (!hasRuntimeType(parsedRequest.data.command, "string")) {
     throw new ElectronValidationError({
       operation: "electron.ipc.host-invoke.validate",
       message: "Electron host invoke command must be a string.",
@@ -81,7 +86,12 @@ const validateElectronHostInvokeResult = (
         ok: false,
         error: {
           message: errorMessage(cause),
-          ...(failure ? { failure } : {}),
+          ...(() => {
+            if (failure) {
+              return { failure };
+            }
+            return {};
+          })(),
         },
       },
     };

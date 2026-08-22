@@ -6,6 +6,10 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { invokeStopAgentSession, useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 
+interface CatchStateContract {
+  rejectionHandler?: (error: Error) => void;
+}
+
 const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
   runtimeKind: "opencode",
@@ -15,9 +19,10 @@ const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
 describe("invokeStopAgentSession", () => {
   test("invokes stop and registers a local rejection handler", () => {
     const stopCalls: AgentSessionIdentity[] = [];
-    const catchState: { rejectionHandler?: (error: Error) => unknown } = {};
+    const catchState: CatchStateContract = {};
+    // SAFETY: This test drives the failure path that supplies `Promise<void>` before this assertion.
     const stopPromise = {
-      catch(handler: (error: Error) => unknown) {
+      catch(handler: (error: Error) => void) {
         catchState.rejectionHandler = handler;
         return Promise.resolve();
       },

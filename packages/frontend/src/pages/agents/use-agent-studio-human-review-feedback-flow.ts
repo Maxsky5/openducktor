@@ -100,10 +100,18 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             role: request.role,
             launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceSession !== undefined
-              ? { initialSourceSession: request.initialSourceSession }
-              : {}),
-            ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
+            ...(() => {
+              if (request.initialSourceSession !== undefined) {
+                return { initialSourceSession: request.initialSourceSession };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (request.initialStartMode) {
+                return { initialStartMode: request.initialStartMode };
+              }
+              return {};
+            })(),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,

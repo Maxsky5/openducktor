@@ -52,7 +52,12 @@ export const createTaskCrudUseCases = ({
         .createTask({
           repoPath,
           task: normalizedTask,
-          ...(descriptionAssets ? { descriptionAssets } : {}),
+          ...(() => {
+            if (descriptionAssets) {
+              return { descriptionAssets };
+            }
+            return {};
+          })(),
         })
         .pipe(
           Effect.mapError((error) =>
@@ -88,7 +93,12 @@ export const createTaskCrudUseCases = ({
           repoPath,
           taskId,
           patch,
-          ...(descriptionAssets ? { descriptionAssets } : {}),
+          ...(() => {
+            if (descriptionAssets) {
+              return { descriptionAssets };
+            }
+            return {};
+          })(),
         })
         .pipe(
           Effect.mapError((error) => preserveCommittedAssetMutation("update-task", taskId, error)),

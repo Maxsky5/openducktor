@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
 import type { JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -52,7 +53,7 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
-  ({
+  createFocusedTestService<WorkspaceSettingsService>({
     listWorkspaces() {
       return Effect.tryPromise({
         try: async () => {
@@ -103,12 +104,9 @@ const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
           }),
       });
     },
-  }) as Pick<
-    WorkspaceSettingsService,
-    "getRepoConfig" | "getRepoConfigByRepoPath" | "listWorkspaces"
-  > as unknown as WorkspaceSettingsService;
+  });
 const createTaskService = (service: Partial<TaskService>): TaskService =>
-  service as unknown as TaskService;
+  createFocusedTestService<TaskService>(service);
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
   "taskAssetReadService"
@@ -126,7 +124,7 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
 describe("createOdtMcpBridgeService", () => {
   test("reports MCP tool coverage and workspaces", async () => {
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: {} as TaskService,
+      taskService: createFocusedTestService<TaskService>({}),
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
     await expect(Effect.runPromise(service.ready())).resolves.toEqual({

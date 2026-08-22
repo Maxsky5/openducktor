@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type {
   AgentChatMessage,
@@ -21,7 +22,7 @@ export const toSessionContextUsage = (
   totalTokens: number | undefined,
   model?: AgentSessionState["selectedModel"],
 ): AgentSessionContextUsage | null => {
-  if (typeof totalTokens !== "number" || totalTokens <= 0) {
+  if (!hasRuntimeType(totalTokens, "number") || totalTokens <= 0) {
     return null;
   }
 
@@ -29,10 +30,30 @@ export const toSessionContextUsage = (
 
   return {
     totalTokens,
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
+    ...(() => {
+      if (effectiveModel?.providerId) {
+        return { providerId: effectiveModel.providerId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.modelId) {
+        return { modelId: effectiveModel.modelId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.variant) {
+        return { variant: effectiveModel.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.profileId) {
+        return { profileId: effectiveModel.profileId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -52,15 +73,60 @@ export const createAssistantMessageMeta = ({
   return {
     kind: "assistant",
     isFinal,
-    ...(role ? { agentRole: role } : {}),
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
-    ...(typeof durationMs === "number" ? { durationMs } : {}),
-    ...(typeof totalTokens === "number" && totalTokens > 0 ? { totalTokens } : {}),
-    ...(typeof contextWindow === "number" && contextWindow > 0 ? { contextWindow } : {}),
-    ...(typeof outputLimit === "number" && outputLimit > 0 ? { outputLimit } : {}),
+    ...(() => {
+      if (role) {
+        return { agentRole: role };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.providerId) {
+        return { providerId: effectiveModel.providerId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.modelId) {
+        return { modelId: effectiveModel.modelId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.variant) {
+        return { variant: effectiveModel.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.profileId) {
+        return { profileId: effectiveModel.profileId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(durationMs, "number")) {
+        return { durationMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(totalTokens, "number") && totalTokens > 0) {
+        return { totalTokens };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(contextWindow, "number") && contextWindow > 0) {
+        return { contextWindow };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (hasRuntimeType(outputLimit, "number") && outputLimit > 0) {
+        return { outputLimit };
+      }
+      return {};
+    })(),
   };
 };
 

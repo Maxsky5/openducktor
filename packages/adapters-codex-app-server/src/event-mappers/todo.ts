@@ -1,5 +1,5 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -22,7 +22,7 @@ import { type CodexToolTimingFields, codexToolTimingFields } from "../codex-tool
 
 const parseJsonObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
   if (isPlainObject(value)) return value;
-  if (typeof value !== "string") return null;
+  if (!hasRuntimeType(value, "string")) return null;
   try {
     const parsed = jsonValueSchema.safeParse(JSON.parse(value));
     return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
@@ -115,7 +115,12 @@ const codexTodoToolInputFromPayload = (
   }
   const explanation = extractStringField(payload, ["explanation"]);
   return {
-    ...(explanation ? { explanation } : {}),
+    ...(() => {
+      if (explanation) {
+        return { explanation };
+      }
+      return {};
+    })(),
     todos,
   };
 };
@@ -129,8 +134,18 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
     rawTodos.filter(isPlainObject).map((item, index) => ({
       id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
       content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
-      ...(typeof item.status === "string" ? { status: item.status } : {}),
-      ...(typeof item.priority === "string" ? { priority: item.priority } : {}),
+      ...(() => {
+        if (hasRuntimeType(item.status, "string")) {
+          return { status: item.status };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(item.priority, "string")) {
+          return { priority: item.priority };
+        }
+        return {};
+      })(),
     })),
   );
   if (todos.length === 0) {
@@ -138,7 +153,12 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
   }
   const explanation = extractStringField(payload, ["explanation"]);
   return {
-    ...(explanation ? { explanation } : {}),
+    ...(() => {
+      if (explanation) {
+        return { explanation };
+      }
+      return {};
+    })(),
     todos,
   };
 };
@@ -171,8 +191,18 @@ const todoToolCanonicalEvents = (
     source: ctx.source,
     mapper: TODO_MAPPER_NAME,
     threadId: ctx.threadId,
-    ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+    ...(() => {
+      if (ctx.turnId) {
+        return { turnId: ctx.turnId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (ctx.timestamp) {
+        return { timestamp: ctx.timestamp };
+      }
+      return {};
+    })(),
     raw,
     invocation: {
       ...ids,
@@ -188,8 +218,18 @@ const todoToolCanonicalEvents = (
     source: ctx.source,
     mapper: TODO_MAPPER_NAME,
     threadId: ctx.threadId,
-    ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+    ...(() => {
+      if (ctx.turnId) {
+        return { turnId: ctx.turnId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (ctx.timestamp) {
+        return { timestamp: ctx.timestamp };
+      }
+      return {};
+    })(),
     raw,
     todos: update.todos,
   },

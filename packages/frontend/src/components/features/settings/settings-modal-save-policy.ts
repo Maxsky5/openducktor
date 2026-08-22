@@ -2,6 +2,7 @@ import type { RuntimeKind, SettingsSnapshot } from "@openducktor/contracts";
 import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `(keyof DirtySections)[]`.
 const DIRTY_SECTION_KEYS = Object.keys(EMPTY_DIRTY_SECTIONS) as (keyof DirtySections)[];
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>

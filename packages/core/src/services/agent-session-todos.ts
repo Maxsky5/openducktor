@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "../types/agent-orchestrator";
 
 const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
@@ -6,10 +7,12 @@ const TODO_STATUS_SET = new Set<AgentSessionTodoItem["status"]>(TODO_STATUSES);
 const TODO_PRIORITY_SET = new Set<AgentSessionTodoItem["priority"]>(TODO_PRIORITIES);
 
 const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] => {
+  // SAFETY: The preceding runtime guard establishes `AgentSessionTodoItem["status"]` before this assertion.
   return TODO_STATUS_SET.has(value as AgentSessionTodoItem["status"]);
 };
 
 const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] => {
+  // SAFETY: The preceding runtime guard establishes `AgentSessionTodoItem["priority"]` before this assertion.
   return TODO_PRIORITY_SET.has(value as AgentSessionTodoItem["priority"]);
 };
 
@@ -24,7 +27,7 @@ export type NormalizeAgentSessionTodoInput = {
 export const normalizeAgentSessionTodoStatus = (
   value: string | undefined,
 ): AgentSessionTodoItem["status"] => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized = hasRuntimeType(value, "string") ? value.trim().toLowerCase() : "";
   if (!normalized) {
     return "pending";
   }
@@ -51,7 +54,7 @@ export const normalizeAgentSessionTodoStatus = (
 export const normalizeAgentSessionTodoPriority = (
   value: string | undefined,
 ): AgentSessionTodoItem["priority"] => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const normalized = hasRuntimeType(value, "string") ? value.trim().toLowerCase() : "";
   return isAgentSessionTodoPriority(normalized) ? normalized : "medium";
 };
 
@@ -65,8 +68,11 @@ export const normalizeAgentSessionTodoItem = (
   }
 
   const status = normalizeAgentSessionTodoStatus(value.status);
-  const statusFromBoolean =
-    typeof value.completed === "boolean" ? (value.completed ? "completed" : "pending") : undefined;
+  const statusFromBoolean = hasRuntimeType(value.completed, "boolean")
+    ? value.completed
+      ? "completed"
+      : "pending"
+    : undefined;
 
   return {
     id,

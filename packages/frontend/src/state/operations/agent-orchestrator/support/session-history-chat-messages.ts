@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -44,11 +45,36 @@ const userMessageMeta = (
   return {
     kind: "user",
     state,
-    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : {}),
-    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : {}),
-    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : {}),
-    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : {}),
-    ...(parts.length > 0 ? { parts } : {}),
+    ...(() => {
+      if (effectiveModel?.providerId) {
+        return { providerId: effectiveModel.providerId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.modelId) {
+        return { modelId: effectiveModel.modelId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.variant) {
+        return { variant: effectiveModel.variant };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (effectiveModel?.profileId) {
+        return { profileId: effectiveModel.profileId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (parts.length > 0) {
+        return { parts };
+      }
+      return {};
+    })(),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
@@ -105,18 +131,78 @@ const historyPartToChatMessage = (
             tool: part.tool,
             toolType: part.toolType,
             status: part.status,
-            ...(part.preview ? { preview: part.preview } : {}),
-            ...(part.title ? { title: part.title } : {}),
-            ...(part.displayLabel ? { displayLabel: part.displayLabel } : {}),
-            ...(input ? { input } : {}),
-            ...(output ? { output } : {}),
-            ...(error ? { error } : {}),
-            ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : {}),
-            ...(part.fileContent ? { fileContent: part.fileContent } : {}),
-            ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
-            ...(part.metadata ? { metadata: part.metadata } : {}),
-            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+            ...(() => {
+              if (part.preview) {
+                return { preview: part.preview };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.title) {
+                return { title: part.title };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.displayLabel) {
+                return { displayLabel: part.displayLabel };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (input) {
+                return { input };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (output) {
+                return { output };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (error) {
+                return { error };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.fileDiffs) {
+                return { fileDiffs: part.fileDiffs };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.fileContent) {
+                return { fileContent: part.fileContent };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.fileChanges) {
+                return { fileChanges: part.fileChanges };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.metadata) {
+                return { metadata: part.metadata };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(part.startedAtMs, "number")) {
+                return { startedAtMs: part.startedAtMs };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(part.endedAtMs, "number")) {
+                return { endedAtMs: part.endedAtMs };
+              }
+              return {};
+            })(),
           },
         },
         message,
@@ -131,15 +217,60 @@ const historyPartToChatMessage = (
             partId: part.partId,
             correlationKey: part.correlationKey,
             status: part.status,
-            ...(part.agent ? { agent: part.agent } : {}),
-            ...(part.prompt ? { prompt: part.prompt } : {}),
-            ...(part.description ? { description: part.description } : {}),
-            ...(part.error ? { error: part.error } : {}),
-            ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : {}),
-            ...(part.executionMode ? { executionMode: part.executionMode } : {}),
-            ...(part.metadata ? { metadata: part.metadata } : {}),
-            ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
-            ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),
+            ...(() => {
+              if (part.agent) {
+                return { agent: part.agent };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.prompt) {
+                return { prompt: part.prompt };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.description) {
+                return { description: part.description };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.error) {
+                return { error: part.error };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.externalSessionId) {
+                return { externalSessionId: part.externalSessionId };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.executionMode) {
+                return { executionMode: part.executionMode };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (part.metadata) {
+                return { metadata: part.metadata };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(part.startedAtMs, "number")) {
+                return { startedAtMs: part.startedAtMs };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(part.endedAtMs, "number")) {
+                return { endedAtMs: part.endedAtMs };
+              }
+              return {};
+            })(),
           },
         }),
         message,
@@ -169,6 +300,7 @@ const historyPartToChatMessage = (
   }
 };
 
+// SAFETY: The schema parser validates every field required by `SessionHistoryPart[]` before returning.
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -243,11 +375,24 @@ export const historyToChatMessages = (
         ? (message.durationMs ??
           resolveAssistantTurnDurationMs({
             completedAtMs,
-            ...(typeof activityStartedAtMs === "number" ? { activityStartedAtMs } : {}),
-            ...(typeof userAnchorAtMs === "number" ? { userAnchorAtMs } : {}),
-            ...(typeof previousAssistantCompletedAtMs === "number"
-              ? { previousAssistantCompletedAtMs }
-              : {}),
+            ...(() => {
+              if (hasRuntimeType(activityStartedAtMs, "number")) {
+                return { activityStartedAtMs };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(userAnchorAtMs, "number")) {
+                return { userAnchorAtMs };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (hasRuntimeType(previousAssistantCompletedAtMs, "number")) {
+                return { previousAssistantCompletedAtMs };
+              }
+              return {};
+            })(),
           }))
         : undefined;
     const assistantMeta =
@@ -270,9 +415,12 @@ export const historyToChatMessages = (
           meta: {
             ...assistantMeta,
             sourceMessageId: message.messageId,
-            ...(lastAssistantTextMessage.meta.partId
-              ? { partId: lastAssistantTextMessage.meta.partId }
-              : {}),
+            ...(() => {
+              if (lastAssistantTextMessage.meta.partId) {
+                return { partId: lastAssistantTextMessage.meta.partId };
+              }
+              return {};
+            })(),
           },
         };
       }
@@ -320,8 +468,18 @@ export const historyToChatMessages = (
         role: message.role,
         content,
         timestamp: message.timestamp,
-        ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : {}),
-        ...(meta ? { meta } : {}),
+        ...(() => {
+          if (message.timestampIsApproximate) {
+            return { timestampIsApproximate: true };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (meta) {
+            return { meta };
+          }
+          return {};
+        })(),
       };
       next.push(primaryMessage);
     }

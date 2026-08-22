@@ -12,6 +12,7 @@ type CodexProbeTransport = Pick<
 describe("verifyCodexAppServerProtocol", () => {
   test("completes the app-server initialize handshake", async () => {
     const calls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `CodexProbeTransport` used by this case.
     const transport = {
       request(input) {
         calls.push(input);
@@ -54,6 +55,7 @@ describe("verifyCodexAppServerProtocol", () => {
 
   test("fails when the selected executable does not answer the Codex protocol", async () => {
     let notified = false;
+    // SAFETY: This test controls the fixture and supplies `CodexProbeTransport` used by this case.
     const transport = {
       request: () =>
         Effect.fail(
@@ -67,7 +69,7 @@ describe("verifyCodexAppServerProtocol", () => {
       },
       close: () => Effect.void,
       rejectPendingRequestsForShutdown: () => Effect.void,
-    } as unknown as CodexProbeTransport;
+    } as CodexProbeTransport;
 
     const failure = await Effect.runPromise(
       Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),
@@ -82,12 +84,13 @@ describe("verifyCodexAppServerProtocol", () => {
       operation: "codexAppServerTransport.request.initialize",
       message: "initialize request timed out",
     });
+    // SAFETY: This test controls the fixture and supplies `CodexProbeTransport` used by this case.
     const transport = {
       request: () => Effect.fail(operationFailure),
       notify: () => Effect.void,
       close: () => Effect.void,
       rejectPendingRequestsForShutdown: () => Effect.void,
-    } as unknown as CodexProbeTransport;
+    } as CodexProbeTransport;
 
     const failure = await Effect.runPromise(
       Effect.flip(verifyCodexAppServerProtocol(transport, "1.2.3")),

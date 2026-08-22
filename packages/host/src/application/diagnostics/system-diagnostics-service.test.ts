@@ -17,6 +17,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
+// SAFETY: This test controls the fixture and supplies `RuntimeDescriptor` used by this case.
 const runtimeDefinition = (kind: RuntimeDescriptor["kind"]): RuntimeDescriptor =>
   ({
     kind,
@@ -32,6 +33,7 @@ const runtimeHealth = (
   version: error === null ? `${kind} 1.0.0` : null,
   error,
 });
+// SAFETY: This test drives the failure path that supplies `SettingsConfigPort` before this assertion.
 const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =>
   ({
     readConfig: () =>
@@ -76,7 +78,7 @@ const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =
       }),
     pathExists: () => Effect.succeed(true),
     join: (...paths) => paths.join("/"),
-  }) as SettingsConfigPort as SettingsConfigPort;
+  }) as SettingsConfigPort;
 const createRuntimeDefinitions = (
   kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
 ): RuntimeDefinitionsService => ({
@@ -149,6 +151,7 @@ const createSystemCommandPort = ({
           }),
       }),
   };
+  // SAFETY: This test controls the fixture and supplies `SystemCommandPort` used by this case.
   return port as SystemCommandPort;
 };
 const createToolDiscoveryPort = ({
@@ -171,6 +174,7 @@ const healthyRepoStoreHealth: RepoStoreHealth = {
   detail: "SQLite task store is ready.",
   databasePath: "/config/task-stores/workspace-1/database.sqlite",
 };
+// SAFETY: This test drives the failure path that supplies `TaskStorePort` before this assertion.
 const createTaskStore = (
   health: RepoStoreHealth = healthyRepoStoreHealth,
   calls: Array<{
@@ -192,7 +196,7 @@ const createTaskStore = (
             cause: cause,
           }),
       }),
-  }) as Pick<TaskStorePort, "diagnoseRepoStore"> as unknown as TaskStorePort;
+  }) as TaskStorePort;
 const createSystemDiagnosticsServiceForTest = (
   input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
     toolDiscovery?: ToolDiscoveryPort;

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   EventPermissionAsked,
   EventPermissionReplied,
@@ -83,7 +84,12 @@ export const childSessionInfo = (childSessionId: string, parentID?: string): Ses
   slug: childSessionId,
   projectID: "project-1",
   directory: "/repo",
-  ...(parentID ? { parentID } : {}),
+  ...(() => {
+    if (parentID) {
+      return { parentID };
+    }
+    return {};
+  })(),
   title: "Subagent",
   version: "1.0.0",
   time: {
@@ -225,8 +231,18 @@ export const permissionV2AskedEvent = (input: {
       sessionID: input.sessionId ?? "external-session-1",
       action: input.action ?? "edit",
       resources: input.resources ?? ["src/**"],
-      ...(input.save ? { save: input.save } : {}),
-      ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(() => {
+        if (input.save) {
+          return { save: input.save };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (input.metadata) {
+          return { metadata: input.metadata };
+        }
+        return {};
+      })(),
       ...input.properties,
     },
   }) satisfies EventPermissionV2Asked;
@@ -376,6 +392,7 @@ export const malformedControlEvent = (
 ): MalformedControlEvent => ({ id: `malformed-${type}`, type, properties });
 
 export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
+  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   return {
     global: {
       event: async () => {
@@ -384,14 +401,14 @@ export const makeClientWithEvents = (events: TestGlobalEventPayload[]): Opencode
             const properties = "properties" in event ? event.properties : undefined;
             const directoryValue =
               properties && "directory" in properties ? properties.directory : undefined;
-            const directory = typeof directoryValue === "string" ? directoryValue : "/repo";
+            const directory = hasRuntimeType(directoryValue, "string") ? directoryValue : "/repo";
             yield { directory, payload: event };
           }
         }
         return { stream: iterator() };
       },
     },
-  } as unknown as OpencodeClient;
+  } as OpencodeClient;
 };
 
 export const makeSessionInput = (): SessionInput => ({
@@ -469,7 +486,12 @@ export const runEventStreamWithSession = async (
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
-    ...(options.logEvent ? { logEvent: options.logEvent } : {}),
+    ...(() => {
+      if (options.logEvent) {
+        return { logEvent: options.logEvent };
+      }
+      return {};
+    })(),
   });
   const streamDone = runtimeEventTransports.get(sessionRecord.runtimeId)?.streamDone;
   if (!streamDone) {

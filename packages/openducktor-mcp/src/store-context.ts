@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
@@ -123,10 +124,12 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: expected a JSON object.`,
     );
   }
-  const hostUrl =
-    typeof parsed.hostUrl === "string" ? normalizeOptionalInput(parsed.hostUrl) : undefined;
-  const hostToken =
-    typeof parsed.hostToken === "string" ? normalizeOptionalInput(parsed.hostToken) : undefined;
+  const hostUrl = hasRuntimeType(parsed.hostUrl, "string")
+    ? normalizeOptionalInput(parsed.hostUrl)
+    : undefined;
+  const hostToken = hasRuntimeType(parsed.hostToken, "string")
+    ? normalizeOptionalInput(parsed.hostToken)
+    : undefined;
 
   if (hostUrl === undefined) {
     throw new Error(
@@ -139,7 +142,7 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
     );
   }
   const pid = parsed.pid;
-  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+  if (!hasRuntimeType(pid, "number") || !Number.isInteger(pid) || pid <= 0) {
     throw new Error(
       `Invalid OpenDucktor MCP discovery file at ${discoveryPath}: pid must be a positive integer.`,
     );
@@ -161,7 +164,12 @@ const discoverHostConnection = async (
   try {
     discoveryPayload = await readFile(discoveryPath, "utf8");
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+    if (
+      hasRuntimeType(error, "object") &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
       throw new Error(
         `No running OpenDucktor host was discovered. Checked ${discoveryPath}. Start the OpenDucktor desktop app or provide ODT_HOST_URL to override discovery.`,
       );
@@ -224,7 +232,12 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   if (!workspaceId) {
     return {
       hostUrl,
-      ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
+      ...(() => {
+        if (resolvedHostToken) {
+          return { hostToken: resolvedHostToken };
+        }
+        return {};
+      })(),
       ...workspaceIdInputMode,
     };
   }
@@ -232,7 +245,12 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   return {
     workspaceId,
     hostUrl,
-    ...(resolvedHostToken ? { hostToken: resolvedHostToken } : {}),
+    ...(() => {
+      if (resolvedHostToken) {
+        return { hostToken: resolvedHostToken };
+      }
+      return {};
+    })(),
     ...workspaceIdInputMode,
   };
 };

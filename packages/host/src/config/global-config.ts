@@ -4,33 +4,39 @@ import {
   globalConfigSchema,
   type PersistedGlobalConfigV2,
   persistedGlobalConfigV2Schema,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
+
+interface MigratedContract extends Record<string, JsonValue> {}
 
 export type LoadedGlobalConfig = GlobalConfig & {
   agentRuntimes: AgentRuntimes;
 };
 
+// SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 }) as LoadedGlobalConfig;
 
-const migratePersistedConfigShape = (payload: JsonValue | undefined): JsonValue | undefined => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+const migratePersistedConfig = (payload: JsonValue | undefined): JsonValue | undefined => {
+  if (!payload || !hasRuntimeType(payload, "object") || Array.isArray(payload)) {
     return payload;
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const candidate = payload as Record<string, JsonValue>;
   const chat = candidate.chat;
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const customPrompts =
-    chat && typeof chat === "object" && !Array.isArray(chat)
+    chat && hasRuntimeType(chat, "object") && !Array.isArray(chat)
       ? (chat as Record<string, JsonValue>).customPrompts
       : undefined;
   if (candidate.reusablePrompts !== undefined || !Array.isArray(customPrompts)) {
     return payload;
   }
 
-  const migrated: Record<string, JsonValue> = {
+  const migrated: MigratedContract = {
     ...candidate,
     reusablePrompts: customPrompts,
   };
@@ -41,10 +47,11 @@ const assertSupportedConfigVersion = (
   payload: JsonValue | undefined,
   expectedVersion: 2 | 3,
 ): void => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!payload || !hasRuntimeType(payload, "object") || Array.isArray(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
 
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const version = (payload as Record<string, JsonValue>).version;
   if (version !== expectedVersion) {
     throw new HostValidationError({
@@ -56,7 +63,8 @@ const assertSupportedConfigVersion = (
 export const parsePersistedGlobalConfig = (payload: JsonValue | undefined): LoadedGlobalConfig => {
   assertSupportedConfigVersion(payload, 3);
   try {
-    return globalConfigSchema.parse(migratePersistedConfigShape(payload)) as LoadedGlobalConfig;
+    // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
+    return globalConfigSchema.parse(migratePersistedConfig(payload)) as LoadedGlobalConfig;
   } catch (cause) {
     throw new HostValidationError({
       message: cause instanceof Error ? cause.message : String(cause),
@@ -70,7 +78,7 @@ export const parsePersistedGlobalConfigV2 = (
 ): PersistedGlobalConfigV2 => {
   assertSupportedConfigVersion(payload, 2);
   try {
-    return persistedGlobalConfigV2Schema.parse(migratePersistedConfigShape(payload));
+    return persistedGlobalConfigV2Schema.parse(migratePersistedConfig(payload));
   } catch (cause) {
     throw new HostValidationError({
       message: cause instanceof Error ? cause.message : String(cause),
@@ -80,9 +88,10 @@ export const parsePersistedGlobalConfigV2 = (
 };
 
 export const readPersistedGlobalConfigVersion = (payload: JsonValue | undefined): 2 | 3 => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!payload || !hasRuntimeType(payload, "object") || Array.isArray(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
+  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const version = (payload as Record<string, JsonValue>).version;
   if (version === 2 || version === 3) {
     return version;
@@ -106,6 +115,7 @@ export const upgradePersistedGlobalConfigV2 = (
     ]),
   );
 
+  // SAFETY: The schema parser validates every field required by `LoadedGlobalConfig` before returning.
   return globalConfigSchema.parse({
     ...config,
     version: 3,

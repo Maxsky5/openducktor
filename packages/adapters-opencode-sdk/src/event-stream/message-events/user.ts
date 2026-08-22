@@ -26,15 +26,16 @@ const resolveUserMessageDisplay = (input: {
   metadata?: SessionMessageMetadata;
   runtime: EventStreamRuntime;
   model?: ReturnType<typeof readMessageModelSelection>;
-}): {
-  displayParts: AgentUserMessageDisplayPart[];
-  matchedQueuedSend: QueuedUserMessageSend | null;
-  visible: string;
-} => {
+}) => {
   const initialVisibleUserMessage = buildVisibleUserMessage({
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : {}),
+    ...(() => {
+      if (input.metadata) {
+        return { metadata: input.metadata };
+      }
+      return {};
+    })(),
   });
   const matchedQueuedSend = takeQueuedUserSendMatch(
     input.runtime,
@@ -44,17 +45,30 @@ const resolveUserMessageDisplay = (input: {
   );
 
   if (!matchedQueuedSend) {
-    return { ...initialVisibleUserMessage, matchedQueuedSend: null };
+    return { ...initialVisibleUserMessage, matchedQueuedSend: null } satisfies {
+      displayParts: AgentUserMessageDisplayPart[];
+      matchedQueuedSend: QueuedUserMessageSend | null;
+      visible: string;
+    };
   }
 
   const finalVisibleUserMessage = buildVisibleUserMessage({
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(input.metadata ? { metadata: input.metadata } : {}),
+    ...(() => {
+      if (input.metadata) {
+        return { metadata: input.metadata };
+      }
+      return {};
+    })(),
     matchedQueuedSend,
   });
 
-  return { ...finalVisibleUserMessage, matchedQueuedSend };
+  return { ...finalVisibleUserMessage, matchedQueuedSend } satisfies {
+    displayParts: AgentUserMessageDisplayPart[];
+    matchedQueuedSend: QueuedUserMessageSend | null;
+    visible: string;
+  };
 };
 
 export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime): void => {
@@ -75,7 +89,12 @@ export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime):
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
       state: nextState,
-      ...(metadata?.model ? { model: metadata.model } : {}),
+      ...(() => {
+        if (metadata?.model) {
+          return { model: metadata.model };
+        }
+        return {};
+      })(),
     });
   }
 };
@@ -108,8 +127,18 @@ export const handleUserMessageUpdated = (
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(currentMetadata ? { metadata: currentMetadata } : {}),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
+    ...(() => {
+      if (currentMetadata) {
+        return { metadata: currentMetadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.messageModel) {
+        return { model: input.messageModel };
+      }
+      return {};
+    })(),
   });
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return true;
@@ -120,8 +149,18 @@ export const handleUserMessageUpdated = (
     session,
     messageId: input.messageId,
     timestamp,
-    ...(currentMetadata ? { metadata: currentMetadata } : {}),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
+    ...(() => {
+      if (currentMetadata) {
+        return { metadata: currentMetadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (input.messageModel) {
+        return { model: input.messageModel };
+      }
+      return {};
+    })(),
     visible,
     displayParts,
   });
@@ -135,9 +174,19 @@ export const handleUserMessageUpdated = (
     state: resolveLiveUserMessageState(runtime, {
       messageId: input.messageId,
       matchedQueuedSend,
-      ...(explicitState ? { explicitState } : {}),
+      ...(() => {
+        if (explicitState) {
+          return { explicitState };
+        }
+        return {};
+      })(),
     }),
-    ...(input.messageModel ? { model: input.messageModel } : {}),
+    ...(() => {
+      if (input.messageModel) {
+        return { model: input.messageModel };
+      }
+      return {};
+    })(),
   });
 };
 
@@ -161,16 +210,36 @@ export const handleUserPartUpdated = (
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(metadata ? { metadata } : {}),
-    ...(metadata?.model ? { model: metadata.model } : {}),
+    ...(() => {
+      if (metadata) {
+        return { metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata?.model) {
+        return { model: metadata.model };
+      }
+      return {};
+    })(),
   });
   if (visible.trim().length > 0 || displayParts.length > 0) {
     persistUserMessageMetadata({
       session,
       messageId,
       timestamp: runtime.now(),
-      ...(metadata ? { metadata } : {}),
-      ...(metadata?.model ? { model: metadata.model } : {}),
+      ...(() => {
+        if (metadata) {
+          return { metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (metadata?.model) {
+          return { model: metadata.model };
+        }
+        return {};
+      })(),
       visible,
       displayParts,
     });
@@ -184,6 +253,11 @@ export const handleUserPartUpdated = (
       messageId,
       matchedQueuedSend,
     }),
-    ...(metadata?.model ? { model: metadata.model } : {}),
+    ...(() => {
+      if (metadata?.model) {
+        return { model: metadata.model };
+      }
+      return {};
+    })(),
   });
 };

@@ -9,12 +9,12 @@ import {
 } from "./app-state-provider";
 import { useWorkspaceState } from "./index";
 
-const HookProbe = ({ hook }: { hook: () => unknown }): ReactElement => {
+const HookProbe = ({ hook }: { hook: () => void }): ReactElement => {
   hook();
   return createElement("div");
 };
 
-const captureHookErrorMessage = (hook: () => unknown): string | null => {
+const captureHookErrorMessage = (hook: () => void): string | null => {
   try {
     renderToStaticMarkup(createElement(HookProbe, { hook }));
     return null;
@@ -25,7 +25,7 @@ const captureHookErrorMessage = (hook: () => unknown): string | null => {
 
 describe("AppStateProvider hooks", () => {
   test("throw clear errors when used outside AppStateProvider", () => {
-    const expectations: Array<{ hook: () => unknown; expected: string }> = [
+    const expectations: Array<{ hook: () => void; expected: string }> = [
       {
         hook: useWorkspaceState,
         expected: "useWorkspaceState must be used inside AppStateProvider",

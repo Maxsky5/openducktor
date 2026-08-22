@@ -112,7 +112,7 @@ describe("config-schemas", () => {
         git: { defaultMergeMethod: "merge_commit" },
       }).success,
     ).toBe(false);
-    expect(settingsSnapshotSaveInputSchema.shape.agentModelFavorites.description).toBe(
+    expect(settingsSnapshotSaveInputSchema["shape"].agentModelFavorites.description).toBe(
       "Echo the current canonical favorites. Change favorites through the narrow favorites command.",
     );
   });
@@ -310,6 +310,7 @@ describe("config-schemas", () => {
     expect(() => resolveHorizontalScrollbarVisibility("system")).toThrow(
       "A supported app platform is required to resolve System default horizontal scrollbar visibility.",
     );
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() => resolveHorizontalScrollbarVisibility("system", "freebsd" as never)).toThrow(
       "Unsupported app platform for horizontal scrollbar visibility: freebsd",
     );
@@ -379,6 +380,7 @@ describe("config-schemas", () => {
       enabled: false,
       executablePath: "/bin/opencode",
     });
+    // SAFETY: This test controls the fixture and supplies `JsonObject` used by this case.
     expect((parsed.agentRuntimes as JsonObject).custom).toEqual({
       enabled: true,
       executablePath: "/bin/custom",

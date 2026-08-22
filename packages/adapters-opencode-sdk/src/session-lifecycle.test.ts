@@ -11,10 +11,12 @@ import {
 import type { SessionRecord } from "./types";
 
 describe("OpencodeSdkAdapter session lifecycle", () => {
+  // SAFETY: This test controls the fixture and supplies `{ sessions: Map<string, SessionRecord> }` used by this case.
   const localSessions = (adapter: OpencodeSdkAdapter): Map<string, SessionRecord> =>
-    (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
+    (adapter as { sessions: Map<string, SessionRecord> }).sessions;
 
   test("subscribeEvents prepares existing session state without loading history or emitting a started event", async () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -37,7 +39,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
                 input: { command: "pwd" },
                 output: "output",
               },
-            } as unknown as Part,
+            } as Part,
           ],
         },
       ],
@@ -59,10 +61,11 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
 
   test("subscribeEvents rolls back partial registration when runtime event subscription fails", async () => {
     const mock = makeMockClient({});
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const unsupportedClient = {
       ...mock.client,
       global: {},
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => unsupportedClient,
       now: () => "2026-02-17T12:00:00Z",
@@ -99,6 +102,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
   });
 
   test("prepared existing session state does not infer subagent correlation from history", async () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -116,7 +120,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as unknown as Part,
+            } as Part,
           ],
         },
         {
@@ -148,7 +152,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
                 },
                 title: "Task",
               },
-            } as unknown as Part,
+            } as Part,
           ],
         },
       ],
@@ -230,6 +234,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
   test("stopSession keeps the local session when runtime abort fails", async () => {
     const mock = makeMockClient({});
     const abortError = new Error("abort failed");
+    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const client = {
       ...mock.client,
       session: {
@@ -239,7 +244,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
           throw abortError;
         },
       },
-    } as unknown as OpencodeClient;
+    } as OpencodeClient;
     const adapter = new OpencodeSdkAdapter({
       createClient: () => client,
       now: () => "2026-02-17T12:00:00Z",

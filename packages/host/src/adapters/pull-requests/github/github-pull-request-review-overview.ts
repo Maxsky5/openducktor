@@ -1,3 +1,4 @@
+import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import type {
   GitProviderRepository,
   PullRequestReviewActivity,
@@ -108,7 +109,7 @@ query PullRequestReviewOverview(
 `;
 
 const requirePositiveNumber = (value: JsonValue | undefined, field: string): number => {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+  if (hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0) {
     return value;
   }
   throw new HostValidationError({
@@ -121,7 +122,7 @@ const normalizeReviewState = (
   state: JsonValue | undefined,
   isDraft: JsonValue | undefined,
 ): PullRequestReviewState => {
-  const normalized = typeof state === "string" ? state.trim().toLowerCase() : "";
+  const normalized = hasRuntimeType(state, "string") ? state.trim().toLowerCase() : "";
   if (isDraft === true && normalized === "open") {
     return "draft";
   }
@@ -139,7 +140,7 @@ const parseComment = (
   field: string,
 ): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
-  const body = typeof payload.body === "string" ? payload.body : "";
+  const body = hasRuntimeType(payload.body, "string") ? payload.body : "";
   if (!body.trim()) {
     return null;
   }
@@ -167,11 +168,11 @@ const parseReviewOutcome = (
   state: JsonValue | undefined,
   field: string,
 ): PullRequestReviewOutcome | null => {
-  if (typeof state !== "string") {
+  if (!hasRuntimeType(state, "string")) {
     throw new HostValidationError({
       field,
       message: `GitHub pull request review state '${field}' is missing or invalid.`,
-      details: { receivedType: typeof state },
+      details: { receivedType: runtimeTypeName(state) },
     });
   }
   switch (state) {
@@ -203,11 +204,11 @@ const parseReview = (
   if (!reviewOutcome) {
     return null;
   }
-  if (typeof payload.body !== "string") {
+  if (!hasRuntimeType(payload.body, "string")) {
     throw new HostValidationError({
       field: `${field}.body`,
       message: `GitHub pull request review body '${field}.body' is missing or invalid.`,
-      details: { receivedType: typeof payload.body },
+      details: { receivedType: runtimeTypeName(payload.body) },
     });
   }
   const author = toNullableGithubObject(payload.author, `${field}.author`);
@@ -303,7 +304,7 @@ const runOverviewGraphql = (
     "-f",
     `query=${PULL_REQUEST_REVIEW_OVERVIEW_QUERY}`,
     ...variables.flatMap(({ name, value }) => [
-      typeof value === "string" ? "-f" : "-F",
+      hasRuntimeType(value, "string") ? "-f" : "-F",
       `${name}=${value}`,
     ]),
   ]).pipe(

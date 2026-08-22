@@ -1,4 +1,4 @@
-import { agentRoleValues } from "@openducktor/contracts";
+import { agentRoleValues, hasRuntimeType } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { JsonValue } from "@openducktor/contracts";
@@ -62,7 +62,7 @@ const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
 
 const readOptionalString = (value: string | null | undefined): string | undefined => {
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     return undefined;
   }
   const trimmed = value.trim();
@@ -142,11 +142,12 @@ export const applyQueryUpdateToNavigationState = (
 
 export const buildAgentStudioSelectionQueryUpdate = (
   params: AgentStudioSessionSelectionQueryParams,
-): AgentStudioQueryUpdate => ({
-  [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
-  [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId ?? undefined,
-  [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
-});
+) =>
+  ({
+    [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId ?? undefined,
+    [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
+  }) satisfies AgentStudioQueryUpdate;
 
 export const buildAgentStudioHref = (params: AgentStudioSessionSelectionQueryParams): string => {
   const searchParams = buildSearchParamsFromNavigationState(new URLSearchParams(), {
@@ -188,6 +189,7 @@ export const hasAgentStudioNavigationSelection = (
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
   let parsed: JsonValue;
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; persisted context is JSON
   } catch (cause) {
     throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
@@ -216,9 +218,24 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
   );
   return {
-    ...(taskId ? { taskId } : {}),
-    ...(role ? { role } : {}),
-    ...(sessionExternalId ? { sessionExternalId } : {}),
+    ...(() => {
+      if (taskId) {
+        return { taskId };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (role) {
+        return { role };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (sessionExternalId) {
+        return { sessionExternalId };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -270,7 +287,7 @@ const parsePersistedContextString = (
     return undefined;
   }
 
-  if (typeof value !== "string") {
+  if (!hasRuntimeType(value, "string")) {
     throw new Error(
       `Failed to parse persisted agent studio context: field "${key}" must be a string.`,
     );

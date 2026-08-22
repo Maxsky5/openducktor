@@ -26,7 +26,12 @@ const registerApproval = (
       requestType: "permission_grant",
       title: "Approve read",
     },
-    ...(fixture.route ? { route: fixture.route } : {}),
+    ...(() => {
+      if (fixture.route) {
+        return { route: fixture.route };
+      }
+      return {};
+    })(),
   });
 
 const registerQuestion = (
@@ -46,7 +51,12 @@ const registerQuestion = (
     },
     questionIds: ["question-item-1"],
     input: { questions: [{ header: "Confirm", question: "Proceed?", options: [] }] },
-    ...(fixture.route ? { route: fixture.route } : {}),
+    ...(() => {
+      if (fixture.route) {
+        return { route: fixture.route };
+      }
+      return {};
+    })(),
   });
 
 const route = (
@@ -54,7 +64,12 @@ const route = (
   childExternalSessionId = "child-thread",
   runtimeId?: string,
 ): CodexSubagentRoute => ({
-  ...(runtimeId ? { runtimeId } : {}),
+  ...(() => {
+    if (runtimeId) {
+      return { runtimeId };
+    }
+    return {};
+  })(),
   parentExternalSessionId,
   childExternalSessionId,
   subagentCorrelationKey: `codex-subagent:${parentExternalSessionId}:${childExternalSessionId}`,
@@ -208,9 +223,10 @@ describe("CodexPendingInputState", () => {
       runtimeId: "runtime-2",
       nativeRequestId: "approval-2",
     });
+    // SAFETY: This test controls the fixture and supplies `ActiveCodexTurn` used by this case.
     const activeTurn = {
       session: { threadId: "thread-1", runtimeId: "runtime-1" },
-    } as unknown as ActiveCodexTurn;
+    } as ActiveCodexTurn;
 
     pendingInput.bindActiveTurn("thread-1", activeTurn);
 
@@ -288,9 +304,10 @@ describe("CodexPendingInputState", () => {
       threadId: "child-thread",
       route: childRoute,
     });
+    // SAFETY: This test controls the fixture and supplies `ActiveCodexTurn` used by this case.
     const activeTurn = {
       session: { threadId: "parent-thread", runtimeId: "runtime-1" },
-    } as unknown as ActiveCodexTurn;
+    } as ActiveCodexTurn;
 
     pendingInput.bindActiveTurn("parent-thread", activeTurn);
 
@@ -304,9 +321,10 @@ describe("CodexPendingInputState", () => {
       threadId: "child-thread",
       route: childRoute,
     });
+    // SAFETY: This test controls the fixture and supplies `ActiveCodexTurn` used by this case.
     const activeParentTurn = {
       session: { threadId: "parent-thread", runtimeId: "runtime-1" },
-    } as unknown as ActiveCodexTurn;
+    } as ActiveCodexTurn;
 
     pendingInput.bindActiveTurn("parent-thread", activeParentTurn);
     pendingInput.clearSession("parent-thread", "runtime-1");

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AppUpdater, Logger, ProgressInfo } from "electron-updater";
 import { ElectronOperationError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
@@ -204,7 +205,7 @@ export const createElectronUpdaterAdapter = ({
       const nativeVersion = nativeResult?.updateInfo.version;
       if (
         !nativeResult?.isUpdateAvailable ||
-        typeof nativeVersion !== "string" ||
+        !hasRuntimeType(nativeVersion, "string") ||
         nativeVersion !== resolvedRelease.version
       ) {
         throw new ElectronOperationError({

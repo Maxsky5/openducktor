@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { taskAssetIdSchema } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
 export type TaskAssetFileOwner = {
@@ -49,7 +49,7 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
 };
 
 const isMissing = (cause: unknown): boolean =>
-  typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+  hasRuntimeType(cause, "object") && cause !== null && "code" in cause && cause.code === "ENOENT";
 
 const existingStat = async (target: string) => {
   try {
@@ -62,8 +62,10 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateOwner = (value: unknown): TaskAssetFileOwner => {
-  if (typeof value !== "object" || value === null) {
+const validateOwner = (
+  value: Parameters<typeof jsonValueSchema.safeParse>[0],
+): TaskAssetFileOwner => {
+  if (!hasRuntimeType(value, "object") || value === null) {
     throw new Error("Task asset owner record must be an object.");
   }
   // SAFETY: the owner record shape is validated field-by-field below; the record is re-exported
@@ -79,6 +81,7 @@ const validateOwner = (value: unknown): TaskAssetFileOwner => {
   ) {
     throw new Error("Task asset owner record is invalid.");
   }
+  // SAFETY: The surrounding boundary constructs or validates every member required by `TaskAssetFileOwner`.
   return owner as TaskAssetFileOwner;
 };
 
@@ -154,14 +157,16 @@ export const createTaskAssetFileOwnership = (
       await link(publication, marker);
     } catch (cause) {
       if (
-        typeof cause !== "object" ||
+        !hasRuntimeType(cause, "object") ||
         cause === null ||
         !("code" in cause) ||
         cause.code !== "EEXIST"
       ) {
         throw cause;
       }
-      const existing = validateOwner(JSON.parse(await readFile(marker, "utf8")));
+      const existing = validateOwner(
+        jsonValueSchema.parse(JSON.parse(await readFile(marker, "utf8"))),
+      );
       if (
         existing.instanceId !== dependencies.owner.instanceId ||
         existing.processId !== dependencies.owner.processId ||
@@ -196,7 +201,9 @@ export const createTaskAssetFileOwnership = (
         throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
       }
       const owner = validateOwner(
-        JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8")),
+        jsonValueSchema.parse(
+          JSON.parse(await readFile(path.join(ownersRoot, entry.name), "utf8")),
+        ),
       );
       if (owner.instanceId !== instanceId) {
         throw new Error("Task asset owner record ID does not match its filename.");

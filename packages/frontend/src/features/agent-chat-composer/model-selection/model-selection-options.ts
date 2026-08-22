@@ -41,7 +41,12 @@ const toAgentProfileOptionsWithSelectedFallback = (
         value: fallbackAgent,
         label: fallbackAgent,
         description: "Current session profile",
-        ...(fallbackAgentColor ? { accentColor: fallbackAgentColor } : {}),
+        ...(() => {
+          if (fallbackAgentColor) {
+            return { accentColor: fallbackAgentColor };
+          }
+          return {};
+        })(),
       },
     ];
   }
@@ -84,11 +89,9 @@ const toVariantOptions = (
   }));
 };
 
-const toAgentAccentColorsByProfileId = (
-  selectionCatalog: AgentModelCatalog | null,
-): Record<string, string> => {
+const toAgentAccentColorsByProfileId = (selectionCatalog: AgentModelCatalog | null) => {
   if (!selectionCatalog) {
-    return {};
+    return {} satisfies Record<string, string>;
   }
   const map: Record<string, string> = {};
   for (const descriptor of selectionCatalog.profiles ?? []) {
@@ -102,7 +105,7 @@ const toAgentAccentColorsByProfileId = (
       map[descriptorId] = color;
     }
   }
-  return map;
+  return map satisfies Record<string, string>;
 };
 
 export const resolveModelSelectionOptions = ({

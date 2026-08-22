@@ -21,6 +21,7 @@ const summary = (): TerminalSummary => ({
   exit: null,
 });
 
+// SAFETY: This test controls the fixture and supplies `TerminalPtyHandle` used by this case.
 const handle = {} as TerminalPtyHandle;
 
 const makeSession = async () => {

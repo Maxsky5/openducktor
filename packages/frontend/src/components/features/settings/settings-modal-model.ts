@@ -60,7 +60,12 @@ export const ensureDraftAgentDefault = (
     | undefined,
 ): RepoAgentDefaultInput => {
   return {
-    ...(value?.runtimeKind ? { runtimeKind: value.runtimeKind } : {}),
+    ...(() => {
+      if (value?.runtimeKind) {
+        return { runtimeKind: value.runtimeKind };
+      }
+      return {};
+    })(),
     providerId: value?.providerId ?? "",
     modelId: value?.modelId ?? "",
     variant: value?.variant ?? "",
@@ -263,9 +268,8 @@ const formatPlaceholders = (placeholders: string[]): string => {
   return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
 };
 
-export const buildPromptOverrideValidationErrors = (
-  overrides: RepoPromptOverrides,
-): PromptOverrideValidationErrors => {
+// SAFETY: Object.entries reads this RepoPromptOverrides object, so each tuple keeps its indexed key and value types.
+export const buildPromptOverrideValidationErrors = (overrides: RepoPromptOverrides) => {
   const errors: PromptOverrideValidationErrors = {};
 
   for (const [templateId, override] of Object.entries(overrides) as Array<
@@ -298,5 +302,5 @@ export const buildPromptOverrideValidationErrors = (
     errors[templateId] = messages.join(" ");
   }
 
-  return errors;
+  return errors satisfies PromptOverrideValidationErrors;
 };

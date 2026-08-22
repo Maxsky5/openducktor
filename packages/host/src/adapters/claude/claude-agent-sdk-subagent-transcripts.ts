@@ -23,6 +23,7 @@ export const parseClaudeTranscriptTarget = (externalSessionId: string): ClaudeTr
   if (!sessionId || taskIds.some((taskId) => !taskId)) {
     return { sessionId: externalSessionId };
   }
+  // SAFETY: The runtime adapter builds this value from the contract fields required by `string`.
   return {
     sessionId,
     subpath: claudeSubagentSubpath(taskIds.at(-1) as string),

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { toAssistantMessageMeta, toSessionContextUsage } from "../support/assistant-meta";
@@ -66,7 +67,7 @@ const resolveFinalAssistantSnapshot = ({
 }) => {
   const baseContextUsage = toSessionContextUsage(current, event.totalTokens, model ?? undefined);
   const nextContextUsage =
-    baseContextUsage && typeof event.contextWindow === "number"
+    baseContextUsage && hasRuntimeType(event.contextWindow, "number")
       ? { ...baseContextUsage, contextWindow: event.contextWindow }
       : baseContextUsage;
   const resolvedContextUsage = shouldPreserveContextUsage
@@ -81,10 +82,10 @@ const resolveFinalAssistantSnapshot = ({
       model ?? undefined,
     ),
   };
-  if (typeof resolvedContextUsage?.contextWindow === "number") {
+  if (hasRuntimeType(resolvedContextUsage?.contextWindow, "number")) {
     assistantMeta.contextWindow = resolvedContextUsage.contextWindow;
   }
-  if (typeof resolvedContextUsage?.outputLimit === "number") {
+  if (hasRuntimeType(resolvedContextUsage?.outputLimit, "number")) {
     assistantMeta.outputLimit = resolvedContextUsage.outputLimit;
   }
 
@@ -158,7 +159,12 @@ export const handleAssistantMessage = (
             meta: {
               ...nextSnapshot.assistantMessage.meta,
               sourceMessageId: event.messageId,
-              ...(sourceTextMessage.meta.partId ? { partId: sourceTextMessage.meta.partId } : {}),
+              ...(() => {
+                if (sourceTextMessage.meta.partId) {
+                  return { partId: sourceTextMessage.meta.partId };
+                }
+                return {};
+              })(),
             },
           }
         : nextSnapshot.assistantMessage;
@@ -324,8 +330,18 @@ const settleTerminalMessages = (
   },
 ) => {
   const settledMessages = settleDanglingTodoToolMessages(session, timestamp, {
-    ...(options?.outcome ? { outcome: options.outcome } : {}),
-    ...(options?.errorMessage ? { errorMessage: options.errorMessage } : {}),
+    ...(() => {
+      if (options?.outcome) {
+        return { outcome: options.outcome };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (options?.errorMessage) {
+        return { errorMessage: options.errorMessage };
+      }
+      return {};
+    })(),
   });
 
   if (!options?.appendUserStoppedNotice) {

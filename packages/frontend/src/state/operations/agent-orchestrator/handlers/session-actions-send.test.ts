@@ -34,7 +34,12 @@ const acceptedUserMessage = (
   message: serializeAgentUserMessagePartsToText(input.parts),
   parts: [],
   state: "read",
-  ...(input.model ? { model: input.model } : {}),
+  ...(() => {
+    if (input.model) {
+      return { model: input.model };
+    }
+    return {};
+  })(),
 });
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
@@ -377,7 +382,12 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           parts: confirmedEvent.parts,
           state: confirmedEvent.state,
           timestamp: "2026-02-22T08:00:06.000Z",
-          ...(confirmedEvent.model ? { model: confirmedEvent.model } : {}),
+          ...(() => {
+            if (confirmedEvent.model) {
+              return { model: confirmedEvent.model };
+            }
+            return {};
+          })(),
         });
       }
 

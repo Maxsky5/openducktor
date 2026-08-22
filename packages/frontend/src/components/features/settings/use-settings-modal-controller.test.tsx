@@ -10,6 +10,7 @@ import {
   type RuntimeKind,
   type SettingsSnapshot,
   type WorkspaceRecord,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -26,6 +27,18 @@ import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
+
+interface AttemptCountByKindContract extends Record<RuntimeKind, number> {}
+
+interface InitialValidationByKindContract extends Record<
+  RuntimeKind,
+  ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
+> {}
+
+interface RepeatedValidationByKindContract extends Record<
+  RuntimeKind,
+  ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
+> {}
 
 enableReactActEnvironment();
 
@@ -210,14 +223,17 @@ const createHookHarness = (
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
         onRuntimeAvailabilityError: () => {},
-        ...(options && "requiredRepoPath" in options
-          ? {
+        ...(() => {
+          if (options && "requiredRepoPath" in options) {
+            return {
               workspaceSelectionPolicy: {
                 kind: "required" as const,
                 repoPath: options.requiredRepoPath ?? null,
               },
-            }
-          : {}),
+            };
+          }
+          return {};
+        })(),
       }),
     {
       isOpen: open,
@@ -363,6 +379,7 @@ describe("useSettingsModalController", () => {
       if (input.mode === "discover") {
         return { runtimes: [] };
       }
+      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
       const kinds = Object.keys(input.paths) as RuntimeKind[];
       requests.push(kinds);
       return {
@@ -517,23 +534,17 @@ describe("useSettingsModalController", () => {
   test("fails closed when runtime executable validation cannot load", async () => {
     const originalCheck = host.runtimeExecutablesCheck;
     const requestedKinds: RuntimeKind[] = [];
-    const attemptCountByKind: Record<RuntimeKind, number> = {
+    const attemptCountByKind: AttemptCountByKindContract = {
       opencode: 0,
       codex: 0,
       claude: 0,
     };
-    const initialValidationByKind: Record<
-      RuntimeKind,
-      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-    > = {
+    const initialValidationByKind: InitialValidationByKindContract = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
     };
-    const repeatedValidationByKind: Record<
-      RuntimeKind,
-      ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-    > = {
+    const repeatedValidationByKind: RepeatedValidationByKindContract = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
@@ -561,7 +572,7 @@ describe("useSettingsModalController", () => {
           initialValidationByKind[kind].reject(new Error("Executable validation failed"));
         }
       });
-      await harness.waitFor((state) => typeof state.runtimeExecutablesError === "string");
+      await harness.waitFor((state) => hasRuntimeType(state.runtimeExecutablesError, "string"));
       await harness.run(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -1092,6 +1103,7 @@ describe("useSettingsModalController", () => {
       await harness.waitFor((state) => state.snapshotDraft !== null);
 
       await harness.run((state) => {
+        // SAFETY: This test controls the fixture and supplies `NonNullable<typeof repoConfig.agentDefaults.spec>` used by this case.
         state.updateSelectedRepoConfig((repoConfig) => ({
           ...repoConfig,
           agentDefaults: {
@@ -1101,7 +1113,7 @@ describe("useSettingsModalController", () => {
               modelId: "gpt-5",
               variant: "",
               profileId: "",
-            } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>,
+            } as NonNullable<typeof repoConfig.agentDefaults.spec>,
           },
         }));
       });

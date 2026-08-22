@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import {
   applyClaudeTaskToolResult,
@@ -37,10 +38,7 @@ export const projectClaudeCompletedToolResult = ({
   startedAtMs,
   state,
   tool,
-}: ProjectClaudeCompletedToolResultInput): {
-  part: CompletedToolPart;
-  todos: ReturnType<typeof applyClaudeTaskToolResult>;
-} => {
+}: ProjectClaudeCompletedToolResultInput) => {
   const todos = applyClaudeTaskToolResult({ input, isError, raw, state, tool });
   const todoPresentation = todos ? claudeTodoToolPresentation(todos) : null;
   return {
@@ -54,11 +52,34 @@ export const projectClaudeCompletedToolResult = ({
       tool,
       ...(todoPresentation ?? {
         text: resultText,
-        ...(input ? { input } : {}),
-        ...(preview ? { preview } : {}),
+        ...(() => {
+          if (input) {
+            return { input };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (preview) {
+            return { preview };
+          }
+          return {};
+        })(),
       }),
-      ...(metadata ? { metadata } : {}),
-      ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+      ...(() => {
+        if (metadata) {
+          return { metadata };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (hasRuntimeType(startedAtMs, "number")) {
+          return { startedAtMs };
+        }
+        return {};
+      })(),
     }),
+  } satisfies {
+    part: CompletedToolPart;
+    todos: ReturnType<typeof applyClaudeTaskToolResult>;
   };
 };

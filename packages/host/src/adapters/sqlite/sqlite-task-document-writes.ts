@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { QaReportVerdict, TaskMetadataDocument } from "@openducktor/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -39,7 +40,7 @@ const nextDocumentRevision = (
     if (revision === null) {
       return 1;
     }
-    if (typeof revision !== "number") {
+    if (!hasRuntimeType(revision, "number")) {
       return yield* new SqliteTaskStoreDataError({
         message: "SQLite task document revision must be a number.",
         field: "revision",

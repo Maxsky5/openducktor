@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
@@ -124,7 +125,7 @@ const createResizeObserverCleanup = (
   container: HTMLElement,
   binding: TerminalBinding,
 ): (() => void) => {
-  if (typeof ResizeObserver === "undefined") {
+  if (hasRuntimeType(globalThis.ResizeObserver, "undefined")) {
     return () => {};
   }
 
@@ -141,7 +142,7 @@ const createThemeObserverCleanup = (
   container: HTMLElement,
   binding: TerminalBinding,
 ): (() => void) => {
-  if (typeof MutationObserver === "undefined") {
+  if (hasRuntimeType(globalThis.MutationObserver, "undefined")) {
     return () => {};
   }
 

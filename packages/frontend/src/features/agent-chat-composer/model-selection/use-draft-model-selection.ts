@@ -84,10 +84,7 @@ export const useDraftModelSelectionState = ({
   defaultSelection: AgentModelSelection | null;
   isDefaultSelectionReady: boolean;
   selectionKey: string;
-}): {
-  draftSelection: AgentModelSelection | null;
-  applyDraftSelection: (selection: AgentModelSelection | null) => void;
-} => {
+}) => {
   const [draftState, dispatchDraftState] = useReducer(
     draftModelSelectionReducer,
     { contextKey },
@@ -122,5 +119,8 @@ export const useDraftModelSelectionState = ({
   return {
     draftSelection,
     applyDraftSelection,
+  } satisfies {
+    draftSelection: AgentModelSelection | null;
+    applyDraftSelection: (selection: AgentModelSelection | null) => void;
   };
 };

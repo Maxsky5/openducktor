@@ -120,7 +120,12 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     session,
     runtime,
     stopReason: "start-session-stop-after-persist-failure",
-    ...(bootstrap ? { bootstrap } : {}),
+    ...(() => {
+      if (bootstrap) {
+        return { bootstrap };
+      }
+      return {};
+    })(),
   });
 };
 

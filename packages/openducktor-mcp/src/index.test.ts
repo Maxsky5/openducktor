@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import type { RegisteredToolName } from "./listed-tool-schema";
 import { createMcpServer } from "./mcp-server";
-import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
 
 type RecordedRequest = {
   url: string;
@@ -93,6 +93,7 @@ const taskSummaryPayload = {
 
 const startMockBridge = async (): Promise<{ url: string; requests: RecordedRequest[] }> => {
   const requests: RecordedRequest[] = [];
+  // SAFETY: This test controls the fixture and supplies `{ taskId?: unknown }` used by this case.
   const server = createServer(async (request, response) => {
     const url = request.url ?? "/";
 
@@ -159,7 +160,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       const body = await readJsonBody(request);
       requests.push({ url, body });
       if (
-        typeof body === "object" &&
+        hasRuntimeType(body, "object") &&
         body !== null &&
         (body as { taskId?: unknown }).taskId === "missing-task"
       ) {
@@ -177,7 +178,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         return;
       }
       if (
-        typeof body === "object" &&
+        hasRuntimeType(body, "object") &&
         body !== null &&
         (body as { taskId?: unknown }).taskId === "bad-response"
       ) {
@@ -246,7 +247,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
   });
 
   const address = server.address();
-  if (!address || typeof address === "string") {
+  if (!address || hasRuntimeType(address, "string")) {
     throw new Error("Mock bridge failed to bind to a TCP port.");
   }
 
@@ -257,6 +258,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
 };
 
 const parseAllowedToolNames = (allowedTools?: string): RegisteredToolName[] | undefined => {
+  // SAFETY: This test controls the fixture and supplies `RegisteredToolName[] | undefined` used by this case.
   return allowedTools
     ?.split(",")
     .map((toolName) => toolName.trim())
@@ -271,8 +273,18 @@ const createTransport = async (
   const server = await createMcpServer(
     {
       hostUrl,
-      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
-      ...(options.forbidWorkspaceIdInput ? { forbidWorkspaceIdInput: true } : {}),
+      ...(() => {
+        if (options.workspaceId) {
+          return { workspaceId: options.workspaceId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (options.forbidWorkspaceIdInput) {
+          return { forbidWorkspaceIdInput: true };
+        }
+        return {};
+      })(),
     },
     {
       allowedToolNames: parseAllowedToolNames(options.allowedTools),
@@ -283,12 +295,15 @@ const createTransport = async (
   return clientTransport;
 };
 
+// SAFETY: This test drives the failure path that supplies `object` before this assertion.
 const requireContentToolResult = (result: JsonValue | undefined): ContentToolResult => {
+  // SAFETY: This test controls the fixture and supplies `object` used by this case.
   expect("content" in (result as object)).toBe(true);
   if (!("content" in (result as object))) {
     throw new Error("Expected callTool() to return a content-based tool result.");
   }
 
+  // SAFETY: This test controls the fixture and supplies `ContentToolResult` used by this case.
   return result as ContentToolResult;
 };
 
@@ -300,8 +315,10 @@ const expectToolError = (
   // SAFETY: MCP text blocks contain JSON serialized by the server under test.
   const textPayload = JSON.parse(result.content[0]?.text ?? "null") as JsonValue;
   expect(textPayload).toMatchObject({ ok: false });
+  // SAFETY: This test controls the fixture and supplies `{ error?: JsonValue }` used by this case.
   const error = (textPayload as { error?: JsonValue }).error;
   expect(error).toBeTruthy();
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   return error as {
     code?: JsonValue;
     message?: JsonValue;
@@ -314,9 +331,11 @@ const readToolInputProperties = (
   toolsResult: JsonValue | undefined,
   toolName: string,
 ): Record<string, JsonValue> => {
+  // SAFETY: This test controls the fixture and supplies `{ tools?: Array<{ name?: string; inputSchema?: JsonValue }> }` used by this case.
   const tools = (toolsResult as { tools?: Array<{ name?: string; inputSchema?: JsonValue }> })
     .tools;
   const tool = tools?.find((entry) => entry.name === toolName);
+  // SAFETY: This test controls the fixture and supplies `{ properties?: Record<string, JsonValue> } | undefined` used by this case.
   const properties = (tool?.inputSchema as { properties?: Record<string, JsonValue> } | undefined)
     ?.properties;
   if (!properties) {
@@ -796,6 +815,7 @@ describe("MCP server tool results", () => {
       await client.connect(transport);
       const tools = await client.listTools();
 
+      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       const setPlanTool = (
         tools as { tools?: Array<{ name?: string; description?: string; inputSchema?: JsonValue }> }
       ).tools?.find((entry) => entry.name === "odt_set_plan");

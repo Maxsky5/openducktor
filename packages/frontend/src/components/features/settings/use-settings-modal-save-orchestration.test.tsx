@@ -516,12 +516,13 @@ describe("useSettingsModalSaveOrchestration", () => {
     if (!repoConfig) {
       throw new Error("Expected repo settings fixture");
     }
+    // SAFETY: This test controls the fixture and supplies `NonNullable<typeof repoConfig.agentDefaults.spec>` used by this case.
     repoConfig.agentDefaults.spec = {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "",
       profileId: "",
-    } as unknown as NonNullable<typeof repoConfig.agentDefaults.spec>;
+    } as NonNullable<typeof repoConfig.agentDefaults.spec>;
     const harness = createHookHarness(
       createArgs(
         {

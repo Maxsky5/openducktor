@@ -64,8 +64,18 @@ export function TaskWorkflowActionGroup({
   const [isMenuOpen, setMenuOpen] = useState(false);
   const resolveActionOptions = {
     hasActiveSession,
-    ...(activeSessionRole ? { activeSessionRole } : {}),
-    ...(historicalSessionRoles ? { historicalSessionRoles } : {}),
+    ...(() => {
+      if (activeSessionRole) {
+        return { activeSessionRole };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (historicalSessionRoles) {
+        return { historicalSessionRoles };
+      }
+      return {};
+    })(),
   };
   const { primaryAction, secondaryActions, allActions } = includeActions
     ? resolveTaskCardActions(task, { include: includeActions, ...resolveActionOptions })

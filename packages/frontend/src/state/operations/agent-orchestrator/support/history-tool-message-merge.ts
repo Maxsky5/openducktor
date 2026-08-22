@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { toToolMessageId } from "./chat-message-ids";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
@@ -43,7 +44,7 @@ const toolStatusRank = (status: ToolStatus): number => {
 };
 
 const trimToolCallId = (callId: string | undefined): string =>
-  typeof callId === "string" ? callId.trim() : "";
+  hasRuntimeType(callId, "string") ? callId.trim() : "";
 
 const shouldPreserveCurrentToolMessage = (
   loadedStatus: ToolStatus,
@@ -81,7 +82,12 @@ const preserveCurrentToolWithLoadedIdentity = (
   const canonicalId = toToolMessageId({
     messageId: scopedId.messageId,
     partId: loadedMessage.meta.partId,
-    ...(canonicalCallId ? { callId: canonicalCallId } : {}),
+    ...(() => {
+      if (canonicalCallId) {
+        return { callId: canonicalCallId };
+      }
+      return {};
+    })(),
   });
 
   return {
@@ -112,18 +118,33 @@ export const mergeToolMessages = (
 
   const nextMeta = {
     ...loadedMessage.meta,
-    ...(loadedMessage.meta.observedStartedAtMs === undefined &&
-    currentMessage.meta.observedStartedAtMs !== undefined
-      ? { observedStartedAtMs: currentMessage.meta.observedStartedAtMs }
-      : {}),
-    ...(loadedMessage.meta.observedEndedAtMs === undefined &&
-    currentMessage.meta.observedEndedAtMs !== undefined
-      ? { observedEndedAtMs: currentMessage.meta.observedEndedAtMs }
-      : {}),
-    ...(loadedMessage.meta.inputReadyAtMs === undefined &&
-    currentMessage.meta.inputReadyAtMs !== undefined
-      ? { inputReadyAtMs: currentMessage.meta.inputReadyAtMs }
-      : {}),
+    ...(() => {
+      if (
+        loadedMessage.meta.observedStartedAtMs === undefined &&
+        currentMessage.meta.observedStartedAtMs !== undefined
+      ) {
+        return { observedStartedAtMs: currentMessage.meta.observedStartedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (
+        loadedMessage.meta.observedEndedAtMs === undefined &&
+        currentMessage.meta.observedEndedAtMs !== undefined
+      ) {
+        return { observedEndedAtMs: currentMessage.meta.observedEndedAtMs };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (
+        loadedMessage.meta.inputReadyAtMs === undefined &&
+        currentMessage.meta.inputReadyAtMs !== undefined
+      ) {
+        return { inputReadyAtMs: currentMessage.meta.inputReadyAtMs };
+      }
+      return {};
+    })(),
   };
 
   return applyPreferredMessageTimestamp(

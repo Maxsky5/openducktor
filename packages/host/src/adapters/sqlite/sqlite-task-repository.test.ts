@@ -123,6 +123,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(readDrizzleMigrationRows(databasePath)).toHaveLength(2);
     const database = new Database(databasePath);
     try {
+      // SAFETY: This test controls the fixture and supplies `{ journal_mode: string }` used by this case.
       expect(
         (database.query("PRAGMA journal_mode;").get() as { journal_mode: string }).journal_mode,
       ).toBe("wal");
@@ -208,6 +209,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     await Effect.runPromise(store.deleteTask({ repoPath, taskId: task.id, deleteSubtasks: false }));
     const verification = new Database(databasePath);
     try {
+      // SAFETY: This test controls the fixture and supplies `{ count: number; }` used by this case.
       const row = verification.query("SELECT count(*) AS count FROM task_assets").get() as {
         count: number;
       };

@@ -6,6 +6,8 @@ import {
 } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 
+type ZodSchemaFields = Parameters<typeof z.object>[0];
+
 export const agentSessionStatusSchema = z.enum(["starting", "running", "idle", "error", "stopped"]);
 export type AgentSessionStatus = z.infer<typeof agentSessionStatusSchema>;
 
@@ -103,7 +105,7 @@ export const agentSessionQuestionRequestSchema = z.object({
 });
 export type AgentSessionQuestionRequest = z.infer<typeof agentSessionQuestionRequestSchema>;
 
-const agentSessionRecordShape = {
+const agentSessionRecordFields = {
   externalSessionId: nonEmptyStringSchema,
   role: agentSessionRoleSchema,
   startedAt: z.string(),
@@ -113,9 +115,9 @@ const agentSessionRecordShape = {
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),
   ),
-} satisfies z.ZodRawShape;
+} satisfies ZodSchemaFields;
 
-export const agentSessionRecordSchema = z.object(agentSessionRecordShape);
+export const agentSessionRecordSchema = z.object(agentSessionRecordFields);
 export type AgentSessionRecord = z.infer<typeof agentSessionRecordSchema>;
 export type AgentSessionIdentity = Pick<
   AgentSessionRecord,

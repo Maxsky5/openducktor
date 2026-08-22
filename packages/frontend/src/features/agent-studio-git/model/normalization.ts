@@ -23,13 +23,7 @@ const toGitConflict = (
   };
 };
 
-const toUpstreamState = (
-  upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
-): {
-  upstreamAheadBehind: CommitsAheadBehind | null;
-  upstreamStatus: "tracking" | "untracked" | "error";
-  error: string | null;
-} => {
+const toUpstreamState = (upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"]) => {
   if (upstreamAheadBehind.outcome === "tracking") {
     return {
       upstreamAheadBehind: {
@@ -38,6 +32,10 @@ const toUpstreamState = (
       },
       upstreamStatus: "tracking",
       error: null,
+    } satisfies {
+      upstreamAheadBehind: CommitsAheadBehind | null;
+      upstreamStatus: "tracking" | "untracked" | "error";
+      error: string | null;
     };
   }
 
@@ -49,6 +47,10 @@ const toUpstreamState = (
       },
       upstreamStatus: "untracked",
       error: null,
+    } satisfies {
+      upstreamAheadBehind: CommitsAheadBehind | null;
+      upstreamStatus: "tracking" | "untracked" | "error";
+      error: string | null;
     };
   }
 
@@ -56,6 +58,10 @@ const toUpstreamState = (
     upstreamAheadBehind: null,
     upstreamStatus: "error",
     error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
+  } satisfies {
+    upstreamAheadBehind: CommitsAheadBehind | null;
+    upstreamStatus: "tracking" | "untracked" | "error";
+    error: string | null;
   };
 };
 

@@ -24,16 +24,19 @@ if (
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const hostManifestPath = path.join(repoRoot, "packages/host/package.json");
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `PackageManifest` at this boundary.
 const hostManifest = JSON.parse(readFileSync(hostManifestPath, "utf8")) as PackageManifest;
 const opencodeAdapterManifestPath = path.join(
   repoRoot,
   "packages/adapters-opencode-sdk/package.json",
 );
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `PackageManifest` at this boundary.
 const opencodeAdapterManifest = JSON.parse(
   readFileSync(opencodeAdapterManifestPath, "utf8"),
 ) as PackageManifest;
 const packageRoot = path.join(repoRoot, "packages/openducktor-web");
 const manifestPath = path.join(packageRoot, "package.json");
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `PackageManifest` at this boundary.
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest;
 const runtimeDependencySources = [
   {
@@ -47,6 +50,7 @@ const runtimeDependencySources = [
     manifestPath: opencodeAdapterManifestPath,
   },
 ] as const;
+// SAFETY: The surrounding boundary constructs or validates every member required by `Record<(typeof runtimeDependencySources)[number]["name"], string>`.
 const allowedRuntimeDependencies = Object.fromEntries(
   runtimeDependencySources.map(({ name, manifest: sourceManifest, manifestPath: sourcePath }) => {
     const dependencyVersion = sourceManifest.dependencies?.[name];

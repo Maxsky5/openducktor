@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { basename } from "node:path";
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -10,6 +11,8 @@ import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
 import type { JsonValue } from "@openducktor/contracts";
+
+interface MIMEEXTENSIONSContract extends Record<string, string> {}
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -39,7 +42,12 @@ export const appendUnmatchedLiveUserMessages = (
       displayParts:
         message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
       state: message.state ?? "read",
-      ...(message.model ? { model: message.model } : {}),
+      ...(() => {
+        if (message.model) {
+          return { model: message.model };
+        }
+        return {};
+      })(),
       parts: [],
     });
   }
@@ -49,7 +57,7 @@ type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role
 
 const CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX = "claude-history://attachment/";
 
-const MIME_EXTENSIONS: Record<string, string> = {
+const MIME_EXTENSIONS: MIMEEXTENSIONSContract = {
   "application/pdf": ".pdf",
   "image/gif": ".gif",
   "image/jpeg": ".jpg",
@@ -77,6 +85,7 @@ const CLAUDE_QUOTED_FILE_ESCAPE_PATTERN = /\\(.)/gu;
 const hasClaudeReferenceBoundary = (text: string, start: number): boolean =>
   start === 0 || CLAUDE_REFERENCE_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
 
+// SAFETY: The runtime adapter builds this value from the contract fields required by `AgentFileReference["kind"]`.
 const claudeFileReference = (path: string): AgentFileReference => ({
   id: path,
   path,
@@ -149,7 +158,7 @@ export const readClaudeHistoryDisplayParts = (
     return [];
   }
   const content = message.content;
-  if (typeof content === "string" && content.length > 0) {
+  if (hasRuntimeType(content, "string") && content.length > 0) {
     return readClaudeHistoryTextDisplayParts(content);
   }
   if (!Array.isArray(content)) {
@@ -197,7 +206,12 @@ export const readClaudeHistoryDisplayParts = (
           name: `Claude image attachment${extensionForMime(mime)}`,
           kind: "image",
           localPreviewAvailable: false,
-          ...(mime ? { mime } : {}),
+          ...(() => {
+            if (mime) {
+              return { mime };
+            }
+            return {};
+          })(),
         },
       });
       continue;

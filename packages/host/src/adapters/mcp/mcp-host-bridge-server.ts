@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import {
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   type WorkspaceScopedOdtToolName,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
@@ -56,26 +57,25 @@ type McpHostBridgeStartup = {
 };
 
 type BridgeHttpResponse = {
+  readonly body: string | undefined;
   readonly statusCode: number;
-  readonly payload: unknown;
 };
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const workspaceScopedToolNames = new Set<string>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
 
-const bridgeHttpResponse = (statusCode: number, payload: unknown): BridgeHttpResponse => ({
+const bridgeHttpResponse = <Payload>(statusCode: number, payload: Payload): BridgeHttpResponse => ({
+  body: JSON.stringify(payload),
   statusCode,
-  payload,
 });
 
 const bridgeErrorResponse = (cause: unknown): BridgeHttpResponse =>
   bridgeHttpResponse(400, bridgeErrorPayload(cause, errorMessage(cause)));
 
-const sendJson = (response: ServerResponse, { statusCode, payload }: BridgeHttpResponse): void => {
+const sendJson = (response: ServerResponse, { body, statusCode }: BridgeHttpResponse): void => {
   if (response.headersSent || response.writableEnded || response.destroyed) {
     return;
   }
-  const body = JSON.stringify(payload);
   if (response.headersSent || response.writableEnded || response.destroyed) {
     return;
   }
@@ -143,7 +143,7 @@ const listen = (server: Server): Effect.Effect<number, HostOperationError> =>
     try {
       server.listen(0, "127.0.0.1", () => {
         const address = server.address();
-        if (!address || typeof address === "string") {
+        if (!address || hasRuntimeType(address, "string")) {
           closeThenFinish(
             Effect.fail(
               new HostOperationError({
@@ -154,6 +154,7 @@ const listen = (server: Server): Effect.Effect<number, HostOperationError> =>
           );
           return;
         }
+        // SAFETY: The preceding runtime guard establishes `AddressInfo` before this assertion.
         finish(Effect.succeed((address as AddressInfo).port));
       });
     } catch (error) {
@@ -226,6 +227,7 @@ const createBridgeRequestHandler =
         );
       }
 
+      // SAFETY: The preceding runtime guard establishes `WorkspaceScopedOdtToolName` before this assertion.
       return bridgeHttpResponse(
         200,
         yield* bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),

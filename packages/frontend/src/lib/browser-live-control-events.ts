@@ -31,7 +31,12 @@ export function browserLiveControlEvent(
   return {
     __openducktorBrowserLive: true,
     kind,
-    ...(detail !== undefined ? { message: detail } : {}),
+    ...(() => {
+      if (detail !== undefined) {
+        return { message: detail };
+      }
+      return {};
+    })(),
   };
 }
 
@@ -42,6 +47,7 @@ export const isBrowserLiveControlEvent = (
     return false;
   }
 
+  // SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, JsonValue>`.
   const record = payload as Record<string, JsonValue>;
   if (record.__openducktorBrowserLive !== true) {
     return false;

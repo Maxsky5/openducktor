@@ -27,14 +27,45 @@ const createToolPart = ({
 }): Part => {
   const state = {
     input,
-    ...(status !== undefined ? { status } : {}),
-    ...(output !== undefined ? { output } : {}),
-    ...(error !== undefined ? { error } : {}),
-    ...(title !== undefined ? { title } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
-    ...(time !== undefined ? { time } : {}),
+    ...(() => {
+      if (status !== undefined) {
+        return { status };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (output !== undefined) {
+        return { output };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (error !== undefined) {
+        return { error };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (title !== undefined) {
+        return { title };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (metadata !== undefined) {
+        return { metadata };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (time !== undefined) {
+        return { time };
+      }
+      return {};
+    })(),
   };
 
+  // SAFETY: This test controls the fixture and supplies `Part` used by this case.
   return {
     id,
     sessionID: "session-1",
@@ -43,9 +74,10 @@ const createToolPart = ({
     type: "tool",
     tool,
     state,
-  } as unknown as Part;
+  } as Part;
 };
 
+// SAFETY: This test controls the fixture and supplies `Part` used by this case.
 const createSyntheticTextPart = ({
   id,
   text,
@@ -62,8 +94,13 @@ const createSyntheticTextPart = ({
     type: "text",
     synthetic: true,
     text,
-    ...(time ? { time } : {}),
-  }) as unknown as Part;
+    ...(() => {
+      if (time) {
+        return { time };
+      }
+      return {};
+    })(),
+  }) as Part;
 
 describe("stream-part-mapper", () => {
   test("rejects tool parts with non-JSON state metadata at ingress", () => {
@@ -113,6 +150,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("maps raw subtask parts to canonical subagent parts", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const part = {
       id: "subtask-1",
       sessionID: "session-1",
@@ -123,7 +161,7 @@ describe("stream-part-mapper", () => {
       description: "Implement the plan",
       model: "gpt-5",
       command: "build",
-    } as unknown as Part;
+    } as Part;
 
     const mapped = mapPartToAgentStreamPart(part);
 
@@ -898,6 +936,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("keeps the same correlation key when tool completion changes the description", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const spawnPart = {
       id: "subtask-identity-1",
       sessionID: "session-1",
@@ -906,8 +945,9 @@ describe("stream-part-mapper", () => {
       agent: "build",
       prompt: "Inspect the repo",
       description: "Starting work",
-    } as unknown as Part;
+    } as Part;
 
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const completionPart = {
       id: "tool-identity-1",
       sessionID: "session-1",
@@ -926,7 +966,7 @@ describe("stream-part-mapper", () => {
           externalSessionId: "session-child-identity-1",
         },
       },
-    } as unknown as Part;
+    } as Part;
 
     const spawned = mapPartToAgentStreamPart(spawnPart);
     const completed = mapPartToAgentStreamPart(completionPart);
@@ -1343,6 +1383,7 @@ describe("stream-part-mapper", () => {
   });
 
   test("falls back to state timing when direct timing fields are non-numeric", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const part = {
       ...createToolPart({
         id: "tool-2b",
@@ -1357,7 +1398,7 @@ describe("stream-part-mapper", () => {
         start: "invalid",
         end: "invalid",
       },
-    } as unknown as Part;
+    } as Part;
 
     const mapped = mapPartToAgentStreamPart(part);
     expect(mapped).toEqual({

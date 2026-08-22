@@ -11,12 +11,11 @@ import {
   type TaskSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 type OdtToolInput<Name extends OdtToolName> = ReturnType<(typeof ODT_TOOL_SCHEMAS)[Name]["parse"]>;
-type ResponseParser<A> = {
-  parse(output: unknown): A;
-};
+type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
 const MAX_TASK_CANDIDATES = 5;
 
@@ -162,7 +161,12 @@ export const mapPublicTask = (task: TaskCard): PublicTask => ({
   issueType: task.issueType,
   aiReviewEnabled: task.aiReviewEnabled,
   labels: task.labels,
-  ...(task.targetBranch ? { targetBranch: task.targetBranch } : {}),
+  ...(() => {
+    if (task.targetBranch) {
+      return { targetBranch: task.targetBranch };
+    }
+    return {};
+  })(),
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
 });
@@ -201,7 +205,12 @@ export const persistedDocument = (
 export const latestDocument = (document: TaskMetadataDocument) => ({
   markdown: document.markdown,
   updatedAt: document.updatedAt ?? null,
-  ...(document.error ? { error: document.error } : {}),
+  ...(() => {
+    if (document.error) {
+      return { error: document.error };
+    }
+    return {};
+  })(),
 });
 
 export const latestQaReport = (qaReport: TaskMetadataPayload["qaReport"]) =>
@@ -210,7 +219,12 @@ export const latestQaReport = (qaReport: TaskMetadataPayload["qaReport"]) =>
         markdown: qaReport.markdown,
         updatedAt: qaReport.updatedAt ?? null,
         verdict: qaReport.verdict,
-        ...(qaReport.error ? { error: qaReport.error } : {}),
+        ...(() => {
+          if (qaReport.error) {
+            return { error: qaReport.error };
+          }
+          return {};
+        })(),
       }
     : undefined;
 
@@ -237,6 +251,7 @@ export const createdSubtaskIds = (
     .map((task) => task.id)
     .filter((taskId) => !before.has(taskId));
 
+// SAFETY: The schema parser validates every field required by `OdtToolInput<Name>` before returning.
 export const parseToolInput = <Name extends OdtToolName>(
   toolName: Name,
   input: JsonValue | undefined,

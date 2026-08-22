@@ -1,7 +1,5 @@
 import { mock } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
-
-export type MockedModuleReset = readonly [moduleId: string, loadActual: () => Promise<unknown>];
+export type MockedModuleReset = readonly [moduleId: string, loadActual: () => Promise<object>];
 
 export const restoreMockedModules = async (
   entries: ReadonlyArray<MockedModuleReset>,
@@ -14,6 +12,6 @@ export const restoreMockedModules = async (
   );
 
   for (const { moduleId, actualModule } of restoredModules) {
-    mock.module(moduleId, () => ({ ...(actualModule as Record<string, JsonValue>) }));
+    mock.module(moduleId, () => ({ ...actualModule }));
   }
 };

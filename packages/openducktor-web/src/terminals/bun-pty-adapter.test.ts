@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import {
   assertTerminalPtyConformance,
@@ -10,6 +11,26 @@ import {
 import { Effect } from "effect";
 import { type BunPtySpawn, type BunPtySpawnOptions, createBunPtyPort } from "./bun-pty-adapter";
 
+interface CapturedContract {
+  options: BunPtySpawnOptions | null;
+}
+
+interface CapturedContract128 {
+  options: BunPtySpawnOptions | null;
+}
+
+interface CapturedContract170 {
+  options: BunPtySpawnOptions | null;
+}
+
+interface CapturedContract214 {
+  options: BunPtySpawnOptions | null;
+}
+
+interface CapturedContract281 {
+  options: BunPtySpawnOptions | null;
+}
+
 const injectedCleanupFailure = () =>
   terminateProcessTree({
     pid: 0,
@@ -21,7 +42,7 @@ const injectedCleanupFailure = () =>
 
 describe("createBunPtyPort", () => {
   test("satisfies the shared contract with a real Bun terminal process", async () => {
-    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    if (process.platform === "win32" || !hasRuntimeType(Bun.Terminal, "function")) return;
     const observation = await observeLiveTerminalPtyConformance(createBunPtyPort());
     expect(observation.transcript).toContain("INPUT:terminal-conformance");
     expect(observation.transcript).toMatch(/40\s+120/);
@@ -29,23 +50,23 @@ describe("createBunPtyPort", () => {
     expect(observation.exit.exitCode).toBe(0);
   }, 7_000);
   test("terminates a real Bun PTY descendant process tree", async () => {
-    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    if (process.platform === "win32" || !hasRuntimeType(Bun.Terminal, "function")) return;
     const childPid = await verifyLiveTerminalPtyProcessTreeTermination(createBunPtyPort());
     expect(childPid).toBeGreaterThan(0);
   }, 7_000);
   test("cleans a real Bun PTY descendant after natural shell exit", async () => {
-    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    if (process.platform === "win32" || !hasRuntimeType(Bun.Terminal, "function")) return;
     const childPid = await verifyLiveTerminalPtyNaturalExitCleanup(createBunPtyPort());
     expect(childPid).toBeGreaterThan(0);
   }, 7_000);
   test("interrupts a real Bun PTY foreground process with Ctrl+C input", async () => {
-    if (process.platform === "win32" || typeof Bun.Terminal !== "function") return;
+    if (process.platform === "win32" || !hasRuntimeType(Bun.Terminal, "function")) return;
     const exit = await verifyLiveTerminalPtyInterrupt(createBunPtyPort());
     expect(exit.exitCode).toBe(130);
   }, 7_000);
   test("reports no output pause and orders process exit after terminal EOF", async () => {
     const calls: string[] = [];
-    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const captured: CapturedContract = { options: null };
     const terminal = {
       closed: false,
       write: (data: Uint8Array) => {
@@ -125,7 +146,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("resumes a partial input write after terminal drain", async () => {
-    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const captured: CapturedContract128 = { options: null };
     const writes: number[][] = [];
     let writeCalls = 0;
     const terminal = {
@@ -167,7 +188,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("retries process-tree cleanup after a failed termination", async () => {
-    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const captured: CapturedContract170 = { options: null };
     let cleanupCalls = 0;
     let terminalCloseCalls = 0;
     let terminalClosed = false;
@@ -211,7 +232,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("publishes one convergent natural-finalization failure and allows explicit retry", async () => {
-    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const captured: CapturedContract214 = { options: null };
     const failures: string[] = [];
     let reportFailure: (() => void) | null = null;
     const failureReported = new Promise<void>((resolve) => {
@@ -278,7 +299,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("does not report success after EOF timeout when Bun already marks the terminal closed", async () => {
-    const captured: { options: BunPtySpawnOptions | null } = { options: null };
+    const captured: CapturedContract281 = { options: null };
     let cleanupCalls = 0;
     let terminalCloseCalls = 0;
     let terminalClosed = false;

@@ -1,4 +1,4 @@
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, runtimeTypeName } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
@@ -65,9 +65,16 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, JsonValue> = {}) =
   ...overrides,
 });
 
-const createClient = (resolver: (command: string, args?: Record<string, JsonValue>) => unknown) => {
+type TestHostResult = object | string | number | boolean | null | undefined;
+
+const createClient = (
+  resolver: (command: string, args?: Record<string, JsonValue>) => TestHostResult,
+) => {
   const calls: InvokeCall[] = [];
-  const invoke = async (command: string, args?: Record<string, JsonValue>): Promise<unknown> => {
+  const invoke = async (
+    command: string,
+    args?: Record<string, JsonValue>,
+  ): Promise<TestHostResult> => {
     calls.push({ command, args });
     return resolver(command, args);
   };
@@ -344,7 +351,7 @@ describe("HostClient", () => {
     ] as const;
 
     for (const methodName of expectedMethods) {
-      expect(typeof client[methodName]).toBe("function");
+      expect(runtimeTypeName(client[methodName])).toBe("function");
     }
   });
 
@@ -941,6 +948,7 @@ describe("HostClient", () => {
   test("taskTransition validates status before invoking host", async () => {
     const { client, calls } = createClient(() => makeTaskCardPayload());
 
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       client.taskTransition("/repo", "task-1", "not_a_status" as never),
     ).rejects.toThrow();
@@ -2083,7 +2091,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode startup probe failed reason=timeout after 15000ms");
-      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+      expect(error).toMatchObject({ failureKind: "timeout" });
     }
   });
 
@@ -2110,7 +2118,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode runtime is still starting");
-      expect(Reflect.get(error, "failureKind")).toBe("timeout");
+      expect(error).toMatchObject({ failureKind: "timeout" });
     }
   });
 
@@ -2134,7 +2142,7 @@ describe("HostClient", () => {
         throw new Error("Expected runtimeEnsure to reject with an Error");
       }
       expect(error.message).toBe("OpenCode runtime startup failed");
-      expect(Reflect.get(error, "failureKind")).toBe("error");
+      expect(error).toMatchObject({ failureKind: "error" });
     }
   });
 

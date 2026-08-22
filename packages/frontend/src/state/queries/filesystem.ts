@@ -59,7 +59,15 @@ export const directoryListingQueryOptions = (
     queryKey: filesystemQueryKeys.directory(path, includeFiles),
     queryFn: (): Promise<DirectoryListing> =>
       includeFiles
-        ? hostClient.filesystemListDirectory({ ...(path ? { path } : {}), includeFiles: true })
+        ? hostClient.filesystemListDirectory({
+            ...(() => {
+              if (path) {
+                return { path };
+              }
+              return {};
+            })(),
+            includeFiles: true,
+          })
         : hostClient.filesystemListDirectory(path),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });
@@ -74,7 +82,12 @@ export const workspaceFileTreeQueryOptions = (
     queryFn: (): Promise<WorkspaceFileTree> =>
       hostClient.filesystemListTree({
         rootPath,
-        ...(targetBranch ? { targetBranch } : {}),
+        ...(() => {
+          if (targetBranch) {
+            return { targetBranch };
+          }
+          return {};
+        })(),
       }),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });

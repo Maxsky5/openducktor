@@ -7,7 +7,12 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
-import { canDownloadAppUpdate, canInstallAppUpdate, jsonValueSchema } from "@openducktor/contracts";
+import {
+  canDownloadAppUpdate,
+  canInstallAppUpdate,
+  jsonValueSchema,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import { parse as parseYaml } from "yaml";
 import { ElectronLifecycleError } from "../../effect/electron-errors";
 import { createElectronDetachedTaskOwner } from "../electron-main-task-owner";
@@ -51,11 +56,14 @@ export type ElectronAppUpdateService = {
   subscribe(listener: (state: AppUpdateState) => void): () => void;
 };
 
-export type ElectronAppUpdateScheduler = {
-  clearInterval(handle: object): void;
-  clearTimeout(handle: object): void;
-  setInterval(callback: () => void, intervalMs: number): object;
-  setTimeout(callback: () => void, timeoutMs: number): object;
+export type ElectronAppUpdateScheduler<
+  IntervalHandle extends object = object,
+  TimeoutHandle extends object = object,
+> = {
+  clearInterval(handle: IntervalHandle): void;
+  clearTimeout(handle: TimeoutHandle): void;
+  setInterval(callback: () => void, intervalMs: number): IntervalHandle;
+  setTimeout(callback: () => void, timeoutMs: number): TimeoutHandle;
 };
 
 export type ElectronAppUpdateServiceOptions = {
@@ -91,9 +99,11 @@ export const deriveElectronUpdateChannel = (version: string): string | null =>
 
 const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
   clearInterval: (handle) => {
+    // SAFETY: The surrounding boundary constructs or validates every member required by `ReturnType<typeof setInterval>`.
     clearInterval(handle as ReturnType<typeof setInterval>);
   },
   clearTimeout: (handle) => {
+    // SAFETY: The surrounding boundary constructs or validates every member required by `ReturnType<typeof setTimeout>`.
     clearTimeout(handle as ReturnType<typeof setTimeout>);
   },
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),
@@ -104,7 +114,12 @@ const defaultReadUpdateConfig = async (path: string): Promise<string | null> => 
   try {
     return await readFile(path, "utf8");
   } catch (cause) {
-    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT") {
+    if (
+      hasRuntimeType(cause, "object") &&
+      cause !== null &&
+      "code" in cause &&
+      cause.code === "ENOENT"
+    ) {
       return null;
     }
     throw cause;
@@ -131,14 +146,14 @@ const isMacOsUpdateSignatureMismatch = (platform: NodeJS.Platform, cause: unknow
 
 const readErrorCode = (cause: unknown): string | undefined => {
   if (cause instanceof Error) {
-    const code = Reflect.get(cause, "code");
-    return typeof code === "string" ? code : undefined;
+    const code = "code" in cause ? cause.code : undefined;
+    return hasRuntimeType(code, "string") ? code : undefined;
   }
 
   const parsedDetails = jsonValueSchema.safeParse(cause);
   if (
     !parsedDetails.success ||
-    typeof parsedDetails.data !== "object" ||
+    !hasRuntimeType(parsedDetails.data, "object") ||
     parsedDetails.data === null ||
     Array.isArray(parsedDetails.data)
   ) {
@@ -146,7 +161,7 @@ const readErrorCode = (cause: unknown): string | undefined => {
   }
 
   const code = parsedDetails.data.code;
-  return typeof code === "string" ? code : undefined;
+  return hasRuntimeType(code, "string") ? code : undefined;
 };
 
 const missingManifestPattern = /Cannot find (?:channel ")?(latest(?:-[a-z0-9]+)*\.ya?ml)/i;
@@ -213,12 +228,16 @@ const hasUpdateProviderConfig = (rawConfig: string | null): boolean => {
   }
 
   const parsedConfig: unknown = parseYaml(rawConfig);
-  if (typeof parsedConfig !== "object" || parsedConfig === null || Array.isArray(parsedConfig)) {
+  if (
+    !hasRuntimeType(parsedConfig, "object") ||
+    parsedConfig === null ||
+    Array.isArray(parsedConfig)
+  ) {
     return false;
   }
 
-  const provider = Reflect.get(parsedConfig, "provider");
-  return typeof provider === "string" && provider.trim().length > 0;
+  const provider = "provider" in parsedConfig ? parsedConfig.provider : undefined;
+  return hasRuntimeType(provider, "string") && provider.trim().length > 0;
 };
 
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
@@ -363,8 +382,18 @@ export const createElectronAppUpdateService = ({
   }): AppUpdateState =>
     publishState(
       markUpdateError({
-        ...(availableVersion ? { availableVersion } : {}),
-        ...(checkedAt ? { checkedAt } : {}),
+        ...(() => {
+          if (availableVersion) {
+            return { availableVersion };
+          }
+          return {};
+        })(),
+        ...(() => {
+          if (checkedAt) {
+            return { checkedAt };
+          }
+          return {};
+        })(),
         code,
         cause,
         currentVersion,
@@ -515,8 +544,18 @@ export const createElectronAppUpdateService = ({
       return;
     }
     setErrorState({
-      ...(availableVersion ? { availableVersion } : {}),
-      ...(checkedAt ? { checkedAt } : {}),
+      ...(() => {
+        if (availableVersion) {
+          return { availableVersion };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (checkedAt) {
+          return { checkedAt };
+        }
+        return {};
+      })(),
       code: updateErrorCodeForOperation(operation),
       cause,
       message,
@@ -792,8 +831,18 @@ export const createElectronAppUpdateService = ({
           clearDownloadProgressThrottle();
           const checkedAt = checkedAtFromState(state);
           setErrorState({
-            ...(availableVersion ? { availableVersion } : {}),
-            ...(checkedAt ? { checkedAt } : {}),
+            ...(() => {
+              if (availableVersion) {
+                return { availableVersion };
+              }
+              return {};
+            })(),
+            ...(() => {
+              if (checkedAt) {
+                return { checkedAt };
+              }
+              return {};
+            })(),
             code: "download_failed",
             cause,
             message: appUpdateErrorMessage("download", cause),

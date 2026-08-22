@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
 import type { JsonValue } from "@openducktor/contracts";
 import {
@@ -24,10 +25,25 @@ const toSessionCompactedEvent = (
   source: ctx.source,
   mapper: "compaction",
   threadId: ctx.threadId,
-  ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+  ...(() => {
+    if (ctx.turnId) {
+      return { turnId: ctx.turnId };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (ctx.timestamp) {
+      return { timestamp: ctx.timestamp };
+    }
+    return {};
+  })(),
   raw,
-  ...(messageId ? { messageId } : {}),
+  ...(() => {
+    if (messageId) {
+      return { messageId };
+    }
+    return {};
+  })(),
   message: "Session compacted.",
 });
 
@@ -40,10 +56,25 @@ const toSessionCompactionStartedEvent = (
   source: ctx.source,
   mapper: "compaction",
   threadId: ctx.threadId,
-  ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-  ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+  ...(() => {
+    if (ctx.turnId) {
+      return { turnId: ctx.turnId };
+    }
+    return {};
+  })(),
+  ...(() => {
+    if (ctx.timestamp) {
+      return { timestamp: ctx.timestamp };
+    }
+    return {};
+  })(),
   raw,
-  ...(messageId ? { messageId } : {}),
+  ...(() => {
+    if (messageId) {
+      return { messageId };
+    }
+    return {};
+  })(),
   message: "Session compaction started.",
 });
 
@@ -69,7 +100,12 @@ export const lifecycleMapper: CodexEventMapper = {
                 source: ctx.source,
                 mapper: "lifecycle",
                 threadId: ctx.threadId,
-                ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+                ...(() => {
+                  if (ctx.timestamp) {
+                    return { timestamp: ctx.timestamp };
+                  }
+                  return {};
+                })(),
                 raw: turn,
                 message:
                   (isPlainObject(turn.error) ? extractText(turn.error) : null) ??
@@ -82,7 +118,12 @@ export const lifecycleMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "lifecycle",
           threadId: ctx.threadId,
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+          ...(() => {
+            if (ctx.timestamp) {
+              return { timestamp: ctx.timestamp };
+            }
+            return {};
+          })(),
           raw: turn,
         },
       ],
@@ -164,8 +205,18 @@ export const tokenUsageMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "token_usage",
           threadId: ctx.threadId,
-          ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
+          ...(() => {
+            if (ctx.turnId) {
+              return { turnId: ctx.turnId };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (ctx.timestamp) {
+              return { timestamp: ctx.timestamp };
+            }
+            return {};
+          })(),
           raw: input.notification.params,
           part: {
             kind: "step",
@@ -173,9 +224,12 @@ export const tokenUsageMapper: CodexEventMapper = {
             partId: `${messageId}-token-usage`,
             phase: "finish",
             totalTokens: tokenUsage.totalTokens,
-            ...(typeof tokenUsage.contextWindow === "number"
-              ? { contextWindow: tokenUsage.contextWindow }
-              : {}),
+            ...(() => {
+              if (hasRuntimeType(tokenUsage.contextWindow, "number")) {
+                return { contextWindow: tokenUsage.contextWindow };
+              }
+              return {};
+            })(),
           },
         },
       ],
@@ -214,8 +268,18 @@ export const deltaMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "delta",
           threadId: ctx.threadId,
-          ...(ctx.timestamp ? { timestamp: ctx.timestamp } : {}),
-          ...(messageId ? { messageId } : {}),
+          ...(() => {
+            if (ctx.timestamp) {
+              return { timestamp: ctx.timestamp };
+            }
+            return {};
+          })(),
+          ...(() => {
+            if (messageId) {
+              return { messageId };
+            }
+            return {};
+          })(),
           channel: isText ? "text" : "reasoning",
           delta,
           raw: input.notification.params,

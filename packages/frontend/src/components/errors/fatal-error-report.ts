@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 export interface FatalErrorReport {
   title: string;
   message: string;
@@ -37,7 +38,12 @@ export function buildFatalErrorReport(
         title: inner.name || "Error",
         message: inner.message,
         stack: inner.stack,
-        ...(location ? { location } : {}),
+        ...(() => {
+          if (location) {
+            return { location };
+          }
+          return {};
+        })(),
         source,
         timestamp,
       };
@@ -46,7 +52,12 @@ export function buildFatalErrorReport(
       title: "Uncaught error",
       message: cause.message || String(inner ?? cause),
       stack: undefined,
-      ...(location ? { location } : {}),
+      ...(() => {
+        if (location) {
+          return { location };
+        }
+        return {};
+      })(),
       source,
       timestamp,
     };
@@ -65,7 +76,7 @@ export function buildFatalErrorReport(
     }
     return {
       title: "Unhandled promise rejection",
-      message: typeof reason === "string" ? reason : safeStringify(reason),
+      message: hasRuntimeType(reason, "string") ? reason : safeStringify(reason),
       stack: undefined,
       source,
       timestamp,
@@ -82,7 +93,7 @@ export function buildFatalErrorReport(
     };
   }
 
-  if (typeof cause === "string") {
+  if (hasRuntimeType(cause, "string")) {
     return { title: "Error", message: cause, stack: undefined, source, timestamp };
   }
 
@@ -111,8 +122,18 @@ export function logFatalError(
     source: report.source,
     timestamp: report.timestamp,
     rawValue: cause,
-    ...(report.location ? { location: report.location } : {}),
-    ...(componentStack ? { componentStack } : {}),
+    ...(() => {
+      if (report.location) {
+        return { location: report.location };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (componentStack) {
+        return { componentStack };
+      }
+      return {};
+    })(),
   };
 
   console.error(
@@ -152,7 +173,7 @@ function formatErrorLocation(event: ErrorEvent): string | undefined {
 function safeStringify(cause: unknown): string {
   try {
     const json = JSON.stringify(cause);
-    return typeof json === "string" ? json : String(cause);
+    return hasRuntimeType(json, "string") ? json : String(cause);
   } catch {
     return String(cause);
   }

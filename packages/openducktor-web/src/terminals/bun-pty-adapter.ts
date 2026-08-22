@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -82,7 +83,12 @@ const operationFailure = (
     code: "operation_failed",
     operation,
     message,
-    ...(cause !== undefined ? { cause } : {}),
+    ...(() => {
+      if (cause !== undefined) {
+        return { cause };
+      }
+      return {};
+    })(),
   });
 
 class BunPtySession implements TerminalPtyHandle {
@@ -342,6 +348,7 @@ class BunPtySession implements TerminalPtyHandle {
   }
 }
 
+// SAFETY: The preceding runtime guard establishes `BunPtySpawn` before this assertion.
 export const createBunPtyPort = ({
   spawn = Bun.spawn as BunPtySpawn,
   platform = process.platform,
@@ -351,7 +358,7 @@ export const createBunPtyPort = ({
   start: (plan: TerminalPtyLaunchPlan, handlers: TerminalPtyHandlers) =>
     Effect.try({
       try: (): TerminalPtyHandle => {
-        if (typeof Bun.Terminal !== "function") throw unsupported();
+        if (!hasRuntimeType(Bun.Terminal, "function")) throw unsupported();
         const session = new BunPtySession(
           handlers,
           platform,

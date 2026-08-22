@@ -162,8 +162,18 @@ const createCompletedToolMessage = ({
     tool,
     toolType,
     status: "completed",
-    ...(input !== undefined ? { input } : {}),
-    ...(output !== undefined ? { output } : {}),
+    ...(() => {
+      if (input !== undefined) {
+        return { input };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (output !== undefined) {
+        return { output };
+      }
+      return {};
+    })(),
   },
 });
 

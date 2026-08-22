@@ -8,6 +8,8 @@ import {
   odtToolErrorPayloadSchema,
   type JsonValue,
   type WorkspaceScopedOdtToolName,
+  hasRuntimeType,
+  runtimeTypeName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
 import { normalizeBaseUrl } from "./path-utils";
@@ -45,10 +47,10 @@ const toCauseMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (typeof cause === "string" && cause.trim().length > 0) {
+  if (hasRuntimeType(cause, "string") && cause.trim().length > 0) {
     return cause.trim();
   }
-  if (typeof cause === "number" || typeof cause === "boolean") {
+  if (hasRuntimeType(cause, "number") || hasRuntimeType(cause, "boolean")) {
     return String(cause);
   }
   return "Unknown bridge error";
@@ -117,7 +119,7 @@ const createBridgeTransportError = (action: string, cause: unknown): OdtToolErro
     message: `${action} failed: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: cause instanceof Error ? cause.name : typeof cause,
+      causeName: cause instanceof Error ? cause.name : runtimeTypeName(cause),
     },
   });
 };
@@ -128,7 +130,7 @@ const createBridgeJsonError = (action: string, cause: unknown): OdtToolError => 
     message: `Invalid JSON response from ${action}: ${toCauseMessage(cause)}`,
     details: {
       action,
-      causeName: cause instanceof Error ? cause.name : typeof cause,
+      causeName: cause instanceof Error ? cause.name : runtimeTypeName(cause),
     },
   });
 };
@@ -182,6 +184,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       ...input,
       workspaceId,
     });
+    // SAFETY: The surrounding boundary constructs or validates every member required by `ToolOutput<Name>`.
     return parseHostResponse(
       ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName],
       payload,
@@ -202,7 +205,12 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          ...(this.appToken ? { "x-openducktor-app-token": this.appToken } : {}),
+          ...(() => {
+            if (this.appToken) {
+              return { "x-openducktor-app-token": this.appToken };
+            }
+            return {};
+          })(),
         },
         body: JSON.stringify(input),
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),

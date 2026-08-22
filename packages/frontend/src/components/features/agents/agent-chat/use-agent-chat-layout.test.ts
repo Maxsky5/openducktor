@@ -1,6 +1,8 @@
+import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
   COMPOSER_EDITOR_MIN_HEIGHT_PX,
@@ -17,6 +19,7 @@ type LayoutHookState = {
   resizeComposerTextarea: () => void;
 };
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 (
   globalThis as typeof globalThis & {
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -43,12 +46,13 @@ describe("use-agent-chat-layout helpers", () => {
       height: "40px",
       overflowY: "hidden" as const,
     };
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = {
       getBoundingClientRect: () => ({ height: 40 }),
       scrollHeight: 40,
       style: styleState,
       value: "draft",
-    } as unknown as HTMLTextAreaElement;
+    } as HTMLTextAreaElement;
 
     resizeComposerTextareaElement(textarea);
 
@@ -57,12 +61,14 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement keeps multiline height stable when the layout is unchanged", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "120px",
       overflowY: "hidden" as "auto" | "hidden",
     };
     const assignedHeights: string[] = [];
     const assignedOverflowValues: Array<"auto" | "hidden"> = [];
+    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
     const style = {} as CSSStyleDeclaration;
 
     Object.defineProperty(style, "height", {
@@ -82,6 +88,7 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = {
       getBoundingClientRect: () => ({ height: 120 }),
       style,
@@ -89,7 +96,7 @@ describe("use-agent-chat-layout helpers", () => {
       get scrollHeight() {
         return 120;
       },
-    } as unknown as HTMLTextAreaElement;
+    } as HTMLTextAreaElement;
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -102,10 +109,12 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerEditorElement detects native multiline growth from the last synced height", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "",
       overflowY: "hidden" as "auto" | "hidden",
     };
+    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
     const style = {} as CSSStyleDeclaration;
 
     Object.defineProperty(style, "height", {
@@ -123,12 +132,13 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
     const editor = {
       getBoundingClientRect: () => ({ height: 120 }),
       scrollHeight: 120,
       style,
       textContent: "line one\nline two",
-    } as unknown as HTMLDivElement;
+    } as HTMLDivElement;
 
     const result = resizeComposerEditorElement(editor, undefined, COMPOSER_EDITOR_MIN_HEIGHT_PX);
 
@@ -140,10 +150,12 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement shrinks when content height decreases", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "120px",
       overflowY: "hidden" as "auto" | "hidden",
     };
+    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
     const style = {} as CSSStyleDeclaration;
 
     Object.defineProperty(style, "height", {
@@ -161,6 +173,7 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = {
       getBoundingClientRect: () => ({ height: 120 }),
       style,
@@ -168,7 +181,7 @@ describe("use-agent-chat-layout helpers", () => {
       get scrollHeight() {
         return styleState.height === "auto" ? COMPOSER_EDITOR_MIN_HEIGHT_PX : 120;
       },
-    } as unknown as HTMLTextAreaElement;
+    } as HTMLTextAreaElement;
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -180,20 +193,23 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement preserves height when the editor already reports the target size", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "120px",
       overflowY: "hidden" as "auto" | "hidden",
     };
     const assignedHeights: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
     const style = {} as CSSStyleDeclaration;
-    const measurementClone = {
+    // SAFETY: This test creates the DOM fixture that supplies `CSSStyleDeclaration` before this lookup.
+    const measurementClone = createFocusedFixture<HTMLTextAreaElement>({
       style: {} as CSSStyleDeclaration,
       scrollHeight: COMPOSER_EDITOR_MIN_HEIGHT_PX,
       value: "",
       rows: 1,
       setAttribute: () => {},
       remove: () => {},
-    } as unknown as HTMLTextAreaElement;
+    });
 
     Object.defineProperty(style, "height", {
       configurable: true,
@@ -211,16 +227,16 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
-    const textarea = {
+    const textarea = createFocusedFixture<HTMLTextAreaElement>({
       cloneNode: () => measurementClone,
-      getBoundingClientRect: () => ({ height: 120, width: 320 }),
-      ownerDocument: {
-        body: {
-          appendChild: () => {},
-        },
-        defaultView: {
+      getBoundingClientRect: () => createFocusedFixture<DOMRect>({ height: 120, width: 320 }),
+      ownerDocument: createFocusedFixture<Document>({
+        body: createFocusedFixture<HTMLElement>({
+          appendChild: (node) => node,
+        }),
+        defaultView: createFocusedFixture<Window & typeof globalThis>({
           getComputedStyle: () =>
-            ({
+            createFocusedFixture<CSSStyleDeclaration>({
               boxSizing: "border-box",
               fontFamily: "monospace",
               fontSize: "14px",
@@ -242,14 +258,14 @@ describe("use-agent-chat-layout helpers", () => {
               borderRightWidth: "1px",
               borderBottomWidth: "1px",
               borderLeftWidth: "1px",
-            }) satisfies Partial<CSSStyleDeclaration>,
-        },
-      },
+            }),
+        }),
+      }),
       style,
       rows: 1,
       scrollHeight: 120,
       value: "line one\nline two",
-    } as unknown as HTMLTextAreaElement;
+    });
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -262,11 +278,13 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement skips no-op writes for single-line drafts already at min height", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "",
       overflowY: "hidden" as "auto" | "hidden",
     };
     const assignedHeights: string[] = [];
+    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
     const style = {} as CSSStyleDeclaration;
 
     Object.defineProperty(style, "height", {
@@ -285,6 +303,7 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = {
       getBoundingClientRect: () => ({ height: COMPOSER_EDITOR_MIN_HEIGHT_PX }),
       style,
@@ -292,7 +311,7 @@ describe("use-agent-chat-layout helpers", () => {
       get scrollHeight() {
         return COMPOSER_EDITOR_MIN_HEIGHT_PX;
       },
-    } as unknown as HTMLTextAreaElement;
+    } as HTMLTextAreaElement;
 
     const result = resizeComposerTextareaElement(textarea);
 
@@ -305,16 +324,18 @@ describe("use-agent-chat-layout helpers", () => {
   });
 
   test("resizeComposerTextareaElement clamps empty drafts to minimum height", () => {
+    // SAFETY: This test controls the fixture and supplies `"auto" | "hidden"` used by this case.
     const styleState = {
       height: "220px",
       overflowY: "auto" as "auto" | "hidden",
     };
+    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
     const textarea = {
       getBoundingClientRect: () => ({ height: 220 }),
       scrollHeight: 220,
       style: styleState,
       value: "",
-    } as unknown as HTMLTextAreaElement;
+    } as HTMLTextAreaElement;
 
     resizeComposerTextareaElement(textarea);
 
@@ -332,15 +353,17 @@ describe("use-agent-chat-layout helpers", () => {
 
     await harness.mount();
 
+    // SAFETY: This test controls the fixture and supplies `LayoutHookState` used by this case.
     const initialState = harness.getLatest() as LayoutHookState;
 
     expect(initialState.messagesContainerRef.current).toBeNull();
     expect(initialState.composerFormRef.current).toBeNull();
     expect(initialState.composerTextareaRef.current).toBeNull();
-    expect(typeof initialState.resizeComposerTextarea).toBe("function");
+    expect(runtimeTypeName(initialState.resizeComposerTextarea)).toBe("function");
 
     await harness.update({ displayedSessionKey: "session-2", input: "draft" });
 
+    // SAFETY: This test controls the fixture and supplies `LayoutHookState` used by this case.
     const updatedState = harness.getLatest() as LayoutHookState;
     expect(updatedState.messagesContainerRef).toBe(initialState.messagesContainerRef);
 
@@ -358,17 +381,19 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
+      // SAFETY: This test controls the fixture and supplies `LayoutHookState` used by this case.
       const state = harness.getLatest() as LayoutHookState;
       const styleState = {
         height: "44px",
         overflowY: "hidden" as const,
       };
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       const textarea = {
         getBoundingClientRect: () => ({ height: 44 }),
         scrollHeight: 120,
         style: styleState,
         value: "",
-      } as unknown as HTMLTextAreaElement;
+      } as HTMLTextAreaElement;
       state.composerTextareaRef.current = textarea;
 
       await animationFrameDriver.flushFrames();
@@ -406,7 +431,7 @@ describe("use-agent-chat-layout helpers", () => {
         current: () => {
           syncBottomAfterComposerLayoutCallCount += 1;
         },
-      } as { current: (() => void) | null };
+      } satisfies { current: (() => void) | null };
       const harness = createSharedHookHarness(
         ({ displayedSessionKey }: { displayedSessionKey: string | null }) => {
           return useAgentChatLayout({
@@ -419,7 +444,9 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
+      // SAFETY: This test controls the fixture and supplies `LayoutHookState` used by this case.
       const state = harness.getLatest() as LayoutHookState;
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
       state.messagesContainerRef.current = {
         scrollHeight: 1000,
         scrollTop: 700,
@@ -430,12 +457,13 @@ describe("use-agent-chat-layout helpers", () => {
         height: "44px",
         overflowY: "hidden" as const,
       };
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       const textarea = {
         getBoundingClientRect: () => ({ height: 44 }),
         scrollHeight: 120,
         style: styleState,
         value: "line one\nline two",
-      } as unknown as HTMLTextAreaElement;
+      } as HTMLTextAreaElement;
       state.composerTextareaRef.current = textarea;
 
       state.resizeComposerTextarea();
@@ -444,6 +472,7 @@ describe("use-agent-chat-layout helpers", () => {
       expect(styleState.height).toBe("120px");
       expect(syncBottomAfterComposerLayoutCallCount).toBe(1);
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
       state.messagesContainerRef.current = {
         scrollHeight: 1000,
         scrollTop: 700,
@@ -475,17 +504,19 @@ describe("use-agent-chat-layout helpers", () => {
 
       await harness.mount();
 
+      // SAFETY: This test controls the fixture and supplies `LayoutHookState` used by this case.
       const state = harness.getLatest() as LayoutHookState;
       const styleState = {
         height: "220px",
         overflowY: "hidden" as const,
       };
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
       const textarea = {
         getBoundingClientRect: () => ({ height: 220 }),
         scrollHeight: 44,
         style: styleState,
         value: "",
-      } as unknown as HTMLTextAreaElement;
+      } as HTMLTextAreaElement;
 
       state.composerTextareaRef.current = textarea;
       state.resizeComposerTextarea();

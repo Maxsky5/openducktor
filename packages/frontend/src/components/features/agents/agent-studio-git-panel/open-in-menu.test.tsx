@@ -9,6 +9,7 @@ import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { OpenInMenu } from "./open-in-menu";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +30,7 @@ describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
   beforeEach(() => {
+    // SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
     (
       globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,7 +54,7 @@ describe("OpenInMenu", () => {
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
           { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
           { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
     host.systemListOpenInTools = systemListOpenInTools;
@@ -91,6 +93,7 @@ describe("OpenInMenu", () => {
       expect(screen.queryByText("Terminals")).toBeNull();
       expect(screen.queryByText("Editors & IDEs")).toBeNull();
       expect(screen.queryByTestId("agent-studio-git-open-in-item-finder")).toBeNull();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLImageElement` before this lookup.
       expect(
         (screen.getByTestId("agent-studio-git-open-in-icon-zed") as HTMLImageElement).tagName,
       ).toBe("IMG");
@@ -113,7 +116,7 @@ describe("OpenInMenu", () => {
       async () =>
         [
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
 
     try {
@@ -129,6 +132,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
       const disabledTrigger = screen.getByTestId("agent-studio-git-open-in-disabled-trigger");
 
@@ -151,7 +155,7 @@ describe("OpenInMenu", () => {
       async () =>
         [
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
 
     try {
@@ -163,6 +167,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
 
       expect(trigger.disabled).toBe(true);
@@ -184,7 +189,7 @@ describe("OpenInMenu", () => {
         async () =>
           [
             { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-          ] satisfies SystemOpenInToolInfo[],
+          ] satisfies Array<SystemOpenInToolInfo>,
       );
 
       try {
@@ -228,7 +233,7 @@ describe("OpenInMenu", () => {
           { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
           { toolId: "terminal", iconDataUrl: "data:image/png;base64,terminal" },
           { toolId: "zed", iconDataUrl: "data:image/png;base64,zed" },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
 
@@ -278,7 +283,7 @@ describe("OpenInMenu", () => {
         [
           { toolId: "explorer", iconDataUrl: null },
           { toolId: "vscode", iconDataUrl: null },
-        ] satisfies SystemOpenInToolInfo[],
+        ] satisfies Array<SystemOpenInToolInfo>,
     );
     const onOpenInTool = mock(async () => {});
 
@@ -309,7 +314,7 @@ describe("OpenInMenu", () => {
 
   test("shows platform-neutral empty discovery copy and disables the default action", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
-    const systemListOpenInTools = mock(async () => [] satisfies SystemOpenInToolInfo[]);
+    const systemListOpenInTools = mock(async () => [] satisfies Array<SystemOpenInToolInfo>);
     host.systemListOpenInTools = systemListOpenInTools;
 
     try {
@@ -326,6 +331,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       const defaultButton = screen.getByTestId(
         "agent-studio-git-open-in-default-button",
       ) as HTMLButtonElement;
@@ -354,7 +360,7 @@ describe("OpenInMenu", () => {
 
       return [
         { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-      ] satisfies SystemOpenInToolInfo[];
+      ] satisfies Array<SystemOpenInToolInfo>;
     });
     host.systemListOpenInTools = systemListOpenInTools;
 
@@ -377,6 +383,7 @@ describe("OpenInMenu", () => {
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
+      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
         (screen.getByTestId("agent-studio-git-open-in-default-button") as HTMLButtonElement)
           .disabled,

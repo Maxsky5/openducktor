@@ -1,5 +1,7 @@
 import type { GitConflict, GitConflictOperation } from "@/features/agent-studio-git";
 
+interface COPYBYOPERATIONContract extends Record<GitConflictOperation, GitConflictCopy> {}
+
 type GitConflictCopy = {
   title: string;
   inProgressLabel: string;
@@ -12,7 +14,7 @@ type GitConflictCopy = {
   builderFailureMessage: string;
 };
 
-const COPY_BY_OPERATION: Record<GitConflictOperation, GitConflictCopy> = {
+const COPY_BY_OPERATION: COPYBYOPERATIONContract = {
   rebase: {
     title: "Rebase conflict detected",
     inProgressLabel: "Rebase in progress",

@@ -17,6 +17,7 @@ import {
   jsonValueSchema,
   parseCodexAppServerClientRequest,
   type JsonValue,
+  hasRuntimeType,
 } from "@openducktor/contracts";
 
 type CodexAppServerCommandHandlerOptions = {
@@ -38,21 +39,23 @@ const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
 const isRecordValue = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const recordFromValue = (value: unknown): Record<string, JsonValue> => {
+const recordFromValue = (
+  value: Parameters<typeof jsonValueSchema.safeParse>[0],
+): Record<string, JsonValue> => {
   const parsed = jsonValueSchema.safeParse(value);
   return parsed.success && isRecordValue(parsed.data) ? parsed.data : {};
 };
 
 const stringField = (record: Record<string, JsonValue>, field: string): string | undefined => {
   const value = record[field];
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  return hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
 };
 
 const logValue = (value: JsonValue | undefined): string | undefined => {
-  if (typeof value === "string" && value.trim().length > 0) {
+  if (hasRuntimeType(value, "string") && value.trim().length > 0) {
     return value;
   }
-  if (typeof value === "boolean" || typeof value === "number") {
+  if (hasRuntimeType(value, "boolean") || hasRuntimeType(value, "number")) {
     return String(value);
   }
   if (value === null) {
@@ -96,12 +99,14 @@ const cwdFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | un
     return undefined;
   }
   const firstWritableRoot = sandboxPolicy.writableRoots[0];
-  return typeof firstWritableRoot === "string" && firstWritableRoot.trim().length > 0
+  return hasRuntimeType(firstWritableRoot, "string") && firstWritableRoot.trim().length > 0
     ? firstWritableRoot
     : undefined;
 };
 
-const threadIdFromResult = (result: unknown): string | undefined => {
+const threadIdFromResult = (
+  result: Parameters<typeof jsonValueSchema.safeParse>[0],
+): string | undefined => {
   const resultRecord = recordFromValue(result);
   if (!isRecordValue(resultRecord.thread)) {
     return undefined;
@@ -219,7 +224,7 @@ const optionalNullablePositiveInteger = (
   if (value === undefined || value === null) {
     return value;
   }
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+  if (!hasRuntimeType(value, "number") || !Number.isInteger(value) || value <= 0) {
     throw new HostValidationError({
       message: `${field} must be a positive integer.`,
       field,
@@ -270,10 +275,30 @@ const requestCodexAppServer = (
   return service.listThreadTurns({
     runtimeId: input.runtimeId,
     threadId: requireString(params.threadId, "threadId"),
-    ...(cursor !== undefined ? { cursor } : {}),
-    ...(limit !== undefined ? { limit } : {}),
-    ...(sortDirection !== undefined ? { sortDirection } : {}),
-    ...(itemsView !== undefined ? { itemsView } : {}),
+    ...(() => {
+      if (cursor !== undefined) {
+        return { cursor };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (limit !== undefined) {
+        return { limit };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (sortDirection !== undefined) {
+        return { sortDirection };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (itemsView !== undefined) {
+        return { itemsView };
+      }
+      return {};
+    })(),
   });
 };
 

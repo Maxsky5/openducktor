@@ -12,6 +12,8 @@ const commentOwnerKinds = new Set([
   "VariableDeclaration",
 ]);
 
+const exportedDeclarationKinds = new Set(["ExportDefaultDeclaration", "ExportNamedDeclaration"]);
+
 function isConstAssertion(node: TypeAssertion): boolean {
   return (
     node.typeAnnotation.type === "TSTypeReference" &&
@@ -30,7 +32,14 @@ function hasSafetyComment(sourceCode: SourceCode, node: TypeAssertion): boolean 
     ) {
       return true;
     }
-    if (commentOwnerKinds.has(current.type) || current.parent.type === "Program") return false;
+    if (commentOwnerKinds.has(current.type)) {
+      if (exportedDeclarationKinds.has(current.parent.type)) {
+        current = current.parent;
+        continue;
+      }
+      return false;
+    }
+    if (current.parent.type === "Program") return false;
     current = current.parent;
   }
 }

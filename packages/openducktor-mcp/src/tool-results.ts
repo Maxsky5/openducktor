@@ -4,7 +4,7 @@ import type {
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { readTaskAssetsResultSchema } from "@openducktor/contracts";
+import { readTaskAssetsResultSchema, hasRuntimeType } from "@openducktor/contracts";
 import { z } from "zod";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -39,10 +39,10 @@ export const toErrorMessage = (cause: unknown): string => {
   if (cause instanceof Error && cause.message.trim().length > 0) {
     return cause.message;
   }
-  if (typeof cause === "string" && cause.trim().length > 0) {
+  if (hasRuntimeType(cause, "string") && cause.trim().length > 0) {
     return cause.trim();
   }
-  if (typeof cause === "number" || typeof cause === "boolean") {
+  if (hasRuntimeType(cause, "number") || hasRuntimeType(cause, "boolean")) {
     return String(cause);
   }
   return "Unknown error";
@@ -100,7 +100,12 @@ export const toToolResult = (payload: JsonValue | undefined): ToolResult => {
         text: JSON.stringify(payload, null, 2),
       },
     ],
-    ...(isStructuredToolPayload(payload) ? { structuredContent: payload } : {}),
+    ...(() => {
+      if (isStructuredToolPayload(payload)) {
+        return { structuredContent: payload };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -137,8 +142,18 @@ export const toToolError = (cause: unknown): ToolResult => {
     error: {
       code,
       message,
-      ...(cause instanceof OdtToolError && cause.details ? { details: cause.details } : {}),
-      ...(issues ? { issues } : {}),
+      ...(() => {
+        if (cause instanceof OdtToolError && cause.details) {
+          return { details: cause.details };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (issues) {
+          return { issues };
+        }
+        return {};
+      })(),
     },
   };
   return {

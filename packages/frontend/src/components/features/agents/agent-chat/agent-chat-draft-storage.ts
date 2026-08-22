@@ -1,4 +1,4 @@
-import { runtimeKindSchema } from "@openducktor/contracts";
+import { runtimeKindSchema, hasRuntimeType } from "@openducktor/contracts";
 import type { AgentAttachmentKind } from "@openducktor/core";
 import {
   type AgentSessionIdentityLike,
@@ -83,7 +83,7 @@ const optionalNonEmptyString = (value: JsonValue | undefined): value is string |
   typeof value === "undefined" || isNonEmptyString(value);
 
 const isStringArray = (value: JsonValue | undefined): value is string[] =>
-  Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  Array.isArray(value) && value.every((entry) => hasRuntimeType(entry, "string"));
 
 export const toAgentChatDraftStorageKey = (identity: AgentChatDraftSessionIdentity): string =>
   `${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:${encodeURIComponent(
@@ -106,9 +106,9 @@ const isValidSlashCommand = (value: JsonValue | undefined): boolean => {
     isNonEmptyString(value.trigger) &&
     isNonEmptyString(value.title) &&
     optionalString(value.description) &&
-    (typeof value.source === "undefined" ||
-      (typeof value.source === "string" && SLASH_COMMAND_SOURCES.has(value.source))) &&
-    (typeof value.hints === "undefined" || isStringArray(value.hints))
+    (hasRuntimeType(value.source, "undefined") ||
+      (hasRuntimeType(value.source, "string") && SLASH_COMMAND_SOURCES.has(value.source))) &&
+    (hasRuntimeType(value.hints, "undefined") || isStringArray(value.hints))
   );
 };
 
@@ -120,7 +120,7 @@ const isValidFileReference = (value: JsonValue | undefined): boolean => {
     isNonEmptyString(value.id) &&
     isNonEmptyString(value.path) &&
     isNonEmptyString(value.name) &&
-    typeof value.kind === "string" &&
+    hasRuntimeType(value.kind, "string") &&
     FILE_REFERENCE_KINDS.has(value.kind)
   );
 };
@@ -164,7 +164,12 @@ const toPersistedAttachment = (
     path: attachment.path,
     name: attachment.name,
     kind: attachment.kind,
-    ...(attachment.mime ? { mime: attachment.mime } : {}),
+    ...(() => {
+      if (attachment.mime) {
+        return { mime: attachment.mime };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -237,6 +242,7 @@ const isValidSegment = (
   }
 };
 
+// SAFETY: The preceding runtime guard establishes `AgentAttachmentKind` before this assertion.
 const parseAttachment = (value: JsonValue | undefined): AgentChatComposerAttachment | null => {
   if (!isRecord(value)) {
     return null;
@@ -245,17 +251,23 @@ const parseAttachment = (value: JsonValue | undefined): AgentChatComposerAttachm
     !isNonEmptyString(value.id) ||
     !isNonEmptyString(value.path) ||
     !isNonEmptyString(value.name) ||
-    typeof value.kind !== "string" ||
+    !hasRuntimeType(value.kind, "string") ||
     !ATTACHMENT_KINDS.has(value.kind as AgentAttachmentKind) ||
     !optionalString(value.mime)
   ) {
     return null;
   }
 
+  // SAFETY: The preceding runtime guard establishes `AgentAttachmentKind` before this assertion.
   const attachment = buildComposerAttachmentFromPath(value.path, {
     name: value.name,
     kind: value.kind as AgentAttachmentKind,
-    ...(value.mime ? { mime: value.mime } : {}),
+    ...(() => {
+      if (value.mime) {
+        return { mime: value.mime };
+      }
+      return {};
+    })(),
   });
   return attachment ? { ...attachment, id: value.id } : null;
 };
@@ -280,6 +292,7 @@ export const parseAgentChatDraftPayload = ({
 
   let parsed: JsonValue;
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
     parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored wire data is JSON
   } catch {
     return { status: "invalid", reason: "Stored chat draft is not valid JSON." };

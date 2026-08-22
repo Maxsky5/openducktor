@@ -5,7 +5,11 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import { host } from "../shared/host";
 import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operations.test-fixtures";
 
-(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
@@ -24,6 +28,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   host.taskWorktreeGet = async () => ({
     workingDirectory: "/tmp/repo/worktree",
   });
+  // SAFETY: The surrounding boundary constructs or validates every member required by `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>`.
   host.workspaceGetRepoConfig = async () =>
     ({
       workspaceId: "repo",

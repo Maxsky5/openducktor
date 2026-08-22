@@ -1,6 +1,7 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import path from "node:path";
 import { Effect } from "effect";
-import { createServer } from "vite";
+import { createServer, type ViteDevServer } from "vite";
 import {
   ElectronOperationError,
   errorMessage,
@@ -15,13 +16,16 @@ type ForceCloseableHttpServer = {
 };
 
 export type ElectronDevRendererWatcher = {
-  add(paths: string | readonly string[]): unknown;
-  on(event: "add" | "change" | "unlink", listener: (filePath: string) => void): unknown;
+  add(paths: string | readonly string[]): ElectronDevRendererWatcher;
+  on(
+    event: "add" | "change" | "unlink",
+    listener: (filePath: string) => void,
+  ): ElectronDevRendererWatcher;
 };
 
 export type ElectronDevRendererServer = {
   close(): Promise<void>;
-  httpServer?: object | null;
+  httpServer?: ViteDevServer["httpServer"];
   resolvedUrls?: { local: string[] } | null;
   watcher: ElectronDevRendererWatcher;
 };
@@ -35,16 +39,26 @@ export type ElectronRendererDevServer = {
 };
 
 const callRendererConnectionCloseMethod = (
-  httpServer: object | null | undefined,
+  httpServer: ViteDevServer["httpServer"] | undefined,
   method: keyof ForceCloseableHttpServer,
 ): void => {
   if (!httpServer || !(method in httpServer)) {
     return;
   }
 
-  const close = Reflect.get(httpServer, method);
-  if (typeof close === "function") {
-    close.call(httpServer);
+  if (
+    method === "closeIdleConnections" &&
+    "closeIdleConnections" in httpServer &&
+    hasRuntimeType(httpServer.closeIdleConnections, "function")
+  ) {
+    httpServer.closeIdleConnections();
+  }
+  if (
+    method === "closeAllConnections" &&
+    "closeAllConnections" in httpServer &&
+    hasRuntimeType(httpServer.closeAllConnections, "function")
+  ) {
+    httpServer.closeAllConnections();
   }
 };
 

@@ -99,7 +99,7 @@ const sessionHistoryNoticeSchema = z.discriminatedUnion("reason", [
     .strict(),
 ]);
 
-const sessionHistoryMessageShape = {
+const sessionHistoryMessageFields = {
   messageId: nonEmptyStringSchema,
   timestamp: nonEmptyStringSchema,
   timestampIsApproximate: z.literal(true).optional(),
@@ -109,7 +109,7 @@ const sessionHistoryMessageShape = {
 export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
   z
     .object({
-      ...sessionHistoryMessageShape,
+      ...sessionHistoryMessageFields,
       role: z.literal("user"),
       displayParts: z.array(agentUserMessageDisplayPartSchema),
       state: z.enum(["queued", "read"]),
@@ -119,7 +119,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .strict(),
   z
     .object({
-      ...sessionHistoryMessageShape,
+      ...sessionHistoryMessageFields,
       role: z.literal("assistant"),
       durationMs: z.number().optional(),
       totalTokens: z.number().optional(),
@@ -130,7 +130,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .strict(),
   z
     .object({
-      ...sessionHistoryMessageShape,
+      ...sessionHistoryMessageFields,
       role: z.literal("system"),
       notice: sessionHistoryNoticeSchema.optional(),
       parts: z.tuple([]),

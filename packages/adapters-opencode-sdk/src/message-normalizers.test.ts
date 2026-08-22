@@ -13,6 +13,7 @@ import {
 
 describe("message-normalizers", () => {
   test("readTextFromParts joins only text parts", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "text-1",
@@ -48,6 +49,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes user display parts by filtering synthetic text and preserving file refs", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "text-1",
@@ -107,6 +109,7 @@ describe("message-normalizers", () => {
   });
 
   test("ignores malformed source text payloads when normalizing file references", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "file-1",
@@ -142,6 +145,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes OpenCode agent parts into subagent display parts", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "text-1",
@@ -186,6 +190,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "slash-envelope",
@@ -212,6 +217,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes local multimodal file parts into attachment display parts", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "image-1",
@@ -296,6 +302,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps attachment echoes as attachments when runtime adds non-@ source text", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "pdf-runtime-echo",
@@ -332,6 +339,7 @@ describe("message-normalizers", () => {
   });
 
   test("preserves raw filesystem paths returned in attachment urls", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "image-raw-path",
@@ -378,6 +386,7 @@ describe("message-normalizers", () => {
   });
 
   test("falls back to source file path for attachments when the runtime omits a file url", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "image-source-path",
@@ -409,6 +418,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes only supported media file attachments without inline source text", () => {
+    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const parts: Part[] = [
       {
         id: "file-1",

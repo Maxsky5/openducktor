@@ -16,6 +16,7 @@ export const areAgentSessionStatesEquivalent = (
   current: AgentSessionState,
   nextSession: AgentSessionState,
 ): boolean => {
+  // SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Array<keyof AgentSessionState>`.
   const keys = new Set<keyof AgentSessionState>([
     ...(Object.keys(current) as Array<keyof AgentSessionState>),
     ...(Object.keys(nextSession) as Array<keyof AgentSessionState>),

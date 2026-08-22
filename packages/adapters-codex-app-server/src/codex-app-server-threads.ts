@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
@@ -22,7 +23,7 @@ export const extractThreadId = (
   }
 
   const createdAt = response.thread?.createdAt;
-  return typeof createdAt === "number" && Number.isFinite(createdAt)
+  return hasRuntimeType(createdAt, "number") && Number.isFinite(createdAt)
     ? { externalSessionId, startedAt: new Date(createdAt * 1000).toISOString() }
     : { externalSessionId };
 };
@@ -38,7 +39,12 @@ export const toSessionSummary = (input: {
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
   workingDirectory: input.workingDirectory,
-  ...(input.title ? { title: input.title } : {}),
+  ...(() => {
+    if (input.title) {
+      return { title: input.title };
+    }
+    return {};
+  })(),
   sessionAssociation: input.sessionAssociation,
   startedAt: input.startedAt,
   status: input.status,
@@ -70,13 +76,13 @@ export type CodexSubAgentSourceMetadata = {
 };
 
 const codexTimestampFromUnknownSeconds = (value: JsonValue | undefined): string =>
-  typeof value === "number" ? new Date(value * 1000).toISOString() : new Date().toISOString();
+  hasRuntimeType(value, "number") ? new Date(value * 1000).toISOString() : new Date().toISOString();
 
 const codexTimestampMsFromUnknownSeconds = (value: JsonValue | undefined): number | null => {
   if (value === null || value === undefined) {
     return null;
   }
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!hasRuntimeType(value, "number") || !Number.isFinite(value)) {
     throw new Error("Codex thread updatedAt must be a finite number.");
   }
   const timestampMs = value * 1000;
@@ -91,7 +97,7 @@ export const codexThreadStatusSnapshot = (
 ): CodexThreadStatusSnapshot => {
   const type = isPlainObject(status)
     ? extractStringField(status, ["type"])
-    : typeof status === "string"
+    : hasRuntimeType(status, "string")
       ? status
       : null;
   const normalized = type?.toLowerCase() ?? "idle";
@@ -155,7 +161,7 @@ const codexSubAgentSourceMetadata = (
     return null;
   }
   const parentThreadId = extractStringField(threadSpawn, ["parent_thread_id", "parentThreadId"]);
-  const depth = typeof threadSpawn.depth === "number" ? threadSpawn.depth : null;
+  const depth = hasRuntimeType(threadSpawn.depth, "number") ? threadSpawn.depth : null;
   if (!parentThreadId || depth === null || !Number.isFinite(depth)) {
     return null;
   }
@@ -180,7 +186,7 @@ export const codexLoadedThreadIds = (response: JsonValue | undefined): Set<strin
     ? new Set(
         arrayFromUnknown(response.data)
           .map((entry) => {
-            if (typeof entry === "string") {
+            if (hasRuntimeType(entry, "string")) {
               return entry;
             }
             return isPlainObject(entry) ? extractStringField(entry, ["id", "threadId"]) : null;

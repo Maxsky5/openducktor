@@ -1,5 +1,5 @@
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { Effect } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
 import type { TaskService } from "../../application/tasks/task-service";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
@@ -17,14 +17,14 @@ const runHandler = <T>(
 describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
-    const service: Partial<TaskService> = {
-      agentSessionDelete(input: JsonValue | undefined) {
+    const service: Partial<TaskService> = createFocusedTestService<TaskService>({
+      agentSessionDelete(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
           return true;
         });
       },
-      agentSessionUpsert(input: JsonValue | undefined) {
+      agentSessionUpsert(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_session_upsert", input });
@@ -38,7 +38,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsList(input: JsonValue | undefined) {
+      agentSessionsList(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "agent_sessions_list", input });
@@ -52,16 +52,17 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      agentSessionsListForTasks(input: JsonValue | undefined) {
+      agentSessionsListForTasks(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_sessions_list_for_tasks", input });
           return [];
         });
       },
-      getApprovalContext(input: JsonValue | undefined) {
+      getApprovalContext(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_approval_context_get", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -72,10 +73,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      detectPullRequest(input: JsonValue | undefined) {
+      detectPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_detect", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -86,7 +88,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      unlinkPullRequest(input: JsonValue | undefined) {
+      unlinkPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_unlink", input });
@@ -100,10 +102,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      upsertPullRequest(input: JsonValue | undefined) {
+      upsertPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_upsert", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -114,10 +117,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      directMerge(input: JsonValue | undefined) {
+      directMerge(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -128,10 +132,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      completeDirectMerge(input: JsonValue | undefined) {
+      completeDirectMerge(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge_complete", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -142,10 +147,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      linkMergedPullRequest(input: JsonValue | undefined) {
+      linkMergedPullRequest(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_link_merged", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -156,10 +162,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildBlocked(input: JsonValue | undefined) {
+      buildBlocked(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_blocked", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -170,10 +177,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildStart(input: JsonValue | undefined) {
+      buildStart(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_start", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -184,10 +192,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildCompleted(input: JsonValue | undefined) {
+      buildCompleted(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_completed", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -198,10 +207,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      buildResumed(input: JsonValue | undefined) {
+      buildResumed(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_resumed", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -212,10 +222,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      createTask(input: JsonValue | undefined) {
+      createTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_create", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -226,7 +237,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      deleteTask(input: JsonValue | undefined) {
+      deleteTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_delete", input });
@@ -240,10 +251,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      closeTask(input: JsonValue | undefined) {
+      closeTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_close", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -254,10 +266,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetImplementation(input: JsonValue | undefined) {
+      resetImplementation(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset_implementation", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -268,10 +281,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      resetTask(input: JsonValue | undefined) {
+      resetTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -282,7 +296,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      listTasks(input: JsonValue | undefined) {
+      listTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "tasks_list", input });
@@ -296,10 +310,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      getTaskMetadata(input: JsonValue | undefined) {
+      getTaskMetadata(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_metadata_get", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -310,10 +325,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanApprove(input: JsonValue | undefined) {
+      humanApprove(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_approve", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -324,10 +340,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      humanRequestChanges(input: JsonValue | undefined) {
+      humanRequestChanges(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_request_changes", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -338,10 +355,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      savePlanDocument(input: JsonValue | undefined) {
+      savePlanDocument(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_save_document", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -352,10 +370,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      planGet(input: JsonValue | undefined) {
+      planGet(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_get", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -366,10 +385,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      saveSpecDocument(input: JsonValue | undefined) {
+      saveSpecDocument(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_save_document", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -380,10 +400,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      specGet(input: JsonValue | undefined) {
+      specGet(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_get", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -394,7 +415,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setPlan(input: JsonValue | undefined) {
+      setPlan(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_plan", input });
@@ -411,10 +432,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      setSpec(input: JsonValue | undefined) {
+      setSpec(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_spec", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -425,10 +447,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaApproved(input: JsonValue | undefined) {
+      qaApproved(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_approved", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -439,10 +462,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaGetReport(input: JsonValue | undefined) {
+      qaGetReport(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_get_report", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -453,10 +477,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      qaRejected(input: JsonValue | undefined) {
+      qaRejected(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_rejected", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -467,7 +492,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSync(input: JsonValue | undefined) {
+      repoPullRequestSync(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync", input });
@@ -481,7 +506,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      repoPullRequestSyncDetailed(input: JsonValue | undefined) {
+      repoPullRequestSyncDetailed(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
@@ -495,10 +520,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      transitionTask(input: JsonValue | undefined) {
+      transitionTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_transition", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -509,10 +535,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      updateTask(input: JsonValue | undefined) {
+      updateTask(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_update", input });
+            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {} as never;
           },
           catch: (cause) =>
@@ -523,8 +550,8 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-    } as unknown as TaskService;
-    const handlers = createTaskCommandHandlers(service as TaskService);
+    });
+    const handlers = createTaskCommandHandlers(createFocusedTestService<TaskService>(service));
     await expect(
       runHandler(
         handlers.tasks_list?.(

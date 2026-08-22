@@ -32,6 +32,7 @@ describe("runtime distribution factories", () => {
   });
 
   test("preserves bundled directory values when normalizing raw tool ids", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(
       createArtifactRuntimeDistribution({
         bundledToolBinDirs: { " opencode ": " /app/resources/bin " } as never,
@@ -47,6 +48,7 @@ describe("runtime distribution factories", () => {
   });
 
   test("rejects unsupported artifact launcher kinds with a typed validation error", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
@@ -55,6 +57,7 @@ describe("runtime distribution factories", () => {
         } as never,
       }),
     ).toThrow(HostValidationError);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
@@ -66,6 +69,7 @@ describe("runtime distribution factories", () => {
   });
 
   test("rejects unsupported artifact tool script launcher ids with a typed validation error", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
@@ -75,6 +79,7 @@ describe("runtime distribution factories", () => {
         } as never,
       }),
     ).toThrow(HostValidationError);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
@@ -87,6 +92,7 @@ describe("runtime distribution factories", () => {
   });
 
   test("rejects unsupported bundled tool directory ids with a typed validation error", () => {
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         bundledToolBinDirs: { node: "/app/resources/bin" } as never,
@@ -96,6 +102,7 @@ describe("runtime distribution factories", () => {
         },
       }),
     ).toThrow(HostValidationError);
+    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         bundledToolBinDirs: { node: "/app/resources/bin" } as never,

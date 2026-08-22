@@ -4,6 +4,11 @@ import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-tas
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 
+interface RoleSessionActionsContract extends Record<
+  OpenSessionWorkflowAction,
+  RoleSessionActionConfig
+> {}
+
 type TaskWorkflowCallbacks = {
   onPlan: ((taskId: string, action: "set_spec" | "set_plan") => void) | undefined;
   onQaStart: ((taskId: string) => void) | undefined;
@@ -36,7 +41,7 @@ type RoleSessionActionConfig = {
   fallback?: (callbacks: TaskWorkflowCallbacks, taskId: string) => void;
 };
 
-const roleSessionActions: Record<OpenSessionWorkflowAction, RoleSessionActionConfig> = {
+const roleSessionActions: RoleSessionActionsContract = {
   open_spec: { role: "spec" },
   open_planner: { role: "planner" },
   open_qa: {

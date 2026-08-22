@@ -48,6 +48,7 @@ export const createFakeAppUpdateBridge = (initialState: AppUpdateState): FakeApp
   return bridge;
 };
 
+// SAFETY: This test controls the fixture and supplies `HostClient` used by this case.
 export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge => ({
   client: {} as HostClient,
   subscribeRunEvents: async () => () => {},

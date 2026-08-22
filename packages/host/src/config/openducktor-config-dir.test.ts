@@ -43,7 +43,9 @@ describe("OpenDucktor config directory resolution", () => {
       throw new Error("Expected whitespace-only config dir to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(HostValidationError);
+      // SAFETY: This test controls the fixture and supplies `HostValidationError` used by this case.
       expect((error as HostValidationError).field).toBe(OPENDUCKTOR_CONFIG_DIR_ENV);
+      // SAFETY: This test controls the fixture and supplies `HostValidationError` used by this case.
       expect((error as HostValidationError).message).toContain(
         "OPENDUCKTOR_CONFIG_DIR is set but empty",
       );
@@ -56,7 +58,9 @@ describe("OpenDucktor config directory resolution", () => {
       throw new Error("Expected quoted-empty config dir to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(HostValidationError);
+      // SAFETY: This test controls the fixture and supplies `HostValidationError` used by this case.
       expect((error as HostValidationError).field).toBe(OPENDUCKTOR_CONFIG_DIR_ENV);
+      // SAFETY: This test controls the fixture and supplies `HostValidationError` used by this case.
       expect((error as HostValidationError).message).toContain(
         "OPENDUCKTOR_CONFIG_DIR is set but empty",
       );

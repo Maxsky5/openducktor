@@ -1,3 +1,8 @@
+import { hasRuntimeType } from "@openducktor/contracts";
+
+interface CallsByMethodContract extends Record<ConsoleMethod, CapturedConsoleCalls> {}
+
+interface ChunksByStreamContract extends Record<WritableStreamName, string[]> {}
 type ConsoleMethod = "debug" | "error" | "info" | "log" | "warn";
 type ConsoleArguments = Parameters<Console["log"]>;
 
@@ -15,7 +20,8 @@ export const withCapturedConsole = async <Result>(
   method: ConsoleMethod,
   run: (calls: CapturedConsoleCalls) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const consoleMethods = console as unknown as ConsoleMethodMap;
+  // SAFETY: This test controls the fixture and supplies `ConsoleMethodMap` used by this case.
+  const consoleMethods = console as ConsoleMethodMap;
   const original = consoleMethods[method];
   const calls: CapturedConsoleCalls = [];
 
@@ -34,9 +40,10 @@ export const withCapturedConsoleMethods = async <Result>(
   methods: readonly ConsoleMethod[],
   run: (callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls>) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const consoleMethods = console as unknown as ConsoleMethodMap;
+  // SAFETY: This test controls the fixture and supplies `ConsoleMethodMap` used by this case.
+  const consoleMethods = console as ConsoleMethodMap;
   const originals = new Map<ConsoleMethod, (...args: ConsoleArguments) => void>();
-  const callsByMethod: Record<ConsoleMethod, CapturedConsoleCalls> = {
+  const callsByMethod: CallsByMethodContract = {
     debug: [],
     error: [],
     info: [],
@@ -64,9 +71,10 @@ export const withCapturedOutputStreams = async <Result>(
   streamNames: readonly WritableStreamName[],
   run: (chunksByStream: Record<WritableStreamName, string[]>) => Promise<Result> | Result,
 ): Promise<Result> => {
-  const streams = process as unknown as Record<WritableStreamName, WritableStreamLike>;
+  // SAFETY: This test controls the fixture and supplies `Record<WritableStreamName, WritableStreamLike>` used by this case.
+  const streams = process as Record<WritableStreamName, WritableStreamLike>;
   const originals = new Map<WritableStreamName, WritableStreamLike["write"]>();
-  const chunksByStream: Record<WritableStreamName, string[]> = {
+  const chunksByStream: ChunksByStreamContract = {
     stderr: [],
     stdout: [],
   };
@@ -78,7 +86,7 @@ export const withCapturedOutputStreams = async <Result>(
       chunksByStream[streamName].push(String(chunk));
       let callback: (() => void) | null = null;
       for (const arg of args) {
-        if (typeof arg === "function") {
+        if (hasRuntimeType(arg, "function")) {
           callback = () => {
             arg();
           };

@@ -15,6 +15,7 @@ import type { CodexSessionHistoryError } from "../../ports/codex-session-history
 import type { DevServerProcessStartExitError } from "../../ports/dev-server-process-port";
 import { type HostCommandName, parseHostCommandName } from "../commands/host-command-registry";
 import type { JsonValue } from "@openducktor/contracts";
+export type HostCommandResult = object | string | number | boolean | null | void;
 export type HostCommandArgs = Record<string, JsonValue> | undefined;
 export type HostCommandContext = {
   command: HostCommandName;
@@ -33,7 +34,7 @@ export type HostCommandHandlerError =
 export type HostCommandHandler = (
   args: HostCommandArgs,
   context: HostCommandContext,
-) => Effect.Effect<unknown, HostCommandHandlerError>;
+) => Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 export type HostCommandHandlers = Partial<Record<HostCommandName, HostCommandHandler>>;
 export type EffectHostCommandRouter = {
   dispose(): Effect.Effect<void, HostCommandHandlerError>;
@@ -41,12 +42,12 @@ export type EffectHostCommandRouter = {
   invoke(
     command: string,
     args?: Record<string, JsonValue>,
-  ): Effect.Effect<unknown, HostCommandHandlerError>;
+  ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 };
 export type HostCommandRouter = {
   dispose(): Promise<void>;
   initialize(): Promise<void>;
-  invoke(command: string, args?: Record<string, JsonValue>): Promise<unknown>;
+  invoke(command: string, args?: Record<string, JsonValue>): Promise<HostCommandResult>;
 };
 export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;

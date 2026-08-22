@@ -44,20 +44,18 @@ export class DiagnosticsQueryTimeoutError extends Error {
   }
 }
 
-export const classifyDiagnosticsQueryError = (
-  cause: unknown,
-): { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> } => {
+export const classifyDiagnosticsQueryError = (cause: unknown) => {
   if (cause instanceof DiagnosticsQueryTimeoutError) {
     return {
       message: cause.message,
       failureKind: cause.failureKind,
-    };
+    } satisfies { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> };
   }
 
   return {
     message: errorMessage(cause),
     failureKind: "error",
-  };
+  } satisfies { message: string; failureKind: Exclude<RepoRuntimeFailureKind, null> };
 };
 
 const withDiagnosticsQueryTimeout = async <T>(promise: Promise<T>): Promise<T> => {
@@ -154,6 +152,7 @@ export const repoRuntimeHealthQueryOptions = (
         ),
       );
 
+      // SAFETY: The surrounding boundary constructs or validates every member required by `RepoRuntimeHealthMap`.
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
     staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),

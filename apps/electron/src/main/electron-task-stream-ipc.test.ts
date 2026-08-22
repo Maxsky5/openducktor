@@ -28,7 +28,10 @@ type ElectronTaskStreamEvent = {
   sender: ReturnType<typeof createSender>["sender"];
   senderFrame: ReturnType<typeof createFrame> | null;
 };
-type Handler = (event: ElectronTaskStreamEvent, value: JsonValue | undefined) => unknown;
+type Handler = (
+  event: ElectronTaskStreamEvent,
+  value: JsonValue | undefined,
+) => JsonValue | void | Promise<JsonValue | undefined>;
 type NavigationDetails = { isMainFrame: boolean; isSameDocument: boolean };
 type LifecycleListener = () => void;
 type NavigationListener = (details: NavigationDetails) => void;
@@ -68,12 +71,14 @@ const createSender = (id: number, frameSend = mock(() => {})) => {
     emitLifecycle(event: "destroyed" | "render-process-gone") {
       // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
       for (const listener of [...(listeners.get(event) ?? [])]) {
+        // SAFETY: This test controls the fixture and supplies `LifecycleListener` used by this case.
         (listener as LifecycleListener)();
       }
     },
     emitNavigation(details: NavigationDetails) {
       // oxlint-disable-next-line unicorn/no-useless-spread -- match EventEmitter snapshot behavior
       for (const listener of [...(listeners.get("did-start-navigation") ?? [])]) {
+        // SAFETY: This test controls the fixture and supplies `NavigationListener` used by this case.
         (listener as NavigationListener)(details);
       }
     },
@@ -109,6 +114,7 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
     ),
   };
   const reportDeliveryFailure = mock(() => {});
+  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   registerElectronTaskStreamIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) },
     reportDeliveryFailure,
@@ -307,7 +313,8 @@ describe("electron task stream IPC", () => {
     const owner = createSender(1);
     harness.invoke(ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL, eventFor(owner), { cursor: null });
 
-    harness.sink()?.({ type: "change" } as unknown as TaskEventStreamFrame);
+    // SAFETY: This test controls the fixture and supplies `TaskEventStreamFrame` used by this case.
+    harness.sink()?.({ type: "change" } as TaskEventStreamFrame);
 
     expect(owner.mainFrame.send).toHaveBeenCalledWith(
       ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,

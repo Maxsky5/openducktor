@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
@@ -103,9 +104,12 @@ const toChatContextUsage = (
   return {
     totalTokens: selectedSessionContextUsage.totalTokens,
     contextWindow: selectedSessionContextUsage.contextWindow,
-    ...(typeof selectedSessionContextUsage.outputLimit === "number"
-      ? { outputLimit: selectedSessionContextUsage.outputLimit }
-      : {}),
+    ...(() => {
+      if (hasRuntimeType(selectedSessionContextUsage.outputLimit, "number")) {
+        return { outputLimit: selectedSessionContextUsage.outputLimit };
+      }
+      return {};
+    })(),
   };
 };
 
@@ -353,7 +357,12 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      ...(pendingSendItems ? { pendingSendItems } : {}),
+      ...(() => {
+        if (pendingSendItems) {
+          return { pendingSendItems };
+        }
+        return {};
+      })(),
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,

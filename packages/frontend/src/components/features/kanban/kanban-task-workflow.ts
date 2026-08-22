@@ -6,6 +6,13 @@ import type {
 } from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
+interface SESSIONVIEWACTIONBYROLEContract extends Record<AgentRole, SessionRoleViewAction> {}
+
+interface ACTIONPRIORITYBYISSUETYPEContract extends Record<
+  TaskCard["issueType"],
+  TaskWorkflowAction[]
+> {}
+
 export type { TaskWorkflowAction } from "@/features/task-workflow/task-workflow-actions";
 
 type SessionRoleViewAction = "open_spec" | "open_planner" | "open_builder" | "open_qa";
@@ -31,7 +38,7 @@ const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
   "qa_start",
 ];
 
-const SESSION_VIEW_ACTION_BY_ROLE: Record<AgentRole, SessionRoleViewAction> = {
+const SESSION_VIEW_ACTION_BY_ROLE: SESSIONVIEWACTIONBYROLEContract = {
   spec: "open_spec",
   planner: "open_planner",
   build: "open_builder",
@@ -167,7 +174,7 @@ const filterEnabledActions = (
   return enabled;
 };
 
-const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowAction[]> = {
+const ACTION_PRIORITY_BY_ISSUE_TYPE: ACTIONPRIORITYBYISSUETYPEContract = {
   epic: [
     "set_spec",
     "set_plan",
@@ -254,6 +261,7 @@ const resolvePriorityForTask = (
 
   if (options.hasActiveSession && options.activeSessionRole) {
     const activeSessionViewAction = toRoleSessionViewAction(options.activeSessionRole);
+    // SAFETY: The preceding runtime guard establishes `SessionRoleViewAction` before this assertion.
     const sessionViewActionsByOrder = basePriority.filter((action) =>
       SESSION_VIEW_ACTIONS.has(action as SessionRoleViewAction),
     );

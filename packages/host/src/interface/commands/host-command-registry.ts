@@ -202,7 +202,6 @@ export const HOST_COMMAND_NAMES = [
 export type HostCommandName = (typeof HOST_COMMAND_NAMES)[number];
 
 type HostCommandResponseSchema = z.ZodType;
-type HostCommandResponseWire = unknown;
 
 const asHostCommandResponseSchema = <Schema extends HostCommandResponseSchema>(
   schema: Schema,
@@ -393,7 +392,7 @@ export const parseHostCommandName = (value: string): HostCommandName => {
 
 export const parseHostCommandResponse = (
   command: string,
-  value: HostCommandResponseWire,
+  value: Parameters<typeof jsonValueSchema.parse>[0],
 ): JsonValue => {
   const hostCommand = parseHostCommandName(command);
   try {

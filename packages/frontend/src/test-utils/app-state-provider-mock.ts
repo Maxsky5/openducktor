@@ -6,6 +6,7 @@ const unused = (name: keyof AppStateProviderModule) => () => {
   throw new Error(`${String(name)} is not used in this test`);
 };
 
+// SAFETY: This test creates the DOM fixture that supplies `ReactElement` before this lookup.
 export const createAppStateProviderModuleMock = (
   overrides: Partial<AppStateProviderModule>,
 ): AppStateProviderModule => ({

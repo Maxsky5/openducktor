@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -34,7 +35,7 @@ const createFakePersistence = (
   let draft = initialDraft;
   let version = 0;
   const clear = mock((options?: { onlyIfVersion?: number | null }) => {
-    if (typeof options?.onlyIfVersion === "number" && options.onlyIfVersion !== version) {
+    if (hasRuntimeType(options?.onlyIfVersion, "number") && options.onlyIfVersion !== version) {
       return false;
     }
     draft = createEmptyComposerDraft();

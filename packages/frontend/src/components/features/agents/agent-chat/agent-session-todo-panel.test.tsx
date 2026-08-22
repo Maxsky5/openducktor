@@ -1,8 +1,10 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 
+// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
 const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -13,7 +15,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  if (typeof previousActEnvironmentValue === "undefined") {
+  if (hasRuntimeType(previousActEnvironmentValue, "undefined")) {
     delete reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
     return;
   }

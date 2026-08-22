@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -248,6 +249,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("rolls back a stale fork after lease completion without aborting the completed lease", async () => {
+    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const adapter = new OpencodeSdkAdapter();
     const stoppedSessionIds: string[] = [];
@@ -270,7 +272,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -331,7 +333,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     adapter.loadSessionHistory = async () => [];
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -639,7 +641,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     };
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
       );
     };
 
@@ -737,6 +739,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("stops the forked session when the repo becomes stale after child history load", async () => {
+    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
@@ -777,7 +780,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     };
     adapter.stopSession = async (sessionRef) => {
       stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
+        hasRuntimeType(sessionRef, "string") ? sessionRef : sessionRef.externalSessionId,
       );
     };
 

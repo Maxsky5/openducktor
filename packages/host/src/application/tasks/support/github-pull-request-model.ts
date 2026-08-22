@@ -1,5 +1,5 @@
 import type { GitProviderRepository, JsonValue, PullRequest } from "@openducktor/contracts";
-import { pullRequestSchema } from "@openducktor/contracts";
+import { pullRequestSchema, hasRuntimeType } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 
 export const GITHUB_PROVIDER_ID = "github";
@@ -54,7 +54,7 @@ export type GithubPullRequestSyncPolicy = {
 };
 
 const requireGithubString = (value: JsonValue | undefined, label: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw new HostValidationError({
       field: label,
       message: `GitHub pull request response field ${label} is missing or invalid.`,
@@ -64,7 +64,7 @@ const requireGithubString = (value: JsonValue | undefined, label: string): strin
 };
 
 const requireGithubNumber = (value: JsonValue | undefined, label: string): number => {
-  if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
+  if (!Number.isInteger(value) || !hasRuntimeType(value, "number") || value <= 0) {
     throw new HostValidationError({
       field: label,
       message: `GitHub pull request response field ${label} is missing or invalid.`,
@@ -74,8 +74,8 @@ const requireGithubNumber = (value: JsonValue | undefined, label: string): numbe
 };
 
 const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullRequest => {
-  const mergedAt = typeof response.merged_at === "string" ? response.merged_at : undefined;
-  const closedAt = typeof response.closed_at === "string" ? response.closed_at : undefined;
+  const mergedAt = hasRuntimeType(response.merged_at, "string") ? response.merged_at : undefined;
+  const closedAt = hasRuntimeType(response.closed_at, "string") ? response.closed_at : undefined;
   const rawState = requireGithubString(response.state, "state").trim().toLowerCase();
   const state =
     mergedAt !== undefined
@@ -107,6 +107,7 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
   // pullRequestSchema.parse in normalizeGithubPullRequest.
   let parsed: JsonValue | undefined;
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue | undefined` at this boundary.
     parsed = JSON.parse(payload) as JsonValue | undefined;
   } catch (cause) {
     throw new HostValidationError({
@@ -124,12 +125,13 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
   }
   const flattened = responses.every((entry) => Array.isArray(entry)) ? responses.flat() : responses;
   return flattened.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!entry || !hasRuntimeType(entry, "object") || Array.isArray(entry)) {
       throw new HostValidationError({
         field: "payload",
         message: "Failed to parse GitHub pull request list response: expected objects.",
       });
     }
+    // SAFETY: The preceding runtime guard establishes `GithubPullResponse` before this assertion.
     return normalizeGithubPullRequest(entry as GithubPullResponse);
   });
 };
@@ -139,6 +141,7 @@ export const parseGithubPullResponse = (payload: string): ResolvedPullRequest =>
   // pullRequestSchema.parse in normalizeGithubPullRequest.
   let parsed: JsonValue | undefined;
   try {
+    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue | undefined` at this boundary.
     parsed = JSON.parse(payload) as JsonValue | undefined;
   } catch (cause) {
     throw new HostValidationError({
@@ -147,12 +150,13 @@ export const parseGithubPullResponse = (payload: string): ResolvedPullRequest =>
       cause,
     });
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!parsed || !hasRuntimeType(parsed, "object") || Array.isArray(parsed)) {
     throw new HostValidationError({
       field: "payload",
       message: "Failed to parse GitHub pull request response: expected an object.",
     });
   }
+  // SAFETY: The preceding runtime guard establishes `GithubPullResponse` before this assertion.
   return normalizeGithubPullRequest(parsed as GithubPullResponse);
 };
 

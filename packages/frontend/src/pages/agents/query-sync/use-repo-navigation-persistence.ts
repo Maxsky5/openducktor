@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
@@ -308,7 +309,10 @@ export function useRepoNavigationPersistence({
   ]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || typeof document === "undefined") {
+    if (
+      hasRuntimeType(globalThis.window, "undefined") ||
+      hasRuntimeType(globalThis.document, "undefined")
+    ) {
       return;
     }
 

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -51,6 +52,7 @@ describe("createTaskService build start worktree handling", () => {
     for (const role of ["planner", "qa"] as const) {
       const calls: unknown[] = [];
       const status = role === "qa" ? "blocked" : "ready_for_dev";
+      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(task({ status })),
@@ -92,6 +94,7 @@ describe("createTaskService build start worktree handling", () => {
     { role: "qa", task: task({ status: "ready_for_dev" }) },
   ] as const)("rejects unavailable $role bootstrap before creating a worktree", async (entry) => {
     const calls: unknown[] = [];
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
@@ -137,6 +140,7 @@ describe("createTaskService build start worktree handling", () => {
       const calls: unknown[] = [];
       const coordinator = createTaskSessionBootstrapCoordinator();
       let currentTask = entry.before;
+      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
@@ -199,6 +203,7 @@ describe("createTaskService build start worktree handling", () => {
     let updatedAt = "2026-01-01T00:00:00.000Z";
     const calls: unknown[] = [];
     const coordinator = createTaskSessionBootstrapCoordinator();
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const taskStore = {
       getTask: () => Effect.succeed(task({ status, updatedAt })),
       transitionTask: () => Effect.succeed(task({ status: "in_progress" })),
@@ -295,6 +300,7 @@ describe("createTaskService build start worktree handling", () => {
   test("coordinates fork startup leases with destructive task lifecycle operations", async () => {
     const calls: unknown[] = [];
     const coordinator = createTaskSessionBootstrapCoordinator();
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ai_review" })),
@@ -357,6 +363,7 @@ describe("createTaskService build start worktree handling", () => {
     { role: "qa", task: task({ status: "ready_for_dev" }) },
   ] as const)("rejects an unavailable $role fork lease before locking the task", async (entry) => {
     const coordinator = createTaskSessionBootstrapCoordinator();
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
@@ -393,6 +400,7 @@ describe("createTaskService build start worktree handling", () => {
     async (entry) => {
       const coordinator = createTaskSessionBootstrapCoordinator();
       let currentTask = entry.before;
+      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
@@ -441,6 +449,7 @@ describe("createTaskService build start worktree handling", () => {
 
   test("completes a QA fork lease across available statuses and replays completion", async () => {
     let currentTask = task({ status: "blocked" });
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(currentTask),
@@ -480,6 +489,7 @@ describe("createTaskService build start worktree handling", () => {
   });
 
   test("rejects completing an aborted fork lease while replaying abort", async () => {
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "blocked" })),
@@ -609,6 +619,7 @@ describe("createTaskService build start worktree handling", () => {
         );
       },
     };
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
@@ -923,7 +934,10 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.some(
         (call) =>
-          typeof call === "object" && call !== null && "type" in call && call.type === "transition",
+          hasRuntimeType(call, "object") &&
+          call !== null &&
+          "type" in call &&
+          call.type === "transition",
       ),
     ).toBe(false);
   });
@@ -1002,6 +1016,7 @@ describe("createTaskService build start worktree handling", () => {
         });
       },
     };
+    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
@@ -1062,7 +1077,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.filter(
         (call) =>
-          typeof call === "object" &&
+          hasRuntimeType(call, "object") &&
           call !== null &&
           "type" in call &&
           call.type === "createWorktree",
@@ -1126,7 +1141,7 @@ describe("createTaskService build start worktree handling", () => {
     expect(
       calls.filter(
         (call) =>
-          typeof call === "object" &&
+          hasRuntimeType(call, "object") &&
           call !== null &&
           "type" in call &&
           ["deleteReference", "removeWorktree", "deleteLocalBranch"].includes(String(call.type)),

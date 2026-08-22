@@ -40,7 +40,9 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.pendingUserTurnCount).toBe(0);
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.activity as "idle" | "running").toBe("idle");
+    // SAFETY: This test controls the fixture and supplies `| "idle" | "requires_action" | "running" | undefined` used by this case.
     const sdkStateAfterCompletedResult = session.sdkState as
       | "idle"
       | "requires_action"
@@ -61,6 +63,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     });
 
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.activity as "idle" | "running").toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
     expect(events.at(-1)).toEqual(
@@ -98,6 +101,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
@@ -130,6 +134,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.activity).toBe("running");
     expect(session.pendingUserTurnCount).toBe(1);
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(events).toEqual([]);
 
@@ -274,6 +279,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("idle");
+    // SAFETY: This test controls the fixture and supplies `"idle" | "running"` used by this case.
     expect(session.sdkState as "idle" | "running").toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);

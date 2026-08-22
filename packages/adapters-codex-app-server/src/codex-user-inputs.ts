@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentUserMessagePart } from "@openducktor/core";
 import type { JsonValue } from "@openducktor/contracts";
 import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
@@ -15,8 +16,8 @@ const codexTextElementFromUnknown = (entry: JsonValue | undefined): CodexTextEle
   const start = byteRange.start;
   const end = byteRange.end;
   if (
-    typeof start !== "number" ||
-    typeof end !== "number" ||
+    !hasRuntimeType(start, "number") ||
+    !hasRuntimeType(end, "number") ||
     !Number.isFinite(start) ||
     !Number.isFinite(end)
   ) {
@@ -25,7 +26,7 @@ const codexTextElementFromUnknown = (entry: JsonValue | undefined): CodexTextEle
   const placeholder = entry.placeholder;
   return {
     byteRange: { start, end },
-    placeholder: typeof placeholder === "string" ? placeholder : null,
+    placeholder: hasRuntimeType(placeholder, "string") ? placeholder : null,
   };
 };
 
@@ -38,7 +39,7 @@ const codexUserInputFromUnknown = (entry: JsonValue | undefined): CodexUserInput
   if (!isPlainObject(entry)) {
     return null;
   }
-  if (entry.type === "text" && typeof entry.text === "string") {
+  if (entry.type === "text" && hasRuntimeType(entry.text, "string")) {
     return {
       type: "text",
       text: entry.text,
@@ -47,15 +48,19 @@ const codexUserInputFromUnknown = (entry: JsonValue | undefined): CodexUserInput
   }
   if (
     entry.type === "mention" &&
-    typeof entry.name === "string" &&
-    typeof entry.path === "string"
+    hasRuntimeType(entry.name, "string") &&
+    hasRuntimeType(entry.path, "string")
   ) {
     return { type: "mention", name: entry.name, path: entry.path };
   }
-  if (entry.type === "skill" && typeof entry.name === "string" && typeof entry.path === "string") {
+  if (
+    entry.type === "skill" &&
+    hasRuntimeType(entry.name, "string") &&
+    hasRuntimeType(entry.path, "string")
+  ) {
     return { type: "skill", name: entry.name, path: entry.path };
   }
-  if (entry.type === "localImage" && typeof entry.path === "string") {
+  if (entry.type === "localImage" && hasRuntimeType(entry.path, "string")) {
     return { type: "localImage", path: entry.path };
   }
   return null;

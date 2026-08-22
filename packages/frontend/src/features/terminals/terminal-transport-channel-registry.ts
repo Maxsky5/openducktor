@@ -56,18 +56,26 @@ export const createTerminalTransportChannelRegistry = () => {
       channel.listeners.add(listener);
       return isFirstListener;
     },
-    removeListener(
-      terminalId: string,
-      listener: TerminalFrameListener,
-    ): { lastListenerRemoved: boolean; wasClosing: boolean } {
+    removeListener(terminalId: string, listener: TerminalFrameListener) {
       const channel = channels.get(terminalId);
-      if (!channel) return { lastListenerRemoved: false, wasClosing: false };
+      if (!channel)
+        return { lastListenerRemoved: false, wasClosing: false } satisfies {
+          lastListenerRemoved: boolean;
+          wasClosing: boolean;
+        };
       channel.listeners.delete(listener);
-      if (channel.listeners.size > 0) return { lastListenerRemoved: false, wasClosing: false };
+      if (channel.listeners.size > 0)
+        return { lastListenerRemoved: false, wasClosing: false } satisfies {
+          lastListenerRemoved: boolean;
+          wasClosing: boolean;
+        };
       const wasClosing = channel.isClosing;
       if (!channel.operationQueue) channel.discardQueuedOperations = false;
       forgetIfUnused(terminalId, channel);
-      return { lastListenerRemoved: true, wasClosing };
+      return { lastListenerRemoved: true, wasClosing } satisfies {
+        lastListenerRemoved: boolean;
+        wasClosing: boolean;
+      };
     },
     lastConsumedSequence(terminalId: string): number | null {
       return channels.get(terminalId)?.consumedSequence ?? null;

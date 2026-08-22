@@ -32,8 +32,18 @@ export const toPrimaryAgentOptions = (catalog: AgentModelCatalog | null): Combob
     return {
       value,
       label,
-      ...(entry.description ? { description: entry.description } : {}),
-      ...(accentColor ? { accentColor } : {}),
+      ...(() => {
+        if (entry.description) {
+          return { description: entry.description };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (accentColor) {
+          return { accentColor };
+        }
+        return {};
+      })(),
     };
   });
 };
@@ -49,7 +59,12 @@ export const toModelOptions = (catalog: AgentModelCatalog | null): ComboboxOptio
       value: catalogModelOptionValue(entry),
       label: entry.modelName,
       description: entry.modelId,
-      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),
+      ...(() => {
+        if (contextWindowLabel) {
+          return { secondaryLabel: contextWindowLabel };
+        }
+        return {};
+      })(),
       searchKeywords: [
         entry.modelId,
         entry.providerId,
@@ -75,7 +90,12 @@ export const toModelGroupsByProvider = (catalog: AgentModelCatalog | null): Comb
       value: catalogModelOptionValue(model),
       label: model.modelName,
       description: model.modelId,
-      ...(contextWindowLabel ? { secondaryLabel: contextWindowLabel } : {}),
+      ...(() => {
+        if (contextWindowLabel) {
+          return { secondaryLabel: contextWindowLabel };
+        }
+        return {};
+      })(),
       searchKeywords: [
         model.modelId,
         model.providerId,

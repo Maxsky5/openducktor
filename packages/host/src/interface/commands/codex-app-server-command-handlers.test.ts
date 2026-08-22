@@ -1,4 +1,5 @@
 import type { CodexAppServerRequestInput } from "../../ports/codex-app-server-port";
+import { createInvalidFixture } from "../../test-support/focused-service";
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -418,6 +419,7 @@ describe("createCodexAppServerCommandHandlers", () => {
 
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
+    const nonJsonParams = { omitted: undefined } satisfies object;
     const unexpectedCall = (input: CodexAppServerRequestInput | JsonValue | undefined) =>
       Effect.sync(() => {
         calls.push(input);
@@ -472,7 +474,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         method: "model/list",
         // SAFETY: intentionally non-JSON payload to exercise the runtime
         // JSON-serializability validation; the cast bypasses the static JsonValue gate.
-        params: { omitted: undefined } as unknown as JsonValue,
+        params: createInvalidFixture<JsonValue>(nonJsonParams),
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
     for (const params of [null, true, 1, "params", []]) {

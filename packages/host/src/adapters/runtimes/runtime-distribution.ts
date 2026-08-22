@@ -60,6 +60,7 @@ const assertToolDiscoveryId = (value: string, field: string): ToolDiscoveryId =>
   return toolId;
 };
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `SourceRuntimeDistribution`.
 export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRuntimeDistribution =>
   ({
     mode: "source",
@@ -67,6 +68,7 @@ export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRu
   }) as SourceRuntimeDistribution;
 
 const unsupportedArtifactMcpLauncher = (launcher: never): never => {
+  // SAFETY: The surrounding boundary constructs or validates every member required by `{ kind?: unknown }`.
   const kind = (launcher as { kind?: unknown }).kind;
   throw new HostValidationError({
     field: "mcpLauncher.kind",
@@ -118,13 +120,17 @@ export const createArtifactRuntimeDistribution = ({
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
   const normalizedBundledToolBinDirs = createBundledToolBinDirs(bundledToolBinDirs);
+  // SAFETY: The surrounding boundary constructs or validates every member required by `ArtifactRuntimeDistribution`.
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(normalizedBundledToolBinDirs === undefined
-      ? {}
-      : {
-          bundledToolBinDirs: normalizedBundledToolBinDirs,
-        }),
+    ...(() => {
+      if (normalizedBundledToolBinDirs === undefined) {
+        return {};
+      }
+      return {
+        bundledToolBinDirs: normalizedBundledToolBinDirs,
+      };
+    })(),
   } as ArtifactRuntimeDistribution;
 };

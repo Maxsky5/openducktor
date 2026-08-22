@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
-import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
-import type { ClaudeSession } from "./claude-agent-sdk-types";
+import {
+  createClaudeQueryFixture,
+  createClaudeSession,
+} from "./claude-agent-sdk-session-io.test-support";
 
 describe("Claude session I/O model changes", () => {
   test("does not change the query creation system prompt on later sends", async () => {
@@ -42,7 +43,7 @@ describe("Claude session I/O model changes", () => {
     };
     const session = createClaudeSession({
       activity: "idle",
-      query: { setModel } as unknown as ClaudeSession["query"],
+      query: createClaudeQueryFixture({ setModel }),
       queue,
     });
 
@@ -88,7 +89,7 @@ describe("Claude session I/O model changes", () => {
 
   test("applies supported per-message effort changes through Claude flag settings", async () => {
     const setModel = mock(async (_model?: string) => {});
-    const applyFlagSettings = mock(async (_settings: JsonValue | undefined) => {});
+    const applyFlagSettings = mock(async () => {});
     const pushed: SDKUserMessage[] = [];
     const queue = new AsyncInputQueue<SDKUserMessage>();
     queue.push = (message) => {
@@ -102,10 +103,10 @@ describe("Claude session I/O model changes", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: {
+      query: createClaudeQueryFixture({
         applyFlagSettings,
         setModel,
-      } as unknown as ClaudeSession["query"],
+      }),
       queue,
     });
 
@@ -150,7 +151,7 @@ describe("Claude session I/O model changes", () => {
         modelId: "claude-sonnet-4-6",
         runtimeKind: "claude",
       },
-      query: { setModel } as unknown as ClaudeSession["query"],
+      query: createClaudeQueryFixture({ setModel }),
       queue,
     });
 

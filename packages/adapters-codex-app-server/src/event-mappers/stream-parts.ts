@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { arrayFromUnknown, extractStringField, isPlainObject } from "../codex-app-server-shared";
 import type { JsonValue } from "@openducktor/contracts";
 import { codexItemTypeMatches, toStreamPart } from "../codex-app-server-transcript";
@@ -26,8 +27,18 @@ const streamPartEvents = (
       source: ctx.source,
       mapper: name,
       threadId: ctx.threadId,
-      ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
-      ...(eventTimestamp ? { timestamp: eventTimestamp } : {}),
+      ...(() => {
+        if (ctx.turnId) {
+          return { turnId: ctx.turnId };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (eventTimestamp) {
+          return { timestamp: eventTimestamp };
+        }
+        return {};
+      })(),
       raw,
       part,
     };
@@ -44,8 +55,9 @@ const streamPartMapper = (name: string, itemType: string): CodexEventMapper => (
     if (!codexItemTypeMatches(input.item, itemType)) {
       return emptyCodexMappingResult();
     }
-    const itemId =
-      typeof input.item.id === "string" ? input.item.id : `${ctx.threadId}-${name}-${Date.now()}`;
+    const itemId = hasRuntimeType(input.item.id, "string")
+      ? input.item.id
+      : `${ctx.threadId}-${name}-${Date.now()}`;
     return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId, undefined, {
       allowStartedAtOnly: input.kind === "item_started",
     });
@@ -54,8 +66,9 @@ const streamPartMapper = (name: string, itemType: string): CodexEventMapper => (
     if (!codexItemTypeMatches(input.item, itemType)) {
       return emptyCodexMappingResult();
     }
-    const itemId =
-      typeof input.item.id === "string" ? input.item.id : `${ctx.threadId}-${name}-${input.index}`;
+    const itemId = hasRuntimeType(input.item.id, "string")
+      ? input.item.id
+      : `${ctx.threadId}-${name}-${input.index}`;
     return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId, input.timestamp);
   },
 });
@@ -97,10 +110,9 @@ export const fileChangeMapper: CodexEventMapper = {
     if (!codexItemTypeMatches(input.item, "fileChange")) {
       return emptyCodexMappingResult();
     }
-    const itemId =
-      typeof input.item.id === "string"
-        ? input.item.id
-        : `${ctx.threadId}-file_change-${input.index}`;
+    const itemId = hasRuntimeType(input.item.id, "string")
+      ? input.item.id
+      : `${ctx.threadId}-file_change-${input.index}`;
     return streamPartEvents(
       this.name,
       ctx,

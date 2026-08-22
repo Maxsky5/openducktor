@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
@@ -88,8 +89,9 @@ const settingsSnapshotReducer = (
     case "loadingFinished":
       return { ...state, isLoadingSettings: false };
     case "draftChanged": {
-      const snapshotDraft =
-        typeof action.update === "function" ? action.update(state.snapshotDraft) : action.update;
+      const snapshotDraft = hasRuntimeType(action.update, "function")
+        ? action.update(state.snapshotDraft)
+        : action.update;
       return { ...state, snapshotDraft };
     }
     case "workspaceSelected":

@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { ParsedOpencodePart } from "./opencode-ingress";
@@ -124,13 +125,23 @@ const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | nu
   return {
     externalSessionId,
     status,
-    ...(summary ? { summary } : {}),
-    ...(resultText ? { resultText } : {}),
+    ...(() => {
+      if (summary) {
+        return { summary };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (resultText) {
+        return { resultText };
+      }
+      return {};
+    })(),
   };
 };
 
 const readEndedAtMs = (part: TextPart, timestamp: string | undefined): number | undefined => {
-  if (typeof part.time?.end === "number") {
+  if (hasRuntimeType(part.time?.end, "number")) {
     return part.time.end;
   }
   if (!timestamp) {
@@ -168,13 +179,28 @@ export const mapOpenCodeBackgroundTaskResultPart = (
     correlationKey:
       options.correlationKey ?? ["session", part.messageID, parsed.externalSessionId].join(":"),
     status: parsed.status,
-    ...(description ? { description } : {}),
-    ...(parsed.status === "error" && parsed.resultText ? { error: parsed.resultText } : {}),
+    ...(() => {
+      if (description) {
+        return { description };
+      }
+      return {};
+    })(),
+    ...(() => {
+      if (parsed.status === "error" && parsed.resultText) {
+        return { error: parsed.resultText };
+      }
+      return {};
+    })(),
     externalSessionId: parsed.externalSessionId,
     executionMode: "background",
     metadata: {
       background: true,
     },
-    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    ...(() => {
+      if (hasRuntimeType(endedAtMs, "number")) {
+        return { endedAtMs };
+      }
+      return {};
+    })(),
   };
 };

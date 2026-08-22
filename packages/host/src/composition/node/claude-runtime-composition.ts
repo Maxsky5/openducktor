@@ -54,7 +54,12 @@ export const createClaudeRuntimeComposition = ({
   const agentSdkService = createClaudeAgentSdkService({
     emit: eventHub.emit,
     onBackgroundFailure,
-    ...(processEnv ? { processEnv } : {}),
+    ...(() => {
+      if (processEnv) {
+        return { processEnv };
+      }
+      return {};
+    })(),
     resolveMcpBridgeConnection,
     runtimeDistribution,
     settingsConfig,

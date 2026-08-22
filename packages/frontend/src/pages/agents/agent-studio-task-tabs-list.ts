@@ -51,13 +51,13 @@ export const closeTaskTab = (params: {
   tabTaskIds: string[];
   taskIdToClose: string;
   activeTaskId: string;
-}): { nextTabTaskIds: string[]; nextActiveTaskId: string | null } => {
+}) => {
   const closeIndex = params.tabTaskIds.indexOf(params.taskIdToClose);
   if (closeIndex < 0) {
     return {
       nextTabTaskIds: params.tabTaskIds,
       nextActiveTaskId: params.activeTaskId || null,
-    };
+    } satisfies { nextTabTaskIds: string[]; nextActiveTaskId: string | null };
   }
 
   const nextTabTaskIds = params.tabTaskIds.filter((taskId) => taskId !== params.taskIdToClose);
@@ -65,7 +65,7 @@ export const closeTaskTab = (params: {
     return {
       nextTabTaskIds,
       nextActiveTaskId: params.activeTaskId || null,
-    };
+    } satisfies { nextTabTaskIds: string[]; nextActiveTaskId: string | null };
   }
 
   const adjacentTab =
@@ -76,5 +76,5 @@ export const closeTaskTab = (params: {
   return {
     nextTabTaskIds,
     nextActiveTaskId: adjacentTab,
-  };
+  } satisfies { nextTabTaskIds: string[]; nextActiveTaskId: string | null };
 };

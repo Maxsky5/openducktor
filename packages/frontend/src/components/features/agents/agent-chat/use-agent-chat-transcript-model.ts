@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   startTransition,
   useEffect,
@@ -62,6 +63,7 @@ const EMPTY_TRANSCRIPT_MODEL_REVISION: TranscriptModelRevision = Object.freeze({
   count: null,
 });
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `AgentChatTurnAnchor[]`.
 const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
   revision: EMPTY_TRANSCRIPT_MODEL_REVISION,
   rows: EMPTY_ROWS,
@@ -147,7 +149,7 @@ const createInitialTranscriptModelCache = (
 };
 
 const now = (): number => {
-  return typeof globalThis.performance?.now === "function"
+  return hasRuntimeType(globalThis.performance?.now, "function")
     ? globalThis.performance.now()
     : Date.now();
 };
@@ -260,13 +262,7 @@ export const useAgentChatTranscriptModel = ({
 }: {
   session: AgentChatTranscriptSession | null;
   showThinkingMessages: boolean;
-}): {
-  transcriptState: TranscriptModelState;
-  hasRowsForActiveSession: boolean;
-  hasCurrentRowsForActiveSession: boolean;
-  isTranscriptModelMissing: boolean;
-  isTranscriptModelPending: boolean;
-} => {
+}) => {
   const [rowsCache] = useState(() =>
     createInitialTranscriptModelCache(session, showThinkingMessages),
   );
@@ -438,5 +434,11 @@ export const useAgentChatTranscriptModel = ({
     hasCurrentRowsForActiveSession,
     isTranscriptModelMissing,
     isTranscriptModelPending,
+  } satisfies {
+    transcriptState: TranscriptModelState;
+    hasRowsForActiveSession: boolean;
+    hasCurrentRowsForActiveSession: boolean;
+    isTranscriptModelMissing: boolean;
+    isTranscriptModelPending: boolean;
   };
 };

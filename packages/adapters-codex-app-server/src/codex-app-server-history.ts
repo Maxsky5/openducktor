@@ -20,14 +20,22 @@ export const applyFinalAssistantTurnMetadata = (
   const tokenUsageFields = tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : null;
   return {
     ...message,
-    ...(turnTiming ? { durationMs: turnTiming.durationMs } : {}),
+    ...(() => {
+      if (turnTiming) {
+        return { durationMs: turnTiming.durationMs };
+      }
+      return {};
+    })(),
     ...tokenUsageFields,
-    ...(tokenUsageFields
-      ? {
+    ...(() => {
+      if (tokenUsageFields) {
+        return {
           parts: message.parts.map((part) =>
             isStopFinishPart(part) ? { ...part, ...tokenUsageFields } : part,
           ),
-        }
-      : {}),
+        };
+      }
+      return {};
+    })(),
   };
 };

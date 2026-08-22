@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -315,9 +316,12 @@ export const useAgentChatComposerEditorEvents = ({
         sourceDraft,
         event.target,
       );
+      // SAFETY: The surrounding boundary constructs or validates every member required by `{ inputType?: unknown; data?: unknown }`.
       const nativeEvent = event.nativeEvent as { inputType?: unknown; data?: unknown };
-      const inputType = typeof nativeEvent.inputType === "string" ? nativeEvent.inputType : null;
-      const data = typeof nativeEvent.data === "string" ? nativeEvent.data : null;
+      const inputType = hasRuntimeType(nativeEvent.inputType, "string")
+        ? nativeEvent.inputType
+        : null;
+      const data = hasRuntimeType(nativeEvent.data, "string") ? nativeEvent.data : null;
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
         sourceDraft,
         activeSelection,

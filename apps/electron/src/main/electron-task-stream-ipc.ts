@@ -59,7 +59,10 @@ type ElectronTaskStreamEvent = {
 type ElectronIpcMainLike = {
   handle(
     channel: string,
-    listener: (event: ElectronTaskStreamEvent, value: JsonValue | undefined) => unknown,
+    listener: (
+      event: ElectronTaskStreamEvent,
+      value: JsonValue | undefined,
+    ) => JsonValue | void | Promise<JsonValue | undefined>,
   ): void;
 };
 
@@ -90,10 +93,7 @@ const validationError = (
   details?: ElectronErrorDetails,
 ) => new ElectronValidationError({ operation, field, message, details });
 
-const readTrustedSender = (
-  event: ElectronTaskStreamEvent,
-  operation: string,
-): { sender: ElectronTaskStreamSender; senderFrame: ElectronTaskStreamFrame } => {
+const readTrustedSender = (event: ElectronTaskStreamEvent, operation: string) => {
   const { sender, senderFrame } = event;
   const mainFrame = sender.mainFrame;
   if (
@@ -111,7 +111,10 @@ const readTrustedSender = (
       "Electron task stream messages must come from the sender's active main frame.",
     );
   }
-  return { sender, senderFrame };
+  return { sender, senderFrame } satisfies {
+    sender: ElectronTaskStreamSender;
+    senderFrame: ElectronTaskStreamFrame;
+  };
 };
 
 const parseOrThrow = <Value>(

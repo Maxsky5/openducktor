@@ -66,6 +66,7 @@ const TREE_THEME_BY_MODE = {
   },
 } satisfies Record<"light" | "dark", TreeThemeInput>;
 
+// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
 const treeStylesForTheme = (theme: "light" | "dark"): CSSProperties =>
   ({
     ...themeToTreeStyles(TREE_THEME_BY_MODE[theme]),

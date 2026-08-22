@@ -92,10 +92,14 @@ const contentDisposition = (originalName: string): string => {
   return `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(wellFormedName)}`;
 };
 
+interface TaskAssetResponseHeaders {
+  readonly [name: string]: string;
+}
+
 const responseHeaders = (
   record: TaskAssetRecord,
   mediaType: TaskAssetMediaType,
-): Readonly<Record<string, string>> => ({
+): TaskAssetResponseHeaders => ({
   "Cache-Control": "private, no-store",
   "Content-Disposition": contentDisposition(record.originalName),
   "Content-Type": mediaType,
@@ -150,7 +154,12 @@ export const createTaskAssetReadService = (input: {
       message: missingWorkspace
         ? "Task assets were not found."
         : "Task asset workspace could not be read.",
-      ...(missingWorkspace ? {} : { cause }),
+      ...(() => {
+        if (missingWorkspace) {
+          return {};
+        }
+        return { cause };
+      })(),
     });
   };
 

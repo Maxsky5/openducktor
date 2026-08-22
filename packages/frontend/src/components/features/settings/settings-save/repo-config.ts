@@ -37,10 +37,30 @@ export const prepareRepoConfigForSave = (repo: RepoConfig): RepoConfig => {
     }),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
     agentDefaults: {
-      ...(spec ? { spec } : {}),
-      ...(planner ? { planner } : {}),
-      ...(build ? { build } : {}),
-      ...(qa ? { qa } : {}),
+      ...(() => {
+        if (spec) {
+          return { spec };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (planner) {
+          return { planner };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (build) {
+          return { build };
+        }
+        return {};
+      })(),
+      ...(() => {
+        if (qa) {
+          return { qa };
+        }
+        return {};
+      })(),
     },
   };
 };

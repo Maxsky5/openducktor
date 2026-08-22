@@ -61,6 +61,7 @@ const clearStoreContextEnv = (): void => {
   }
 };
 
+// SAFETY: This test controls the fixture and supplies `StoreContextEnvSnapshot` used by this case.
 const snapshotStoreContextEnv = (): StoreContextEnvSnapshot =>
   Object.fromEntries(
     STORE_CONTEXT_ENV_KEYS.map((key) => [key, process.env[key]]),
@@ -100,6 +101,7 @@ describe("resolveStoreContext", () => {
     const responseBarrier = new Promise<void>((resolve) => {
       releaseResponses = resolve;
     });
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       requests.push({
@@ -159,6 +161,7 @@ describe("resolveStoreContext", () => {
 
   test("starts without a workspace default after one authenticated readiness request", async () => {
     const requests: Array<{ url: string; body: JsonValue }> = [];
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       requests.push({
@@ -196,12 +199,14 @@ describe("resolveStoreContext", () => {
     tempDirs.push(dir);
     const observedHostTokens: Array<string | undefined> = [];
 
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       if (url.endsWith("/health")) {
         return jsonResponse({ ok: true });
       }
       if (url.endsWith("/invoke/odt_mcp_ready")) {
+        // SAFETY: This test controls the fixture and supplies `Record<string, string> | undefined` used by this case.
         observedHostTokens.push(
           (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
         );
@@ -224,6 +229,7 @@ describe("resolveStoreContext", () => {
   });
 
   test("reads workspaceId-forbidden mode from the environment", async () => {
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -263,6 +269,7 @@ describe("resolveStoreContext", () => {
   });
 
   test("preserves explicit false for workspaceId-forbidden mode", async () => {
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -293,6 +300,7 @@ describe("resolveStoreContext", () => {
   });
 
   test("fails fast when authenticated readiness fails", async () => {
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -324,9 +332,11 @@ describe("resolveStoreContext", () => {
     process.env.ODT_WORKSPACE_ID = "repo";
     const observedHostTokens: Array<string | undefined> = [];
 
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       if (url === "http://127.0.0.1:14327/invoke/odt_mcp_ready") {
+        // SAFETY: This test controls the fixture and supplies `Record<string, string> | undefined` used by this case.
         observedHostTokens.push(
           (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
         );
@@ -336,6 +346,7 @@ describe("resolveStoreContext", () => {
         });
       }
       if (url === "http://127.0.0.1:14327/invoke/odt_get_workspaces") {
+        // SAFETY: This test controls the fixture and supplies `Record<string, string> | undefined` used by this case.
         observedHostTokens.push(
           (init?.headers as Record<string, string> | undefined)?.["x-openducktor-app-token"],
         );
@@ -394,6 +405,7 @@ describe("resolveStoreContext", () => {
     process.env.OPENDUCKTOR_CHANNEL = "dev";
     process.env.OPENDUCKTOR_DEV_INSTANCE = "browser-0123456789ab";
 
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url === "http://127.0.0.1:24327/invoke/odt_mcp_ready") {
@@ -465,9 +477,11 @@ describe("resolveStoreContext", () => {
       throw new Error("Expected resolveStoreContext() to reject.");
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toStartWith(
         `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. not-a-url: `,
       );
+      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).toEndWith(" Provide ODT_HOST_URL to override discovery.");
     }
   });
@@ -484,6 +498,7 @@ describe("resolveStoreContext", () => {
     const readinessBarrier = new Promise<void>((resolve) => {
       releaseReadiness = resolve;
     });
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -512,6 +527,7 @@ describe("resolveStoreContext", () => {
       throw new Error("Expected resolveStoreContext() to reject.");
     }
     expect(outcome.error).toBeInstanceOf(Error);
+    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((outcome.error as Error).message).toStartWith(
       `No healthy OpenDucktor host was discovered. Checked ${discoveryPath}. http://127.0.0.1:14327: OpenDucktor host bridge is missing required MCP tools:`,
     );
@@ -520,6 +536,7 @@ describe("resolveStoreContext", () => {
   test("preserves the exact unknown-workspace error during host discovery", async () => {
     const configDir = await createDiscoveryFile();
     process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
+    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.endsWith("/invoke/odt_mcp_ready")) {

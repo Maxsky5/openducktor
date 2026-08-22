@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -185,7 +186,7 @@ export const createSettingsConfigAdapter = ({
         }).pipe(
           Effect.catchTag("HostOperationError", (error) => {
             if (
-              typeof error.cause === "object" &&
+              hasRuntimeType(error.cause, "object") &&
               error.cause !== null &&
               "code" in error.cause &&
               error.cause.code === "ENOENT"

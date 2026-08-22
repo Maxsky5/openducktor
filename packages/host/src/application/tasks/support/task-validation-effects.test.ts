@@ -1,3 +1,4 @@
+import { createFocusedTestService } from "../../../test-support/focused-service";
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -40,22 +41,24 @@ describe("task validation effects", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
+    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
   });
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
     const current = task({ issueType: "bug", status: "human_review" });
-    const taskStore = {
+    const taskStore = createFocusedTestService<TaskStorePort>({
       transitionTask() {
         return Effect.die("transition should not run");
       },
-    } as unknown as TaskStorePort;
+    });
 
     const error = await Effect.runPromise(
       Effect.flip(blockBuildCompletionTask(taskStore, "/repo", current.id, current, [current])),
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
+    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 });

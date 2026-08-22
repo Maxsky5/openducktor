@@ -234,7 +234,12 @@ export const normalizeOpencodeGlobalEventPayload = (
     return {
       kind: "event",
       event: {
-        ...(parsed.id ? { id: parsed.id } : {}),
+        ...(() => {
+          if (parsed.id) {
+            return { id: parsed.id };
+          }
+          return {};
+        })(),
         type: parsed.type,
         properties: parsed.properties,
       },
@@ -253,7 +258,12 @@ export const normalizeOpencodeGlobalEventPayload = (
   return {
     kind: "event",
     event: {
-      ...(syncEvent.id ? { id: syncEvent.id } : {}),
+      ...(() => {
+        if (syncEvent.id) {
+          return { id: syncEvent.id };
+        }
+        return {};
+      })(),
       type: eventType,
       properties: syncEvent.data,
     },
@@ -349,9 +359,12 @@ const createEventStreamRuntime = (
     now: input.now,
     emit: input.emit,
     session,
-    ...(input.resolveSubagentSessionLink
-      ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
-      : {}),
+    ...(() => {
+      if (input.resolveSubagentSessionLink) {
+        return { resolveSubagentSessionLink: input.resolveSubagentSessionLink };
+      }
+      return {};
+    })(),
   };
 };
 
