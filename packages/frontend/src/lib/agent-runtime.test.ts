@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createInvalidFixture } from "@/test-utils/focused-fixture";
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
@@ -159,13 +158,14 @@ describe("agent-runtime capability policies", () => {
   });
 
   test("returns schema errors instead of crashing for partially migrated descriptors", () => {
-    const malformedDescriptor = createInvalidFixture<RuntimeDescriptor>({
+    const malformedDescriptor: RuntimeDescriptor = {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       capabilities: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+        // @ts-expect-error -- This fixture verifies runtime rejection of a missing workflow contract.
         workflow: undefined,
       },
-    });
+    };
 
     expect(() => validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).not.toThrow();
     expect(validateRuntimeDefinitionForOpenDucktor(malformedDescriptor)).toEqual([
@@ -212,14 +212,14 @@ describe("agent-runtime capability policies", () => {
         supportedReplyOutcomes: ["reject"],
       },
     });
-    const structuredInputDescriptor = withCapabilities(
-      createInvalidFixture<Partial<RuntimeDescriptor["capabilities"]>>({
-        structuredInput: {
-          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
-          supportsQuestions: "yes",
-        },
-      }),
-    );
+    const malformedCapabilities: Partial<RuntimeDescriptor["capabilities"]> = {
+      structuredInput: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.structuredInput,
+        // @ts-expect-error -- This fixture verifies runtime rejection of a non-boolean capability.
+        supportsQuestions: "yes",
+      },
+    };
+    const structuredInputDescriptor = withCapabilities(malformedCapabilities);
 
     expect(validateRuntimeDefinitionForOpenDucktor(approvalDescriptor)).toEqual([
       "[workflow] runtime descriptor schema violation at capabilities.approvals.supportedReplyOutcomes: Runtime descriptors with approval requests must support at least one approval reply outcome.",

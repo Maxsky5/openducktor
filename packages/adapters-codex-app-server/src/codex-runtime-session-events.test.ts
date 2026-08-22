@@ -199,7 +199,7 @@ const createActiveTurn = (
   session: createSession(threadId),
   startedAtMs: Date.now(),
   turnStartRequestSentAtMs: 0,
-  turnStartPromise: Promise.resolve({}),
+  turnStartPromise: null,
   isTurnSettled: () => false,
   markTurnSettled: () => undefined,
   handledRequestKeys: new Set(),

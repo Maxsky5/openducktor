@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { createInvalidFixture } from "../../test-support/focused-service";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
@@ -11,13 +10,10 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("Claude SDK ingress", () => {
   test("rejects malformed history entries before history projection", () => {
+    const malformedHistory = [{ type: "assistant", message: new Date() }];
     let error: unknown;
     try {
-      filterClaudeHistoryMessages(
-        createInvalidFixture<Parameters<typeof filterClaudeHistoryMessages>[0]>([
-          { type: "assistant", message: new Date() },
-        ]),
-      );
+      filterClaudeHistoryMessages(malformedHistory);
     } catch (cause) {
       error = cause;
     }
@@ -30,18 +26,18 @@ describe("Claude SDK ingress", () => {
 
   test("rejects malformed pre-tool input before authorization", async () => {
     const hook = createClaudePreToolUseHook({ session: createClaudeSession() });
+    const malformedInput: Parameters<typeof hook>[0] = {
+      cwd: "/repo",
+      hook_event_name: "PreToolUse",
+      session_id: "session-1",
+      tool_name: "Bash",
+      tool_input: "pwd",
+      tool_use_id: "tool-1",
+      transcript_path: "/repo/transcript.jsonl",
+    };
 
     await expect(
-      hook(
-        createInvalidFixture<Parameters<typeof hook>[0]>({
-          hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: "pwd",
-          tool_use_id: "tool-1",
-        }),
-        "tool-1",
-        { signal: new AbortController().signal },
-      ),
+      hook(malformedInput, "tool-1", { signal: new AbortController().signal }),
     ).rejects.toMatchObject({
       _tag: "HostValidationError",
       field: "claudePreToolUse",
@@ -54,19 +50,19 @@ describe("Claude SDK ingress", () => {
       now: () => "2026-08-21T12:00:00.000Z",
       session: createClaudeSession(),
     });
+    const malformedInput: Parameters<typeof hook>[0] = {
+      cwd: "/repo",
+      hook_event_name: "PostToolUse",
+      session_id: "session-1",
+      tool_name: "Edit",
+      tool_input: { file_path: "src/file.ts" },
+      tool_response: new Date(),
+      tool_use_id: "tool-1",
+      transcript_path: "/repo/transcript.jsonl",
+    };
 
     await expect(
-      hook(
-        createInvalidFixture<Parameters<typeof hook>[0]>({
-          hook_event_name: "PostToolUse",
-          tool_name: "Edit",
-          tool_input: { file_path: "src/file.ts" },
-          tool_response: new Date(),
-          tool_use_id: "tool-1",
-        }),
-        "tool-1",
-        { signal: new AbortController().signal },
-      ),
+      hook(malformedInput, "tool-1", { signal: new AbortController().signal }),
     ).rejects.toMatchObject({
       _tag: "HostValidationError",
       field: "claudePostToolUse",

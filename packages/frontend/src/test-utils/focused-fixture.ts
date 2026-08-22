@@ -12,13 +12,6 @@ export const createFocusedFixture = <Value extends object>(value: Partial<Value>
   return guardedValue as Value;
 };
 
-export const createInvalidFixture = <Value extends object, Source extends object = object>(
-  value: Source,
-): Value => {
-  // SAFETY: boundary tests use this helper only to pass malformed object payloads through a static contract.
-  return value as Source & Value;
-};
-
 export const createTimerFixture = (): ReturnType<typeof setTimeout> => {
   const timer = setTimeout(() => {}, 60_000);
   clearTimeout(timer);

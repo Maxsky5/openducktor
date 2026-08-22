@@ -14,14 +14,3 @@ export const createFocusedTestService = <Service extends object>(
   // SAFETY: The proxy rejects every read of an omitted service member, while Partial checks each supplied member.
   return guardedService as Service;
 };
-
-/** Pass malformed test data through a static contract without weakening production types. */
-export const createInvalidFixture = <
-  Value,
-  Source extends object | readonly object[] = object | readonly object[],
->(
-  value: Source,
-): Value => {
-  // SAFETY: boundary tests use this helper only to verify runtime validation of malformed object payloads.
-  return value as Source & Value;
-};

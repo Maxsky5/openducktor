@@ -1,6 +1,7 @@
 import type { GitProviderRepository, JsonValue, PullRequest } from "@openducktor/contracts";
-import { pullRequestSchema, hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import { pullRequestSchema, jsonValueSchema } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { z } from "zod";
 
 export const GITHUB_PROVIDER_ID = "github";
 
@@ -19,9 +20,26 @@ export const combinedCommandOutput = (stdout: string, stderr: string): string =>
   return `${trimmedStdout}\n${trimmedStderr}`;
 };
 
-export type GithubPullBranchRef = Record<string, JsonValue>;
+const githubPullBranchRefSchema = z.object({
+  ref: z.string().trim().min(1),
+});
 
-export type GithubPullResponse = Record<string, JsonValue>;
+const githubPullResponseSchema = z.object({
+  number: z.number().int().positive(),
+  html_url: z.string().trim().min(1),
+  state: z.string().trim().min(1),
+  draft: z.boolean().optional(),
+  created_at: z.string().trim().min(1),
+  updated_at: z.string().trim().min(1),
+  merged_at: z.string().trim().min(1).nullable().optional(),
+  closed_at: z.string().trim().min(1).nullable().optional(),
+  head: githubPullBranchRefSchema,
+  base: githubPullBranchRefSchema,
+});
+
+export type GithubPullBranchRef = z.infer<typeof githubPullBranchRefSchema>;
+
+export type GithubPullResponse = z.infer<typeof githubPullResponseSchema>;
 
 export type ResolvedPullRequest = {
   record: PullRequest;
@@ -40,33 +58,23 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-const requireGithubString = (value: JsonValue | undefined, label: string): string => {
-  if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
-    throw new HostValidationError({
-      field: label,
-      message: `GitHub pull request response field ${label} is missing or invalid.`,
-    });
+const parseGithubPullPayload = (value: JsonValue): GithubPullResponse => {
+  const parsed = githubPullResponseSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
   }
-  return value;
+  const field = parsed.error.issues[0]?.path.join(".") || "payload";
+  throw new HostValidationError({
+    field,
+    message: `GitHub pull request response field ${field} is missing or invalid.`,
+    cause: parsed.error,
+  });
 };
-
-const requireGithubNumber = (value: JsonValue | undefined, label: string): number => {
-  if (!Number.isInteger(value) || !hasRuntimeType(value, "number") || value <= 0) {
-    throw new HostValidationError({
-      field: label,
-      message: `GitHub pull request response field ${label} is missing or invalid.`,
-    });
-  }
-  return value;
-};
-
-const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 
 const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullRequest => {
-  const mergedAt = hasRuntimeType(response.merged_at, "string") ? response.merged_at : undefined;
-  const closedAt = hasRuntimeType(response.closed_at, "string") ? response.closed_at : undefined;
-  const rawState = requireGithubString(response.state, "state").trim().toLowerCase();
+  const mergedAt = response.merged_at ?? undefined;
+  const closedAt = response.closed_at ?? undefined;
+  const rawState = response.state.toLowerCase();
   const state =
     mergedAt !== undefined
       ? "merged"
@@ -75,22 +83,20 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
         : rawState === "open"
           ? "open"
           : "closed_unmerged";
-  const head = isJsonRecord(response.head) ? response.head : undefined;
-  const base = isJsonRecord(response.base) ? response.base : undefined;
   return {
     record: pullRequestSchema.parse({
       providerId: GITHUB_PROVIDER_ID,
-      number: requireGithubNumber(response.number, "number"),
-      url: requireGithubString(response.html_url, "html_url"),
+      number: response.number,
+      url: response.html_url,
       state,
-      createdAt: requireGithubString(response.created_at, "created_at"),
-      updatedAt: requireGithubString(response.updated_at, "updated_at"),
+      createdAt: response.created_at,
+      updatedAt: response.updated_at,
       lastSyncedAt: new Date().toISOString(),
       ...(mergedAt !== undefined ? { mergedAt } : undefined),
       ...(closedAt !== undefined ? { closedAt } : undefined),
     }),
-    sourceBranch: requireGithubString(head?.ref, "head.ref"),
-    targetBranch: requireGithubString(base?.ref, "base.ref"),
+    sourceBranch: response.head.ref,
+    targetBranch: response.base.ref,
   };
 };
 
@@ -114,13 +120,7 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
   }
   const flattened = responses.every((entry) => Array.isArray(entry)) ? responses.flat() : responses;
   return flattened.map((entry) => {
-    if (!isJsonRecord(entry)) {
-      throw new HostValidationError({
-        field: "payload",
-        message: "Failed to parse GitHub pull request list response: expected objects.",
-      });
-    }
-    return normalizeGithubPullRequest(entry);
+    return normalizeGithubPullRequest(parseGithubPullPayload(entry));
   });
 };
 
@@ -135,13 +135,7 @@ export const parseGithubPullResponse = (payload: string): ResolvedPullRequest =>
       cause,
     });
   }
-  if (!isJsonRecord(parsed)) {
-    throw new HostValidationError({
-      field: "payload",
-      message: "Failed to parse GitHub pull request response: expected an object.",
-    });
-  }
-  return normalizeGithubPullRequest(parsed);
+  return normalizeGithubPullRequest(parseGithubPullPayload(parsed));
 };
 
 const comparablePullRequestRecord = ({

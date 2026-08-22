@@ -1,9 +1,17 @@
+import type { GlobalEvent } from "@opencode-ai/sdk/v2/client";
 import { jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import type { UnknownRecord } from "./guards";
 
 const jsonRecordSchema = z.record(z.string(), jsonValueSchema);
-export type OpenCodeExternalValue = z.input<typeof jsonValueSchema>;
+
+type SdkGlobalEventPayload = GlobalEvent["payload"];
+type ServerHeartbeatPayload = {
+  id: string;
+  type: "server.heartbeat";
+  properties: Record<string, never>;
+};
+export type OpencodeGlobalEventPayload = SdkGlobalEventPayload | ServerHeartbeatPayload;
 
 const directEventSchema = z.object({
   id: z.string().optional(),
@@ -37,7 +45,7 @@ const formatIngressIssues = (issues: readonly z.core.$ZodIssue[]): string =>
     .join("; ");
 
 export const parseOpencodeGlobalEventPayload = (
-  value: OpenCodeExternalValue,
+  value: OpencodeGlobalEventPayload,
 ): ParsedOpencodeGlobalEventPayload => {
   const json = jsonValueSchema.safeParse(value);
   if (!json.success) {

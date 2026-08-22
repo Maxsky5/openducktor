@@ -5,6 +5,10 @@ import {
   runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
+  workspaceRepoConfigInputSchema,
+  workspaceRepoSettingsInputSchema,
+  type WorkspaceRepoConfigInput,
+  type WorkspaceRepoSettingsInput,
   hasRuntimeType,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -65,6 +69,26 @@ const optionalRuntimeKind = (record: Record<string, JsonValue>) => {
   return parsed.data;
 };
 
+const parseRepoConfigInput = (value: JsonValue | undefined): WorkspaceRepoConfigInput => {
+  const parsed = workspaceRepoConfigInputSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new HostValidationError({
+    message: `workspace_update_repo_config config is invalid: ${parsed.error.message}`,
+    field: "config",
+    cause: parsed.error,
+  });
+};
+
+const parseRepoSettingsInput = (value: JsonValue | undefined): WorkspaceRepoSettingsInput => {
+  const parsed = workspaceRepoSettingsInputSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new HostValidationError({
+    message: `workspace_save_repo_settings settings is invalid: ${parsed.error.message}`,
+    field: "settings",
+    cause: parsed.error,
+  });
+};
+
 export const createWorkspaceSettingsCommandHandlers = (
   workspaceSettingsService: WorkspaceSettingsService,
 ): HostCommandHandlers => ({
@@ -106,10 +130,7 @@ export const createWorkspaceSettingsCommandHandlers = (
         requireObjectArg("workspace_update_repo_config", args, "workspaceId"),
         "workspaceId",
       ),
-      requireRecord(
-        requireObjectArg("workspace_update_repo_config", args, "config"),
-        "workspace_update_repo_config config",
-      ),
+      parseRepoConfigInput(requireObjectArg("workspace_update_repo_config", args, "config")),
     ),
   workspace_save_repo_settings: (args) =>
     workspaceSettingsService.saveRepoSettings(
@@ -117,10 +138,7 @@ export const createWorkspaceSettingsCommandHandlers = (
         requireObjectArg("workspace_save_repo_settings", args, "workspaceId"),
         "workspaceId",
       ),
-      requireRecord(
-        requireObjectArg("workspace_save_repo_settings", args, "settings"),
-        "workspace_save_repo_settings settings",
-      ),
+      parseRepoSettingsInput(requireObjectArg("workspace_save_repo_settings", args, "settings")),
     ),
   workspace_update_repo_hooks: (args) =>
     workspaceSettingsService.updateRepoHooks(

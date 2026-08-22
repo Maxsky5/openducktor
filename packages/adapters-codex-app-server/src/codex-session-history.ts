@@ -3,7 +3,6 @@ import {
   type AgentSessionHistoryMessage,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import { isCodexThreadNotLoadedError } from "./codex-app-server-shared";
 import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
@@ -17,7 +16,11 @@ import {
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
-import type { CodexAppServerClient, CodexSessionState } from "./types";
+import type {
+  CodexAppServerClient,
+  CodexSessionState,
+  CodexThreadHistoryReadResponse,
+} from "./types";
 
 type CodexSessionHistoryRuntime = {
   client: CodexAppServerClient;
@@ -85,7 +88,7 @@ const projectCodexThreadReadToHistory = ({
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
-  response: JsonValue | undefined;
+  response: CodexThreadHistoryReadResponse | undefined;
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;

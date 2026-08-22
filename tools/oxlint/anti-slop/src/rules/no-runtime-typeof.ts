@@ -3,6 +3,9 @@ import { defineRule } from "@oxlint/plugins";
 import type { ESTree } from "@oxlint/plugins";
 
 type RuntimeFunction = ESTree.ArrowFunctionExpression | ESTree.Function;
+type NoRuntimeTypeofOption = {
+	allowInTypeGuards?: boolean;
+};
 
 function isRuntimeFunction(node: ESTree.Node): node is RuntimeFunction {
 	return (
@@ -49,12 +52,9 @@ export const noRuntimeTypeofRule = defineRule({
 	createOnce(context) {
 		return {
 			UnaryExpression(node) {
-				const option = context.options?.[0];
-				const allowInTypeGuards =
-					typeof option === "object" &&
-					option !== null &&
-					!Array.isArray(option) &&
-					option.allowInTypeGuards === true;
+				// SAFETY: The rule metadata schema validates this exact option before rule execution.
+				const option = context.options?.[0] as NoRuntimeTypeofOption | undefined;
+				const allowInTypeGuards = option?.allowInTypeGuards === true;
 				if (
 					node.operator === "typeof" &&
 					(!allowInTypeGuards || !isInsideTypeGuard(node))

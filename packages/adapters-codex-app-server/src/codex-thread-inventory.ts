@@ -1,20 +1,18 @@
+import { hasRuntimeType, type CodexAppServerTurn } from "@openducktor/contracts";
 import {
-  extractStringField,
   isCodexThreadNotLoadedError,
   isCodexUnmaterializedThreadError,
   isPlainObject,
 } from "./codex-app-server-shared";
-import type { JsonValue } from "@openducktor/contracts";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
   type CodexThreadStatusSnapshot,
   codexLoadedThreadIds,
   codexThreadList,
-  threadSnapshotFromReadResponse,
 } from "./codex-app-server-threads";
 import type { CodexTransportPolicy } from "./codex-session-policy";
-import type { CodexAppServerClient } from "./types";
+import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
 
 type PendingInventoryRead = {
   mode: "read" | "refresh";
@@ -221,8 +219,8 @@ export class CodexThreadInventoryReader {
       workingDirectory: string;
       allowUnmaterialized?: boolean;
     },
-  ): Promise<JsonValue | null> {
-    let response: JsonValue | undefined;
+  ): Promise<CodexThreadHistoryReadResponse | null> {
+    let response: CodexThreadHistoryReadResponse | undefined;
     try {
       response = await this.readThreadWithTurns(
         client,
@@ -235,8 +233,8 @@ export class CodexThreadInventoryReader {
       }
       throw error;
     }
-    const thread = threadSnapshotFromReadResponse(response);
-    if (!response || !thread || thread.cwd !== input.workingDirectory) {
+    const threadWorkingDirectory = response?.thread.cwd;
+    if (!response || threadWorkingDirectory !== input.workingDirectory) {
       return null;
     }
     return response;
@@ -246,9 +244,9 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     unmaterializedWorkingDirectory?: string,
-  ): Promise<JsonValue | undefined> {
-    let response: JsonValue | undefined;
-    let pagedTurns: Record<string, JsonValue>[];
+  ): Promise<CodexThreadHistoryReadResponse | undefined> {
+    let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
+    let pagedTurns: CodexAppServerTurn[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
@@ -266,16 +264,13 @@ export class CodexThreadInventoryReader {
       }
       throw error;
     }
-    if (!isPlainObject(response) || !isPlainObject(response.thread)) {
-      return { thread: { id: threadId, turns: pagedTurns } };
-    }
     return { ...response, thread: { ...response.thread, turns: pagedTurns } };
   }
 
   async readThreadTurnIds(client: CodexAppServerClient, threadId: string): Promise<Set<string>> {
     const turnIds = new Set<string>();
     for (const turn of await this.fetchThreadTurns(client, threadId, "summary")) {
-      const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]);
+      const turnId = turn.id;
       if (!turnId) {
         throw new Error(`Codex thread '${threadId}' returned a summary turn without an id.`);
       }
@@ -313,9 +308,7 @@ export class CodexThreadInventoryReader {
       for (const threadId of pageIds) {
         loadedIds.add(threadId);
       }
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
+      cursor = response.nextCursor;
       if (cursor && seenCursors.has(cursor)) {
         throw new Error("Codex thread/loaded/list returned a repeated pagination cursor.");
       }
@@ -346,9 +339,7 @@ export class CodexThreadInventoryReader {
           : undefined),
       });
       threads.push(...codexThreadList(response));
-      cursor = isPlainObject(response)
-        ? (extractStringField(response, ["nextCursor", "next_cursor"]) ?? null)
-        : null;
+      cursor = response.nextCursor;
       if (cursor && seenCursors.has(cursor)) {
         throw new Error("Codex thread/list returned a repeated pagination cursor.");
       }
@@ -360,8 +351,8 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     itemsView: "full" | "summary",
-  ): Promise<Record<string, JsonValue>[]> {
-    const turns: Record<string, JsonValue>[] = [];
+  ): Promise<CodexAppServerTurn[]> {
+    const turns: CodexAppServerTurn[] = [];
     let cursor: string | null = null;
     const seenCursors = new Set<string>();
     do {
@@ -375,21 +366,27 @@ export class CodexThreadInventoryReader {
         sortDirection: "asc",
         itemsView,
       });
-      if (!isPlainObject(response) || !Array.isArray(response.data)) {
+      if (!Array.isArray(response.data)) {
         throw new Error("Codex thread/turns/list response data must be an array.");
       }
       for (const [turnIndex, turn] of response.data.entries()) {
         if (!isPlainObject(turn)) {
           throw new Error(`Codex thread/turns/list response data[${turnIndex}] must be an object.`);
         }
+        if (!hasRuntimeType(turn.id, "string")) {
+          throw new Error(
+            `Codex thread/turns/list response data[${turnIndex}] is missing a string id.`,
+          );
+        }
         if (itemsView === "full" && !Array.isArray(turn.items)) {
           throw new Error(
             `Codex thread/turns/list response data[${turnIndex}].items must be an array.`,
           );
         }
-        turns.push(turn);
+        // SAFETY: The checks above validate the paginated turn shape required by the adapter.
+        turns.push(turn as CodexAppServerTurn);
       }
-      cursor = extractStringField(response, ["nextCursor", "next_cursor"]) ?? null;
+      cursor = response.nextCursor;
       if (cursor && seenCursors.has(cursor)) {
         throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");
       }

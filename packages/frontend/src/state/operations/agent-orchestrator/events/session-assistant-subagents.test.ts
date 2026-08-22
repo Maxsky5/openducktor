@@ -14,15 +14,13 @@ import {
   type SessionPartEventContext,
   sessionMessageAt,
 } from "./session-events-test-harness";
-import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator session assistant and subagent updates", () => {
   test("keeps streamed assistant text through status transitions", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -73,7 +71,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     handleEvent({
       type: "session_status",
       externalSessionId: "session-1",
-      status: { type: "retry", attempt: 1, message: '{"message":"Retrying"}' },
+      status: {
+        type: "retry",
+        attempt: 1,
+        message: '{"message":"Retrying"}',
+        nextEpochMs: 1_771_747_203_000,
+      },
       timestamp: "2026-02-22T08:00:03.000Z",
     });
     handleEvent({
@@ -104,11 +107,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   test.each(["idle", "stopped", "error"] as const)(
     "keeps an inactive parent session %s when a background subagent completes late",
     async (inactiveStatus) => {
-      const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+      const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
       const adapter: SessionEventAdapter = {
         subscribeEvents: async (_externalSessionId, handler) => {
-          // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-          handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+          handlers.push(handler);
           return () => {};
         },
         replyApproval: async () => {},
@@ -237,11 +239,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   );
 
   test("keeps a hydrated idle parent idle when a background subagent update omits its mode", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -311,11 +312,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("keeps an idle parent idle through foreground subagent updates", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -418,13 +418,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("handles session start and assistant parts matrix", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     let clearCalls = 0;
 
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -683,11 +682,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("writes live text parts into transcript messages", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -757,11 +755,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("preserves interleaved Claude text parts in live order", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -913,11 +910,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("forwards turn timing callbacks to part handlers through listenToAgentSessionEvents", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -967,11 +963,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("reuses the spawned subagent row when a later update adds externalSessionId", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1046,11 +1041,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("preserves live subagent runtime error details", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1110,11 +1104,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("keeps same-prompt subagents separate until an exact identity match arrives", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1215,11 +1208,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("preserves cancelled subagent updates on the existing live row", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1296,11 +1288,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("bridges a unique session-scoped subagent update into the existing part-scoped live row", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1379,11 +1370,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("keeps session-scoped subagent updates separate when multiple same-prompt live rows exist", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -1469,11 +1459,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   });
 
   test("matches an older assistant message when the newest same-text message is outside the timestamp window", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

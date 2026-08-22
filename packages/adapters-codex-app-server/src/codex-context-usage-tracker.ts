@@ -4,12 +4,14 @@ import { isPlainObject } from "./codex-app-server-shared";
 import { extractCodexTokenUsageTotals } from "./codex-app-server-transcript";
 import type { JsonValue } from "@openducktor/contracts";
 import type { CodexNotificationRecord, CodexSessionContextUsage } from "./types";
+import { z } from "zod";
 
 const contextUsageKey = (runtimeId: string, threadId: string): string =>
   JSON.stringify([runtimeId, threadId]);
 
-// SAFETY: JSON.parse can only produce JSON data, which satisfies `[string, string]` at this boundary.
-const parseContextUsageKey = (key: string): [string, string] => JSON.parse(key) as [string, string];
+const contextUsageKeySchema = z.tuple([z.string(), z.string()]);
+const parseContextUsageKey = (key: string): [string, string] =>
+  contextUsageKeySchema.parse(JSON.parse(key));
 
 const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextUsage | null => {
   if (!isPlainObject(params) || !isPlainObject(params.tokenUsage)) {

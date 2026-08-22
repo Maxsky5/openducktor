@@ -144,7 +144,7 @@ export const sessionStateFromThreadStart = (
   response: CodexThreadStartResult,
   title: string,
 ): CodexSessionState => {
-  const { externalSessionId, startedAt } = extractThreadId(response, "thread/start");
+  const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({
     externalSessionId,
     workingDirectory: input.workingDirectory,
@@ -170,7 +170,7 @@ export const sessionStateFromThreadFork = (
   response: CodexThreadForkResult,
   title: string,
 ): CodexSessionState => {
-  const { externalSessionId, startedAt } = extractThreadId(response, "thread/fork");
+  const { externalSessionId, startedAt } = extractThreadId(response);
   const summary = toSessionSummary({
     externalSessionId,
     workingDirectory: input.workingDirectory,
@@ -222,7 +222,7 @@ const sessionStateFromThreadResumeResponse = (
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
 ): CodexSessionState => {
-  const { externalSessionId, startedAt } = extractThreadId(response, "thread/resume");
+  const { externalSessionId, startedAt } = extractThreadId(response);
   const threadSnapshot = requireThreadSnapshotFromReadResponse(
     response,
     "thread/resume",

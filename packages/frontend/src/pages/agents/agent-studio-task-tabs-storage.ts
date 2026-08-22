@@ -1,8 +1,7 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
-import type { JsonValue, TaskCard } from "@openducktor/contracts";
-import { isRecord } from "@openducktor/core";
+import { jsonValueSchema, type JsonValue, type TaskCard } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
+import { z } from "zod";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];
@@ -19,10 +18,12 @@ const DEFAULT_PERSISTED_TABS_STATE: PersistedTaskTabsState = {
   activeTaskId: null,
 };
 
-const normalizeTaskTabs = (entries: JsonValue | undefined): string[] => {
-  if (!Array.isArray(entries)) {
-    return [];
-  }
+const persistedTaskTabsObjectSchema = z.object({
+  tabs: z.array(jsonValueSchema),
+  activeTaskId: z.string().nullable().optional(),
+});
+
+const normalizeTaskTabs = (entries: readonly JsonValue[]): string[] => {
   return Array.from(
     new Set(
       entries.filter(
@@ -38,8 +39,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
   }
 
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = jsonValueSchema.parse(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
 
     if (Array.isArray(parsed)) {
       return {
@@ -48,15 +48,10 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
       };
     }
 
-    if (!isRecord(parsed)) {
-      return DEFAULT_PERSISTED_TABS_STATE;
-    }
-
-    const tabs = normalizeTaskTabs(parsed.tabs);
+    const payload = persistedTaskTabsObjectSchema.parse(parsed);
+    const tabs = normalizeTaskTabs(payload.tabs);
     const activeTaskId =
-      hasRuntimeType(parsed.activeTaskId, "string") && parsed.activeTaskId.trim().length > 0
-        ? parsed.activeTaskId
-        : null;
+      payload.activeTaskId && payload.activeTaskId.trim().length > 0 ? payload.activeTaskId : null;
     return {
       tabs,
       activeTaskId,

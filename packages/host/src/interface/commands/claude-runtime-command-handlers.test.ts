@@ -1,12 +1,15 @@
-import { createFocusedTestService, createInvalidFixture } from "../../test-support/focused-service";
+import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, mock, test } from "bun:test";
 import {
-  type JsonValue,
   type RepoConfig,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
+  AgentSkillCatalog,
+  AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
   ListAgentModelsInput,
   SearchAgentFilesInput,
 } from "@openducktor/core";
@@ -28,17 +31,17 @@ type CatalogOperation =
   | {
       command: "claude_runtime_list_slash_commands";
       method: "listAvailableSlashCommands";
-      result: { commands: JsonValue[] };
+      result: AgentSlashCommandCatalog;
     }
   | {
       command: "claude_runtime_list_skills";
       method: "listAvailableSkills";
-      result: { skills: JsonValue[] };
+      result: AgentSkillCatalog;
     }
   | {
       command: "claude_runtime_list_subagents";
       method: "listAvailableSubagents";
-      result: { subagents: JsonValue[] };
+      result: AgentSubagentCatalog;
     };
 
 const createLiveClaudeRuntimeRegistry = () =>
@@ -274,7 +277,9 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         workingDirectory: "/worktrees/repo/task-1",
       };
 
-      await expect(router.invoke(operation.command, { input })).resolves.toEqual(operation.result);
+      await expect(router.invoke(operation.command, { input })).resolves.toEqual(
+        jsonValueSchema.parse(operation.result),
+      );
       expect(loadCatalog).toHaveBeenCalledWith(input);
     }
   });
@@ -325,7 +330,8 @@ describe("createClaudeRuntimeCommandHandlers", () => {
   });
 
   test("rejects service output that violates the selected command contract", async () => {
-    const invalidCatalog = createInvalidFixture<AgentModelCatalog>({ unrelated: true });
+    // @ts-expect-error -- This case verifies runtime rejection of an invalid service result.
+    const invalidCatalog: AgentModelCatalog = { unrelated: true };
     const service = createFocusedTestService<ClaudeAgentSdkService>({
       listAvailableModels: () =>
         // SAFETY: this test returns invalid adapter output to verify result validation.

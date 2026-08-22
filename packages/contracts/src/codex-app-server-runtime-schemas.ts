@@ -6,6 +6,7 @@ import {
   codexAppServerExecCommandApprovalParamsSchema,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
+  codexAppServerThreadStatusSchema,
 } from "./codex-app-server-protocol-schemas";
 import { jsonValueSchema, type JsonValue } from "./json-types";
 
@@ -70,7 +71,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
   notification("turn/completed", threadTurnParamsSchema),
   notification(
     "thread/status/changed",
-    z.object({ status: jsonValueSchema, threadId: z.string() }),
+    z.object({ status: codexAppServerThreadStatusSchema, threadId: z.string() }),
   ),
   notification(
     "model/safetyBuffering/updated",

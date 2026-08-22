@@ -48,7 +48,11 @@ import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
 } from "./user-message-signatures";
-import { createInvalidFixture } from "./test-fixture";
+import {
+  createGlobalEventClientFixture,
+  createInvalidOpencodeEventFixture,
+  createInvalidOpencodePartFixture,
+} from "./test-fixture";
 
 const IMAGE_ATTACHMENT_DISPLAY_PART = {
   kind: "attachment" as const,
@@ -77,14 +81,14 @@ test("global event observation becomes ready only after the lazy SSE stream conn
   const connected = new Promise<void>((resolve) => {
     connect = resolve;
   });
-  const client = createInvalidFixture<Parameters<typeof subscribeGlobalEvents>[0]["client"]>({
+  const client = createGlobalEventClientFixture({
     global: {
       event: async () => ({
         stream: (async function* () {
           await connected;
           yield {
             directory: "/repo",
-            payload: createInvalidFixture<Event>({
+            payload: createInvalidOpencodeEventFixture({
               type: "server.connected",
               properties: {},
             }),
@@ -152,11 +156,11 @@ test("classifies OpenCode server heartbeats at the global transport boundary", (
 });
 
 test("keeps session observation alive across OpenCode server heartbeats", async () => {
-  const heartbeat = createInvalidFixture<TestGlobalEventPayload>({
+  const heartbeat: TestGlobalEventPayload = {
     id: "event-heartbeat-1",
     type: "server.heartbeat",
     properties: {},
-  });
+  };
   const emitted = await runEventStream([heartbeat, sessionStatusEvent({ type: "busy" })]);
 
   expect(emitted).toEqual([
@@ -206,7 +210,7 @@ test("projects direct and sync message removal events as Transcript retractions"
 
 test("does not emit removed pending assistant output when the session becomes idle", async () => {
   const emitted = await runEventStream([
-    createInvalidFixture<Event>({
+    createInvalidOpencodeEventFixture({
       type: "message.updated",
       properties: {
         info: {
@@ -329,7 +333,7 @@ test("readEventParentExternalSessionId prefers parent ids from event info", () =
 test("readEventSessionId accepts info.id only for session lifecycle events", () => {
   expect(
     readEventSessionId(
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.created",
         properties: {
           info: { id: "external-child-session" },
@@ -339,7 +343,7 @@ test("readEventSessionId accepts info.id only for session lifecycle events", () 
   ).toBe("external-child-session");
   expect(
     readEventSessionId(
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: { id: "message-1" },
@@ -368,7 +372,7 @@ test("readSessionLifecycleEvent ignores parent aliases and non-lifecycle events"
   expect(readSessionLifecycleEvent(aliasEvent)?.parentExternalSessionId).toBeUndefined();
   expect(
     readSessionLifecycleEvent(
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: event.properties,
       }),
@@ -520,7 +524,7 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
 });
 
 const assistantRoleEvent = (messageId: string): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -532,7 +536,7 @@ const assistantRoleEvent = (messageId: string): Event =>
   });
 
 const makeSessionIdleEvent = (): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "session.idle",
     properties: {
       sessionID: "external-session-1",
@@ -581,7 +585,7 @@ const makeAssistantMessageUpdatedEvent = (input: {
         ]
       : undefined);
 
-  return createInvalidFixture<Event>({
+  return createInvalidOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -605,7 +609,7 @@ const makeMessagePartUpdatedEvent = (input: {
   text: string;
   end?: number;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: makeAssistantTextPart({
@@ -622,7 +626,7 @@ const makeAssistantStepFinishPartUpdatedEvent = (input: {
   partId: string;
   reason?: string;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -644,7 +648,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
   prompt: string;
   description: string;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -665,7 +669,7 @@ const makeMessagePartDeltaEvent = (input: {
   field: string;
   delta: string;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.delta",
     properties: {
       sessionID: "external-session-1",
@@ -679,7 +683,7 @@ const makeMessagePartDeltaEvent = (input: {
 describe("event-stream", () => {
   test("does not project OpenCode compaction events as shared transcript notices", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -691,11 +695,11 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.compacted",
         properties: { sessionID: "external-session-1" },
       }),
@@ -731,7 +735,7 @@ describe("event-stream", () => {
 
   test("keeps the OpenCode compaction marker hidden without suppressing its assistant summary", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -763,7 +767,7 @@ describe("event-stream", () => {
 
   test("emits user_message when opencode acknowledges a user turn", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -802,7 +806,7 @@ describe("event-stream", () => {
 
   test("emits user_message from stored user text parts when message.updated omits visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -814,7 +818,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -848,7 +852,7 @@ describe("event-stream", () => {
 
   test("emits user_message when user text parts arrive after message.updated", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -865,7 +869,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -901,7 +905,7 @@ describe("event-stream", () => {
 
   test("re-emits user_message when later parts update the visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -915,7 +919,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -950,7 +954,7 @@ describe("event-stream", () => {
     const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
 
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -963,7 +967,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -975,7 +979,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1002,7 +1006,7 @@ describe("event-stream", () => {
 
   test("preserves visible user text when later file parts arrive without visible text parts", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1016,7 +1020,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1077,7 +1081,7 @@ describe("event-stream", () => {
 
   test("keeps queued follow-ups queued until the pending assistant clears", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1090,7 +1094,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1104,7 +1108,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.idle",
         properties: {
           sessionID: "external-session-1",
@@ -1131,7 +1135,7 @@ describe("event-stream", () => {
   test("does not leave a late queued-send acknowledgement stuck queued after idle", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.updated",
           properties: {
             info: {
@@ -1169,7 +1173,7 @@ describe("event-stream", () => {
   test("removes a queued send when OpenCode retracts it before the message echo", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.removed",
           properties: {
             sessionID: "external-session-1",
@@ -1190,7 +1194,7 @@ describe("event-stream", () => {
 
   test("ignores unrelated status fields when deriving explicit user message state", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1203,7 +1207,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1232,7 +1236,7 @@ describe("event-stream", () => {
   test("matches queued sends by exact model selection when content repeats", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.updated",
           properties: {
             info: {
@@ -1284,7 +1288,7 @@ describe("event-stream", () => {
   test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.updated",
           properties: {
             info: {
@@ -1375,7 +1379,7 @@ describe("event-stream", () => {
   test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.updated",
           properties: {
             info: {
@@ -1389,7 +1393,7 @@ describe("event-stream", () => {
             },
           },
         }),
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.part.updated",
           properties: {
             part: {
@@ -1451,7 +1455,7 @@ describe("event-stream", () => {
   test("keeps pdf attachment echoes out of inline file-reference rendering", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.updated",
           properties: {
             info: {
@@ -1540,7 +1544,7 @@ describe("event-stream", () => {
 
   test("reconciles queued follow-ups when a newer assistant becomes pending", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1553,7 +1557,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1567,7 +1571,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1696,7 +1700,7 @@ describe("event-stream", () => {
 
   test("emits session_idle for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1752,7 +1756,7 @@ describe("event-stream", () => {
 
   test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1799,7 +1803,7 @@ describe("event-stream", () => {
 
   test("emits final assistant_message from known parts when terminal metadata arrives later", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1812,7 +1816,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -1861,7 +1865,7 @@ describe("event-stream", () => {
 
   test("does not emit idle or final assistant_message from known parts without a stop signal", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -1874,7 +1878,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -2250,7 +2254,7 @@ describe("event-stream", () => {
 
   test("replays known assistant parts when the assistant role becomes known later", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2275,14 +2279,14 @@ describe("event-stream", () => {
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
     const { emitted } = await runEventStreamWithSession([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "todo.updated",
         properties: {
           sessionID: "external-other-session",
           todos: [{ content: "ignored" }],
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "todo.updated",
         properties: {
           sessionID: "external-session-1",
@@ -2313,13 +2317,13 @@ describe("event-stream", () => {
 
   test("routes directory-scoped global events only to matching working directories", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.idle",
         properties: {
           directory: "/other",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.idle",
         properties: {
           directory: "/repo",
@@ -2336,14 +2340,14 @@ describe("event-stream", () => {
 
     await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "todo.updated",
           properties: {
             sessionID: "external-other-session",
             todos: [{ content: "ignored" }],
           },
         }),
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "todo.updated",
           properties: {
             sessionID: "external-session-1",
@@ -2371,7 +2375,7 @@ describe("event-stream", () => {
       sessionId: "external-child-session",
       permission: "read",
     });
-    const childMessageEvent = createInvalidFixture<Event>({
+    const childMessageEvent = createInvalidOpencodeEventFixture({
       type: "message.updated",
       properties: {
         info: {
@@ -2426,7 +2430,7 @@ describe("event-stream", () => {
       "question.asked",
       "question.replied",
     ] as const) {
-      const event = createInvalidFixture<Event>({
+      const event = createInvalidOpencodeEventFixture({
         type: eventType,
         properties: {
           sessionID: "external-child-session",
@@ -2448,7 +2452,7 @@ describe("event-stream", () => {
   });
 
   test("does not treat a top-level lifecycle parent id as authoritative", () => {
-    const childSessionCreatedEvent = createInvalidFixture<Event>({
+    const childSessionCreatedEvent = createInvalidOpencodeEventFixture({
       type: "session.created",
       properties: {
         parentID: "external-parent-session",
@@ -2533,7 +2537,7 @@ describe("event-stream", () => {
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-2"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2543,7 +2547,7 @@ describe("event-stream", () => {
           delta: " world",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2575,7 +2579,7 @@ describe("event-stream", () => {
   test("replays queued deltas in FIFO order", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-fifo"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2585,7 +2589,7 @@ describe("event-stream", () => {
           delta: " world",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2595,7 +2599,7 @@ describe("event-stream", () => {
           delta: "!",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2621,7 +2625,7 @@ describe("event-stream", () => {
   test("keeps known-part and queued-part delta application consistent", async () => {
     const queuedPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2631,7 +2635,7 @@ describe("event-stream", () => {
           delta: " world",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2648,7 +2652,7 @@ describe("event-stream", () => {
 
     const knownPath = await runEventStream([
       assistantRoleEvent("assistant-message-consistency"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -2661,7 +2665,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2692,7 +2696,7 @@ describe("event-stream", () => {
 
   test("suppresses assistant_delta when delta belongs to user message", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -2702,7 +2706,7 @@ describe("event-stream", () => {
           },
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2718,7 +2722,7 @@ describe("event-stream", () => {
   test("emits reasoning channel for reasoning fallback deltas", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-reasoning"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -2743,7 +2747,7 @@ describe("event-stream", () => {
 
   test("suppresses non-assistant reasoning parts", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -3160,7 +3164,7 @@ describe("event-stream", () => {
         sessionId: "external-child-session",
         properties: { info: { parentID: "external-session-1" } },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -3296,7 +3300,7 @@ describe("event-stream", () => {
 
   test("removes a queued child question when OpenCode resolves it before correlation", async () => {
     const { sessionRecord } = await runEventStreamWithSession([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "question.asked",
         properties: {
           sessionID: "external-child-session",
@@ -3311,7 +3315,7 @@ describe("event-stream", () => {
           ],
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "question.replied",
         properties: {
           sessionID: "external-child-session",
@@ -3409,7 +3413,7 @@ describe("event-stream", () => {
   test("clears pending deltas when message part is removed", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-3"),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -3419,14 +3423,14 @@ describe("event-stream", () => {
           delta: "stale ",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.removed",
         properties: {
           sessionID: "external-session-1",
           partID: "text-part-2",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.updated",
         properties: {
           part: {
@@ -3455,7 +3459,7 @@ describe("event-stream", () => {
   test("clears deferred pending subagent emissions when message part is removed", async () => {
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
@@ -3466,7 +3470,7 @@ describe("event-stream", () => {
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set("child-session-1", [
           {
-            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
+            part: createInvalidOpencodePartFixture({
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3497,7 +3501,7 @@ describe("event-stream", () => {
     const correlationKey = "part:assistant-message-4:subtask-part-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
@@ -3536,7 +3540,7 @@ describe("event-stream", () => {
     const childExternalSessionId = "child-session-1";
     const { sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "message.part.removed",
           properties: {
             sessionID: "external-session-1",
@@ -3547,7 +3551,7 @@ describe("event-stream", () => {
       (record) => {
         record.pendingSubagentPartEmissionsByExternalSessionId.set(childExternalSessionId, [
           {
-            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
+            part: createInvalidOpencodePartFixture({
               id: "subtask-part-1",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3558,7 +3562,7 @@ describe("event-stream", () => {
             }),
           },
           {
-            part: createInvalidFixture<import("@opencode-ai/sdk/v2/client").Part>({
+            part: createInvalidOpencodePartFixture({
               id: "subtask-part-2",
               sessionID: "external-session-1",
               messageID: "assistant-message-4",
@@ -3596,7 +3600,7 @@ describe("event-stream", () => {
   test("normalizes unknown session error payload", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
-        createInvalidFixture<Event>({
+        createInvalidOpencodeEventFixture({
           type: "session.error",
           properties: {
             sessionID: "external-session-1",
@@ -3628,7 +3632,7 @@ describe("event-stream", () => {
         text: "Final output before error",
         partId: "text-error-1",
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "session.error",
         properties: {
           sessionID: "external-session-1",
@@ -3645,7 +3649,7 @@ describe("event-stream", () => {
 
   test("does not replay duplicate delta after suppressed known user-part update", async () => {
     const emitted = await runEventStream([
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {
@@ -3665,7 +3669,7 @@ describe("event-stream", () => {
           ],
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.part.delta",
         properties: {
           sessionID: "external-session-1",
@@ -3675,7 +3679,7 @@ describe("event-stream", () => {
           delta: " world",
         },
       }),
-      createInvalidFixture<Event>({
+      createInvalidOpencodeEventFixture({
         type: "message.updated",
         properties: {
           info: {

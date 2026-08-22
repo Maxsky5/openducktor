@@ -48,6 +48,7 @@ import {
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import type { CodexThreadHistoryReadResponse } from "./types";
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -199,9 +200,9 @@ export const shouldReplaceCodexBufferedFinalAgentMessage = (
 };
 
 export const codexTurnItemsFromThreadRead = (
-  value: JsonValue | undefined,
+  value: CodexThreadHistoryReadResponse | undefined,
 ): CodexThreadReadItem[] => {
-  if (!isPlainObject(value) || !isPlainObject(value.thread)) {
+  if (!value || !isPlainObject(value.thread)) {
     throw new Error("Codex thread/read response is missing thread data.");
   }
   if (!Array.isArray(value.thread.turns)) {

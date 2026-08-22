@@ -270,7 +270,7 @@ const codexAppServerSandboxPolicySchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const codexAppServerThreadStatusSchema = z.discriminatedUnion("type", [
+export const codexAppServerThreadStatusSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("active"),
     activeFlags: z.array(z.enum(["waitingOnApproval", "waitingOnUserInput"])),

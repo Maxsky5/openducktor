@@ -4,36 +4,42 @@ import {
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
 } from "./lib";
-import type { JsonValue } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 
 export type RegisteredToolName = keyof typeof ODT_TOOL_SCHEMAS;
+type ListedToolSchema = z.infer<typeof listedToolSchemaSchema>;
 
 const WORKSPACE_SCOPED_TOOL_NAMES = new Set<RegisteredToolName>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
+const listedToolSchemaSchema = z.intersection(
+  z.record(z.string(), jsonValueSchema),
+  z.object({
+    properties: z.record(z.string(), jsonValueSchema).optional(),
+    required: z.array(z.string()).optional(),
+  }),
+);
 
-const removeWorkspaceId = (jsonSchema: Record<string, JsonValue>) => {
-  // SAFETY: The surrounding boundary constructs or validates every member required by `Record< string, JsonValue >`.
-  const { workspaceId: _workspaceId, ...properties } = jsonSchema.properties as Record<
-    string,
-    JsonValue
-  >;
+const removeWorkspaceId = (jsonSchema: ListedToolSchema): ListedToolSchema => {
+  const { workspaceId: _workspaceId, ...properties } = jsonSchema.properties ?? {};
 
-  return {
+  const nextSchema = {
     ...jsonSchema,
     properties,
     ...(Array.isArray(jsonSchema.required)
       ? { required: jsonSchema.required.filter((key) => key !== "workspaceId") }
       : undefined),
-  } satisfies Record<string, JsonValue>;
+  };
+  return listedToolSchemaSchema.parse(nextSchema);
 };
 
 export const getListedToolInputSchema = (
   toolName: RegisteredToolName,
   options: { hideWorkspaceId: boolean },
-): Record<string, JsonValue> => {
-  // SAFETY: zod JSON schema output is JSON-compatible by construction.
-  const jsonSchema = z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], {
-    io: "input",
-  }) as Record<string, JsonValue>;
+): ListedToolSchema => {
+  const jsonSchema = listedToolSchemaSchema.parse(
+    z.toJSONSchema(ODT_TOOL_SCHEMAS[toolName], {
+      io: "input",
+    }),
+  );
 
   if (options.hideWorkspaceId && WORKSPACE_SCOPED_TOOL_NAMES.has(toolName)) {
     return removeWorkspaceId(jsonSchema);
@@ -42,11 +48,9 @@ export const getListedToolInputSchema = (
   return jsonSchema;
 };
 
-export const getListedToolOutputSchema = (
-  toolName: RegisteredToolName,
-): Record<string, JsonValue> => {
-  // SAFETY: zod JSON schema output is JSON-compatible by construction.
-  return z.toJSONSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName], {
-    io: "output",
-  }) as Record<string, JsonValue>;
-};
+export const getListedToolOutputSchema = (toolName: RegisteredToolName): ListedToolSchema =>
+  listedToolSchemaSchema.parse(
+    z.toJSONSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName], {
+      io: "output",
+    }),
+  );

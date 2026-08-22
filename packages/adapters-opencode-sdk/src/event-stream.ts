@@ -10,12 +10,11 @@ import {
 import {
   normalizeOpencodeGlobalEventPayload,
   opencodeEventUsesParentSessionRouting,
-  type OpencodeGlobalEventPayload,
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
 import { asUnknownRecord } from "./guards";
-import type { ParsedOpencodeEvent as Event } from "./opencode-ingress";
+import type { OpencodeGlobalEventPayload, ParsedOpencodeEvent as Event } from "./opencode-ingress";
 import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;

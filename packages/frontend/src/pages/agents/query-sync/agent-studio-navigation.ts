@@ -1,7 +1,7 @@
-import { agentRoleValues, hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
-import { type AgentRole, isRecord } from "@openducktor/core";
+import { agentRoleValues, hasRuntimeType } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type { JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -57,6 +57,12 @@ export type PersistedAgentStudioContext = {
 };
 
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
+const persistedAgentStudioContextSchema = z.object({
+  taskId: z.string().optional(),
+  role: z.string().optional(),
+  sessionExternalId: z.string().optional(),
+});
+type ParsedPersistedAgentStudioContext = z.output<typeof persistedAgentStudioContextSchema>;
 
 const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
@@ -187,18 +193,13 @@ export const hasAgentStudioNavigationSelection = (
 };
 
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
-  let parsed: JsonValue;
+  let parsed: ParsedPersistedAgentStudioContext;
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    parsed = jsonValueSchema.parse(JSON.parse(raw));
+    parsed = persistedAgentStudioContextSchema.parse(JSON.parse(raw));
   } catch (cause) {
     throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
       cause,
     });
-  }
-
-  if (!isRecord(parsed)) {
-    throw new Error("Failed to parse persisted agent studio context: expected an object payload.");
   }
 
   const taskId = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId);
@@ -217,11 +218,11 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     parsed,
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
   );
-  return {
-    ...(taskId ? { taskId } : undefined),
-    ...(role ? { role } : undefined),
-    ...(sessionExternalId ? { sessionExternalId } : undefined),
-  };
+  const persistedContext: PersistedAgentStudioContext = {};
+  if (taskId) persistedContext.taskId = taskId;
+  if (role) persistedContext.role = role;
+  if (sessionExternalId) persistedContext.sessionExternalId = sessionExternalId;
+  return persistedContext;
 };
 
 export const restoreNavigationFromPersistedContext = (
@@ -264,18 +265,12 @@ export const toTabsStorageKey = (workspaceId: string): string =>
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
 
 const parsePersistedContextString = (
-  parsed: Record<string, JsonValue>,
+  parsed: ParsedPersistedAgentStudioContext,
   key: (typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS)[keyof typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS],
 ): string | undefined => {
   const value = parsed[key];
   if (value === undefined || value === null) {
     return undefined;
-  }
-
-  if (!hasRuntimeType(value, "string")) {
-    throw new Error(
-      `Failed to parse persisted agent studio context: field "${key}" must be a string.`,
-    );
   }
 
   const trimmed = value.trim();

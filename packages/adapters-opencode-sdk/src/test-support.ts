@@ -8,6 +8,51 @@ import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
 
 type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
+type ClientMethodInput<
+  Namespace extends keyof OpencodeClient,
+  Method extends keyof OpencodeClient[Namespace],
+> = OpencodeClient[Namespace][Method] extends (...args: infer Args) => infer _Result
+  ? Args[0]
+  : never;
+
+type MockApiError = Error | { message: string };
+
+type MockSessionMessage = {
+  info: {
+    id: string;
+    role: "user" | "assistant";
+    time: { created: number };
+    [key: string]: JsonValue;
+  };
+  parts: Part[];
+};
+
+type MockChildSession = {
+  id: string;
+  parentID?: string;
+  time: { created: number };
+};
+
+type MockTodoPayload = {
+  id?: string;
+  content: string;
+  status: string;
+  priority: string;
+};
+
+type MockAgentPayload =
+  | null
+  | number
+  | {
+      name: string;
+      description?: string;
+      mode: "primary" | "subagent";
+      hidden?: boolean;
+      native?: boolean;
+      color?: string;
+    };
+
+type MockMcpStatus = { status: "connected" } | { status: "failed"; error: string };
 
 export const flushAsync = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 export const buildQueuedSignature = (text: string): string =>
@@ -84,53 +129,44 @@ const DEFAULT_ODT_RUNTIME_TOOL_IDS = [
 ] as const;
 
 export type MockSession = {
-  createCalls: unknown[];
-  promptCalls: unknown[];
-  promptAsyncCalls: unknown[];
-  commandCalls: unknown[];
-  abortCalls: unknown[];
-  getCalls: unknown[];
-  updateCalls: unknown[];
-  forkCalls: unknown[];
-  deleteCalls: unknown[];
+  createCalls: ClientMethodInput<"session", "create">[];
+  promptCalls: ClientMethodInput<"session", "prompt">[];
+  promptAsyncCalls: ClientMethodInput<"session", "promptAsync">[];
+  commandCalls: ClientMethodInput<"session", "command">[];
+  abortCalls: ClientMethodInput<"session", "abort">[];
+  getCalls: ClientMethodInput<"session", "get">[];
+  updateCalls: ClientMethodInput<"session", "update">[];
+  forkCalls: ClientMethodInput<"session", "fork">[];
+  deleteCalls: ClientMethodInput<"session", "delete">[];
   updateResult: SessionUpdateMockResult;
-  messagesCalls: unknown[];
-  childrenCalls: unknown[];
-  todoCalls: unknown[];
-  messagesResponse: Array<{
-    info: {
-      id: string;
-      role: "user" | "assistant";
-      time: { created: number };
-      [key: string]: JsonValue;
-    };
-    parts: Part[];
-  }>;
+  messagesCalls: ClientMethodInput<"session", "messages">[];
+  childrenCalls: ClientMethodInput<"session", "children">[];
+  todoCalls: ClientMethodInput<"session", "todo">[];
+  messagesResponse: MockSessionMessage[];
   todoResult: TodoMockResult;
 };
 
 export type SessionUpdateMockResult = {
-  data?: JsonValue;
-  error?: JsonValue | undefined;
-  response?: JsonValue | undefined;
+  data?: { id: string };
+  error?: MockApiError;
 };
 
 export type MockTool = {
-  idsCalls: unknown[];
-  listCalls: unknown[];
+  idsCalls: ClientMethodInput<"tool", "ids">[];
+  listCalls: ClientMethodInput<"tool", "list">[];
 };
 
 export type MockMcp = {
-  statusCalls: unknown[];
-  connectCalls: unknown[];
+  statusCalls: ClientMethodInput<"mcp", "status">[];
+  connectCalls: ClientMethodInput<"mcp", "connect">[];
 };
 
 export type MockPermission = {
-  replyCalls: unknown[];
+  replyCalls: ClientMethodInput<"permission", "reply">[];
 };
 
 export type MockQuestion = {
-  replyCalls: unknown[];
+  replyCalls: ClientMethodInput<"question", "reply">[];
 };
 
 export type MockEventStream = {
@@ -140,11 +176,11 @@ export type MockEventStream = {
 export type TodoMockResult =
   | {
       mode: "success";
-      data: JsonValue;
+      data: MockTodoPayload[];
     }
   | {
       mode: "api_error";
-      error: JsonValue | undefined;
+      error: MockApiError;
       status?: number;
       statusText?: string;
     }
@@ -155,12 +191,8 @@ export type TodoMockResult =
 
 export type AgentsMockResult =
   | {
-      mode: "success";
-      data: JsonValue;
-    }
-  | {
       mode: "api_error";
-      error: JsonValue | undefined;
+      error: MockApiError;
     }
   | {
       mode: "throw";
@@ -170,11 +202,10 @@ export type AgentsMockResult =
 export type PromptAsyncMockResult =
   | {
       mode: "success";
-      data?: JsonValue;
     }
   | {
       mode: "api_error";
-      error: JsonValue | undefined;
+      error: MockApiError;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -185,11 +216,11 @@ export type PromptAsyncMockResult =
 export type CommandMockResult =
   | {
       mode: "success";
-      data?: JsonValue;
+      data?: { info: { id: string } };
     }
   | {
       mode: "api_error";
-      error: JsonValue | undefined;
+      error: MockApiError;
       response?: { status?: number; statusText?: string };
     }
   | {
@@ -205,23 +236,13 @@ export type MakeMockClientInput = {
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
   streamEvents?: Event[];
-  messagesResponse?: Array<{
-    info: {
-      id: string;
-      role: "user" | "assistant";
-      time: { created: number };
-      [key: string]: JsonValue;
-    };
-    parts: Part[];
-  }>;
-  childrenResponse?: unknown[];
+  messagesResponse?: MockSessionMessage[];
+  childrenResponse?: MockChildSession[];
   todoResult?: TodoMockResult;
-  providerResponse?: JsonValue | undefined;
-  agentsResponse?: JsonValue | undefined;
+  agentsResponse?: MockAgentPayload[];
   agentsResult?: AgentsMockResult;
-  toolIdsResponse?: JsonValue | undefined;
-  modelToolsResponse?: JsonValue | undefined;
-  mcpStatusResponse?: JsonValue | undefined;
+  toolIdsResponse?: string[];
+  mcpStatusResponse?: Record<string, MockMcpStatus>;
 };
 
 export const makeMockClient = ({
@@ -238,34 +259,9 @@ export const makeMockClient = ({
     mode: "success",
     data: [],
   },
-  providerResponse = {
-    providers: [
-      {
-        id: "openai",
-        name: "OpenAI",
-        models: {
-          "gpt-5": {
-            name: "GPT-5",
-            limit: {
-              context: 400_000,
-              output: 32_000,
-            },
-            variants: {
-              high: {},
-              low: {},
-            },
-          },
-        },
-      },
-    ],
-    default: {
-      openai: "gpt-5",
-    },
-  },
   agentsResponse = [],
   agentsResult,
   toolIdsResponse = [...DEFAULT_ODT_RUNTIME_TOOL_IDS],
-  modelToolsResponse = [],
   mcpStatusResponse = { openducktor: { status: "connected" } },
 }: MakeMockClientInput = {}) => {
   const session: MockSession = {
@@ -307,11 +303,11 @@ export const makeMockClient = ({
   // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
   const client = {
     session: {
-      create: async (input: JsonValue | undefined) => {
+      create: async (input: ClientMethodInput<"session", "create">) => {
         session.createCalls.push(input);
         return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
       },
-      promptAsync: async (input: JsonValue | undefined) => {
+      promptAsync: async (input: ClientMethodInput<"session", "promptAsync">) => {
         session.promptAsyncCalls.push(input);
         if (promptAsyncResult.mode === "throw") {
           throw promptAsyncResult.error;
@@ -323,9 +319,9 @@ export const makeMockClient = ({
             response: promptAsyncResult.response,
           };
         }
-        return { data: promptAsyncResult.data, error: undefined };
+        return { data: undefined, error: undefined };
       },
-      command: async (input: JsonValue | undefined) => {
+      command: async (input: ClientMethodInput<"session", "command">) => {
         session.commandCalls.push(input);
         if (commandResult.mode === "throw") {
           throw commandResult.error;
@@ -339,15 +335,15 @@ export const makeMockClient = ({
         }
         return { data: commandResult.data, error: undefined };
       },
-      prompt: async (input: JsonValue | undefined) => {
+      prompt: async (input: ClientMethodInput<"session", "prompt">) => {
         session.promptCalls.push(input);
         return { data: undefined, error: undefined };
       },
-      abort: async (input: JsonValue | undefined) => {
+      abort: async (input: ClientMethodInput<"session", "abort">) => {
         session.abortCalls.push(input);
         return { data: true, error: undefined };
       },
-      get: async (input: JsonValue | undefined) => {
+      get: async (input: ClientMethodInput<"session", "get">) => {
         session.getCalls.push(input);
         return {
           data: {
@@ -358,33 +354,33 @@ export const makeMockClient = ({
           error: undefined,
         };
       },
-      update: async (input: JsonValue | undefined) => {
+      update: async (input: ClientMethodInput<"session", "update">) => {
         session.updateCalls.push(input);
         return session.updateResult;
       },
-      fork: async (input: JsonValue | undefined) => {
+      fork: async (input: ClientMethodInput<"session", "fork">) => {
         session.forkCalls.push(input);
         return { data: { id: forkSessionId }, error: undefined };
       },
-      delete: async (input: JsonValue | undefined) => {
+      delete: async (input: ClientMethodInput<"session", "delete">) => {
         session.deleteCalls.push(input);
         return { data: true, error: undefined };
       },
-      messages: async (input: JsonValue | undefined) => {
+      messages: async (input: ClientMethodInput<"session", "messages">) => {
         session.messagesCalls.push(input);
         return {
           data: session.messagesResponse,
           error: undefined,
         };
       },
-      children: async (input: JsonValue | undefined) => {
+      children: async (input: ClientMethodInput<"session", "children">) => {
         session.childrenCalls.push(input);
         return {
           data: childrenResponse,
           error: undefined,
         };
       },
-      todo: async (input: JsonValue | undefined) => {
+      todo: async (input: ClientMethodInput<"session", "todo">) => {
         session.todoCalls.push(input);
         if (session.todoResult.mode === "throw") {
           throw session.todoResult.error;
@@ -410,13 +406,13 @@ export const makeMockClient = ({
       },
     },
     permission: {
-      reply: async (input: JsonValue | undefined) => {
+      reply: async (input: ClientMethodInput<"permission", "reply">) => {
         permission.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     question: {
-      reply: async (input: JsonValue | undefined) => {
+      reply: async (input: ClientMethodInput<"question", "reply">) => {
         question.replyCalls.push(input);
         return { data: true, error: undefined };
       },
@@ -424,7 +420,30 @@ export const makeMockClient = ({
     config: {
       providers: async () => {
         return {
-          data: providerResponse,
+          data: {
+            providers: [
+              {
+                id: "openai",
+                name: "OpenAI",
+                models: {
+                  "gpt-5": {
+                    name: "GPT-5",
+                    limit: {
+                      context: 400_000,
+                      output: 32_000,
+                    },
+                    variants: {
+                      high: {},
+                      low: {},
+                    },
+                  },
+                },
+              },
+            ],
+            default: {
+              openai: "gpt-5",
+            },
+          },
           error: undefined,
         };
       },
@@ -435,41 +454,36 @@ export const makeMockClient = ({
           throw agentsResult.error;
         }
         return {
-          data:
-            agentsResult?.mode === "success"
-              ? agentsResult.data
-              : agentsResult?.mode === "api_error"
-                ? undefined
-                : agentsResponse,
+          data: agentsResult?.mode === "api_error" ? undefined : agentsResponse,
           error: agentsResult?.mode === "api_error" ? agentsResult.error : undefined,
         };
       },
     },
     tool: {
-      ids: async (input: JsonValue | undefined) => {
+      ids: async (input: ClientMethodInput<"tool", "ids">) => {
         tool.idsCalls.push(input);
         return {
           data: toolIdsResponse,
           error: undefined,
         };
       },
-      list: async (input: JsonValue | undefined) => {
+      list: async (input: ClientMethodInput<"tool", "list">) => {
         tool.listCalls.push(input);
         return {
-          data: modelToolsResponse,
+          data: [],
           error: undefined,
         };
       },
     },
     mcp: {
-      status: async (input: JsonValue | undefined) => {
+      status: async (input: ClientMethodInput<"mcp", "status">) => {
         mcp.statusCalls.push(input);
         return {
           data: mcpStatusResponse,
           error: undefined,
         };
       },
-      connect: async (input: JsonValue | undefined) => {
+      connect: async (input: ClientMethodInput<"mcp", "connect">) => {
         mcp.connectCalls.push(input);
         return {
           data: true,

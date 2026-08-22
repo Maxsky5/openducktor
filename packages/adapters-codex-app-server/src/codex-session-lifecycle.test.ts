@@ -88,10 +88,12 @@ describe("codex session lifecycle", () => {
       externalSessionId: "thread-1",
     } satisfies PolicyBoundSessionRef;
 
-    const existingThreadSession = sessionStateFromExistingThread(input, "runtime-1", undefined, {
-      ...threadResumeResponse,
-      startedAt: "2026-05-07T00:00:00.000Z",
-    });
+    const existingThreadSession = sessionStateFromExistingThread(
+      input,
+      "runtime-1",
+      undefined,
+      threadResumeResponse,
+    );
 
     expect(existingThreadSession.model).toBeUndefined();
     expect(existingThreadSession.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");

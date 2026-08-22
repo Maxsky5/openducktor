@@ -2,6 +2,7 @@ import {
   type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
+  jsonValueSchema,
   type PlanSubtaskInput,
   type PullRequest,
   planSubtaskInputSchema,
@@ -15,6 +16,7 @@ import {
   taskUpdatePatchSchema,
   hasRuntimeType,
 } from "@openducktor/contracts";
+import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
@@ -159,33 +161,39 @@ export const parsePlanSubtasks = (value: JsonValue | undefined): PlanSubtaskInpu
   );
 };
 
-const normalizeAgentSessionInput = (value: JsonValue | undefined): JsonValue | undefined => {
-  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
-    return value;
-  }
+const agentSessionStringKeys = [
+  "externalSessionId",
+  "role",
+  "startedAt",
+  "runtimeKind",
+  "workingDirectory",
+] as const;
+const normalizedAgentSessionInputSchema = z
+  .record(z.string(), jsonValueSchema)
+  .transform((record) => {
+    const normalized = { ...record };
+    for (const key of agentSessionStringKeys) {
+      const value = normalized[key];
+      if (hasRuntimeType(value, "string")) {
+        normalized[key] = value.trim();
+      }
+    }
+    return normalized;
+  });
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = value as Record<string, JsonValue>;
-  return {
-    ...record,
-    ...(hasRuntimeType(record.externalSessionId, "string")
-      ? { externalSessionId: record.externalSessionId.trim() }
-      : undefined),
-    ...(hasRuntimeType(record.role, "string") ? { role: record.role.trim() } : undefined),
-    ...(hasRuntimeType(record.startedAt, "string")
-      ? { startedAt: record.startedAt.trim() }
-      : undefined),
-    ...(hasRuntimeType(record.runtimeKind, "string")
-      ? { runtimeKind: record.runtimeKind.trim() }
-      : undefined),
-    ...(hasRuntimeType(record.workingDirectory, "string")
-      ? { workingDirectory: record.workingDirectory.trim() }
-      : undefined),
-  };
-};
+const normalizedAgentSessionRecordSchema = normalizedAgentSessionInputSchema.transform(
+  (record, context) => {
+    const parsed = agentSessionRecordSchema.safeParse(record);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) {
+      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    return z.NEVER;
+  },
+);
 
 export const parseAgentSessionRecord = (value: JsonValue | undefined): AgentSessionRecord => {
-  const parsed = agentSessionRecordSchema.safeParse(normalizeAgentSessionInput(value));
+  const parsed = normalizedAgentSessionRecordSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
   }
@@ -201,9 +209,19 @@ const agentSessionIdentitySchema = agentSessionRecordSchema.pick({
   runtimeKind: true,
   workingDirectory: true,
 });
+const normalizedAgentSessionIdentitySchema = normalizedAgentSessionInputSchema.transform(
+  (record, context) => {
+    const parsed = agentSessionIdentitySchema.safeParse(record);
+    if (parsed.success) return parsed.data;
+    for (const issue of parsed.error.issues) {
+      context.addIssue({ code: "custom", message: issue.message, path: issue.path });
+    }
+    return z.NEVER;
+  },
+);
 
 export const parseAgentSessionIdentity = (value: JsonValue | undefined): AgentSessionIdentity => {
-  const parsed = agentSessionIdentitySchema.safeParse(normalizeAgentSessionInput(value));
+  const parsed = normalizedAgentSessionIdentitySchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
   }

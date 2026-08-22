@@ -197,7 +197,7 @@ export const startCodexTurnForSession = async (
     session,
     startedAtMs: Number.POSITIVE_INFINITY,
     turnStartRequestSentAtMs: null,
-    turnStartPromise: Promise.resolve({}),
+    turnStartPromise: null,
     isTurnSettled: () => turnSettled,
     markTurnSettled: () => {
       turnSettled = true;

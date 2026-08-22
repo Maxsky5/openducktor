@@ -1,4 +1,4 @@
-import type { Event as SdkEvent, GlobalEvent } from "@opencode-ai/sdk/v2/client";
+import type { Event as SdkEvent } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { handleMessageEvent } from "./event-stream/message-events";
 import { emitAdmittedUserMessage } from "./event-stream/message-events/user-emitter";
@@ -6,6 +6,7 @@ import { handleSessionEvent } from "./event-stream/session-events";
 import type { EventStreamRuntime, SubagentSessionLink } from "./event-stream/shared";
 import {
   parseOpencodeGlobalEventPayload,
+  type OpencodeGlobalEventPayload,
   type ParsedOpencodeEvent as Event,
 } from "./opencode-ingress";
 import {
@@ -35,13 +36,7 @@ type ProjectAdmittedUserMessageInput = OpencodeAgentSessionProjectionContext & {
   message: Parameters<typeof emitAdmittedUserMessage>[1];
 };
 
-type SdkGlobalEventPayload = GlobalEvent["payload"];
-type ServerHeartbeatPayload = {
-  id: string;
-  type: "server.heartbeat";
-  properties: Record<string, never>;
-};
-export type OpencodeGlobalEventPayload = SdkGlobalEventPayload | ServerHeartbeatPayload;
+type SdkGlobalEventPayload = Exclude<OpencodeGlobalEventPayload, { type: "server.heartbeat" }>;
 type SyncGlobalEventPayload = Extract<SdkGlobalEventPayload, { type: "sync" }>;
 type SyncEventType = SyncGlobalEventPayload["syncEvent"]["type"];
 

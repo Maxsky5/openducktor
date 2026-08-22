@@ -691,7 +691,10 @@ describe("createElectronHostCommandRouter", () => {
             onBackgroundFailure: (failure) =>
               Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
             openInTools: createOpenInTools(),
-            processEnv: { PATH: "/usr/bin:/bin" },
+            processEnv: {
+              OPENDUCKTOR_CONFIG_DIR: configDirectory,
+              PATH: "/usr/bin:/bin",
+            },
             runtimeDistribution: testRuntimeDistribution,
             settingsConfig,
             taskStore: createTaskStore(),
@@ -725,6 +728,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("disposes registered runtimes on host shutdown", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-dispose-"));
     const stoppedRuntimes: string[] = [];
     const lifecycleLogs: string[] = [];
     const registeredRuntime = {
@@ -738,50 +742,59 @@ describe("createElectronHostCommandRouter", () => {
       startedAt: "2026-05-13T00:00:00Z",
       descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
     } satisfies RuntimeInstanceSummary;
-    const router = createElectronHostCommandRouter({
-      lifecycleLogger: {
-        info(message) {
-          return Effect.sync(() => lifecycleLogs.push(message));
+    try {
+      const router = createElectronHostCommandRouter({
+        lifecycleLogger: {
+          info(message) {
+            return Effect.sync(() => lifecycleLogs.push(message));
+          },
+          error(message) {
+            return Effect.sync(() => lifecycleLogs.push(message));
+          },
         },
-        error(message) {
-          return Effect.sync(() => lifecycleLogs.push(message));
+        processEnv: {
+          OPENDUCKTOR_CONFIG_DIR: configDirectory,
+          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+          PATH: "/usr/bin:/bin",
         },
-      },
-      runtimeRegistry: {
-        ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
-        findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
-        listRuntimes: () => Effect.succeed([registeredRuntime]),
-        listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
-        stopRuntime: (runtimeId) =>
-          Effect.sync(() => {
-            stoppedRuntimes.push(runtimeId);
-            return true;
-          }),
-        stopAllRuntimes: () =>
-          Effect.sync(() => {
-            stoppedRuntimes.push("runtime-1");
-            return [registeredRuntime];
-          }),
-        stopSession: () => Effect.succeed(undefined),
-        probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
-        probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
-      },
-      settingsConfig: createSettingsConfig(),
-    });
+        runtimeRegistry: {
+          ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
+          findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
+          listRuntimes: () => Effect.succeed([registeredRuntime]),
+          listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
+          stopRuntime: (runtimeId) =>
+            Effect.sync(() => {
+              stoppedRuntimes.push(runtimeId);
+              return true;
+            }),
+          stopAllRuntimes: () =>
+            Effect.sync(() => {
+              stoppedRuntimes.push("runtime-1");
+              return [registeredRuntime];
+            }),
+          stopSession: () => Effect.succeed(undefined),
+          probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
+          probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
+        },
+        settingsConfig: createSettingsConfig(),
+      });
 
-    await expect(router.dispose()).resolves.toBeUndefined();
+      await expect(router.dispose()).resolves.toBeUndefined();
 
-    expect(stoppedRuntimes).toEqual(["runtime-1"]);
-    expect(lifecycleLogs).toEqual(
-      expect.arrayContaining([
-        "Shutting down OpenDucktor host services",
-        "No dev servers are running",
-        "Stopping registered agent runtimes",
-        "Stopped opencode runtime runtime-1 for task workspace (workspace)",
-        "No MCP host bridge server is running",
-        "OpenDucktor host services stopped",
-      ]),
-    );
+      expect(stoppedRuntimes).toEqual(["runtime-1"]);
+      expect(lifecycleLogs).toEqual(
+        expect.arrayContaining([
+          "Shutting down OpenDucktor host services",
+          "No dev servers are running",
+          "Stopping registered agent runtimes",
+          "Stopped opencode runtime runtime-1 for task workspace (workspace)",
+          "No MCP host bridge server is running",
+          "OpenDucktor host services stopped",
+        ]),
+      );
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
   });
 
   test("registers migrated filesystem host commands", async () => {

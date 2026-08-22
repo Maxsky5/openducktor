@@ -10,7 +10,7 @@ import {
   withAnimationFrameTestDriver,
 } from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import { createFocusedFixture, createInvalidFixture } from "@/test-utils/focused-fixture";
+import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
@@ -184,19 +184,21 @@ describe("AgentChatThread", () => {
     animationFrameDriver.installAutoFlush();
     // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
     globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
-    globalThis.IntersectionObserver = createInvalidFixture<typeof IntersectionObserver>(
-      class MockIntersectionObserver {
-        disconnect(): void {}
+    globalThis.IntersectionObserver = class MockIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0];
 
-        observe(): void {}
+      disconnect(): void {}
 
-        takeRecords(): IntersectionObserverEntry[] {
-          return [];
-        }
+      observe(_target: Element): void {}
 
-        unobserve(): void {}
-      },
-    );
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+
+      unobserve(_target: Element): void {}
+    };
   });
 
   afterEach(() => {

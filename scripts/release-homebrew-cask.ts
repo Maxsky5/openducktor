@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 
 interface MacosVersionSymbolsContract extends Record<string, string> {}
 
@@ -27,6 +28,16 @@ type ElectronBuilderConfig = {
     minimumSystemVersion?: string;
   };
 };
+
+const electronBuilderConfigSchema = z.object({
+  productName: z.string().optional(),
+  appId: z.string().optional(),
+  mac: z
+    .object({
+      minimumSystemVersion: z.string().optional(),
+    })
+    .optional(),
+});
 
 export type HomebrewCaskRenderInput = {
   version: string;
@@ -147,8 +158,9 @@ export function resolveHomebrewMacosRequirement(minimumSystemVersion: string): s
 
 export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()) {
   const absolutePath = resolve(workspaceRoot, electronBuilderConfigPath);
-  // SAFETY: The surrounding boundary constructs or validates every member required by `ElectronBuilderConfig`.
-  const parsed = parseYaml(readFileSync(absolutePath, "utf8")) as ElectronBuilderConfig;
+  const parsed: ElectronBuilderConfig = electronBuilderConfigSchema.parse(
+    parseYaml(readFileSync(absolutePath, "utf8")),
+  );
   const productName = parsed.productName?.trim();
   const bundleIdentifier = parsed.appId?.trim();
   const minimumSystemVersion = parsed.mac?.minimumSystemVersion?.trim();

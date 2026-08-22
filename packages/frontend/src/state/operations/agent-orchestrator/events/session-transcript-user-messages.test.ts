@@ -11,15 +11,13 @@ import {
   type SessionEventAdapter,
   type SessionUpdateFn,
 } from "./session-events-test-harness";
-import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator session transcript events", () => {
   test("writes canonical user_message events into the transcript", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -88,11 +86,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("preserves attachment display parts on user_message events", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -328,11 +325,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("merges queued user_message updates in place when the agent reads the turn", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

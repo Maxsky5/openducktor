@@ -1,5 +1,4 @@
 import type { CodexAppServerRequestInput } from "../../ports/codex-app-server-port";
-import { createInvalidFixture } from "../../test-support/focused-service";
 import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -472,9 +471,8 @@ describe("createCodexAppServerCommandHandlers", () => {
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "model/list",
-        // SAFETY: intentionally non-JSON payload to exercise the runtime
-        // JSON-serializability validation; the cast bypasses the static JsonValue gate.
-        params: createInvalidFixture<JsonValue>(nonJsonParams),
+        // @ts-expect-error -- This case verifies runtime rejection of a non-JSON request payload.
+        params: nonJsonParams,
       }),
     ).rejects.toThrow("params must be JSON-serializable.");
     for (const params of [null, true, 1, "params", []]) {

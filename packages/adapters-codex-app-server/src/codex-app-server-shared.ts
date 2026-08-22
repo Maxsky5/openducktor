@@ -17,7 +17,7 @@ export type ActiveCodexTurn = {
   session: CodexSessionState;
   startedAtMs: number;
   turnStartRequestSentAtMs: number | null;
-  turnStartPromise: Promise<CodexTurnStartResult>;
+  turnStartPromise: Promise<CodexTurnStartResult> | null;
   isTurnSettled: () => boolean;
   markTurnSettled: () => void;
   handledRequestKeys: Set<string>;

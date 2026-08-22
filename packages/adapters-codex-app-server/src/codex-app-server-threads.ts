@@ -1,7 +1,14 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
-import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
+import type {
+  CodexAppServerJsonValue,
+  CodexAppServerSessionSource,
+  CodexAppServerThread,
+  CodexAppServerThreadLoadedListResponse,
+  CodexAppServerThreadListResponse,
+  CodexAppServerThreadReadResponse,
+  CodexAppServerThreadStatus,
+} from "@openducktor/contracts";
 import type {
   CodexThreadForkResult,
   CodexThreadResumeResult,
@@ -15,18 +22,10 @@ export type CodexThreadInventory = {
 };
 export const extractThreadId = (
   response: CodexThreadStartResult | CodexThreadResumeResult | CodexThreadForkResult,
-  action: string,
-): { externalSessionId: string; startedAt?: string } => {
-  const externalSessionId = response.thread?.id ?? response.thread?.threadId ?? response.threadId;
-  if (!externalSessionId) {
-    throw new Error(`Codex ${action} response is missing a thread identifier.`);
-  }
-
-  const createdAt = response.thread?.createdAt;
-  return hasRuntimeType(createdAt, "number") && Number.isFinite(createdAt)
-    ? { externalSessionId, startedAt: new Date(createdAt * 1000).toISOString() }
-    : { externalSessionId };
-};
+) => ({
+  externalSessionId: response.thread.id,
+  startedAt: codexTimestampFromSeconds(response.thread.createdAt),
+});
 
 export const toSessionSummary = (input: {
   externalSessionId: string;
@@ -65,19 +64,18 @@ export type CodexThreadSnapshot = {
 export type CodexSubAgentSourceMetadata = {
   parentThreadId: string;
   depth: number;
-  agentPath: JsonValue;
+  agentPath: CodexAppServerJsonValue | null;
   agentNickname: string | null;
   agentRole: string | null;
 };
 
-const codexTimestampFromUnknownSeconds = (value: JsonValue | undefined): string =>
-  hasRuntimeType(value, "number") ? new Date(value * 1000).toISOString() : new Date().toISOString();
+const codexTimestampFromSeconds = (value: number): string => new Date(value * 1000).toISOString();
 
-const codexTimestampMsFromUnknownSeconds = (value: JsonValue | undefined): number | null => {
+const codexTimestampMsFromSeconds = (value: number | null | undefined): number | null => {
   if (value === null || value === undefined) {
     return null;
   }
-  if (!hasRuntimeType(value, "number") || !Number.isFinite(value)) {
+  if (!Number.isFinite(value)) {
     throw new Error("Codex thread updatedAt must be a finite number.");
   }
   const timestampMs = value * 1000;
@@ -88,115 +86,87 @@ const codexTimestampMsFromUnknownSeconds = (value: JsonValue | undefined): numbe
 };
 
 export const codexThreadStatusSnapshot = (
-  status: JsonValue | undefined,
+  status: CodexAppServerThreadStatus | CodexAppServerThreadStatus["type"] | undefined,
 ): CodexThreadStatusSnapshot => {
-  const type = isPlainObject(status)
-    ? extractStringField(status, ["type"])
-    : hasRuntimeType(status, "string")
-      ? status
-      : null;
-  const normalized = type?.toLowerCase() ?? "idle";
-  const activeFlags = isPlainObject(status)
-    ? arrayFromUnknown(status.activeFlags ?? status.active_flags).filter(
-        (flag): flag is string => typeof flag === "string",
-      )
-    : [];
-  if (normalized === "active") {
-    const flags = new Set(activeFlags.map((flag) => flag.toLowerCase()));
-    if (flags.has("waitingonapproval") || flags.has("waiting_on_approval")) {
-      return { classification: "waiting_for_permission" };
-    }
-    if (flags.has("waitingonuserinput") || flags.has("waiting_on_user_input")) {
-      return { classification: "waiting_for_question" };
-    }
-    return { classification: "running" };
+  if (status === undefined || status === "idle" || status === "notLoaded") {
+    return { classification: "idle" };
   }
-  return { classification: "idle" };
+  if (status === "active") return { classification: "running" };
+  if (status === "systemError") {
+    throw new Error("Codex thread reported a system error.");
+  }
+  if (status.type === "idle" || status.type === "notLoaded") {
+    return { classification: "idle" };
+  }
+  if (status.type === "systemError") {
+    throw new Error("Codex thread reported a system error.");
+  }
+  if (status.activeFlags.includes("waitingOnApproval")) {
+    return { classification: "waiting_for_permission" };
+  }
+  if (status.activeFlags.includes("waitingOnUserInput")) {
+    return { classification: "waiting_for_question" };
+  }
+  return { classification: "running" };
 };
 
-const codexThreadSnapshot = (thread: JsonValue | undefined): CodexThreadSnapshot | null => {
-  if (!isPlainObject(thread)) {
-    return null;
-  }
-  const id = extractStringField(thread, ["id", "threadId"]);
-  const cwd = extractStringField(thread, ["cwd", "workingDirectory"]);
-  if (!id || !cwd) {
-    return null;
-  }
+const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot => {
   const subAgentSource = codexSubAgentSourceMetadata(thread.source);
+  const title = thread.name?.trim() || thread.preview.trim() || `Codex ${thread.id}`;
   return {
-    id,
-    cwd,
-    startedAt: codexTimestampFromUnknownSeconds(thread.createdAt ?? thread.created_at),
-    updatedAtMs: codexTimestampMsFromUnknownSeconds(thread.updatedAt ?? thread.updated_at),
-    title: extractStringField(thread, ["name", "preview"]) ?? `Codex ${id}`,
+    id: thread.id,
+    cwd: thread.cwd,
+    startedAt: codexTimestampFromSeconds(thread.createdAt),
+    updatedAtMs: codexTimestampMsFromSeconds(thread.updatedAt),
+    title,
     status: codexThreadStatusSnapshot(thread.status),
-    parentThreadId:
-      extractStringField(thread, ["parentThreadId", "parent_thread_id"]) ??
-      subAgentSource?.parentThreadId ??
-      null,
-    agentNickname: extractStringField(thread, ["agentNickname", "agent_nickname"]),
-    agentRole: extractStringField(thread, ["agentRole", "agent_role"]),
+    parentThreadId: thread.parentThreadId ?? subAgentSource?.parentThreadId ?? null,
+    agentNickname: thread.agentNickname,
+    agentRole: thread.agentRole,
     subAgentSource,
   };
 };
 
 const codexSubAgentSourceMetadata = (
-  source: JsonValue | undefined,
+  source: CodexAppServerSessionSource | null | undefined,
 ): CodexSubAgentSourceMetadata | null => {
-  if (!isPlainObject(source)) {
+  if (!source || hasRuntimeType(source, "string") || !("subAgent" in source)) {
     return null;
   }
-  const subAgent = source.subAgent ?? source.sub_agent;
-  if (!isPlainObject(subAgent)) {
+  const subAgent = source.subAgent;
+  if (hasRuntimeType(subAgent, "string") || "other" in subAgent) {
     return null;
   }
-  const threadSpawn = subAgent.thread_spawn ?? subAgent.threadSpawn;
-  if (!isPlainObject(threadSpawn)) {
+  if (!("thread_spawn" in subAgent)) {
     return null;
   }
-  const parentThreadId = extractStringField(threadSpawn, ["parent_thread_id", "parentThreadId"]);
-  const depth = hasRuntimeType(threadSpawn.depth, "number") ? threadSpawn.depth : null;
-  if (!parentThreadId || depth === null || !Number.isFinite(depth)) {
+  const threadSpawn = subAgent.thread_spawn;
+  if (!threadSpawn.parent_thread_id || !Number.isFinite(threadSpawn.depth)) {
     return null;
   }
   return {
-    parentThreadId,
-    depth,
-    agentPath: threadSpawn.agent_path ?? threadSpawn.agentPath ?? null,
-    agentNickname: extractStringField(threadSpawn, ["agent_nickname", "agentNickname"]),
-    agentRole: extractStringField(threadSpawn, ["agent_role", "agentRole"]),
+    parentThreadId: threadSpawn.parent_thread_id,
+    depth: threadSpawn.depth,
+    agentPath: threadSpawn.agent_path,
+    agentNickname: threadSpawn.agent_nickname,
+    agentRole: threadSpawn.agent_role,
   };
 };
 
-export const codexThreadList = (response: JsonValue | undefined): CodexThreadSnapshot[] =>
-  isPlainObject(response)
-    ? arrayFromUnknown(response.data)
-        .map(codexThreadSnapshot)
-        .filter((thread): thread is CodexThreadSnapshot => Boolean(thread))
-    : [];
+export const codexThreadList = (
+  response: CodexAppServerThreadListResponse,
+): CodexThreadSnapshot[] => response.data.map(codexThreadSnapshot);
 
-export const codexLoadedThreadIds = (response: JsonValue | undefined): Set<string> =>
-  isPlainObject(response)
-    ? new Set(
-        arrayFromUnknown(response.data)
-          .map((entry) => {
-            if (hasRuntimeType(entry, "string")) {
-              return entry;
-            }
-            return isPlainObject(entry) ? extractStringField(entry, ["id", "threadId"]) : null;
-          })
-          .filter((id): id is string => Boolean(id)),
-      )
-    : new Set();
+export const codexLoadedThreadIds = (
+  response: CodexAppServerThreadLoadedListResponse,
+): Set<string> => new Set(response.data);
 
 export const threadSnapshotFromReadResponse = (
-  response: JsonValue | undefined,
-): CodexThreadSnapshot | null =>
-  isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
+  response: CodexAppServerThreadReadResponse | undefined,
+): CodexThreadSnapshot | null => (response ? codexThreadSnapshot(response.thread) : null);
 
 export const requireThreadSnapshotFromReadResponse = (
-  response: JsonValue | undefined,
+  response: CodexAppServerThreadReadResponse | undefined,
   action: string,
   externalSessionId: string,
 ): CodexThreadSnapshot => {

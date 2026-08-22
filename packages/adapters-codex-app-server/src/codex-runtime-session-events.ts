@@ -455,8 +455,12 @@ export class CodexRuntimeSessionEvents {
   }
 
   async continueTurnAfterPendingInput(activeTurn: ActiveCodexTurn): Promise<void> {
+    const turnStartPromise = activeTurn.turnStartPromise;
+    if (!turnStartPromise) {
+      return;
+    }
     try {
-      await activeTurn.turnStartPromise;
+      await turnStartPromise;
     } catch (error) {
       if (this.deps.sessions.get(activeTurn.session.threadId) !== activeTurn.session) {
         return;

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type AuditAdvisory = {
   title?: string;
   url?: string;
@@ -6,6 +8,15 @@ export type AuditAdvisory = {
 };
 
 export type AuditResult = Record<string, AuditAdvisory[]>;
+
+const auditAdvisorySchema = z.object({
+  title: z.string().optional(),
+  url: z.string().optional(),
+  severity: z.string().optional(),
+  vulnerable_versions: z.string().optional(),
+});
+
+const auditResultSchema = z.record(z.string(), z.array(auditAdvisorySchema));
 
 type BunAuditJsonResult = {
   parsed: AuditResult;
@@ -86,9 +97,8 @@ export const runBunAuditJson = (prefix: string): BunAuditJsonResult => {
   }
 
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `AuditResult` at this boundary.
     return {
-      parsed: JSON.parse(jsonPayload) as AuditResult,
+      parsed: auditResultSchema.parse(JSON.parse(jsonPayload)),
       exitCode: audit.exitCode ?? 1,
     };
   } catch (error) {

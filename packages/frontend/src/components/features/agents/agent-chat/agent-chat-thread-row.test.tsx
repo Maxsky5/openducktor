@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { buildMessage, presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
-import { createInvalidFixture } from "@/test-utils/focused-fixture";
 
 const createBaseProps = () => ({
   isStreamingAssistantMessage: false,
@@ -68,14 +67,16 @@ describe("AgentChatThreadRow", () => {
   });
 
   test("throws for unknown row kinds", () => {
+    const row: AgentChatTranscriptRow = {
+      // @ts-expect-error -- This case verifies the runtime exhaustiveness guard for unknown row kinds.
+      kind: "unexpected",
+      key: "broken",
+    };
     const render = () =>
       renderToStaticMarkup(
         createElement(AgentChatThreadRow, {
           ...createBaseProps(),
-          row: createInvalidFixture<AgentChatTranscriptRow>({
-            kind: "unexpected",
-            key: "broken",
-          }),
+          row,
         }),
       );
 

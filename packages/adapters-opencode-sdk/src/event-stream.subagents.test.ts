@@ -6,7 +6,7 @@ import {
   questionAskedEvent,
   runEventStreamWithSession,
 } from "./event-stream.test-support";
-import { createInvalidFixture } from "./test-fixture";
+import { createInvalidOpencodeEventFixture } from "./test-fixture";
 
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
@@ -28,7 +28,7 @@ const readSubagentEvents = (events: AgentEvent[]): SubagentPartEvent[] =>
   );
 
 const assistantRoleEvent = (messageId: string): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -40,7 +40,7 @@ const assistantRoleEvent = (messageId: string): Event =>
   });
 
 const userRoleEvent = (messageId: string): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -56,7 +56,7 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
   partId: string;
   description: string;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -79,7 +79,7 @@ const makeChildSessionCreatedEvent = (input: {
 }): Event => {
   const parentExternalSessionId = input.parentExternalSessionId ?? "external-session-1";
   const parentPlacement = input.parentPlacement ?? "info";
-  return createInvalidFixture<Event>({
+  return createInvalidOpencodeEventFixture({
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
@@ -145,7 +145,7 @@ const makeSubagentToolPartUpdatedEvent = (input: {
     prompt: "Inspect repo",
     ...(input.childSessionId ? { externalSessionId: input.childSessionId } : undefined),
   };
-  return createInvalidFixture<Event>({
+  return createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -186,7 +186,7 @@ const makeBackgroundTaskRunningPartUpdatedEvent = (input: {
   callId: string;
   childSessionId: string;
 }): Event =>
-  createInvalidFixture<Event>({
+  createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       part: {
@@ -234,7 +234,7 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
   text: string;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createInvalidFixture<Event>({
+  return createInvalidOpencodeEventFixture({
     type: "message.updated",
     properties: {
       info: {
@@ -277,7 +277,7 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   eventTimestampMs?: number;
 }): Event => {
   const resultTag = input.state === "error" ? "task_error" : "task_result";
-  return createInvalidFixture<Event>({
+  return createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
       ...(input.eventTimestampMs !== undefined

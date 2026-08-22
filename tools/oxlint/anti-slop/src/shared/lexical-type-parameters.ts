@@ -1,8 +1,10 @@
 import type { ESTree } from "@oxlint/plugins";
 
 type VisitorKeys = Readonly<Record<string, readonly string[]>>;
+type ChildNodeValue = ESTree.Node | readonly ESTree.Node[] | null | undefined;
+type TraversableNode = ESTree.Node & Readonly<Record<string, ChildNodeValue>>;
 
-function isNode(value: unknown): value is ESTree.Node {
+function isNode(value: ChildNodeValue): value is ESTree.Node {
 	return (
 		typeof value === "object" &&
 		value !== null &&
@@ -17,7 +19,8 @@ function collectInferTypeParameterNames(
 	names: Set<string>,
 ): void {
 	if (node.type === "TSInferType") names.add(node.typeParameter.name.name);
-	const record = node as unknown as Readonly<Record<string, unknown>>;
+	// SAFETY: Oxlint visitor keys name only child-node or child-node-array properties on ESTree nodes.
+	const record = node as TraversableNode;
 	for (const key of visitorKeys[node.type] ?? []) {
 		const value = record[key];
 		if (isNode(value)) {

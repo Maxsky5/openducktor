@@ -10,16 +10,14 @@ import {
   type SessionEventAdapter,
   withMockedToast,
 } from "./session-events-test-harness";
-import type { JsonValue } from "@openducktor/contracts";
 
 describe("agent-orchestrator session transcript events", () => {
   test("records inputReadyAtMs when tool input first becomes meaningful", async () => {
     const originalDateNow = Date.now;
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -139,11 +137,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("preserves file edit diffs across later tool updates for the same call", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -222,11 +219,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("does not revive an idle session from a terminal tool update", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},
@@ -283,11 +279,10 @@ describe("agent-orchestrator session transcript events", () => {
   });
 
   test("inserts delayed live tool rows by transcript timestamp instead of arrival order", async () => {
-    const handlers: Array<(event: { type: string; [key: string]: JsonValue }) => void> = [];
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
-        // SAFETY: This test controls the fixture and supplies `(event: { type: string; [key: string]: JsonValue }) => void` used by this case.
-        handlers.push(handler as (event: { type: string; [key: string]: JsonValue }) => void);
+        handlers.push(handler);
         return () => {};
       },
       replyApproval: async () => {},

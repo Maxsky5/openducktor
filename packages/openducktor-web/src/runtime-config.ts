@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import { type BrowserRuntimeConfig, configureBrowserRuntimeConfig } from "./browser-config";
 import {
   errorMessage,
@@ -10,15 +11,10 @@ import {
 
 export const RUNTIME_CONFIG_PATH = "/openducktor-config.json";
 
-const isRuntimeConfigRecord = (value: JsonValue | undefined): value is BrowserRuntimeConfig => {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  // SAFETY: The surrounding boundary constructs or validates every member required by `{ backendUrl?: JsonValue; appToken?: JsonValue }`.
-  const config = value as { backendUrl?: JsonValue; appToken?: JsonValue };
-  return typeof config.backendUrl === "string" && typeof config.appToken === "string";
-};
+const browserRuntimeConfigSchema: z.ZodType<BrowserRuntimeConfig> = z.object({
+  backendUrl: z.string(),
+  appToken: z.string(),
+});
 
 export const loadBrowserRuntimeConfigEffect = (
   fetchImpl: typeof fetch = fetch,
@@ -55,14 +51,15 @@ export const loadBrowserRuntimeConfigEffect = (
           details: { path: RUNTIME_CONFIG_PATH },
         }),
     });
-    if (!isRuntimeConfigRecord(config)) {
+    const parsedConfig = browserRuntimeConfigSchema.safeParse(config);
+    if (!parsedConfig.success) {
       return yield* new WebValidationError({
         message: `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is missing backendUrl or appToken.`,
         details: { path: RUNTIME_CONFIG_PATH },
       });
     }
 
-    configureBrowserRuntimeConfig(config);
+    configureBrowserRuntimeConfig(parsedConfig.data);
   });
 
 export const loadBrowserRuntimeConfig = (fetchImpl: typeof fetch = fetch): Promise<void> =>

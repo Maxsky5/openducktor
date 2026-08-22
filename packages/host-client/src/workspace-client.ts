@@ -1,19 +1,18 @@
 import {
   type AgentModelFavorite,
   type GitProviderRepository,
-  type GitTargetBranch,
   type GlobalGitConfig,
   gitProviderRepositorySchema,
   type RepoConfig,
-  type RepoDevServerScript,
-  type RepoGitConfig,
-  type RepoPromptOverrides,
   type RuntimeKind,
   repoConfigSchema,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
   type WorkspaceRecord,
+  type WorkspaceRepoConfigInput,
+  type WorkspaceRepoHooksInput,
+  type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
   hasRuntimeType,
 } from "@openducktor/contracts";
@@ -22,42 +21,11 @@ import { parseArray } from "./invoke-utils";
 import { toCommandArgs } from "./invoke-utils";
 import type { JsonValue } from "@openducktor/contracts";
 
-export type AgentDefaultConfig = {
-  providerId: string;
-  modelId: string;
-  variant?: string;
-  profileId?: string;
-};
-
-export type WorkspaceAgentDefaults = {
-  spec?: AgentDefaultConfig;
-  planner?: AgentDefaultConfig;
-  build?: AgentDefaultConfig;
-  qa?: AgentDefaultConfig;
-};
-
-export type WorkspaceRepoConfigInput = {
-  defaultRuntimeKind?: RuntimeKind;
-  worktreeBasePath?: string;
-  branchPrefix?: string;
-  defaultTargetBranch?: GitTargetBranch;
-  git?: RepoGitConfig;
-  devServers?: RepoDevServerScript[];
-  worktreeCopyPaths?: string[];
-  agentDefaults?: WorkspaceAgentDefaults;
-  promptOverrides?: RepoPromptOverrides;
-};
-
-export type WorkspaceRepoSettingsInput = WorkspaceRepoConfigInput & {
-  defaultTargetBranch?: GitTargetBranch;
-  hooks?: WorkspaceRepoHooksInput;
-  worktreeCopyPaths?: string[];
-};
-
-export type WorkspaceRepoHooksInput = {
-  preStart?: string[];
-  postComplete?: string[];
-};
+export type {
+  WorkspaceRepoConfigInput,
+  WorkspaceRepoHooksInput,
+  WorkspaceRepoSettingsInput,
+} from "@openducktor/contracts";
 
 export type StagedLocalAttachment = {
   path: string;
@@ -157,10 +125,10 @@ const workspaceUpdateRepoHooks = async (
   workspaceId: string,
   hooks: WorkspaceRepoHooksInput,
 ): Promise<WorkspaceRecord> => {
-  const payload = await invokeFn("workspace_update_repo_hooks", {
-    workspaceId,
-    hooks,
-  });
+  const payload = await invokeFn(
+    "workspace_update_repo_hooks",
+    toCommandArgs({ workspaceId, hooks }),
+  );
   return workspaceRecordSchema.parse(payload);
 };
 

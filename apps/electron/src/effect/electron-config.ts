@@ -1,9 +1,10 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { readFileSync } from "node:fs";
 import { Effect } from "effect";
+import { z } from "zod";
 import { ElectronValidationError, errorMessage } from "./electron-errors";
 
 export const DEFAULT_RENDERER_DEV_PORT = 0;
+const packageVersionSchema = z.object({ version: z.string().trim().min(1) });
 
 export const resolveRendererDevPortEffect = (
   rawPort: string | undefined,
@@ -70,12 +71,9 @@ export const readPackageVersionEffect = (
   });
 
 export const readPackageVersion = (packageJsonPath: string): string => {
-  let packageJson: { version?: unknown };
+  let packageJson: unknown;
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `{ version?: unknown; }` at this boundary.
-    packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
-      version?: unknown;
-    };
+    packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
   } catch (cause) {
     throw new ElectronValidationError({
       operation: "electron.config.read-package-version",
@@ -84,13 +82,16 @@ export const readPackageVersion = (packageJsonPath: string): string => {
       cause,
     });
   }
-  if (!hasRuntimeType(packageJson.version, "string") || packageJson.version.length === 0) {
+
+  const parsed = packageVersionSchema.safeParse(packageJson);
+  if (!parsed.success) {
     throw new ElectronValidationError({
       operation: "electron.config.read-package-version",
       message: `Missing package version in ${packageJsonPath}`,
       path: packageJsonPath,
-      field: "version",
+      details: { packageJsonPath },
     });
   }
-  return packageJson.version;
+
+  return parsed.data.version;
 };

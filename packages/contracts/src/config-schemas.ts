@@ -427,6 +427,29 @@ export const repoConfigSchema = z.object({
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
+export const workspaceRepoHooksInputSchema = repoHooksSchema.partial();
+export type WorkspaceRepoHooksInput = z.output<typeof workspaceRepoHooksInputSchema>;
+
+export const workspaceRepoConfigInputSchema = repoConfigSchema
+  .pick({
+    defaultRuntimeKind: true,
+    worktreeBasePath: true,
+    branchPrefix: true,
+    defaultTargetBranch: true,
+    git: true,
+    devServers: true,
+    worktreeCopyPaths: true,
+    agentDefaults: true,
+    promptOverrides: true,
+  })
+  .partial();
+export type WorkspaceRepoConfigInput = z.output<typeof workspaceRepoConfigInputSchema>;
+
+export const workspaceRepoSettingsInputSchema = workspaceRepoConfigInputSchema.extend({
+  hooks: workspaceRepoHooksInputSchema.optional(),
+});
+export type WorkspaceRepoSettingsInput = z.output<typeof workspaceRepoSettingsInputSchema>;
+
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
   expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),

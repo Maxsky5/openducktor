@@ -1,99 +1,65 @@
 import {
-  jsonValueSchema,
+  type CodexAppServerSkillRecord,
+  type CodexAppServerSkillsListResponse,
   skillCatalogSchema,
-  type JsonValue,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentSkillCatalog } from "@openducktor/core";
-import { isPlainObject } from "./codex-app-server-shared";
 
-const readOptionalString = (
-  value: JsonValue | undefined,
-  fieldName: string,
-): string | undefined => {
+const readOptionalString = (value: string | null | undefined): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
-  }
-  if (!hasRuntimeType(value, "string")) {
-    throw new Error(`Invalid Codex skill payload: ${fieldName} must be a string.`);
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const requireString = (value: JsonValue | undefined, fieldName: string): string => {
-  const trimmed = readOptionalString(value, fieldName);
+const requireString = (value: string | null | undefined, fieldName: string): string => {
+  const trimmed = readOptionalString(value);
   if (!trimmed) {
     throw new Error(`Invalid Codex skill payload: missing ${fieldName}.`);
   }
   return trimmed;
 };
 
-const readEnabled = (value: JsonValue | undefined): boolean => {
-  if (value === undefined || value === null) {
-    return true;
-  }
-  if (!hasRuntimeType(value, "boolean")) {
-    throw new Error("Invalid Codex skill payload: enabled must be a boolean.");
-  }
-  return value;
-};
+const isEnabled = (value: boolean | null | undefined): boolean => value ?? true;
 
 const compareSkillsByName = (
-  left: { displayName: string | undefined; name: string; title: string | undefined },
-  right: { displayName: string | undefined; name: string; title: string | undefined },
+  left: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
+  right: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
 ): number => {
   const leftLabel = left.displayName ?? left.title ?? left.name;
   const rightLabel = right.displayName ?? right.title ?? right.name;
   return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
 };
 
-export const toCodexSkillCatalog = (
-  response: Parameters<typeof jsonValueSchema.safeParse>[0],
-): AgentSkillCatalog => {
-  const parsed = jsonValueSchema.safeParse(response);
-  if (!parsed.success || !isPlainObject(parsed.data) || !Array.isArray(parsed.data.data)) {
-    throw new Error("Invalid Codex skills/list payload: expected an object with data array.");
+const toAgentSkillCatalogEntry = (
+  record: CodexAppServerSkillRecord,
+): AgentSkillCatalog["skills"][number] | null => {
+  if (!isEnabled(record.enabled)) {
+    return null;
   }
 
-  const catalogs = parsed.data.data;
-  const skills = catalogs.flatMap((catalog, catalogIndex) => {
-    if (!isPlainObject(catalog)) {
-      throw new Error(
-        `Invalid Codex skills/list payload at catalog index ${catalogIndex}: expected object.`,
-      );
-    }
-    requireString(catalog.cwd, "cwd");
-    if (!Array.isArray(catalog.skills)) {
-      throw new Error(
-        `Invalid Codex skills/list payload at catalog index ${catalogIndex}: missing skills array.`,
-      );
-    }
+  const name = requireString(record.name, "name");
+  const path = requireString(record.path, "path");
+  return {
+    id: path,
+    name,
+    path,
+    title: readOptionalString(record.title),
+    displayName: readOptionalString(record.displayName),
+    description: readOptionalString(record.description),
+  };
+};
 
-    return catalog.skills.flatMap((record, skillIndex) => {
-      if (!isPlainObject(record)) {
-        throw new Error(
-          `Invalid Codex skill payload at catalog index ${catalogIndex}, skill index ${skillIndex}: expected object.`,
-        );
-      }
-      if (!readEnabled(record.enabled)) {
-        return [];
-      }
-
-      const name = requireString(record.name, "name");
-      const path = requireString(record.path, "path");
-      return [
-        {
-          id: path,
-          name,
-          path,
-          title: readOptionalString(record.title, "title"),
-          displayName: readOptionalString(record.displayName, "displayName"),
-          description: readOptionalString(record.description, "description"),
-        },
-      ];
-    });
-  });
+export const toCodexSkillCatalog = (
+  response: CodexAppServerSkillsListResponse,
+): AgentSkillCatalog => {
+  const skills = response.data.flatMap((catalog) =>
+    catalog.skills.flatMap((record) => {
+      const skill = toAgentSkillCatalogEntry(record);
+      return skill ? [skill] : [];
+    }),
+  );
 
   return skillCatalogSchema.parse({ skills: [...skills].sort(compareSkillsByName) });
 };

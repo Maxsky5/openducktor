@@ -1,6 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { createInvalidFixture } from "@/test-utils/focused-fixture";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentModelSelection, StartAgentSessionInput } from "@openducktor/core";
@@ -1414,15 +1413,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
         throw new Error("startSession should not be reached");
       };
 
-      const selectedModel = (() => {
+      // @ts-expect-error -- This case verifies that a fresh session rejects a missing or blank runtime kind.
+      const selectedModel: AgentModelSelection = (() => {
         if (runtimeKind === undefined) {
           const { runtimeKind: _runtimeKind, ...selectionWithoutRuntime } = BUILD_SELECTION;
-          return createInvalidFixture<AgentModelSelection>(selectionWithoutRuntime);
+          return selectionWithoutRuntime;
         }
-        return createInvalidFixture<AgentModelSelection>({
+        return {
           ...BUILD_SELECTION,
           runtimeKind,
-        });
+        };
       })();
 
       const { start } = createStartSessionTestHarness({

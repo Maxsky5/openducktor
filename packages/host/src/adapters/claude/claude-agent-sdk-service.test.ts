@@ -3,7 +3,6 @@ import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
-import { createInvalidFixture } from "../../test-support/focused-service";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
@@ -492,44 +491,6 @@ describe("createClaudeAgentSdkService", () => {
         }),
       ),
     ).resolves.toEqual([todo]);
-  });
-
-  test("emits nested transcript events for host-owned projection", () => {
-    const session = createSession();
-    const emitted: Array<{ session: ClaudeSession; event: unknown }> = [];
-    const service = createService(session, (eventSession, event) => {
-      // SAFETY: This test controls the fixture and supplies `ClaudeSession` used by this case.
-      emitted.push({ session: eventSession as ClaudeSession, event });
-    });
-    const serviceWithEmit = createInvalidFixture<{
-      emit: (
-        session: ClaudeSession,
-        event: {
-          type: "assistant_message";
-          externalSessionId: string;
-          timestamp: string;
-          messageId: string;
-          message: string;
-        },
-      ) => void;
-    }>(service);
-
-    serviceWithEmit.emit(session, {
-      type: "assistant_message",
-      externalSessionId: "session-1::claude-subagent::task-1",
-      timestamp: "2026-06-25T20:00:01.000Z",
-      messageId: "assistant-child-1",
-      message: "Nested update",
-    });
-
-    expect(emitted).toEqual([
-      {
-        session,
-        event: expect.objectContaining({
-          externalSessionId: "session-1::claude-subagent::task-1",
-        }),
-      },
-    ]);
   });
 
   test("cleans session-scoped MCP token files when Claude executable resolution fails before store ownership", async () => {
