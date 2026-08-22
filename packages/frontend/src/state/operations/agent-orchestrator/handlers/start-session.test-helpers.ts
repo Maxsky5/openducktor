@@ -340,18 +340,8 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       sendAgentMessage,
       loadRepoPromptOverrides,
       loadSettingsSnapshot,
-      ...(() => {
-        if (sessionStartGateRef) {
-          return { sessionStartGateRef };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (readSessionSnapshot) {
-          return { readSessionSnapshot };
-        }
-        return {};
-      })(),
+      ...(sessionStartGateRef ? { sessionStartGateRef } : undefined),
+      ...(readSessionSnapshot ? { readSessionSnapshot } : undefined),
     }),
   );
 

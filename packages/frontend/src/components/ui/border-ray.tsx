@@ -215,12 +215,7 @@ export function BorderRay({
     "--odt-border-ray-perimeter": `${rayGeometry.perimeter}px`,
     "--odt-border-ray-length": `${rayGeometry.rayLength}px`,
     "--odt-border-ray-stroke-width": `${Math.max(strokeWidth, 0.5)}`,
-    ...(() => {
-      if (color) {
-        return { "--odt-border-ray-color": color };
-      }
-      return {};
-    })(),
+    ...(color ? { "--odt-border-ray-color": color } : undefined),
   } satisfies CSSProperties & BorderRayCssVariables;
 
   return (

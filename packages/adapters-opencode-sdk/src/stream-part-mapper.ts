@@ -418,18 +418,8 @@ const extractPartTiming = (part: ParsedOpencodePart, toolState: Record<string, J
   const endedAtMs = fromDirectEnd ?? fromStateEnd;
 
   return {
-    ...(() => {
-      if (hasRuntimeType(startedAtMs, "number")) {
-        return { startedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(endedAtMs, "number")) {
-        return { endedAtMs };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
   } satisfies {
     startedAtMs?: number;
     endedAtMs?: number;
@@ -578,24 +568,9 @@ const buildSubagentStreamPart = (input: {
   const correlationKey = resolveSubagentCorrelationKey({
     messageId: input.messageId,
     partId: input.partId,
-    ...(() => {
-      if (input.externalSessionId) {
-        return { externalSessionId: input.externalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.agent) {
-        return { agent: input.agent };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.prompt) {
-        return { prompt: input.prompt };
-      }
-      return {};
-    })(),
+    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : undefined),
+    ...(input.agent ? { agent: input.agent } : undefined),
+    ...(input.prompt ? { prompt: input.prompt } : undefined),
   });
 
   return {
@@ -604,60 +579,17 @@ const buildSubagentStreamPart = (input: {
     partId: input.partId,
     correlationKey,
     status: input.status,
-    ...(() => {
-      if (input.agent) {
-        return { agent: input.agent };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.prompt) {
-        return { prompt: input.prompt };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.description) {
-        return { description: input.description };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.error) {
-        return { error: input.error };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.externalSessionId) {
-        return { externalSessionId: input.externalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.executionMode) {
-        return { executionMode: input.executionMode };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.metadata) {
-        return { metadata: input.metadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(input.startedAtMs, "number")) {
-        return { startedAtMs: input.startedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(input.endedAtMs, "number")) {
-        return { endedAtMs: input.endedAtMs };
-      }
-      return {};
-    })(),
+    ...(input.agent ? { agent: input.agent } : undefined),
+    ...(input.prompt ? { prompt: input.prompt } : undefined),
+    ...(input.description ? { description: input.description } : undefined),
+    ...(input.error ? { error: input.error } : undefined),
+    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : undefined),
+    ...(input.executionMode ? { executionMode: input.executionMode } : undefined),
+    ...(input.metadata ? { metadata: input.metadata } : undefined),
+    ...(hasRuntimeType(input.startedAtMs, "number")
+      ? { startedAtMs: input.startedAtMs }
+      : undefined),
+    ...(hasRuntimeType(input.endedAtMs, "number") ? { endedAtMs: input.endedAtMs } : undefined),
   };
 };
 
@@ -727,12 +659,7 @@ const buildSubagentFromToolPart = (
     tool: part.tool,
     rawInput,
     rawOutput,
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
+    ...(metadata ? { metadata } : undefined),
   });
   const description =
     resolveSubagentDescription(input, output, metadata) ?? (error ? (prompt ?? preview) : preview);
@@ -741,43 +668,13 @@ const buildSubagentFromToolPart = (
     messageId: part.messageID,
     partId: part.id,
     status,
-    ...(() => {
-      if (agent) {
-        return { agent };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (prompt) {
-        return { prompt };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (description) {
-        return { description };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (error) {
-        return { error };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (externalSessionId) {
-        return { externalSessionId };
-      }
-      return {};
-    })(),
+    ...(agent ? { agent } : undefined),
+    ...(prompt ? { prompt } : undefined),
+    ...(description ? { description } : undefined),
+    ...(error ? { error } : undefined),
+    ...(externalSessionId ? { externalSessionId } : undefined),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
+    ...(metadata ? { metadata } : undefined),
     ...mappedTiming,
   });
 };
@@ -844,12 +741,7 @@ const buildToolStreamPart = (
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
     rawOutput: readUnknownProp(toolState, "output"),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
+    ...(metadata ? { metadata } : undefined),
   });
   const base: ToolStreamPart = {
     kind: "tool",
@@ -859,24 +751,9 @@ const buildToolStreamPart = (
     tool: part.tool,
     toolType,
     status: normalizedStatus,
-    ...(() => {
-      if (input) {
-        return { input };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (preview) {
-        return { preview };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
+    ...(input ? { input } : undefined),
+    ...(preview ? { preview } : undefined),
+    ...(metadata ? { metadata } : undefined),
     ...fileEditPayload,
     ...timing,
   };
@@ -888,12 +765,7 @@ const buildToolStreamPart = (
     const title = toDisplayText(readUnknownProp(toolState, "title"));
     return {
       ...base,
-      ...(() => {
-        if (title) {
-          return { title };
-        }
-        return {};
-      })(),
+      ...(title ? { title } : undefined),
     };
   }
 
@@ -923,12 +795,7 @@ const buildToolStreamPart = (
   const titleField = title ? { title } : {};
   return {
     ...base,
-    ...(() => {
-      if (output) {
-        return { output };
-      }
-      return {};
-    })(),
+    ...(output ? { output } : undefined),
     ...titleField,
   };
 };
@@ -943,12 +810,7 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         messageId: part.messageID,
         partId: part.id,
         text: part.text,
-        ...(() => {
-          if (part.synthetic !== undefined) {
-            return { synthetic: part.synthetic };
-          }
-          return {};
-        })(),
+        ...(part.synthetic !== undefined ? { synthetic: part.synthetic } : undefined),
         completed: Boolean(part.time?.end),
       };
     case "reasoning":
@@ -1004,28 +866,13 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         phase: "finish",
         reason: part.reason,
         cost: part.cost,
-        ...(() => {
-          if (hasRuntimeType(totalTokens, "number")) {
-            return { totalTokens };
-          }
-          return {};
-        })(),
+        ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
       };
     }
     case "subtask": {
       const subtaskMetadata = normalizeMetadata({
-        ...(() => {
-          if (part.model) {
-            return { model: part.model };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (part.command) {
-            return { command: part.command };
-          }
-          return {};
-        })(),
+        ...(part.model ? { model: part.model } : undefined),
+        ...(part.command ? { command: part.command } : undefined),
       });
 
       return buildSubagentStreamPart({
@@ -1035,12 +882,7 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         agent: part.agent,
         prompt: part.prompt,
         description: part.description,
-        ...(() => {
-          if (subtaskMetadata) {
-            return { metadata: subtaskMetadata };
-          }
-          return {};
-        })(),
+        ...(subtaskMetadata ? { metadata: subtaskMetadata } : undefined),
       });
     }
     case "file":

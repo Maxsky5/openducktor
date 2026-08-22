@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -16,8 +16,7 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
     return undefined;
   }
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    return JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
+    return jsonValueSchema.parse(JSON.parse(trimmed));
   } catch {
     return undefined;
   }

@@ -126,90 +126,44 @@ const toLivePendingApproval = (
   requestId: request.requestId,
   requestType: request.requestType,
   title: request.title,
-  ...(() => {
-    if (request.summary !== undefined) {
-      return { summary: request.summary };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.details !== undefined) {
-      return { details: request.details };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.affectedPaths !== undefined) {
-      return { affectedPaths: [...request.affectedPaths] };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.command) {
-      return {
+  ...(request.summary !== undefined ? { summary: request.summary } : undefined),
+  ...(request.details !== undefined ? { details: request.details } : undefined),
+  ...(request.affectedPaths !== undefined
+    ? { affectedPaths: [...request.affectedPaths] }
+    : undefined),
+  ...(request.command
+    ? {
         command: {
           command: request.command.command,
-          ...(() => {
-            if (request.command.workingDirectory !== undefined) {
-              return { workingDirectory: request.command.workingDirectory };
-            }
-            return {};
-          })(),
+          ...(request.command.workingDirectory !== undefined
+            ? { workingDirectory: request.command.workingDirectory }
+            : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.action) {
-      return {
+      }
+    : undefined),
+  ...(request.action
+    ? {
         action: {
           name: request.action.name,
-          ...(() => {
-            if (request.action.description !== undefined) {
-              return { description: request.action.description };
-            }
-            return {};
-          })(),
+          ...(request.action.description !== undefined
+            ? { description: request.action.description }
+            : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.tool) {
-      return {
+      }
+    : undefined),
+  ...(request.tool
+    ? {
         tool: {
           name: request.tool.name,
-          ...(() => {
-            if (request.tool.title !== undefined) {
-              return { title: request.tool.title };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (request.tool.input !== undefined) {
-              return { input: request.tool.input };
-            }
-            return {};
-          })(),
+          ...(request.tool.title !== undefined ? { title: request.tool.title } : undefined),
+          ...(request.tool.input !== undefined ? { input: request.tool.input } : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.mutation !== undefined) {
-      return { mutation: request.mutation };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.supportedReplyOutcomes !== undefined) {
-      return { supportedReplyOutcomes: [...request.supportedReplyOutcomes] };
-    }
-    return {};
-  })(),
+      }
+    : undefined),
+  ...(request.mutation !== undefined ? { mutation: request.mutation } : undefined),
+  ...(request.supportedReplyOutcomes !== undefined
+    ? { supportedReplyOutcomes: [...request.supportedReplyOutcomes] }
+    : undefined),
 });
 
 const toLivePendingQuestion = (
@@ -223,18 +177,8 @@ const toLivePendingQuestion = (
       label: option.label,
       description: option.description,
     })),
-    ...(() => {
-      if (question.multiple !== undefined) {
-        return { multiple: question.multiple };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (question.custom !== undefined) {
-        return { custom: question.custom };
-      }
-      return {};
-    })(),
+    ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
+    ...(question.custom !== undefined ? { custom: question.custom } : undefined),
   })),
 });
 
@@ -263,24 +207,18 @@ export class CodexAppServerAdapter
     this.runtimeEvents = new CodexRuntimeSessionEvents({
       ...runtimeEventSubscription,
       respondServerRequest: options.respondServerRequest,
-      ...(() => {
-        if (options.onLiveSessionMutation) {
-          return {
+      ...(options.onLiveSessionMutation
+        ? {
             onLiveSessionMutation: async (mutation) =>
               options.onLiveSessionMutation?.({
                 ...mutation,
                 snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
               }),
-          };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (options.onCatalogInvalidated) {
-          return { onCatalogInvalidated: options.onCatalogInvalidated };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
+      ...(options.onCatalogInvalidated
+        ? { onCatalogInvalidated: options.onCatalogInvalidated }
+        : undefined),
       sessions: {
         get: (externalSessionId) => this.localSessions.get(externalSessionId),
         values: () => this.localSessions.values(),
@@ -457,12 +395,7 @@ export class CodexAppServerAdapter
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...(() => {
-        if (input.systemPrompt) {
-          return { developerInstructions: input.systemPrompt };
-        }
-        return {};
-      })(),
+      ...(input.systemPrompt ? { developerInstructions: input.systemPrompt } : undefined),
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
     });
@@ -782,19 +715,11 @@ export class CodexAppServerAdapter
       config: sessionPolicy.threadConfig,
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
-      ...(() => {
-        if ("systemPrompt" in input && input.systemPrompt) {
-          return { developerInstructions: input.systemPrompt };
-        }
-        return {};
-      })(),
+      ...("systemPrompt" in input && input.systemPrompt
+        ? { developerInstructions: input.systemPrompt }
+        : undefined),
       excludeTurns: true,
-      ...(() => {
-        if (model) {
-          return { model: toTransportModelSelection(model).model };
-        }
-        return {};
-      })(),
+      ...(model ? { model: toTransportModelSelection(model).model } : undefined),
     });
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -857,12 +782,7 @@ export class CodexAppServerAdapter
         externalSessionId: input.externalSessionId,
         requestId: input.requestId,
         outcome: input.outcome,
-        ...(() => {
-          if (input.message !== undefined) {
-            return { message: input.message };
-          }
-          return {};
-        })(),
+        ...(input.message !== undefined ? { message: input.message } : undefined),
       });
     return session instanceof Promise ? session.then(reply) : reply(session);
   }
@@ -1018,12 +938,7 @@ export class CodexAppServerAdapter
       }),
       title: session.summary.title ?? session.threadId,
       startedAt: session.summary.startedAt,
-      ...(() => {
-        if (route) {
-          return { parentExternalSessionId: route.parentExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(route ? { parentExternalSessionId: route.parentExternalSessionId } : undefined),
       pendingApprovals,
       pendingQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
@@ -1225,12 +1140,9 @@ export class CodexAppServerAdapter
         this.emitSessionEvent(externalSessionId, event),
       codexPolicyForSession: (session) =>
         requireCodexRuntimePolicy(session.runtimePolicy, "start Codex turn"),
-      ...(() => {
-        if (this.options.logSessionPolicy) {
-          return { logSessionPolicy: this.options.logSessionPolicy };
-        }
-        return {};
-      })(),
+      ...(this.options.logSessionPolicy
+        ? { logSessionPolicy: this.options.logSessionPolicy }
+        : undefined),
     };
   }
 

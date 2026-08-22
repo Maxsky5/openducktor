@@ -1623,12 +1623,11 @@ describe("createElectronHostCommandRouter", () => {
             .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
       },
     });
-    await expect(
-      approvalRouter.invoke("task_approval_context_get", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).resolves.toMatchObject({
+    const approvalContext = await approvalRouter.invoke("task_approval_context_get", {
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+    expect(approvalContext).toMatchObject({
       outcome: "ready",
       approvalContext: {
         taskId: "task-1",

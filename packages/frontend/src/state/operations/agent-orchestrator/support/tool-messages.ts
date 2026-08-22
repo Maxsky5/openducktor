@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -15,6 +15,9 @@ export const normalizeToolInput = (
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
+
+const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, JsonValue>`.
 export const normalizeToolText = (value: JsonValue | undefined): string | undefined => {
@@ -112,23 +115,17 @@ export const normalizeSessionErrorMessage = (value: string): string => {
 
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = JSON.parse(withoutQuotes) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
-    if (!parsed || !hasRuntimeType(parsed, "object")) {
+    const parsed = jsonValueSchema.parse(JSON.parse(withoutQuotes));
+    if (!isJsonRecord(parsed)) {
       return withoutQuotes;
     }
-    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-    const record = parsed as Record<string, JsonValue>;
+    const record = parsed;
     if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
       return record.message.trim();
     }
     const nestedError = record.error;
-    if (
-      nestedError &&
-      hasRuntimeType(nestedError, "object") &&
-      hasRuntimeType((nestedError as Record<string, JsonValue>).message, "string")
-    ) {
-      // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-      return String((nestedError as Record<string, JsonValue>).message).trim();
+    if (isJsonRecord(nestedError) && hasRuntimeType(nestedError.message, "string")) {
+      return nestedError.message.trim();
     }
     return withoutQuotes;
   } catch {

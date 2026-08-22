@@ -159,12 +159,9 @@ export const handleAssistantMessage = (
             meta: {
               ...nextSnapshot.assistantMessage.meta,
               sourceMessageId: event.messageId,
-              ...(() => {
-                if (sourceTextMessage.meta.partId) {
-                  return { partId: sourceTextMessage.meta.partId };
-                }
-                return {};
-              })(),
+              ...(sourceTextMessage.meta.partId
+                ? { partId: sourceTextMessage.meta.partId }
+                : undefined),
             },
           }
         : nextSnapshot.assistantMessage;
@@ -330,18 +327,8 @@ const settleTerminalMessages = (
   },
 ) => {
   const settledMessages = settleDanglingTodoToolMessages(session, timestamp, {
-    ...(() => {
-      if (options?.outcome) {
-        return { outcome: options.outcome };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (options?.errorMessage) {
-        return { errorMessage: options.errorMessage };
-      }
-      return {};
-    })(),
+    ...(options?.outcome ? { outcome: options.outcome } : undefined),
+    ...(options?.errorMessage ? { errorMessage: options.errorMessage } : undefined),
   });
 
   if (!options?.appendUserStoppedNotice) {

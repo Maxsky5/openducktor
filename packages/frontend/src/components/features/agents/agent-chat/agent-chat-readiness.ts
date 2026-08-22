@@ -43,12 +43,7 @@ const sessionHistoryFailureNotice = ({
   title: hasTranscript ? "History may be incomplete" : "Couldn't load conversation history",
   description: failure.summary,
   details: sessionHistoryFailureDetails(failure),
-  ...(() => {
-    if (action) {
-      return { action };
-    }
-    return {};
-  })(),
+  ...(action ? { action } : undefined),
 });
 
 export const deriveAgentChatReadiness = ({
@@ -66,12 +61,7 @@ export const deriveAgentChatReadiness = ({
       title: "Runtime unavailable",
       description:
         runtimeReadiness.message ?? "Runtime readiness is blocked without an error message.",
-      ...(() => {
-        if (runtimeBlockedAction) {
-          return { action: runtimeBlockedAction };
-        }
-        return {};
-      })(),
+      ...(runtimeBlockedAction ? { action: runtimeBlockedAction } : undefined),
     };
   } else if (transcriptState.kind === "runtime_waiting") {
     transcriptNotice = {
@@ -110,12 +100,7 @@ export const deriveAgentChatReadiness = ({
           severity: "error",
           title: "Failed to load session",
           description: transcriptState.message,
-          ...(() => {
-            if (failedTranscriptAction) {
-              return { action: failedTranscriptAction };
-            }
-            return {};
-          })(),
+          ...(failedTranscriptAction ? { action: failedTranscriptAction } : undefined),
         };
   }
 

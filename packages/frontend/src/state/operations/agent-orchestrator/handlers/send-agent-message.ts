@@ -212,18 +212,10 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       const acceptedUserMessage = await dependencies.adapter.sendUserMessage({
         ...runtimeSessionRef,
         parts: normalizedParts,
-        ...(() => {
-          if (readySession.selectedModel) {
-            return { model: readySession.selectedModel };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (preparedSend.systemPrompt !== undefined) {
-            return { systemPrompt: preparedSend.systemPrompt };
-          }
-          return {};
-        })(),
+        ...(readySession.selectedModel ? { model: readySession.selectedModel } : undefined),
+        ...(preparedSend.systemPrompt !== undefined
+          ? { systemPrompt: preparedSend.systemPrompt }
+          : undefined),
       });
       if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
@@ -232,12 +224,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       dependencies.updateSession(readySession, (current) => ({
         ...current,
         status: isBusyQueuedSend ? current.status : "error",
-        ...(() => {
-          if (!isBusyQueuedSend) {
-            return { runtimeStatusMessage: null };
-          }
-          return {};
-        })(),
+        ...(!isBusyQueuedSend ? { runtimeStatusMessage: null } : undefined),
         pendingUserMessageStartedAt: undefined,
       }));
       appendSendFailureNotice(

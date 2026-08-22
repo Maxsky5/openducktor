@@ -382,18 +382,8 @@ export const createElectronAppUpdateService = ({
   }): AppUpdateState =>
     publishState(
       markUpdateError({
-        ...(() => {
-          if (availableVersion) {
-            return { availableVersion };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (checkedAt) {
-            return { checkedAt };
-          }
-          return {};
-        })(),
+        ...(availableVersion ? { availableVersion } : undefined),
+        ...(checkedAt ? { checkedAt } : undefined),
         code,
         cause,
         currentVersion,
@@ -544,18 +534,8 @@ export const createElectronAppUpdateService = ({
       return;
     }
     setErrorState({
-      ...(() => {
-        if (availableVersion) {
-          return { availableVersion };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (checkedAt) {
-          return { checkedAt };
-        }
-        return {};
-      })(),
+      ...(availableVersion ? { availableVersion } : undefined),
+      ...(checkedAt ? { checkedAt } : undefined),
       code: updateErrorCodeForOperation(operation),
       cause,
       message,
@@ -831,18 +811,8 @@ export const createElectronAppUpdateService = ({
           clearDownloadProgressThrottle();
           const checkedAt = checkedAtFromState(state);
           setErrorState({
-            ...(() => {
-              if (availableVersion) {
-                return { availableVersion };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (checkedAt) {
-                return { checkedAt };
-              }
-              return {};
-            })(),
+            ...(availableVersion ? { availableVersion } : undefined),
+            ...(checkedAt ? { checkedAt } : undefined),
             code: "download_failed",
             cause,
             message: appUpdateErrorMessage("download", cause),

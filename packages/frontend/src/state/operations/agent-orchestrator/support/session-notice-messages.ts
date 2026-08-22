@@ -40,12 +40,7 @@ export const buildSessionErrorNoticeMessage = (
   id?: string,
 ): AgentChatMessage =>
   buildSessionNoticeMessage({
-    ...(() => {
-      if (id) {
-        return { id };
-      }
-      return {};
-    })(),
+    ...(id ? { id } : undefined),
     timestamp,
     content: message,
     meta: {
@@ -64,12 +59,7 @@ const buildSessionCompactionNoticeMessage = (
   id?: string,
 ): AgentChatMessage =>
   buildSessionNoticeMessage({
-    ...(() => {
-      if (id) {
-        return { id };
-      }
-      return {};
-    })(),
+    ...(id ? { id } : undefined),
     timestamp,
     content: message,
     meta: {

@@ -72,12 +72,7 @@ const sendProtocolError = (
   sendMessage(socket, {
     version: TERMINAL_PROTOCOL_VERSION,
     type: "protocol_error",
-    ...(() => {
-      if (terminalId) {
-        return { terminalId };
-      }
-      return {};
-    })(),
+    ...(terminalId ? { terminalId } : undefined),
     failure,
   });
 

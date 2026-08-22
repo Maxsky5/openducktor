@@ -74,12 +74,7 @@ const appendOrMergeClaudeHistorySubagentPart = (
         messageId: existingPart.messageId,
         partId: existingPart.partId,
         correlationKey: existingPart.correlationKey,
-        ...(() => {
-          if (metadata) {
-            return { metadata };
-          }
-          return {};
-        })(),
+        ...(metadata ? { metadata } : undefined),
       };
     });
     return;
@@ -169,12 +164,7 @@ const projectAgentResult = ({
     },
     timestamp,
     toolUseId: result.toolUseId,
-    ...(() => {
-      if (input) {
-        return { input };
-      }
-      return {};
-    })(),
+    ...(input ? { input } : undefined),
   });
   return events.flatMap((event) =>
     event.type === "assistant_part" && event.part.kind === "subagent"
@@ -259,26 +249,11 @@ export const projectClaudeHistoryToolResults = ({
     const { part: completedPart } = projectClaudeCompletedToolResult({
       callId: result.toolUseId,
       endedAtMs: timestampMs(timestamp),
-      ...(() => {
-        if (input) {
-          return { input };
-        }
-        return {};
-      })(),
+      ...(input ? { input } : undefined),
       isError: result.isError,
       messageId: existingMessage?.messageId ?? entry.uuid ?? result.toolUseId,
-      ...(() => {
-        if (existingPart?.metadata) {
-          return { metadata: existingPart.metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (existingPart?.preview) {
-          return { preview: existingPart.preview };
-        }
-        return {};
-      })(),
+      ...(existingPart?.metadata ? { metadata: existingPart.metadata } : undefined),
+      ...(existingPart?.preview ? { preview: existingPart.preview } : undefined),
       raw: result.raw,
       resultText: result.text,
       state: state.todosById,

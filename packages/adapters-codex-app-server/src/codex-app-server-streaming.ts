@@ -256,24 +256,13 @@ const emitFinalAgentMessage = (
       timestamp,
       messageId: itemId,
       message: text,
-      ...(() => {
-        if (hasRuntimeType(tokenUsage?.totalTokens, "number")) {
-          return { totalTokens: tokenUsage.totalTokens };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(tokenUsage?.contextWindow, "number")) {
-          return { contextWindow: tokenUsage.contextWindow };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (model) {
-          return { model };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(tokenUsage?.totalTokens, "number")
+        ? { totalTokens: tokenUsage.totalTokens }
+        : undefined),
+      ...(hasRuntimeType(tokenUsage?.contextWindow, "number")
+        ? { contextWindow: tokenUsage.contextWindow }
+        : undefined),
+      ...(model ? { model } : undefined),
     });
   }
 };
@@ -294,12 +283,7 @@ export const createCodexAcceptedUserMessage = ({
   message: serializeAgentUserMessagePartsToText(parts),
   parts: toDisplayParts(parts),
   state: "read",
-  ...(() => {
-    if (model) {
-      return { model };
-    }
-    return {};
-  })(),
+  ...(model ? { model } : undefined),
 });
 
 export const emitCodexUserMessage = (
@@ -385,12 +369,7 @@ const emitCompletedItem = (
       message,
       parts: codexUserInputsToDisplayParts(input, itemId),
       state: "read",
-      ...(() => {
-        if (model) {
-          return { model };
-        }
-        return {};
-      })(),
+      ...(model ? { model } : undefined),
     });
     return;
   }
@@ -423,12 +402,7 @@ const emitCompletedItem = (
             session,
             item,
             timestamp,
-            ...(() => {
-              if (model) {
-                return { model };
-              }
-              return {};
-            })(),
+            ...(model ? { model } : undefined),
           });
         }
       }
@@ -447,12 +421,7 @@ const emitCompletedItem = (
       source: "live",
       runtimeId: session.runtimeId,
       threadId: session.threadId,
-      ...(() => {
-        if (turnId) {
-          return { turnId };
-        }
-        return {};
-      })(),
+      ...(turnId ? { turnId } : undefined),
       timestamp,
     },
   );
@@ -754,12 +723,7 @@ export const handleCodexPendingNotifications = async (
           source: "live",
           runtimeId: session.runtimeId,
           threadId: session.threadId,
-          ...(() => {
-            if (notificationTurnId) {
-              return { turnId: notificationTurnId };
-            }
-            return {};
-          })(),
+          ...(notificationTurnId ? { turnId: notificationTurnId } : undefined),
           timestamp,
         },
       );
@@ -805,12 +769,7 @@ export const handleCodexPendingNotifications = async (
             source: "live",
             runtimeId: session.runtimeId,
             threadId: session.threadId,
-            ...(() => {
-              if (turnId) {
-                return { turnId };
-              }
-              return {};
-            })(),
+            ...(turnId ? { turnId } : undefined),
             timestamp,
           },
         ),
@@ -827,12 +786,7 @@ export const handleCodexPendingNotifications = async (
           externalSessionId: session.threadId,
           timestamp,
           channel: "text",
-          ...(() => {
-            if (messageId) {
-              return { messageId };
-            }
-            return {};
-          })(),
+          ...(messageId ? { messageId } : undefined),
           delta,
         });
       }
@@ -853,12 +807,7 @@ export const handleCodexPendingNotifications = async (
           externalSessionId: session.threadId,
           timestamp,
           channel: "reasoning",
-          ...(() => {
-            if (messageId) {
-              return { messageId };
-            }
-            return {};
-          })(),
+          ...(messageId ? { messageId } : undefined),
           delta,
         });
       }

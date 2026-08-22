@@ -230,19 +230,9 @@ export const maybeEmitCompletedAssistantMessage = (
 
   updateMessageMetadata(runtime, input.messageId, {
     timestamp,
-    ...(() => {
-      if (assistantModel) {
-        return { model: assistantModel };
-      }
-      return {};
-    })(),
+    ...(assistantModel ? { model: assistantModel } : undefined),
     hasStopSignal,
-    ...(() => {
-      if (totalTokens !== undefined) {
-        return { totalTokens };
-      }
-      return {};
-    })(),
+    ...(totalTokens !== undefined ? { totalTokens } : undefined),
   });
 
   if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
@@ -267,18 +257,8 @@ export const maybeEmitCompletedAssistantMessage = (
     timestamp,
     messageId: input.messageId,
     message: visible,
-    ...(() => {
-      if (hasRuntimeType(totalTokens, "number")) {
-        return { totalTokens };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (assistantModel) {
-        return { model: assistantModel };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
+    ...(assistantModel ? { model: assistantModel } : undefined),
   });
   session.emittedAssistantMessageIds.add(input.messageId);
   session.pendingCompletedAssistantMessageIds.delete(input.messageId);

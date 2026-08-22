@@ -463,33 +463,17 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       tokenizeMaxLength: PIERRE_HIGHLIGHT_LINE_LIMIT,
       enableLineSelection,
       enableGutterUtility: handleGutterUtilityClick != null,
-      ...(() => {
-        if (handleLineSelectionChange) {
-          return {
+      ...(handleLineSelectionChange
+        ? {
             onLineSelectionStart: handleLineSelectionChange,
             onLineSelectionChange: handleLineSelectionChange,
-          };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (handleLineSelectionEnd) {
-          return { onLineSelectionEnd: handleLineSelectionEnd };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (handleGutterUtilityClick) {
-          return { onGutterUtilityClick: handleGutterUtilityClick };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (enableHunkReset) {
-          return { unsafeCSS: HUNK_RESET_FLOATING_CSS };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
+      ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : undefined),
+      ...(handleGutterUtilityClick
+        ? { onGutterUtilityClick: handleGutterUtilityClick }
+        : undefined),
+      ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : undefined),
     }),
     [
       diffStyle,

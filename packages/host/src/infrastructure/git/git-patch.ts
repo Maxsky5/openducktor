@@ -145,12 +145,7 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
   return {
     header,
     hunks,
-    ...(() => {
-      if (renamePaths) {
-        return { renamePaths };
-      }
-      return {};
-    })(),
+    ...(renamePaths ? { renamePaths } : undefined),
   };
 };
 

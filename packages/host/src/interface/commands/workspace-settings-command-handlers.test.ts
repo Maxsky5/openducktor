@@ -383,12 +383,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ).resolves.toMatchObject({
       agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
     });
-    await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
+    await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeNull();
     await expect(
       router.invoke("workspace_update_global_git_config", {
         git: { defaultMergeMethod: "squash" },
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
     expect(calls).toEqual([
       "listWorkspaces",
       "addWorkspace",

@@ -175,12 +175,7 @@ export const projectClaudeHistoryAssistantMessage = ({
     timestamp,
     text,
     parts,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   };
   if (text.trim().length > 0) {
     addClaudeHistoryFinishStep(assistantMessage, finishReasonForClaudeStopReason(stopReason));

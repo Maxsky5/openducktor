@@ -273,12 +273,7 @@ export const createPrepareOpencodeSessionRuntime = (
               });
             }
           },
-          ...(() => {
-            if (options.logEvent) {
-              return { logEvent: options.logEvent };
-            }
-            return {};
-          })(),
+          ...(options.logEvent ? { logEvent: options.logEvent } : undefined),
         });
       }
     };
@@ -291,12 +286,7 @@ export const createPrepareOpencodeSessionRuntime = (
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
           now,
-          ...(() => {
-            if (input.directories) {
-              return { directories: input.directories };
-            }
-            return {};
-          })(),
+          ...(input.directories ? { directories: input.directories } : undefined),
         });
         requireActive();
         await syncEventSessions(sources);
@@ -344,18 +334,8 @@ export const createPrepareOpencodeSessionRuntime = (
       },
       terminalObserver: (error) =>
         emitSignal({ type: "fault", message: toOpencodeObservationFailureMessage(error) }),
-      ...(() => {
-        if (input.signal) {
-          return { signal: input.signal };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (options.logEvent) {
-          return { logEvent: options.logEvent };
-        }
-        return {};
-      })(),
+      ...(input.signal ? { signal: input.signal } : undefined),
+      ...(options.logEvent ? { logEvent: options.logEvent } : undefined),
     });
 
     const initialize = async (): Promise<OpencodeRuntimeSnapshotSource[]> => {

@@ -187,18 +187,8 @@ const buildPostStartMessage = async ({
   const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
   const promptContext = await resolveSessionStartKickoffPromptContext({
     templateId: kickoffTemplateId,
-    ...(() => {
-      if (intent.message === undefined) {
-        return {};
-      }
-      return { message: intent.message };
-    })(),
-    ...(() => {
-      if (taskTargetBranch) {
-        return { taskTargetBranch };
-      }
-      return {};
-    })(),
+    ...(intent.message === undefined ? undefined : { message: intent.message }),
+    ...(taskTargetBranch ? { taskTargetBranch } : undefined),
     loadRepoDefaultTargetBranch: async () => {
       if (!workspaceId) {
         return null;
@@ -265,12 +255,7 @@ export const startSessionWorkflow = async ({
   await runBeforeStartAction({
     intent,
     persistTaskTargetBranch,
-    ...(() => {
-      if (humanRequestChangesTask) {
-        return { humanRequestChangesTask };
-      }
-      return {};
-    })(),
+    ...(humanRequestChangesTask ? { humanRequestChangesTask } : undefined),
   });
 
   const postStartMessageSender =

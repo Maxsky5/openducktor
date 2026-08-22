@@ -32,12 +32,7 @@ export const toBranchSelectorOptions = (
     value: branchOptionValue(branch, valueFormat),
     label: branch.name,
     secondaryLabel: branchSourceLabel(branch),
-    ...(() => {
-      if (branch.isCurrent) {
-        return { description: "current" };
-      }
-      return {};
-    })(),
+    ...(branch.isCurrent ? { description: "current" } : undefined),
     searchKeywords: branch.name.split("/").filter(Boolean),
   }));
 

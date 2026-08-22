@@ -180,31 +180,11 @@ export const listAvailableModels = async (
       return {
         id: name,
         label: name,
-        ...(() => {
-          if (description) {
-            return { description };
-          }
-          return {};
-        })(),
+        ...(description ? { description } : undefined),
         mode,
-        ...(() => {
-          if (hidden !== undefined) {
-            return { hidden };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (native !== undefined) {
-            return { native };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (resolvedColor !== undefined) {
-            return { color: resolvedColor };
-          }
-          return {};
-        })(),
+        ...(hidden !== undefined ? { hidden } : undefined),
+        ...(native !== undefined ? { native } : undefined),
+        ...(resolvedColor !== undefined ? { color: resolvedColor } : undefined),
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
@@ -252,12 +232,7 @@ export const listAvailableSubagents = async (
           id: trimmedName,
           name: trimmedName,
           label: trimmedName,
-          ...(() => {
-            if (trimmedDescription) {
-              return { description: trimmedDescription };
-            }
-            return {};
-          })(),
+          ...(trimmedDescription ? { description: trimmedDescription } : undefined),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
@@ -323,18 +298,8 @@ export const listAvailableSlashCommands = async (
             id: name,
             trigger: name,
             title: name,
-            ...(() => {
-              if (description) {
-                return { description };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (normalizedSource) {
-                return { source: normalizedSource };
-              }
-              return {};
-            })(),
+            ...(description ? { description } : undefined),
+            ...(normalizedSource ? { source: normalizedSource } : undefined),
             hints,
           },
         ];

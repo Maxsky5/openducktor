@@ -44,9 +44,7 @@ const requireStringArray = (value: JsonValue | undefined, label: string): string
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
       field: label,
-      // SAFETY: host command inputs arrive over the IPC transport boundary, which serializes
-      // payloads to JSON-compatible values before they reach command handlers.
-      details: { value: value as JsonValue },
+      details: { value: value ?? null },
     });
   }
 
@@ -81,12 +79,7 @@ export const createWorkspaceSettingsCommandHandlers = (
       workspaceId: requireString(record.workspaceId, "workspaceId"),
       workspaceName: requireString(record.workspaceName, "workspaceName"),
       repoPath: requireString(record.repoPath, "repoPath"),
-      ...(() => {
-        if (defaultRuntimeKind) {
-          return { defaultRuntimeKind };
-        }
-        return {};
-      })(),
+      ...(defaultRuntimeKind ? { defaultRuntimeKind } : undefined),
     });
   },
   workspace_select: (args) =>

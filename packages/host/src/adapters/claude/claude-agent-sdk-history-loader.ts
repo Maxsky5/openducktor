@@ -98,18 +98,8 @@ const reconcileClaudeSubagentStatuses = async (
       const resolvedAgentId = agentId ?? previous?.agentId;
       latestStatusBySessionId.set(part.externalSessionId, {
         status: part.status,
-        ...(() => {
-          if (resolvedAgentId) {
-            return { agentId: resolvedAgentId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (part.executionMode) {
-            return { executionMode: part.executionMode };
-          }
-          return {};
-        })(),
+        ...(resolvedAgentId ? { agentId: resolvedAgentId } : undefined),
+        ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
       });
     }
   }

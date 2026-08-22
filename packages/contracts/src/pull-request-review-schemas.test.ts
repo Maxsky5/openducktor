@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "./runtime-type";
 import type { JsonObject, JsonValue } from "./json-types";
 import { describe, expect, test } from "bun:test";
 import {
@@ -21,6 +22,30 @@ const createActivityFields = () => ({
   threadId: null,
   isResolved: null,
 });
+
+const isJsonContainer = (value: JsonValue | undefined): value is JsonObject | JsonValue[] =>
+  Array.isArray(value) || (hasRuntimeType(value, "object") && value !== null);
+
+const setJsonPath = (
+  root: JsonObject,
+  path: readonly (number | string)[],
+  value: JsonValue,
+): void => {
+  const finalSegment = path.at(-1);
+  if (finalSegment === undefined) {
+    throw new Error("Expected a non-empty JSON path.");
+  }
+
+  let current: JsonObject | JsonValue[] = root;
+  for (const segment of path.slice(0, -1)) {
+    const next = current[segment];
+    if (!isJsonContainer(next)) {
+      throw new Error(`Expected a JSON container at path segment '${segment}'.`);
+    }
+    current = next;
+  }
+  current[finalSegment] = value;
+};
 
 describe("pullRequestReviewActivitySchema", () => {
   test.each(["approved", "changes_requested", "commented", "dismissed"] as const)(
@@ -213,13 +238,7 @@ describe("pullRequestReviewContextSchema", () => {
       reviewThreads: { openCount: 0 },
       refreshedAt: "2026-07-10T08:02:00Z",
     } as JsonObject;
-    let current = context satisfies unknown;
-    for (const segment of path.slice(0, -1)) {
-      // SAFETY: This test controls the fixture and supplies `Record<string | number, JsonValue>` used by this case.
-      current = (current as Record<string | number, JsonValue>)[segment];
-    }
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (current as Record<string | number, JsonValue>)[path.at(-1) as string | number] = value;
+    setJsonPath(context, path, value);
 
     expect(() => pullRequestReviewContextSchema.parse(context)).toThrow();
   });

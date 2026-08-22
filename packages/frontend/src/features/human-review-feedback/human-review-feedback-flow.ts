@@ -56,19 +56,11 @@ const buildRequestChangesSessionRequest = (
     taskId: state.taskId,
     role: "build",
     launchActionId: "build_after_human_request_changes",
-    ...(() => {
-      if (existingSessionOptions.length === 0) {
-        return { initialStartMode: "fresh" as const };
-      }
-      return {};
-    })(),
+    ...(existingSessionOptions.length === 0 ? { initialStartMode: "fresh" as const } : undefined),
     existingSessionOptions,
-    ...(() => {
-      if (latestBuilderSession) {
-        return { initialSourceSession: toAgentSessionIdentity(latestBuilderSession) };
-      }
-      return {};
-    })(),
+    ...(latestBuilderSession
+      ? { initialSourceSession: toAgentSessionIdentity(latestBuilderSession) }
+      : undefined),
     postStartAction: "kickoff",
     message: feedback,
     beforeStartAction: {

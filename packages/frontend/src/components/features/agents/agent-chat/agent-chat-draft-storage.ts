@@ -1,4 +1,4 @@
-import { runtimeKindSchema, hasRuntimeType } from "@openducktor/contracts";
+import { runtimeKindSchema, hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { AgentAttachmentKind } from "@openducktor/core";
 import {
   type AgentSessionIdentityLike,
@@ -164,12 +164,7 @@ const toPersistedAttachment = (
     path: attachment.path,
     name: attachment.name,
     kind: attachment.kind,
-    ...(() => {
-      if (attachment.mime) {
-        return { mime: attachment.mime };
-      }
-      return {};
-    })(),
+    ...(attachment.mime ? { mime: attachment.mime } : undefined),
   };
 };
 
@@ -262,12 +257,7 @@ const parseAttachment = (value: JsonValue | undefined): AgentChatComposerAttachm
   const attachment = buildComposerAttachmentFromPath(value.path, {
     name: value.name,
     kind: value.kind as AgentAttachmentKind,
-    ...(() => {
-      if (value.mime) {
-        return { mime: value.mime };
-      }
-      return {};
-    })(),
+    ...(value.mime ? { mime: value.mime } : undefined),
   });
   return attachment ? { ...attachment, id: value.id } : null;
 };
@@ -293,7 +283,7 @@ export const parseAgentChatDraftPayload = ({
   let parsed: JsonValue;
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored wire data is JSON
+    parsed = jsonValueSchema.parse(JSON.parse(raw));
   } catch {
     return { status: "invalid", reason: "Stored chat draft is not valid JSON." };
   }

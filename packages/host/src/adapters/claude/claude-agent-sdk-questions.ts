@@ -73,12 +73,7 @@ const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[
     options.push({
       label,
       description,
-      ...(() => {
-        if (preview) {
-          return { preview };
-        }
-        return {};
-      })(),
+      ...(preview ? { preview } : undefined),
     });
   }
   return options;

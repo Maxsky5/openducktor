@@ -191,14 +191,11 @@ const createHarness = () => {
       isSessionWorking: props.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(() => {
-        if (props.syncBottomAfterComposerLayoutRef) {
-          return {
+      ...(props.syncBottomAfterComposerLayoutRef
+        ? {
             syncBottomAfterComposerLayoutRef: props.syncBottomAfterComposerLayoutRef,
-          };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
     });
     latestResultRef.current = result;
     return null;
@@ -284,14 +281,11 @@ const mountHarness = async (
       isSessionWorking: nextProps.isSessionWorking ?? false,
       messagesContainerRef,
       messagesContentRef,
-      ...(() => {
-        if (nextProps.syncBottomAfterComposerLayoutRef) {
-          return {
+      ...(nextProps.syncBottomAfterComposerLayoutRef
+        ? {
             syncBottomAfterComposerLayoutRef: nextProps.syncBottomAfterComposerLayoutRef,
-          };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
     });
     latestResultRef.current = result;
     return result;

@@ -1,4 +1,4 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema, runtimeTypeName } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -19,8 +19,7 @@ const githubPayloadValueType = (value: JsonValue | undefined): string => {
 
 export const parseGithubJson = (payload: string, responseLabel: string): JsonValue => {
   try {
-    // SAFETY: JSON.parse returns JSON-compatible values for a GitHub JSON response.
-    return JSON.parse(payload) as JsonValue;
+    return jsonValueSchema.parse(JSON.parse(payload));
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",

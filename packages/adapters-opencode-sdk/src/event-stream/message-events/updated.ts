@@ -72,18 +72,10 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
         : existingMetadata?.parentId
           ? { parentId: existingMetadata.parentId }
           : {}),
-      ...(() => {
-        if (existingMetadata?.text) {
-          return { text: existingMetadata.text };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (existingMetadata?.displayParts) {
-          return { displayParts: existingMetadata.displayParts };
-        }
-        return {};
-      })(),
+      ...(existingMetadata?.text ? { text: existingMetadata.text } : undefined),
+      ...(existingMetadata?.displayParts
+        ? { displayParts: existingMetadata.displayParts }
+        : undefined),
     });
   }
 
@@ -152,12 +144,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
       infoRecord,
       properties,
       normalizedParts,
-      ...(() => {
-        if (messageModel) {
-          return { messageModel };
-        }
-        return {};
-      })(),
+      ...(messageModel ? { messageModel } : undefined),
     });
   }
 

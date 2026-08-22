@@ -92,12 +92,7 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
   }
   // SAFETY: This test drives the failure path that supplies `CreateClaudeAgentSdkServiceInput["toolDiscovery"]` before this assertion.
   return createClaudeAgentSdkService({
-    ...(() => {
-      if (emit) {
-        return { emit };
-      }
-      return {};
-    })(),
+    ...(emit ? { emit } : undefined),
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {

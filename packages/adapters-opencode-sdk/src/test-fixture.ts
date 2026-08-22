@@ -1,6 +1,6 @@
-interface InvalidFixtureInput extends Record<never, never> {}
-
-export const createInvalidFixture = <Value>(value: InvalidFixtureInput): Value => {
-  // SAFETY: boundary tests use this helper only to pass malformed runtime data through a static type gate.
-  return value as Value;
+export const createInvalidFixture = <Value extends object, Source extends object = object>(
+  value: Source,
+): Value => {
+  // SAFETY: boundary tests use this helper only to pass malformed object payloads through a static contract.
+  return value as Source & Value;
 };

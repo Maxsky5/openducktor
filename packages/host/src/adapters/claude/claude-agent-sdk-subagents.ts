@@ -226,42 +226,12 @@ export const emitClaudeAgentToolResultSubagentPart = ({
       status,
       externalSessionId,
       executionMode,
-      ...(() => {
-        if (agent) {
-          return { agent };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (prompt) {
-          return { prompt };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (description) {
-          return { description };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (error) {
-          return { error };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(startedAtMs, "number")) {
-          return { startedAtMs };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (status === "running") {
-          return {};
-        }
-        return { endedAtMs };
-      })(),
+      ...(agent ? { agent } : undefined),
+      ...(prompt ? { prompt } : undefined),
+      ...(description ? { description } : undefined),
+      ...(error ? { error } : undefined),
+      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(status === "running" ? undefined : { endedAtMs }),
       metadata,
     },
   });

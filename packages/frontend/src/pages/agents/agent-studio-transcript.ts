@@ -40,12 +40,7 @@ export const toAgentStudioTranscriptSession = ({
 
   return {
     ...identity,
-    ...(() => {
-      if (loadedSession.title) {
-        return { title: loadedSession.title };
-      }
-      return {};
-    })(),
+    ...(loadedSession.title ? { title: loadedSession.title } : undefined),
     activityState,
     runtimeStatusMessage: loadedSession.runtimeStatusMessage,
     messages: toSessionMessagesState(loadedSession),

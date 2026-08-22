@@ -45,36 +45,11 @@ const userMessageMeta = (
   return {
     kind: "user",
     state,
-    ...(() => {
-      if (effectiveModel?.providerId) {
-        return { providerId: effectiveModel.providerId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.modelId) {
-        return { modelId: effectiveModel.modelId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.variant) {
-        return { variant: effectiveModel.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.profileId) {
-        return { profileId: effectiveModel.profileId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (parts.length > 0) {
-        return { parts };
-      }
-      return {};
-    })(),
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
+    ...(parts.length > 0 ? { parts } : undefined),
   } satisfies Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
 };
 
@@ -131,78 +106,22 @@ const historyPartToChatMessage = (
             tool: part.tool,
             toolType: part.toolType,
             status: part.status,
-            ...(() => {
-              if (part.preview) {
-                return { preview: part.preview };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.title) {
-                return { title: part.title };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.displayLabel) {
-                return { displayLabel: part.displayLabel };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (input) {
-                return { input };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (output) {
-                return { output };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (error) {
-                return { error };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.fileDiffs) {
-                return { fileDiffs: part.fileDiffs };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.fileContent) {
-                return { fileContent: part.fileContent };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.fileChanges) {
-                return { fileChanges: part.fileChanges };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.metadata) {
-                return { metadata: part.metadata };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(part.startedAtMs, "number")) {
-                return { startedAtMs: part.startedAtMs };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(part.endedAtMs, "number")) {
-                return { endedAtMs: part.endedAtMs };
-              }
-              return {};
-            })(),
+            ...(part.preview ? { preview: part.preview } : undefined),
+            ...(part.title ? { title: part.title } : undefined),
+            ...(part.displayLabel ? { displayLabel: part.displayLabel } : undefined),
+            ...(input ? { input } : undefined),
+            ...(output ? { output } : undefined),
+            ...(error ? { error } : undefined),
+            ...(part.fileDiffs ? { fileDiffs: part.fileDiffs } : undefined),
+            ...(part.fileContent ? { fileContent: part.fileContent } : undefined),
+            ...(part.fileChanges ? { fileChanges: part.fileChanges } : undefined),
+            ...(part.metadata ? { metadata: part.metadata } : undefined),
+            ...(hasRuntimeType(part.startedAtMs, "number")
+              ? { startedAtMs: part.startedAtMs }
+              : undefined),
+            ...(hasRuntimeType(part.endedAtMs, "number")
+              ? { endedAtMs: part.endedAtMs }
+              : undefined),
           },
         },
         message,
@@ -217,60 +136,19 @@ const historyPartToChatMessage = (
             partId: part.partId,
             correlationKey: part.correlationKey,
             status: part.status,
-            ...(() => {
-              if (part.agent) {
-                return { agent: part.agent };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.prompt) {
-                return { prompt: part.prompt };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.description) {
-                return { description: part.description };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.error) {
-                return { error: part.error };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.externalSessionId) {
-                return { externalSessionId: part.externalSessionId };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.executionMode) {
-                return { executionMode: part.executionMode };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (part.metadata) {
-                return { metadata: part.metadata };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(part.startedAtMs, "number")) {
-                return { startedAtMs: part.startedAtMs };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(part.endedAtMs, "number")) {
-                return { endedAtMs: part.endedAtMs };
-              }
-              return {};
-            })(),
+            ...(part.agent ? { agent: part.agent } : undefined),
+            ...(part.prompt ? { prompt: part.prompt } : undefined),
+            ...(part.description ? { description: part.description } : undefined),
+            ...(part.error ? { error: part.error } : undefined),
+            ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : undefined),
+            ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
+            ...(part.metadata ? { metadata: part.metadata } : undefined),
+            ...(hasRuntimeType(part.startedAtMs, "number")
+              ? { startedAtMs: part.startedAtMs }
+              : undefined),
+            ...(hasRuntimeType(part.endedAtMs, "number")
+              ? { endedAtMs: part.endedAtMs }
+              : undefined),
           },
         }),
         message,
@@ -375,24 +253,13 @@ export const historyToChatMessages = (
         ? (message.durationMs ??
           resolveAssistantTurnDurationMs({
             completedAtMs,
-            ...(() => {
-              if (hasRuntimeType(activityStartedAtMs, "number")) {
-                return { activityStartedAtMs };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(userAnchorAtMs, "number")) {
-                return { userAnchorAtMs };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (hasRuntimeType(previousAssistantCompletedAtMs, "number")) {
-                return { previousAssistantCompletedAtMs };
-              }
-              return {};
-            })(),
+            ...(hasRuntimeType(activityStartedAtMs, "number")
+              ? { activityStartedAtMs }
+              : undefined),
+            ...(hasRuntimeType(userAnchorAtMs, "number") ? { userAnchorAtMs } : undefined),
+            ...(hasRuntimeType(previousAssistantCompletedAtMs, "number")
+              ? { previousAssistantCompletedAtMs }
+              : undefined),
           }))
         : undefined;
     const assistantMeta =
@@ -415,12 +282,9 @@ export const historyToChatMessages = (
           meta: {
             ...assistantMeta,
             sourceMessageId: message.messageId,
-            ...(() => {
-              if (lastAssistantTextMessage.meta.partId) {
-                return { partId: lastAssistantTextMessage.meta.partId };
-              }
-              return {};
-            })(),
+            ...(lastAssistantTextMessage.meta.partId
+              ? { partId: lastAssistantTextMessage.meta.partId }
+              : undefined),
           },
         };
       }
@@ -468,18 +332,8 @@ export const historyToChatMessages = (
         role: message.role,
         content,
         timestamp: message.timestamp,
-        ...(() => {
-          if (message.timestampIsApproximate) {
-            return { timestampIsApproximate: true };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (meta) {
-            return { meta };
-          }
-          return {};
-        })(),
+        ...(message.timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
+        ...(meta ? { meta } : undefined),
       };
       next.push(primaryMessage);
     }

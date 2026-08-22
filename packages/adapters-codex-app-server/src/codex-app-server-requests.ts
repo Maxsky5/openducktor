@@ -210,22 +210,14 @@ const commandApprovalFields = (
   const workingDirectory = extractCommandWorkingDirectory(request.params);
   return {
     action: { name: hasNetworkApprovalContext(request) ? "Network access" : "Bash" },
-    ...(() => {
-      if (command) {
-        return {
+    ...(command
+      ? {
           command: {
             command,
-            ...(() => {
-              if (workingDirectory) {
-                return { workingDirectory };
-              }
-              return {};
-            })(),
+            ...(workingDirectory ? { workingDirectory } : undefined),
           },
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
   };
 };
 
@@ -350,21 +342,11 @@ export const toMcpElicitationApprovalRequest = (
     requestType: "runtime_tool",
     title: "MCP Tool Approval",
     summary: params.message,
-    ...(() => {
-      if (toolDescription) {
-        return { details: toolDescription };
-      }
-      return {};
-    })(),
+    ...(toolDescription ? { details: toolDescription } : undefined),
     tool: {
       name: toolName,
       title: toolTitle,
-      ...(() => {
-        if (isPlainObject(toolParams)) {
-          return { input: toolParams };
-        }
-        return {};
-      })(),
+      ...(isPlainObject(toolParams) ? { input: toolParams } : undefined),
     },
     mutation: "unknown",
     supportedReplyOutcomes: mcpToolApprovalSupportedReplyOutcomes(meta),
@@ -462,18 +444,12 @@ export const parseQuestionRequest = (request: CodexServerRequestRecord) => {
       header,
       question,
       options,
-      ...(() => {
-        if (rawQuestion.multiple === true || rawQuestion.multi === true) {
-          return { multiple: true };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (rawQuestion.isOther === true || rawQuestion.custom === true) {
-          return { custom: true };
-        }
-        return {};
-      })(),
+      ...(rawQuestion.multiple === true || rawQuestion.multi === true
+        ? { multiple: true }
+        : undefined),
+      ...(rawQuestion.isOther === true || rawQuestion.custom === true
+        ? { custom: true }
+        : undefined),
     };
   });
 

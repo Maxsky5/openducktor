@@ -248,12 +248,9 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     worktreeResolutionError: worktreeError,
     retryWorktreeResolution,
     defaultTargetBranch: diffComparisonTarget,
-    ...(() => {
-      if (worktreeDiffPreconditionError) {
-        return { preconditionError: worktreeDiffPreconditionError };
-      }
-      return {};
-    })(),
+    ...(worktreeDiffPreconditionError
+      ? { preconditionError: worktreeDiffPreconditionError }
+      : undefined),
     branchIdentityKey: repositoryBranchIdentityKey,
     enableScheduledRefresh: buildToolsBootstrap.shouldEnableScheduledRefresh && isEnabled,
   });

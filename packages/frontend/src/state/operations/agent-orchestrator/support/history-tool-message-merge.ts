@@ -82,12 +82,7 @@ const preserveCurrentToolWithLoadedIdentity = (
   const canonicalId = toToolMessageId({
     messageId: scopedId.messageId,
     partId: loadedMessage.meta.partId,
-    ...(() => {
-      if (canonicalCallId) {
-        return { callId: canonicalCallId };
-      }
-      return {};
-    })(),
+    ...(canonicalCallId ? { callId: canonicalCallId } : undefined),
   });
 
   return {
@@ -118,33 +113,18 @@ export const mergeToolMessages = (
 
   const nextMeta = {
     ...loadedMessage.meta,
-    ...(() => {
-      if (
-        loadedMessage.meta.observedStartedAtMs === undefined &&
-        currentMessage.meta.observedStartedAtMs !== undefined
-      ) {
-        return { observedStartedAtMs: currentMessage.meta.observedStartedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (
-        loadedMessage.meta.observedEndedAtMs === undefined &&
-        currentMessage.meta.observedEndedAtMs !== undefined
-      ) {
-        return { observedEndedAtMs: currentMessage.meta.observedEndedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (
-        loadedMessage.meta.inputReadyAtMs === undefined &&
-        currentMessage.meta.inputReadyAtMs !== undefined
-      ) {
-        return { inputReadyAtMs: currentMessage.meta.inputReadyAtMs };
-      }
-      return {};
-    })(),
+    ...(loadedMessage.meta.observedStartedAtMs === undefined &&
+    currentMessage.meta.observedStartedAtMs !== undefined
+      ? { observedStartedAtMs: currentMessage.meta.observedStartedAtMs }
+      : undefined),
+    ...(loadedMessage.meta.observedEndedAtMs === undefined &&
+    currentMessage.meta.observedEndedAtMs !== undefined
+      ? { observedEndedAtMs: currentMessage.meta.observedEndedAtMs }
+      : undefined),
+    ...(loadedMessage.meta.inputReadyAtMs === undefined &&
+    currentMessage.meta.inputReadyAtMs !== undefined
+      ? { inputReadyAtMs: currentMessage.meta.inputReadyAtMs }
+      : undefined),
   };
 
   return applyPreferredMessageTimestamp(

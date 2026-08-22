@@ -154,12 +154,7 @@ export const createTaskAssetReadService = (input: {
       message: missingWorkspace
         ? "Task assets were not found."
         : "Task asset workspace could not be read.",
-      ...(() => {
-        if (missingWorkspace) {
-          return {};
-        }
-        return { cause };
-      })(),
+      ...(missingWorkspace ? undefined : { cause }),
     });
   };
 

@@ -37,18 +37,8 @@ export function TaskDetailsSheetFooter({
       ? resolveTaskCardActions(task, {
           include: includeActions,
           hasActiveSession,
-          ...(() => {
-            if (activeSessionRole) {
-              return { activeSessionRole };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (historicalSessionRoles) {
-              return { historicalSessionRoles };
-            }
-            return {};
-          })(),
+          ...(activeSessionRole ? { activeSessionRole } : undefined),
+          ...(historicalSessionRoles ? { historicalSessionRoles } : undefined),
         }).allActions.length > 0
       : false,
   );

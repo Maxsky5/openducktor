@@ -24,23 +24,13 @@ const createFileError = (input: {
   new TaskAssetError({
     operation: input.operation,
     code: input.code,
-    ...(() => {
-      if (input.taskId) {
-        return { taskId: input.taskId };
-      }
-      return {};
-    })(),
+    ...(input.taskId ? { taskId: input.taskId } : undefined),
     assetIds: input.assetIds ?? [],
     failedPhase: input.phase,
     durableState: "unchanged",
     retryAllowed: true,
     message: input.message,
-    ...(() => {
-      if (input.cause === undefined) {
-        return {};
-      }
-      return { cause: input.cause };
-    })(),
+    ...(input.cause === undefined ? undefined : { cause: input.cause }),
   });
 
 export const validateTaskAssetTaskContext = (

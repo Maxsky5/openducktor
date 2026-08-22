@@ -176,12 +176,7 @@ const mergeDefined = <T extends object>(
 const routeFromLink = (link: CodexStoredSubagentLink): CodexSubagentRoute | null =>
   link.childThreadId
     ? {
-        ...(() => {
-          if (link.runtimeId) {
-            return { runtimeId: link.runtimeId };
-          }
-          return {};
-        })(),
+        ...(link.runtimeId ? { runtimeId: link.runtimeId } : undefined),
         parentExternalSessionId: link.parentThreadId,
         childExternalSessionId: link.childThreadId,
         subagentCorrelationKey: link.correlationKey,
@@ -238,46 +233,21 @@ export class CodexSubagentLinkState {
       timing = isActive ? { startedAtMs: thread.updatedAtMs } : { endedAtMs: thread.updatedAtMs };
     }
     this.upsertLink({
-      ...(() => {
-        if (runtimeId) {
-          return { runtimeId };
-        }
-        return {};
-      })(),
+      ...(runtimeId ? { runtimeId } : undefined),
       parentThreadId,
       childThreadId: thread.id,
       itemId: thread.id,
       status,
       allowStatusRestart: isActive,
       ...timing,
-      ...(() => {
-        if (agent) {
-          return { agent };
-        }
-        return {};
-      })(),
+      ...(agent ? { agent } : undefined),
       metadata: {
         codexThread: {
           parentThreadId,
           childThreadId: thread.id,
-          ...(() => {
-            if (thread.agentNickname) {
-              return { agentNickname: thread.agentNickname };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (thread.agentRole) {
-              return { agentRole: thread.agentRole };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (thread.subAgentSource) {
-              return { subAgentSource: thread.subAgentSource };
-            }
-            return {};
-          })(),
+          ...(thread.agentNickname ? { agentNickname: thread.agentNickname } : undefined),
+          ...(thread.agentRole ? { agentRole: thread.agentRole } : undefined),
+          ...(thread.subAgentSource ? { subAgentSource: thread.subAgentSource } : undefined),
         },
       },
     });
@@ -355,69 +325,19 @@ export class CodexSubagentLinkState {
       endedAtMs = Math.max(existing.endedAtMs, input.endedAtMs);
     }
     const link: CodexStoredSubagentLink = {
-      ...(() => {
-        if (input.runtimeId) {
-          return { runtimeId: input.runtimeId };
-        }
-        return {};
-      })(),
+      ...(input.runtimeId ? { runtimeId: input.runtimeId } : undefined),
       parentThreadId: input.parentThreadId,
-      ...(() => {
-        if (childThreadId) {
-          return { childThreadId };
-        }
-        return {};
-      })(),
+      ...(childThreadId ? { childThreadId } : undefined),
       correlationKey,
       status,
-      ...(() => {
-        if (prompt) {
-          return { prompt };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (description) {
-          return { description };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (error) {
-          return { error };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (agent) {
-          return { agent };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (metadata) {
-          return { metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (executionMode) {
-          return { executionMode };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(startedAtMs, "number")) {
-          return { startedAtMs };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(endedAtMs, "number")) {
-          return { endedAtMs };
-        }
-        return {};
-      })(),
+      ...(prompt ? { prompt } : undefined),
+      ...(description ? { description } : undefined),
+      ...(error ? { error } : undefined),
+      ...(agent ? { agent } : undefined),
+      ...(metadata ? { metadata } : undefined),
+      ...(executionMode ? { executionMode } : undefined),
+      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+      ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
     };
     this.storeLink(link, parentItemKey);
     const route = routeFromLink(link);
@@ -677,60 +597,17 @@ export class CodexSubagentLinkState {
       partId: link.correlationKey,
       correlationKey: link.correlationKey,
       status: link.status,
-      ...(() => {
-        if (link.agent) {
-          return { agent: link.agent };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.prompt) {
-          return { prompt: link.prompt };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.description) {
-          return { description: link.description };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.error) {
-          return { error: link.error };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.childThreadId) {
-          return { externalSessionId: link.childThreadId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.executionMode) {
-          return { executionMode: link.executionMode };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (link.metadata) {
-          return { metadata: link.metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(link.startedAtMs, "number")) {
-          return { startedAtMs: link.startedAtMs };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(link.endedAtMs, "number")) {
-          return { endedAtMs: link.endedAtMs };
-        }
-        return {};
-      })(),
+      ...(link.agent ? { agent: link.agent } : undefined),
+      ...(link.prompt ? { prompt: link.prompt } : undefined),
+      ...(link.description ? { description: link.description } : undefined),
+      ...(link.error ? { error: link.error } : undefined),
+      ...(link.childThreadId ? { externalSessionId: link.childThreadId } : undefined),
+      ...(link.executionMode ? { executionMode: link.executionMode } : undefined),
+      ...(link.metadata ? { metadata: link.metadata } : undefined),
+      ...(hasRuntimeType(link.startedAtMs, "number")
+        ? { startedAtMs: link.startedAtMs }
+        : undefined),
+      ...(hasRuntimeType(link.endedAtMs, "number") ? { endedAtMs: link.endedAtMs } : undefined),
     };
   }
 }

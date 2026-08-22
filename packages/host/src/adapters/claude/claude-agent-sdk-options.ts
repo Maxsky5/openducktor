@@ -139,12 +139,9 @@ export const buildClaudeAgentSdkOptions = async ({
     },
     mcpServers,
     permissionMode,
-    ...(() => {
-      if (permissionMode === "bypassPermissions") {
-        return { allowDangerouslySkipPermissions: true };
-      }
-      return {};
-    })(),
+    ...(permissionMode === "bypassPermissions"
+      ? { allowDangerouslySkipPermissions: true }
+      : undefined),
     systemPrompt: {
       type: "preset",
       preset: "claude_code",
@@ -203,12 +200,9 @@ const buildClaudeMcpServers = async ({
   }
   const bridgeEnvironment = {
     ...buildOpenDucktorMcpBridgeEnvironment(resolvedDependencies.mcpBridgeConnection, "Claude"),
-    ...(() => {
-      if (workflowRole) {
-        return { ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(",") };
-      }
-      return {};
-    })(),
+    ...(workflowRole
+      ? { ODT_ALLOWED_TOOLS: AGENT_ROLE_TOOL_POLICY[workflowRole].join(",") }
+      : undefined),
   };
   const { ODT_HOST_TOKEN: hostToken, ...publicBridgeEnvironment } = bridgeEnvironment;
   const hostTokenFile = await createSessionScopedClaudeMcpTokenFile({

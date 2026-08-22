@@ -93,18 +93,8 @@ const toAgentModelSelection = (
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(() => {
-      if (selection.variant) {
-        return { variant: selection.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (selection.profileId) {
-        return { profileId: selection.profileId };
-      }
-      return {};
-    })(),
+    ...(selection.variant ? { variant: selection.variant } : undefined),
+    ...(selection.profileId ? { profileId: selection.profileId } : undefined),
   };
 };
 
@@ -307,12 +297,9 @@ export const executeAutopilotAction = async ({
         : await resolveAutopilotSelection({
             activeWorkspace,
             role: action.role,
-            ...(() => {
-              if (startResolution.preferredSelection !== undefined) {
-                return { preferredSelection: startResolution.preferredSelection };
-              }
-              return {};
-            })(),
+            ...(startResolution.preferredSelection !== undefined
+              ? { preferredSelection: startResolution.preferredSelection }
+              : undefined),
             queryClient,
             loadRepoRuntimeCatalog,
           });
@@ -323,12 +310,9 @@ export const executeAutopilotAction = async ({
         role: action.role,
         launchActionId: action.launchActionId,
         postStartAction: "kickoff",
-        ...(() => {
-          if (startResolution.targetWorkingDirectory !== undefined) {
-            return { targetWorkingDirectory: startResolution.targetWorkingDirectory };
-          }
-          return {};
-        })(),
+        ...(startResolution.targetWorkingDirectory !== undefined
+          ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
+          : undefined),
       },
       decision: toSessionStartDecision({
         resolution: startResolution,

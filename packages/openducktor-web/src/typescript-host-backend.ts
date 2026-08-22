@@ -6,6 +6,7 @@ import {
   type HostInvokeFailure,
   hostErrorResponseSchema,
   hostInvokeFailureSchema,
+  jsonValueSchema,
   type JsonValue,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
 } from "@openducktor/contracts";
@@ -206,18 +207,8 @@ const errorResponse = (
     hostErrorResponseSchema.parse({
       error: message,
       message,
-      ...(() => {
-        if (failureKind) {
-          return { failureKind };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (failure) {
-          return { failure };
-        }
-        return {};
-      })(),
+      ...(failureKind ? { failureKind } : undefined),
+      ...(failure ? { failure } : undefined),
     }),
     { status },
     corsHeaders,
@@ -319,25 +310,10 @@ const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostR
     cause,
     details: {
       command,
-      ...(() => {
-        if (details) {
-          return { hostDetails: details };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hostInvokeFailure) {
-          return { hostInvokeFailure };
-        }
-        return {};
-      })(),
+      ...(details ? { hostDetails: details } : undefined),
+      ...(hostInvokeFailure ? { hostInvokeFailure } : undefined),
     },
-    ...(() => {
-      if (failureKind) {
-        return { failureKind };
-      }
-      return {};
-    })(),
+    ...(failureKind ? { failureKind } : undefined),
   });
 };
 
@@ -528,8 +504,7 @@ const parseJsonObjectBody = (
   Effect.gen(function* () {
     const parsed: JsonValue = yield* Effect.tryPromise({
       try: async () => {
-        // SAFETY: Request.json() parses a JSON-compatible request body.
-        return (await request.json()) as JsonValue;
+        return jsonValueSchema.parse(await request.json());
       },
       catch: (error) =>
         new WebHostRequestError({
@@ -703,12 +678,7 @@ const routeCorsRequest = ({
       request,
       requestTimeouts,
       shutdownStarted,
-      ...(() => {
-        if (taskEventLeaseManager) {
-          return { taskEventLeaseManager };
-        }
-        return {};
-      })(),
+      ...(taskEventLeaseManager ? { taskEventLeaseManager } : undefined),
       validateAppCookieOrHeader: (sessionRequest, expectedToken) =>
         validateAppCookieOrHeader(sessionRequest, expectedToken, appSessionCookieName),
       validateAppSessionCookie: (sessionRequest, expectedToken) =>
@@ -845,12 +815,7 @@ export const handleTypescriptHostBackendRequest = ({
       corsHeaders,
       eventBus,
       hostCommandRouter,
-      ...(() => {
-        if (taskEventLeaseManager) {
-          return { taskEventLeaseManager };
-        }
-        return {};
-      })(),
+      ...(taskEventLeaseManager ? { taskEventLeaseManager } : undefined),
       taskAssetReadService,
       localAttachments,
       logger,
@@ -926,18 +891,8 @@ export const startTypescriptHostBackendEffect = ({
             ),
           ),
       },
-      ...(() => {
-        if (processEnv) {
-          return { processEnv };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (providedToolPaths) {
-          return { providedToolPaths };
-        }
-        return {};
-      })(),
+      ...(processEnv ? { processEnv } : undefined),
+      ...(providedToolPaths ? { providedToolPaths } : undefined),
       runtimeDistribution,
       terminalPty: createBunPtyPort(),
     });

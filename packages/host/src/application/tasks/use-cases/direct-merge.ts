@@ -85,24 +85,18 @@ export const createTaskDirectMergeUseCase = ({
               sourceBranch: approval.sourceBranch,
               targetBranch: canonicalTargetBranch(approval.targetBranch),
               method: mergeInput.mergeMethod,
-              ...(() => {
-                if (mergeInput.squashCommitMessage === undefined) {
-                  return {};
-                }
-                return { squashCommitMessage: mergeInput.squashCommitMessage };
-              })(),
+              ...(mergeInput.squashCommitMessage === undefined
+                ? undefined
+                : { squashCommitMessage: mergeInput.squashCommitMessage }),
             }
           : {
               sourceBranch: approval.sourceBranch,
               targetBranch: canonicalTargetBranch(approval.targetBranch),
               sourceWorkingDirectory: approval.workingDirectory,
               method: mergeInput.mergeMethod,
-              ...(() => {
-                if (mergeInput.squashCommitMessage === undefined) {
-                  return {};
-                }
-                return { squashCommitMessage: mergeInput.squashCommitMessage };
-              })(),
+              ...(mergeInput.squashCommitMessage === undefined
+                ? undefined
+                : { squashCommitMessage: mergeInput.squashCommitMessage }),
             };
       const mergeResult = yield* dependencies.gitPort.mergeBranch(effectiveRepoPath, mergeRequest);
       if (mergeResult.outcome === "conflicts") {

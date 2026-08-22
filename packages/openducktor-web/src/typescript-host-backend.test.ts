@@ -118,12 +118,9 @@ const handleTestRequest = (
       controlToken: options.controlToken ?? CONTROL_TOKEN,
       eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
       hostCommandRouter,
-      ...(() => {
-        if (options.taskEventLeaseManager) {
-          return { taskEventLeaseManager: options.taskEventLeaseManager };
-        }
-        return {};
-      })(),
+      ...(options.taskEventLeaseManager
+        ? { taskEventLeaseManager: options.taskEventLeaseManager }
+        : undefined),
       taskAssetReadService: options.taskAssetReadService ?? missingTaskAssetReadService,
       localAttachments: createLocalAttachmentAdapter(),
       logger: testLogger,

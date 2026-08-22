@@ -316,12 +316,7 @@ export function WorkspaceStage({
     initialPickerOpen: true,
   });
   const folderPicker = useInlineFolderPickerController({
-    ...(() => {
-      if (workspaceCreation.repoPath) {
-        return { initialPath: workspaceCreation.repoPath };
-      }
-      return {};
-    })(),
+    ...(workspaceCreation.repoPath ? { initialPath: workspaceCreation.repoPath } : undefined),
     requireGitRepo: true,
     onCancel: workspaceCreation.closePicker,
     onConfirm: workspaceCreation.confirmRepo,

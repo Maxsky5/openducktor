@@ -8,50 +8,33 @@ export type RuntimeTypeName =
   | "symbol"
   | "undefined";
 
-type RuntimeValue<Type extends RuntimeTypeName> = Type extends "bigint"
-  ? bigint
-  : Type extends "boolean"
-    ? boolean
-    : Type extends "function"
-      ? (...args: never[]) => void
-      : Type extends "number"
-        ? number
-        : Type extends "object"
-          ? object | null
-          : Type extends "string"
-            ? string
-            : Type extends "symbol"
-              ? symbol
-              : undefined;
+type RuntimeTypeMap = {
+  bigint: bigint;
+  boolean: boolean;
+  function: (...args: never[]) => never;
+  number: number;
+  object: object | null;
+  string: string;
+  symbol: symbol;
+  undefined: undefined;
+};
 
-type FunctionMembers<Value> = Value extends (...args: infer Args) => infer Result
-  ? (...args: Args) => Result
+type ExistingFunction<Value> = Value extends (...args: infer Parameters) => infer Result
+  ? (...args: Parameters) => Result
   : never;
 
-type RuntimeFunctionPart<Value> = [FunctionMembers<Value>] extends [never]
-  ? (...args: never[]) => void
-  : FunctionMembers<Value>;
+type FunctionNarrow<Value> = [ExistingFunction<Value>] extends [never]
+  ? RuntimeTypeMap["function"]
+  : ExistingFunction<Value>;
 
-type RuntimeObjectPart<Value> = [Extract<Value, object | null>] extends [never]
-  ? object | null
-  : Extract<Value, object | null>;
-
-type RuntimePrimitivePart<Value, Type extends RuntimeTypeName> = [
-  Extract<Value, RuntimeValue<Type>>,
-] extends [never]
-  ? RuntimeValue<Type>
-  : Extract<Value, RuntimeValue<Type>>;
-
-type RuntimeNarrow<Value, Type extends RuntimeTypeName> = Type extends "function"
-  ? RuntimeFunctionPart<Value>
-  : Type extends "object"
-    ? RuntimeObjectPart<Value>
-    : RuntimePrimitivePart<Value, Type>;
+type RuntimeTypeNarrow<Value, Type extends RuntimeTypeName> = Type extends "function"
+  ? FunctionNarrow<Value>
+  : RuntimeTypeMap[Type];
 
 export const hasRuntimeType = <Value, Type extends RuntimeTypeName>(
   value: Value,
   type: Type,
-): value is Value & RuntimeNarrow<Value, Type> => typeof value === type;
+): value is Value & RuntimeTypeNarrow<Value, Type> => typeof value === type;
 
 export const runtimeTypeName = <Value>(value: Value): RuntimeTypeName => {
   if (hasRuntimeType(value, "bigint")) return "bigint";

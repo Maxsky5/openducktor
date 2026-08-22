@@ -41,12 +41,7 @@ const toLocalRuntimeSnapshot = async (
   return toRefreshedRuntimeSnapshot({
     session,
     inventory,
-    ...(() => {
-      if (input) {
-        return { input };
-      }
-      return {};
-    })(),
+    ...(input ? { input } : undefined),
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(
       session.threadId,
       session.runtimeId,

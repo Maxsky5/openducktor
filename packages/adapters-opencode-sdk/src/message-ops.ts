@@ -384,12 +384,7 @@ export const loadSessionHistory = async (
   const response = await client.session.messages({
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
-    ...(() => {
-      if (hasRuntimeType(input.limit, "number")) {
-        return { limit: input.limit };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(input.limit, "number") ? { limit: input.limit } : undefined),
   });
   const data = opencodeSessionMessagesPayloadSchema.parse(
     unwrapData(response, "load session messages"),
@@ -434,30 +429,10 @@ export const loadSessionHistory = async (
         entry,
         timestamp,
         text,
-        ...(() => {
-          if (hasRuntimeType(totalTokens, "number")) {
-            return { totalTokens };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (model) {
-            return { model };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (parentId) {
-            return { parentId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (entry.info.role === "user") {
-            return { displayParts };
-          }
-          return {};
-        })(),
+        ...(hasRuntimeType(totalTokens, "number") ? { totalTokens } : undefined),
+        ...(model ? { model } : undefined),
+        ...(parentId ? { parentId } : undefined),
+        ...(entry.info.role === "user" ? { displayParts } : undefined),
         rawParts: entry.parts,
       };
     })
@@ -514,18 +489,10 @@ export const loadSessionHistory = async (
         role: "assistant",
         timestamp: item.timestamp,
         text: item.text,
-        ...(() => {
-          if (hasRuntimeType(item.totalTokens, "number")) {
-            return { totalTokens: item.totalTokens };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (item.model) {
-            return { model: item.model };
-          }
-          return {};
-        })(),
+        ...(hasRuntimeType(item.totalTokens, "number")
+          ? { totalTokens: item.totalTokens }
+          : undefined),
+        ...(item.model ? { model: item.model } : undefined),
         parts: item.parts,
       });
       continue;
@@ -538,12 +505,7 @@ export const loadSessionHistory = async (
       text: item.text,
       displayParts: item.displayParts ?? [],
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
-      ...(() => {
-        if (item.model) {
-          return { model: item.model };
-        }
-        return {};
-      })(),
+      ...(item.model ? { model: item.model } : undefined),
       parts: item.parts,
     });
   }
@@ -567,12 +529,7 @@ export const loadSessionTodos = async (
     });
     const response = await client.session.todo({
       sessionID: input.externalSessionId,
-      ...(() => {
-        if (trimmedWorkingDirectory.length > 0) {
-          return { directory: trimmedWorkingDirectory };
-        }
-        return {};
-      })(),
+      ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : undefined),
     });
     if (response.data === undefined || response.data === null) {
       // SAFETY: The runtime adapter builds this value from the contract fields required by `{ response?: { status?: unknown; statusText?: unknown } }`.

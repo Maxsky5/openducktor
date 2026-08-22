@@ -12,18 +12,8 @@ export const createRuntimeExecutableProbes = ({
 } = {}): RuntimeExecutableProbesByKind => ({
   claude: createClaudeExecutableProbe(processEnv ? { processEnv } : {}),
   codex: createCodexExecutableProbe({
-    ...(() => {
-      if (clientVersion) {
-        return { clientVersion };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (processEnv) {
-        return { processEnv };
-      }
-      return {};
-    })(),
+    ...(clientVersion ? { clientVersion } : undefined),
+    ...(processEnv ? { processEnv } : undefined),
   }),
   opencode: createOpenCodeExecutableProbe(processEnv ? { processEnv } : {}),
 });

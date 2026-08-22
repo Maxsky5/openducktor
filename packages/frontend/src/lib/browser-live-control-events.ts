@@ -31,12 +31,7 @@ export function browserLiveControlEvent(
   return {
     __openducktorBrowserLive: true,
     kind,
-    ...(() => {
-      if (detail !== undefined) {
-        return { message: detail };
-      }
-      return {};
-    })(),
+    ...(detail !== undefined ? { message: detail } : undefined),
   };
 }
 

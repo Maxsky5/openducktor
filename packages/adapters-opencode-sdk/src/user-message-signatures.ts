@@ -98,12 +98,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
           path: attachmentPathMode === "strict" ? part.attachment.path : "",
           name: part.attachment.name,
           attachmentKind: part.attachment.kind,
-          ...(() => {
-            if (part.attachment.mime) {
-              return { mime: part.attachment.mime };
-            }
-            return {};
-          })(),
+          ...(part.attachment.mime ? { mime: part.attachment.mime } : undefined),
         },
       ];
     }),
@@ -112,12 +107,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   return buildComparableSignature({
     visible: promptText.text,
     nonTextParts,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   });
 };
 
@@ -152,12 +142,7 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
           kind: "file_reference",
           path: part.file.path,
           name: part.file.name,
-          ...(() => {
-            if (part.sourceText) {
-              return { sourceText: part.sourceText };
-            }
-            return {};
-          })(),
+          ...(part.sourceText ? { sourceText: part.sourceText } : undefined),
         },
       ];
     }
@@ -168,12 +153,7 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
           path: attachmentPathMode === "strict" ? part.attachment.path : "",
           name: part.attachment.name,
           attachmentKind: part.attachment.kind,
-          ...(() => {
-            if (part.attachment.mime) {
-              return { mime: part.attachment.mime };
-            }
-            return {};
-          })(),
+          ...(part.attachment.mime ? { mime: part.attachment.mime } : undefined),
         },
       ];
     }
@@ -183,12 +163,7 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
           kind: "subagent_reference",
           id: part.subagent.id,
           name: part.subagent.name,
-          ...(() => {
-            if (part.sourceText) {
-              return { sourceText: part.sourceText };
-            }
-            return {};
-          })(),
+          ...(part.sourceText ? { sourceText: part.sourceText } : undefined),
         },
       ];
     }
@@ -198,11 +173,6 @@ const buildQueuedDisplaySignatureWithAttachmentPathMode = (
   return buildComparableSignature({
     visible: input.visible,
     nonTextParts,
-    ...(() => {
-      if (input.model) {
-        return { model: input.model };
-      }
-      return {};
-    })(),
+    ...(input.model ? { model: input.model } : undefined),
   });
 };

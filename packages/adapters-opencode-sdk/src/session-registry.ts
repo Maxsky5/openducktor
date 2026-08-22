@@ -209,18 +209,8 @@ const ensureRuntimeEventTransport = (input: {
       const parentExternalSessionId = readEventParentExternalSessionId(properties);
       const scope: OpencodeGlobalEventFailureScope = {
         directory: readEventDirectory(event) ?? "",
-        ...(() => {
-          if (externalSessionId) {
-            return { externalSessionId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (parentExternalSessionId) {
-            return { parentExternalSessionId };
-          }
-          return {};
-        })(),
+        ...(externalSessionId ? { externalSessionId } : undefined),
+        ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
       };
       try {
         processRuntimeSessionLineage(streamRecord, event);
@@ -247,12 +237,7 @@ const ensureRuntimeEventTransport = (input: {
             subscriber,
             event,
             relevant,
-            ...(() => {
-              if (input.logEvent) {
-                return { logEvent: input.logEvent };
-              }
-              return {};
-            })(),
+            ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
           });
           if (!relevant) {
             continue;
@@ -446,12 +431,7 @@ export const subscribeSessionToRuntimeEvents = (input: {
     sessions: input.sessions,
     now: input.now,
     emit: input.emit,
-    ...(() => {
-      if (input.logEvent) {
-        return { logEvent: input.logEvent };
-      }
-      return {};
-    })(),
+    ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
   });
   eventTransport.subscribers.set(input.externalSessionId, {
     externalSessionId: input.externalSessionId,
@@ -495,12 +475,7 @@ export const registerSession = (
     externalSessionId: input.externalSessionId,
     runtimeKind: input.sessionInput.runtimeKind,
     workingDirectory: input.sessionInput.workingDirectory,
-    ...(() => {
-      if (title) {
-        return { title };
-      }
-      return {};
-    })(),
+    ...(title ? { title } : undefined),
     sessionAssociation,
     startedAt: input.startedAt,
     status: startsActive ? "running" : "idle",
@@ -553,12 +528,7 @@ export const registerSession = (
         sessionInput: input.sessionInput,
         now: input.now,
         emit: input.emit,
-        ...(() => {
-          if (input.logEvent) {
-            return { logEvent: input.logEvent };
-          }
-          return {};
-        })(),
+        ...(input.logEvent ? { logEvent: input.logEvent } : undefined),
       });
     } catch (error) {
       input.sessions.delete(input.externalSessionId);

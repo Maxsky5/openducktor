@@ -95,12 +95,7 @@ export const createOpenCodeSessionControlAdapter = ({
           workingDirectory: input.workingDirectory,
           sessionScope: input.sessionScope,
           systemPrompt: input.systemPrompt,
-          ...(() => {
-            if (input.model) {
-              return { model: input.model };
-            }
-            return {};
-          })(),
+          ...(input.model ? { model: input.model } : undefined),
         }),
       ),
     resumeSession: (input) =>
@@ -110,18 +105,8 @@ export const createOpenCodeSessionControlAdapter = ({
           runtimeKind: "opencode",
           runtimePolicy: { kind: "opencode" },
           sessionScope: input.sessionScope,
-          ...(() => {
-            if (input.model) {
-              return { model: input.model };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (input.systemPrompt) {
-              return { systemPrompt: input.systemPrompt };
-            }
-            return {};
-          })(),
+          ...(input.model ? { model: input.model } : undefined),
+          ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : undefined),
         }),
       ),
     forkSession: (input) =>
@@ -136,18 +121,10 @@ export const createOpenCodeSessionControlAdapter = ({
             sessionScope: input.sessionScope,
             systemPrompt: input.systemPrompt,
             parentExternalSessionId: input.parentExternalSessionId,
-            ...(() => {
-              if (input.runtimeHistoryAnchor) {
-                return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (input.model) {
-                return { model: input.model };
-              }
-              return {};
-            })(),
+            ...(input.runtimeHistoryAnchor
+              ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
+              : undefined),
+            ...(input.model ? { model: input.model } : undefined),
           }),
         input.parentExternalSessionId,
       ),
@@ -166,18 +143,8 @@ export const createOpenCodeSessionControlAdapter = ({
               parts: input.parts as Parameters<
                 OpencodeSessionRuntimeConnection["sendUserMessage"]
               >[0]["parts"],
-              ...(() => {
-                if (input.model) {
-                  return { model: input.model };
-                }
-                return {};
-              })(),
-              ...(() => {
-                if (input.systemPrompt) {
-                  return { systemPrompt: input.systemPrompt };
-                }
-                return {};
-              })(),
+              ...(input.model ? { model: input.model } : undefined),
+              ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : undefined),
             }),
           catch: (cause) =>
             toHostOperationError(cause, "opencode-live-session.send-user-message", {

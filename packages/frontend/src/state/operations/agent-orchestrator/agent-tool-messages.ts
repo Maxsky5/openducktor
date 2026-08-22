@@ -55,18 +55,10 @@ export const settleDanglingTodoToolMessages = (
     const updatedMeta = {
       ...meta,
       status: updatedStatus,
-      ...(() => {
-        if (hasRuntimeType(meta.endedAtMs, "number")) {
-          return {};
-        }
-        return hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : {};
-      })(),
-      ...(() => {
-        if (updatedStatus === "error") {
-          return { error: errorText };
-        }
-        return {};
-      })(),
+      ...(!hasRuntimeType(meta.endedAtMs, "number") && hasRuntimeType(endedAtMs, "number")
+        ? { endedAtMs }
+        : undefined),
+      ...(updatedStatus === "error" ? { error: errorText } : undefined),
     };
 
     return {
@@ -75,24 +67,9 @@ export const settleDanglingTodoToolMessages = (
       content: formatToolContent({
         tool: meta.tool,
         status: updatedStatus,
-        ...(() => {
-          if (meta.title) {
-            return { title: meta.title };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (meta.output) {
-            return { output: meta.output };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (updatedStatus === "error") {
-            return { error: errorText };
-          }
-          return {};
-        })(),
+        ...(meta.title ? { title: meta.title } : undefined),
+        ...(meta.output ? { output: meta.output } : undefined),
+        ...(updatedStatus === "error" ? { error: errorText } : undefined),
       }),
       meta: updatedMeta,
     };

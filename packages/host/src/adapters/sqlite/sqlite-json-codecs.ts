@@ -3,6 +3,7 @@ import {
   agentSessionRecordSchema,
   type JsonValue,
   hasRuntimeType,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
@@ -51,8 +52,7 @@ export const parseJsonColumnValue = (
     return Effect.succeed(fallback);
   }
   return Effect.try({
-    // SAFETY: JSON.parse returns JSON-compatible values for a SQLite JSON column.
-    try: () => JSON.parse(value) as JsonValue,
+    try: () => jsonValueSchema.parse(JSON.parse(value)),
     catch: (cause) =>
       new SqliteTaskStoreDataError({
         message: `Invalid SQLite task ${taskId} ${field} JSON: ${errorMessage(cause)}`,

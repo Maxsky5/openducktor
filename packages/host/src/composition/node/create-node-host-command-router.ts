@@ -214,12 +214,7 @@ export const createNodeEffectHostCommandRouter = (
       }),
       processEnv,
       runtimeDistribution,
-      ...(() => {
-        if (clientVersion) {
-          return { clientVersion };
-        }
-        return {};
-      })(),
+      ...(clientVersion ? { clientVersion } : undefined),
       resolveMcpBridgeConnection: (runtimeInput) =>
         resolveWorkspaceRuntimeMcpBridgeConnection(
           resolvedMcpHostBridge,

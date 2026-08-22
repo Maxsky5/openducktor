@@ -188,12 +188,7 @@ export const loadAgentSessionListFromQuery = (
 ): Promise<AgentSessionRecord[]> =>
   queryClient.fetchQuery({
     ...agentSessionListQueryOptions(repoPath, taskId, options?.readPort),
-    ...(() => {
-      if (options?.forceFresh) {
-        return { staleTime: 0 };
-      }
-      return {};
-    })(),
+    ...(options?.forceFresh ? { staleTime: 0 } : undefined),
   });
 
 export const loadAgentSessionListsFromQuery = async (
@@ -233,12 +228,7 @@ export const loadAgentSessionListsFromQuery = async (
         taskIdsToHydrate,
         options?.readPort,
       ),
-      ...(() => {
-        if (options?.forceFresh || refreshesInvalidatedData) {
-          return { staleTime: 0 };
-        }
-        return {};
-      })(),
+      ...(options?.forceFresh || refreshesInvalidatedData ? { staleTime: 0 } : undefined),
     });
     await Promise.all(
       taskIdsToHydrate.flatMap((taskId) => {

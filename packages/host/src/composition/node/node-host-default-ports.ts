@@ -127,30 +127,15 @@ const makeNodeHostDefaultPorts = (
       createToolDiscoveryAdapter({
         env: processEnv,
         options: {
-          ...(() => {
-            if (input.providedToolPaths) {
-              return { providedToolPaths: input.providedToolPaths };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (bundledToolBinDirs) {
-              return { bundledToolBinDirs };
-            }
-            return {};
-          })(),
+          ...(input.providedToolPaths ? { providedToolPaths: input.providedToolPaths } : undefined),
+          ...(bundledToolBinDirs ? { bundledToolBinDirs } : undefined),
         },
         systemCommands,
       });
     const runtimeExecutableProbes =
       input.runtimeExecutableProbes ??
       createRuntimeExecutableProbes({
-        ...(() => {
-          if (input.clientVersion) {
-            return { clientVersion: input.clientVersion };
-          }
-          return {};
-        })(),
+        ...(input.clientVersion ? { clientVersion: input.clientVersion } : undefined),
         processEnv,
       });
     const runtimeHealth =

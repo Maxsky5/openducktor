@@ -32,20 +32,20 @@ const isPlainObject = (value: JsonValue | undefined): value is JsonObject =>
 
 const normalizeLegacyTaskMetadataPayload = (value: JsonValue | undefined) => {
   if (!isPlainObject(value)) {
-    return value satisfies unknown;
+    return value;
   }
 
   const payload = value;
   const delivery = payload.delivery;
   if (!isPlainObject(delivery)) {
-    return value satisfies unknown;
+    return value;
   }
 
   return {
     ...payload,
     pullRequest: payload.pullRequest ?? delivery.linkedPullRequest,
     directMerge: payload.directMerge ?? delivery.directMerge,
-  } satisfies unknown;
+  };
 };
 
 export const taskMetadataPayloadSchema = z.preprocess(

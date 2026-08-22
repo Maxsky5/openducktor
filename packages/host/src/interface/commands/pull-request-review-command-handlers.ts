@@ -8,12 +8,7 @@ const parsePullRequestReviewContextInput = (args: Record<string, JsonValue> | un
   const taskId = optionalString(record.taskId, "taskId");
   return {
     repoPath: requireStringPreservingWhitespace(record.repoPath, "repoPath"),
-    ...(() => {
-      if (taskId) {
-        return { taskId };
-      }
-      return {};
-    })(),
+    ...(taskId ? { taskId } : undefined),
   } satisfies {
     repoPath: string;
     taskId?: string;

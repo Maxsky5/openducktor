@@ -166,24 +166,22 @@ const normalizeAgentSessionInput = (value: JsonValue | undefined): JsonValue | u
 
   // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const record = value as Record<string, JsonValue>;
-  // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
   return {
     ...record,
-    externalSessionId: hasRuntimeType(record.externalSessionId, "string")
-      ? record.externalSessionId.trim()
-      : record.externalSessionId,
-    role: hasRuntimeType(record.role, "string") ? record.role.trim() : record.role,
-    startedAt: hasRuntimeType(record.startedAt, "string")
-      ? record.startedAt.trim()
-      : record.startedAt,
-    runtimeKind: hasRuntimeType(record.runtimeKind, "string")
-      ? record.runtimeKind.trim()
-      : record.runtimeKind,
-    workingDirectory: hasRuntimeType(record.workingDirectory, "string")
-      ? record.workingDirectory.trim()
-      : record.workingDirectory,
-    // SAFETY: spread fields are copied from a JSON-compatible record; only strings are trimmed.
-  } as JsonValue;
+    ...(hasRuntimeType(record.externalSessionId, "string")
+      ? { externalSessionId: record.externalSessionId.trim() }
+      : undefined),
+    ...(hasRuntimeType(record.role, "string") ? { role: record.role.trim() } : undefined),
+    ...(hasRuntimeType(record.startedAt, "string")
+      ? { startedAt: record.startedAt.trim() }
+      : undefined),
+    ...(hasRuntimeType(record.runtimeKind, "string")
+      ? { runtimeKind: record.runtimeKind.trim() }
+      : undefined),
+    ...(hasRuntimeType(record.workingDirectory, "string")
+      ? { workingDirectory: record.workingDirectory.trim() }
+      : undefined),
+  };
 };
 
 export const parseAgentSessionRecord = (value: JsonValue | undefined): AgentSessionRecord => {

@@ -36,31 +36,37 @@ export const relativizeSearchSummary = (
   return `${prefix}${relativizeDisplayPath(path, workingDirectory)}`;
 };
 
-export const relativizeDisplayPathsInValue = (
+export function relativizeDisplayPathsInValue(
+  value: JsonValue,
+  workingDirectory?: string | null,
+  key?: string,
+): JsonValue;
+export function relativizeDisplayPathsInValue(
+  value: undefined,
+  workingDirectory?: string | null,
+  key?: string,
+): undefined;
+export function relativizeDisplayPathsInValue(
   value: JsonValue | undefined,
   workingDirectory?: string | null,
   key?: string,
-): JsonValue | undefined => {
+): JsonValue | undefined {
   if (hasRuntimeType(value, "string")) {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
       : value;
   }
   if (Array.isArray(value)) {
-    // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
-    return value.map((entry) =>
-      relativizeDisplayPathsInValue(entry, workingDirectory, key),
-    ) as JsonValue;
+    return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
   }
   if (!value || !hasRuntimeType(value, "object")) {
     return value;
   }
 
-  // SAFETY: The preceding runtime guard establishes `JsonValue` before this assertion.
   return Object.fromEntries(
     Object.entries(value).map(([entryKey, entryValue]) => [
       entryKey,
       relativizeDisplayPathsInValue(entryValue, workingDirectory, entryKey),
     ]),
-  ) as JsonValue;
-};
+  );
+}

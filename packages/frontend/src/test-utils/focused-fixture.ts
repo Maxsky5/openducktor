@@ -1,17 +1,22 @@
 export const createFocusedFixture = <Value extends object>(value: Partial<Value>): Value => {
-  // SAFETY: focused tests exercise only the supplied members; Partial verifies each member type.
-  return value as Value;
+  const guardedValue = new Proxy(value, {
+    get(target, property) {
+      if (!(property in target)) {
+        throw new Error(`Focused test fixture does not implement '${String(property)}'.`);
+      }
+      // SAFETY: The property-existence check proves this key is present on the partial fixture.
+      return target[property as keyof Value];
+    },
+  });
+  // SAFETY: The proxy rejects every read of an omitted member, while Partial checks each supplied member.
+  return guardedValue as Value;
 };
 
-interface InvalidFixtureInput extends Record<never, never> {}
-
-type InvalidFixtureConstructor = abstract new (...args: never[]) => object;
-
-export const createInvalidFixture = <Value extends object>(
-  value: InvalidFixtureInput | InvalidFixtureConstructor,
+export const createInvalidFixture = <Value extends object, Source extends object = object>(
+  value: Source,
 ): Value => {
-  // SAFETY: boundary tests use this helper only to pass malformed runtime data through a static type gate.
-  return value as Value;
+  // SAFETY: boundary tests use this helper only to pass malformed object payloads through a static contract.
+  return value as Source & Value;
 };
 
 export const createTimerFixture = (): ReturnType<typeof setTimeout> => {

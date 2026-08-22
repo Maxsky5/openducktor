@@ -234,12 +234,9 @@ const createTaskService = (
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
     workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(() => {
-      if (taskActivityGuard) {
-        return { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) };
-      }
-      return {};
-    })(),
+    ...(taskActivityGuard
+      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
+      : undefined),
     taskStore: createTaskStorePort(taskStore),
   } as CreateTaskServiceInput);
 };
@@ -262,12 +259,9 @@ const createTaskServiceWithMutationProgress = (
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
     workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(() => {
-      if (taskActivityGuard) {
-        return { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) };
-      }
-      return {};
-    })(),
+    ...(taskActivityGuard
+      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
+      : undefined),
     taskStore: createTaskStorePort(taskStore),
   } as CreateTaskServiceInput);
 };

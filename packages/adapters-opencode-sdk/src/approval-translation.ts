@@ -51,35 +51,17 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
     requestType: toolName ? "runtime_tool" : "permission_grant",
     title,
     summary,
-    ...(() => {
-      if (patterns.length > 0) {
-        return { affectedPaths: patterns };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (command) {
-        return {
+    ...(patterns.length > 0 ? { affectedPaths: patterns } : undefined),
+    ...(command
+      ? {
           command: {
             command,
-            ...(() => {
-              if (workingDirectory) {
-                return { workingDirectory };
-              }
-              return {};
-            })(),
+            ...(workingDirectory ? { workingDirectory } : undefined),
           },
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
     action: { name: permission },
-    ...(() => {
-      if (toolName) {
-        return { tool: { name: toolName } };
-      }
-      return {};
-    })(),
+    ...(toolName ? { tool: { name: toolName } } : undefined),
     mutation: classifyAgentApprovalMutation({
       actionName: permission,
       toolName,
@@ -92,18 +74,8 @@ export const toAgentApprovalRequestFromOpenCodePermission = ({
       opencode: {
         permission,
         patterns,
-        ...(() => {
-          if (save && save.length > 0) {
-            return { save };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (metadata) {
-            return { metadata };
-          }
-          return {};
-        })(),
+        ...(save && save.length > 0 ? { save } : undefined),
+        ...(metadata ? { metadata } : undefined),
       },
     },
   };

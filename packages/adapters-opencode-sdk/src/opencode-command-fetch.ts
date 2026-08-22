@@ -44,12 +44,7 @@ const loadNodeFetch = async (): Promise<CommandFetchRequest> => {
         referrer: sourceRequest.referrer,
         referrerPolicy: sourceRequest.referrerPolicy,
         signal: sourceRequest.signal,
-        ...(() => {
-          if (body) {
-            return { body, duplex: "half" };
-          }
-          return {};
-        })(),
+        ...(body ? { body, duplex: "half" } : undefined),
       };
       request = new UndiciRequest(sourceRequest.url, requestInit);
     }

@@ -42,12 +42,7 @@ export const appendUnmatchedLiveUserMessages = (
       displayParts:
         message.parts ?? (message.text.length > 0 ? [{ kind: "text", text: message.text }] : []),
       state: message.state ?? "read",
-      ...(() => {
-        if (message.model) {
-          return { model: message.model };
-        }
-        return {};
-      })(),
+      ...(message.model ? { model: message.model } : undefined),
       parts: [],
     });
   }
@@ -206,12 +201,7 @@ export const readClaudeHistoryDisplayParts = (
           name: `Claude image attachment${extensionForMime(mime)}`,
           kind: "image",
           localPreviewAvailable: false,
-          ...(() => {
-            if (mime) {
-              return { mime };
-            }
-            return {};
-          })(),
+          ...(mime ? { mime } : undefined),
         },
       });
       continue;

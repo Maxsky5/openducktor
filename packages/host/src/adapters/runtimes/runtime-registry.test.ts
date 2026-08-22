@@ -34,18 +34,8 @@ const createRuntimeRegistry = ({
   ...input
 }: TestRuntimeRegistryInput = {}) => {
   const sessionOperationInput: CreateRuntimeSessionOperationsInput = {
-    ...(() => {
-      if (codexAppServer) {
-        return { codexAppServer };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (claudeAgentSdk) {
-        return { claudeAgentSdk };
-      }
-      return {};
-    })(),
+    ...(codexAppServer ? { codexAppServer } : undefined),
+    ...(claudeAgentSdk ? { claudeAgentSdk } : undefined),
   };
   return createEffectRuntimeRegistry({
     ...input,

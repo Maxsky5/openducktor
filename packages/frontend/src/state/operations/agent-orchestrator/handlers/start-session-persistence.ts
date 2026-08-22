@@ -38,12 +38,7 @@ export const registerStartedSession = async ({
     startedCtx,
     selectedModel,
     systemPrompt,
-    ...(() => {
-      if (initialMessages) {
-        return { initialMessages };
-      }
-      return {};
-    })(),
+    ...(initialMessages ? { initialMessages } : undefined),
   });
 
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
@@ -74,12 +69,7 @@ export const registerStartedSession = async ({
       startedCtx,
       session: deps.session,
       runtime: deps.runtime,
-      ...(() => {
-        if (runtimeInfo.bootstrap) {
-          return { bootstrap: runtimeInfo.bootstrap };
-        }
-        return {};
-      })(),
+      ...(runtimeInfo.bootstrap ? { bootstrap: runtimeInfo.bootstrap } : undefined),
     });
   }
 

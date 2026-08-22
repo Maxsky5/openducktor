@@ -63,7 +63,7 @@ export const readMcpBridgeRequestBody = (
       finish(
         Effect.try({
           // SAFETY: parseJson decodes a JSON request body.
-          try: () => parseJson(body) as JsonValue,
+          try: () => parseJson(body),
           catch: (cause) =>
             new HostOperationError({
               operation: "mcpHostBridge.readRequestBody",

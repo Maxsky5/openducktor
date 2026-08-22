@@ -601,12 +601,7 @@ describe("createGitCliAdapter", () => {
         const command = args.join(" ");
         calls.push({
           command,
-          ...(() => {
-            if (options?.stdin === undefined) {
-              return {};
-            }
-            return { stdin: options.stdin };
-          })(),
+          ...(options?.stdin === undefined ? undefined : { stdin: options.stdin }),
         });
         return Effect.succeed({
           ok: true,

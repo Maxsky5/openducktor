@@ -109,12 +109,7 @@ export const useModelSelectionActions = ({
       const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
       applySelection({
         ...selectionWithoutVariant,
-        ...(() => {
-          if (variants[0]) {
-            return { variant: variants[0] };
-          }
-          return {};
-        })(),
+        ...(variants[0] ? { variant: variants[0] } : undefined),
       });
     },
     [applySelection, loadedSessionIdentity, selectedModelSelection],

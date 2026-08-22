@@ -20,42 +20,14 @@ const makeSubagentMessage = (
     partId: input.partId ?? "subagent-part",
     correlationKey: input.correlationKey,
     status: input.status,
-    ...(() => {
-      if (input.agent) {
-        return { agent: input.agent };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.prompt) {
-        return { prompt: input.prompt };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.description) {
-        return { description: input.description };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.externalSessionId) {
-        return { externalSessionId: input.externalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(input.startedAtMs, "number")) {
-        return { startedAtMs: input.startedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(input.endedAtMs, "number")) {
-        return { endedAtMs: input.endedAtMs };
-      }
-      return {};
-    })(),
+    ...(input.agent ? { agent: input.agent } : undefined),
+    ...(input.prompt ? { prompt: input.prompt } : undefined),
+    ...(input.description ? { description: input.description } : undefined),
+    ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : undefined),
+    ...(hasRuntimeType(input.startedAtMs, "number")
+      ? { startedAtMs: input.startedAtMs }
+      : undefined),
+    ...(hasRuntimeType(input.endedAtMs, "number") ? { endedAtMs: input.endedAtMs } : undefined),
   };
 
   return {

@@ -181,18 +181,8 @@ export const buildAgentStudioQuickActions = (params: {
       description: definition.description,
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
-      ...(() => {
-        if (disabledReason) {
-          return { disabledReason };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (definition.requiresHumanFeedback) {
-          return { requiresHumanFeedback: true };
-        }
-        return {};
-      })(),
+      ...(disabledReason ? { disabledReason } : undefined),
+      ...(definition.requiresHumanFeedback ? { requiresHumanFeedback: true } : undefined),
     };
   };
   const createSpecialOption = (
@@ -208,12 +198,7 @@ export const buildAgentStudioQuickActions = (params: {
     description,
     postStartAction: "kickoff",
     disabled: disabledReason !== null,
-    ...(() => {
-      if (disabledReason) {
-        return { disabledReason };
-      }
-      return {};
-    })(),
+    ...(disabledReason ? { disabledReason } : undefined),
   });
 
   const options = workflowActionOrder.reduce<AgentStudioQuickActionOption[]>(
@@ -255,23 +240,15 @@ export const buildAgentStudioQuickActions = (params: {
       description: "Reuse or fork a Builder session to create or update a pull request.",
       postStartAction: "kickoff",
       disabled: pullRequestDisabledReason !== null,
-      ...(() => {
-        if (pullRequestDisabledReason) {
-          return { disabledReason: pullRequestDisabledReason };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasBuilderSource) {
-          return {
+      ...(pullRequestDisabledReason ? { disabledReason: pullRequestDisabledReason } : undefined),
+      ...(hasBuilderSource
+        ? {
             initialStartMode: getSessionLaunchAction("build_pull_request_generation")
               .defaultStartMode,
             existingSessionOptions: builderSessionOptions,
             initialSourceSession: builderSessionOptions[0]?.sourceSession ?? null,
-          };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
     });
   }
 

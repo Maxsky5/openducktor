@@ -14,7 +14,7 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type {
   HostCommandHandler,
   HostCommandHandlers,
-  HostCommandResult,
+  UnvalidatedHostCommandResult,
 } from "../router/host-command-router";
 import { requireRecord } from "./command-inputs";
 import { jsonValueSchema } from "@openducktor/contracts";
@@ -40,7 +40,7 @@ const toClaudeCommandValidationError = (command: string, cause: unknown): HostVa
   });
 };
 
-const createClaudeCommandHandler = <Input, Response extends HostCommandResult>(
+const createClaudeCommandHandler = <Input, Response extends UnvalidatedHostCommandResult>(
   service: ClaudeAgentSdkService,
   contract: ClaudeRuntimeCommandContract<Input, Response>,
   invoke: (service: ClaudeAgentSdkService, input: Input) => Effect.Effect<unknown, HostError>,
@@ -126,30 +126,12 @@ export const createClaudeRuntimeCommandHandlers = (
             workingDirectory: input.workingDirectory,
             externalSessionId: input.externalSessionId,
             runtimePolicy: input.runtimePolicy,
-            ...(() => {
-              if (input.sessionScope) {
-                return { sessionScope: input.sessionScope };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (input.model) {
-                return { model: input.model };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (input.systemPromptContext) {
-                return { systemPromptContext: input.systemPromptContext };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (input.limit !== undefined) {
-                return { limit: input.limit };
-              }
-              return {};
-            })(),
+            ...(input.sessionScope ? { sessionScope: input.sessionScope } : undefined),
+            ...(input.model ? { model: input.model } : undefined),
+            ...(input.systemPromptContext
+              ? { systemPromptContext: input.systemPromptContext }
+              : undefined),
+            ...(input.limit !== undefined ? { limit: input.limit } : undefined),
           }),
         ),
       ),
@@ -164,12 +146,7 @@ export const createClaudeRuntimeCommandHandlers = (
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         runtimePolicy: input.runtimePolicy,
-        ...(() => {
-          if (input.model) {
-            return { model: input.model };
-          }
-          return {};
-        })(),
+        ...(input.model ? { model: input.model } : undefined),
       };
       return requireClaudeRuntimeWorkingDirectory(runtimeRegistry, dependencies, input).pipe(
         Effect.flatMap(() =>
@@ -189,12 +166,9 @@ export const createClaudeRuntimeCommandHandlers = (
         runtimeKind: input.runtimeKind,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
-        ...(() => {
-          if (input.runtimeHistoryAnchor) {
-            return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
-          }
-          return {};
-        })(),
+        ...(input.runtimeHistoryAnchor
+          ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
+          : undefined),
       }),
   ),
   [CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus.command]: createClaudeCommandHandler(

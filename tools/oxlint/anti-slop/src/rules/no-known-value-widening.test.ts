@@ -110,5 +110,6 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
 		},
 		{ code: "const value: unknown = 1;", errors: [error] },
 		{ code: "const value: object = [];", errors: [error] },
+		{ code: "const value = { answer: 42 } satisfies unknown;", errors: [error] },
 	],
 });

@@ -26,12 +26,7 @@ export function useSessionStartWorkflowRunner({
         queryClient,
         workspaceId,
         startAgentSession,
-        ...(() => {
-          if (sendAgentMessage) {
-            return { sendAgentMessage };
-          }
-          return {};
-        })(),
+        ...(sendAgentMessage ? { sendAgentMessage } : undefined),
       }),
     [queryClient, sendAgentMessage, startAgentSession, workspaceId],
   );

@@ -24,12 +24,7 @@ export const pickDefaultSessionSelectionForCatalog = (
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
   };
 };
 
@@ -57,18 +52,8 @@ export const coerceSessionSelectionToCatalog = (
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };
 
@@ -82,18 +67,8 @@ export const normalizePersistedSelection = (
     runtimeKind: selection.runtimeKind,
     providerId: selection.providerId,
     modelId: selection.modelId,
-    ...(() => {
-      if (selection.variant) {
-        return { variant: selection.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (selection.profileId) {
-        return { profileId: selection.profileId };
-      }
-      return {};
-    })(),
+    ...(selection.variant ? { variant: selection.variant } : undefined),
+    ...(selection.profileId ? { profileId: selection.profileId } : undefined),
   };
 };
 
@@ -112,25 +87,10 @@ export const mergeModelSelection = (
   const variant = override.variant ?? base.variant;
   const profileId = override.profileId ?? base.profileId;
   return {
-    ...(() => {
-      if (runtimeKind) {
-        return { runtimeKind };
-      }
-      return {};
-    })(),
+    ...(runtimeKind ? { runtimeKind } : undefined),
     providerId: override.providerId,
     modelId: override.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };

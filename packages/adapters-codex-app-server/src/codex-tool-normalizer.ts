@@ -260,39 +260,19 @@ const codexExecCommandInput = (
   if (tool === "read") {
     return {
       command,
-      ...(() => {
-        if (cwd) {
-          return { cwd };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (readPathFromCommand(command)) {
-          return { path: readPathFromCommand(command) };
-        }
-        return {};
-      })(),
+      ...(cwd ? { cwd } : undefined),
+      ...(readPathFromCommand(command) ? { path: readPathFromCommand(command) } : undefined),
     };
   }
   if (tool === "search") {
     return {
       ...searchInputFromCommand(command),
-      ...(() => {
-        if (cwd) {
-          return { cwd };
-        }
-        return {};
-      })(),
+      ...(cwd ? { cwd } : undefined),
     };
   }
   return {
     command,
-    ...(() => {
-      if (cwd) {
-        return { cwd };
-      }
-      return {};
-    })(),
+    ...(cwd ? { cwd } : undefined),
   };
 };
 
@@ -344,52 +324,17 @@ export const normalizeCodexToolInvocation = ({
     tool,
     toolType,
     title: title ?? defaultTitle(tool),
-    ...(() => {
-      if (displayLabel) {
-        return { displayLabel };
-      }
-      return {};
-    })(),
+    ...(displayLabel ? { displayLabel } : undefined),
     status: resolvedError ? "error" : statusFromCodexStatus(status),
-    ...(() => {
-      if (resolvedInput) {
-        return { input: resolvedInput };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resolvedPreview) {
-        return { preview: resolvedPreview };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resolvedOutput) {
-        return { output: resolvedOutput };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resolvedError) {
-        return { error: resolvedError };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (fileDiffs && fileDiffs.length > 0) {
-        return { fileDiffs };
-      }
-      return {};
-    })(),
+    ...(resolvedInput ? { input: resolvedInput } : undefined),
+    ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
+    ...(resolvedOutput ? { output: resolvedOutput } : undefined),
+    ...(resolvedError ? { error: resolvedError } : undefined),
+    ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : undefined),
     metadata: {
       ...metadata,
       rawToolName,
-      ...(() => {
-        if (namespace) {
-          return { namespace };
-        }
-        return {};
-      })(),
+      ...(namespace ? { namespace } : undefined),
     },
   };
 };

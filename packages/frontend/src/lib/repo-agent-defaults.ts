@@ -68,17 +68,7 @@ export const normalizeRepoAgentDefaultForSave = (
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };

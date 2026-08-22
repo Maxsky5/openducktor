@@ -23,12 +23,7 @@ const codexMcpToolApprovalRequest = (persist: JsonValue | undefined, includeTool
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      ...(() => {
-        if (includeToolTitle) {
-          return { tool_title: "search" };
-        }
-        return {};
-      })(),
+      ...(includeToolTitle ? { tool_title: "search" } : undefined),
       persist,
     },
   },

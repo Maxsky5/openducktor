@@ -223,17 +223,14 @@ const createHookHarness = (
         open: isOpen,
         shouldLoadCatalog: shouldLoad,
         onRuntimeAvailabilityError: () => {},
-        ...(() => {
-          if (options && "requiredRepoPath" in options) {
-            return {
+        ...(options && "requiredRepoPath" in options
+          ? {
               workspaceSelectionPolicy: {
                 kind: "required" as const,
                 repoPath: options.requiredRepoPath ?? null,
               },
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
       }),
     {
       isOpen: open,

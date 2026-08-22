@@ -649,12 +649,7 @@ export const runLauncherEffect = (
     const runtimeDistribution = yield* resolveWebRuntimeDistributionEffect({
       packageRoot: options.packageRoot,
       workspaceMode: options.workspaceMode,
-      ...(() => {
-        if (options.workspaceRoot) {
-          return { workspaceRoot: options.workspaceRoot };
-        }
-        return {};
-      })(),
+      ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : undefined),
     });
     const providedToolPaths = yield* resolveWebProvidedToolPathsEffect();
     const hostDiscoveryOptions = options.workspaceMode

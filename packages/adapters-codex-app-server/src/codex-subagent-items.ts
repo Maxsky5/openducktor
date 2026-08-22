@@ -263,12 +263,7 @@ const collabMetadata = (
     itemId: extractStringField(item, ["id"]),
     tool: extractStringField(item, ["tool"]),
     parentThreadId,
-    ...(() => {
-      if (childThreadId) {
-        return { childThreadId };
-      }
-      return {};
-    })(),
+    ...(childThreadId ? { childThreadId } : undefined),
   },
 });
 
@@ -285,12 +280,7 @@ const activityMetadata = (
       kind: extractStringField(item, ["kind"]),
       parentThreadId,
       childThreadId,
-      ...(() => {
-        if (agentPath) {
-          return { agentPath };
-        }
-        return {};
-      })(),
+      ...(agentPath ? { agentPath } : undefined),
     },
   };
 };
@@ -323,33 +313,13 @@ export const codexSubagentPartsFromItem = (
       const mapped = mapAggregateStatus(aggregateStatus, tool);
       return [
         linkState.upsertLink({
-          ...(() => {
-            if (ctx.runtimeId) {
-              return { runtimeId: ctx.runtimeId };
-            }
-            return {};
-          })(),
+          ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
           parentThreadId,
           itemId,
           status: mapped.status,
-          ...(() => {
-            if (prompt) {
-              return { prompt };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (creationDescription) {
-              return { description: creationDescription };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (mapped.error) {
-              return { error: mapped.error };
-            }
-            return {};
-          })(),
+          ...(prompt ? { prompt } : undefined),
+          ...(creationDescription ? { description: creationDescription } : undefined),
+          ...(mapped.error ? { error: mapped.error } : undefined),
           metadata: collabMetadata(item, type, parentThreadId),
         }),
       ];
@@ -357,34 +327,14 @@ export const codexSubagentPartsFromItem = (
     return receivers.map((childThreadId) => {
       const mapped = statusForChild(item, tool, aggregateStatus, childThreadId);
       return linkState.upsertLink({
-        ...(() => {
-          if (ctx.runtimeId) {
-            return { runtimeId: ctx.runtimeId };
-          }
-          return {};
-        })(),
+        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
         parentThreadId,
         childThreadId,
         itemId,
         status: mapped.status,
-        ...(() => {
-          if (prompt) {
-            return { prompt };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (creationDescription) {
-            return { description: creationDescription };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (mapped.error) {
-            return { error: mapped.error };
-          }
-          return {};
-        })(),
+        ...(prompt ? { prompt } : undefined),
+        ...(creationDescription ? { description: creationDescription } : undefined),
+        ...(mapped.error ? { error: mapped.error } : undefined),
         metadata: collabMetadata(item, type, parentThreadId, childThreadId),
         preferItemCorrelationKey: tool === "spawnAgent",
         allowStatusRestart: tool === "resumeAgent" && mapped.status === "running",
@@ -415,12 +365,7 @@ export const codexSubagentPartsFromItem = (
     const runtimeId = route?.runtimeId ?? ctx.runtimeId;
     return [
       linkState.upsertLink({
-        ...(() => {
-          if (runtimeId) {
-            return { runtimeId };
-          }
-          return {};
-        })(),
+        ...(runtimeId ? { runtimeId } : undefined),
         parentThreadId: sourceThreadId,
         childThreadId,
         itemId,

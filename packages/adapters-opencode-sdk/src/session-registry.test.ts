@@ -313,12 +313,7 @@ const runRuntimeEventTransport = async (
       emit: (_externalSessionId, event) => {
         emitted.push(event);
       },
-      ...(() => {
-        if (options?.logEvent) {
-          return { logEvent: options.logEvent };
-        }
-        return {};
-      })(),
+      ...(options?.logEvent ? { logEvent: options.logEvent } : undefined),
     });
   }
 

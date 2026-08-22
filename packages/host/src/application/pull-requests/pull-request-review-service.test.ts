@@ -58,12 +58,7 @@ const makeTask = (pullRequest: PullRequest | undefined): TaskCard => ({
     builder: { required: true, canSkip: false, available: true, completed: false },
     qa: { required: false, canSkip: true, available: false, completed: false },
   },
-  ...(() => {
-    if (pullRequest) {
-      return { pullRequest };
-    }
-    return {};
-  })(),
+  ...(pullRequest ? { pullRequest } : undefined),
   createdAt: "2026-07-10T08:00:00.000Z",
   updatedAt: "2026-07-10T08:00:00.000Z",
 });

@@ -49,12 +49,7 @@ export const mapSqliteTaskStoreAdapterError = (
       details: {
         databasePath,
         ...cause.details,
-        ...(() => {
-          if (cause.field === undefined) {
-            return {};
-          }
-          return { field: cause.field };
-        })(),
+        ...(cause.field === undefined ? undefined : { field: cause.field }),
       },
     });
   }

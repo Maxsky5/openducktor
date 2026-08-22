@@ -83,12 +83,7 @@ const requestJson = (
       {
         method: options.method ?? "GET",
         headers: {
-          ...(() => {
-            if (body) {
-              return { "Content-Type": "application/json" };
-            }
-            return {};
-          })(),
+          ...(body ? { "Content-Type": "application/json" } : undefined),
           ...options.headers,
         },
       },

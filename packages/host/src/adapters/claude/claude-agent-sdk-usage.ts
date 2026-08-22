@@ -23,17 +23,7 @@ export const contextUsageFromClaudeControlResponse = (
   const usedTokens = positiveNumber(response.totalTokens);
   const maxTokens = positiveNumber(response.maxTokens);
   return {
-    ...(() => {
-      if (usedTokens !== undefined) {
-        return { usedTokens };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (maxTokens !== undefined) {
-        return { maxTokens };
-      }
-      return {};
-    })(),
+    ...(usedTokens !== undefined ? { usedTokens } : undefined),
+    ...(maxTokens !== undefined ? { maxTokens } : undefined),
   };
 };

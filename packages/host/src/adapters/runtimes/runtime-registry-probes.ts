@@ -90,17 +90,19 @@ const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string)
   return url;
 };
 
+const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const isLiveSessionStatus = (value: JsonValue | undefined): boolean => {
-  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
+  if (!isJsonRecord(value)) {
     return false;
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const status = (value as Record<string, JsonValue>).type;
+  const status = value.type;
   return status === "busy" || status === "retry";
 };
 
 const requireObjectPayload = (value: JsonValue | undefined, context: string) => {
-  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
+  if (!isJsonRecord(value)) {
     return Effect.fail(
       new HostValidationError({
         message: `${context} must be an object`,
@@ -108,8 +110,7 @@ const requireObjectPayload = (value: JsonValue | undefined, context: string) => 
       }),
     );
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  return Effect.succeed(value as Record<string, JsonValue>);
+  return Effect.succeed(value);
 };
 
 const readStringProperty = (value: Record<string, JsonValue>, property: string): string | null => {
@@ -250,7 +251,7 @@ export const probeOpenCodeSessionStatus = ({
     }
     const statuses = yield* Effect.try({
       // SAFETY: JSON.parse returns JSON-compatible values for the session-status response.
-      try: () => JSON.parse(body) as JsonValue,
+      try: () => parseJson(body),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -258,11 +259,17 @@ export const probeOpenCodeSessionStatus = ({
           details: { operation: "runtimeRegistry.parseSessionStatusResponse" },
         }),
     });
-    // SAFETY: the session-status endpoint returns a JSON object keyed by session id.
-    const sessionStatuses = statuses as Record<string, JsonValue>;
+    if (!isJsonRecord(statuses)) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: "OpenCode session status response must be an object",
+          details: { operation: "runtimeRegistry.parseSessionStatusResponse" },
+        }),
+      );
+    }
     return {
       supported: true,
-      hasLiveSession: isLiveSessionStatus(sessionStatuses[externalSessionId]),
+      hasLiveSession: isLiveSessionStatus(statuses[externalSessionId]),
     };
   });
 
@@ -327,7 +334,7 @@ const fetchOpenCodeJson = (
     }
     return yield* Effect.try({
       // SAFETY: parseJson decodes a JSON response from the OpenCode runtime.
-      try: () => parseJson(body) as JsonValue,
+      try: () => parseJson(body),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),

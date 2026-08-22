@@ -94,90 +94,42 @@ const toApprovalRequest = (
   requestId: request.requestId,
   requestType: request.requestType,
   title: request.title,
-  ...(() => {
-    if (request.summary !== undefined) {
-      return { summary: request.summary };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.details !== undefined) {
-      return { details: request.details };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.affectedPaths !== undefined) {
-      return { affectedPaths: request.affectedPaths };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.command !== undefined) {
-      return {
+  ...(request.summary !== undefined ? { summary: request.summary } : undefined),
+  ...(request.details !== undefined ? { details: request.details } : undefined),
+  ...(request.affectedPaths !== undefined ? { affectedPaths: request.affectedPaths } : undefined),
+  ...(request.command !== undefined
+    ? {
         command: {
           command: request.command.command,
-          ...(() => {
-            if (request.command.workingDirectory !== undefined) {
-              return { workingDirectory: request.command.workingDirectory };
-            }
-            return {};
-          })(),
+          ...(request.command.workingDirectory !== undefined
+            ? { workingDirectory: request.command.workingDirectory }
+            : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.action !== undefined) {
-      return {
+      }
+    : undefined),
+  ...(request.action !== undefined
+    ? {
         action: {
           name: request.action.name,
-          ...(() => {
-            if (request.action.description !== undefined) {
-              return { description: request.action.description };
-            }
-            return {};
-          })(),
+          ...(request.action.description !== undefined
+            ? { description: request.action.description }
+            : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.tool !== undefined) {
-      return {
+      }
+    : undefined),
+  ...(request.tool !== undefined
+    ? {
         tool: {
           name: request.tool.name,
-          ...(() => {
-            if (request.tool.title !== undefined) {
-              return { title: request.tool.title };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (request.tool.input !== undefined) {
-              return { input: request.tool.input };
-            }
-            return {};
-          })(),
+          ...(request.tool.title !== undefined ? { title: request.tool.title } : undefined),
+          ...(request.tool.input !== undefined ? { input: request.tool.input } : undefined),
         },
-      };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.mutation !== undefined) {
-      return { mutation: request.mutation };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (request.supportedReplyOutcomes !== undefined) {
-      return { supportedReplyOutcomes: request.supportedReplyOutcomes };
-    }
-    return {};
-  })(),
+      }
+    : undefined),
+  ...(request.mutation !== undefined ? { mutation: request.mutation } : undefined),
+  ...(request.supportedReplyOutcomes !== undefined
+    ? { supportedReplyOutcomes: request.supportedReplyOutcomes }
+    : undefined),
   ...routing,
 });
 
@@ -190,18 +142,8 @@ const toQuestionRequest = (
     header: question.header,
     question: question.question,
     options: question.options,
-    ...(() => {
-      if (question.multiple !== undefined) {
-        return { multiple: question.multiple };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (question.custom !== undefined) {
-        return { custom: question.custom };
-      }
-      return {};
-    })(),
+    ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
+    ...(question.custom !== undefined ? { custom: question.custom } : undefined),
   })),
   ...routing,
 });
@@ -213,42 +155,20 @@ export const toContextUsage = (
     ? null
     : {
         totalTokens: contextUsage.totalTokens,
-        ...(() => {
-          if (contextUsage.contextWindow !== undefined) {
-            return { contextWindow: contextUsage.contextWindow };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (contextUsage.outputLimit !== undefined) {
-            return { outputLimit: contextUsage.outputLimit };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (contextUsage.providerId !== undefined) {
-            return { providerId: contextUsage.providerId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (contextUsage.modelId !== undefined) {
-            return { modelId: contextUsage.modelId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (contextUsage.variant !== undefined) {
-            return { variant: contextUsage.variant };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (contextUsage.profileId !== undefined) {
-            return { profileId: contextUsage.profileId };
-          }
-          return {};
-        })(),
+        ...(contextUsage.contextWindow !== undefined
+          ? { contextWindow: contextUsage.contextWindow }
+          : undefined),
+        ...(contextUsage.outputLimit !== undefined
+          ? { outputLimit: contextUsage.outputLimit }
+          : undefined),
+        ...(contextUsage.providerId !== undefined
+          ? { providerId: contextUsage.providerId }
+          : undefined),
+        ...(contextUsage.modelId !== undefined ? { modelId: contextUsage.modelId } : undefined),
+        ...(contextUsage.variant !== undefined ? { variant: contextUsage.variant } : undefined),
+        ...(contextUsage.profileId !== undefined
+          ? { profileId: contextUsage.profileId }
+          : undefined),
       };
 
 const applyDirectSnapshot = (
@@ -479,17 +399,14 @@ const materializePersistedSessions = ({
       toPersistedSessionView({
         taskId,
         record,
-        ...(() => {
-          if (currentSession) {
-            return {
+        ...(currentSession
+          ? {
               current: resetSessionLiveStateForSnapshot(
                 currentSession,
                 liveSnapshotKeys.has(agentSessionIdentityKey(currentSession)),
               ),
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
       }),
     );
   }
@@ -554,12 +471,7 @@ export const applyTaskSessionRecords = ({
       toPersistedSessionView({
         taskId,
         record,
-        ...(() => {
-          if (currentSession) {
-            return { current: currentSession };
-          }
-          return {};
-        })(),
+        ...(currentSession ? { current: currentSession } : undefined),
       }),
     );
   }

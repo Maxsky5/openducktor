@@ -21,18 +21,8 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
           runtimeKind: currentRuntimeKind,
           providerId: currentValue.providerId,
           modelId: currentValue.modelId,
-          ...(() => {
-            if (currentValue.variant) {
-              return { variant: currentValue.variant };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (currentValue.profileId) {
-              return { profileId: currentValue.profileId };
-            }
-            return {};
-          })(),
+          ...(currentValue.variant ? { variant: currentValue.variant } : undefined),
+          ...(currentValue.profileId ? { profileId: currentValue.profileId } : undefined),
         }
       : null;
   const resolvedPair = resolveModelSelectionForPair({

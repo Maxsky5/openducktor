@@ -78,12 +78,7 @@ const queuePendingSubagentPartEmission = (
     runtime.session.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId) ?? [];
   pending.push({
     part,
-    ...(() => {
-      if (roleHint) {
-        return { roleHint };
-      }
-      return {};
-    })(),
+    ...(roleHint ? { roleHint } : undefined),
   });
   runtime.session.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
@@ -150,12 +145,9 @@ export const normalizeLiveSubagentCorrelation = (
     return {
       ...part,
       correlationKey: existingCorrelationKey,
-      ...(() => {
-        if (effectiveExternalSessionId) {
-          return { externalSessionId: effectiveExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(effectiveExternalSessionId
+        ? { externalSessionId: effectiveExternalSessionId }
+        : undefined),
     };
   }
 
@@ -189,12 +181,7 @@ export const normalizeLiveSubagentCorrelation = (
     return {
       ...part,
       correlationKey,
-      ...(() => {
-        if (linkedExternalSessionId) {
-          return { externalSessionId: linkedExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(linkedExternalSessionId ? { externalSessionId: linkedExternalSessionId } : undefined),
     };
   }
 
@@ -239,12 +226,7 @@ export const normalizeLiveSubagentCorrelation = (
   return {
     ...part,
     correlationKey,
-    ...(() => {
-      if (effectiveExternalSessionId) {
-        return { externalSessionId: effectiveExternalSessionId };
-      }
-      return {};
-    })(),
+    ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : undefined),
   };
 };
 

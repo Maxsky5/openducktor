@@ -1,4 +1,4 @@
-import { agentRoleValues, hasRuntimeType } from "@openducktor/contracts";
+import { agentRoleValues, hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { JsonValue } from "@openducktor/contracts";
@@ -190,7 +190,7 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
   let parsed: JsonValue;
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; persisted context is JSON
+    parsed = jsonValueSchema.parse(JSON.parse(raw));
   } catch (cause) {
     throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
       cause,
@@ -218,24 +218,9 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
     AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
   );
   return {
-    ...(() => {
-      if (taskId) {
-        return { taskId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (role) {
-        return { role };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (sessionExternalId) {
-        return { sessionExternalId };
-      }
-      return {};
-    })(),
+    ...(taskId ? { taskId } : undefined),
+    ...(role ? { role } : undefined),
+    ...(sessionExternalId ? { sessionExternalId } : undefined),
   };
 };
 

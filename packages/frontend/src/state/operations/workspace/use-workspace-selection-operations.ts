@@ -298,12 +298,9 @@ export function useWorkspaceSelectionOperations({
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
-        ...(() => {
-          if (input.defaultRuntimeKind) {
-            return { defaultRuntimeKind: input.defaultRuntimeKind };
-          }
-          return {};
-        })(),
+        ...(input.defaultRuntimeKind
+          ? { defaultRuntimeKind: input.defaultRuntimeKind }
+          : undefined),
       });
       applyWorkspaceRecord(workspace);
       await refreshWorkspaceCachesAfterMutation();

@@ -275,30 +275,10 @@ const requestCodexAppServer = (
   return service.listThreadTurns({
     runtimeId: input.runtimeId,
     threadId: requireString(params.threadId, "threadId"),
-    ...(() => {
-      if (cursor !== undefined) {
-        return { cursor };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (limit !== undefined) {
-        return { limit };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (sortDirection !== undefined) {
-        return { sortDirection };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (itemsView !== undefined) {
-        return { itemsView };
-      }
-      return {};
-    })(),
+    ...(cursor !== undefined ? { cursor } : undefined),
+    ...(limit !== undefined ? { limit } : undefined),
+    ...(sortDirection !== undefined ? { sortDirection } : undefined),
+    ...(itemsView !== undefined ? { itemsView } : undefined),
   });
 };
 

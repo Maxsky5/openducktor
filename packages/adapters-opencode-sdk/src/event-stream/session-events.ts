@@ -245,18 +245,8 @@ const resolveSubagentInputRouting = (
 
   return {
     childExternalSessionId,
-    ...(() => {
-      if (parentExternalSessionId) {
-        return { parentExternalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (subagentCorrelationKey) {
-        return { subagentCorrelationKey };
-      }
-      return {};
-    })(),
+    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
+    ...(subagentCorrelationKey ? { subagentCorrelationKey } : undefined),
   };
 };
 
@@ -333,18 +323,8 @@ const handleQuestionAsked = (
       header: question.header,
       question: question.question,
       options: question.options,
-      ...(() => {
-        if (question.multiple !== undefined) {
-          return { multiple: question.multiple };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (question.custom !== undefined) {
-          return { custom: question.custom };
-        }
-        return {};
-      })(),
+      ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
+      ...(question.custom !== undefined ? { custom: question.custom } : undefined),
     })),
   };
   runtime.emit(runtime.externalSessionId, questionEvent);

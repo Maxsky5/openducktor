@@ -130,12 +130,7 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     },
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
-    ...(() => {
-      if (status.gitConflict) {
-        return { gitConflict: status.gitConflict };
-      }
-      return {};
-    })(),
+    ...(status.gitConflict ? { gitConflict: status.gitConflict } : undefined),
     snapshot: status.snapshot,
   };
 };

@@ -313,12 +313,9 @@ export class CodexRuntimeSessionEvents {
         const retainedOwner = owner ?? this.runtimeStreamEventSessionOwner(event);
         Object.assign(mutation, {
           fault: this.errorMessage(error),
-          ...(() => {
-            if (retainedOwner) {
-              return { faultRef: codexSessionRef(retainedOwner.targetSession) };
-            }
-            return {};
-          })(),
+          ...(retainedOwner
+            ? { faultRef: codexSessionRef(retainedOwner.targetSession) }
+            : undefined),
         });
         this.emitRuntimeStreamEventError(event, error, retainedOwner);
       }
@@ -653,12 +650,9 @@ export class CodexRuntimeSessionEvents {
       externalSessionId: threadId,
       timestamp: new Date().toISOString(),
       requestId: entry.request.requestId,
-      ...(() => {
-        if (entry.request.requestInstanceId) {
-          return { requestInstanceId: entry.request.requestInstanceId };
-        }
-        return {};
-      })(),
+      ...(entry.request.requestInstanceId
+        ? { requestInstanceId: entry.request.requestInstanceId }
+        : undefined),
       ...codexSubagentRouteEventFields(route),
     };
     const activeTurn =

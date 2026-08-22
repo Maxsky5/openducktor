@@ -23,12 +23,7 @@ const childThreadRead = ({
   thread: {
     [childThreadIdField]: "child-thread",
     forkedFromId,
-    ...(() => {
-      if (parentThreadId) {
-        return { parentThreadId };
-      }
-      return {};
-    })(),
+    ...(parentThreadId ? { parentThreadId } : undefined),
     createdAt: 25,
     turns,
   },

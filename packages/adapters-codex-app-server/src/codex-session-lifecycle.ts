@@ -47,24 +47,14 @@ const buildSessionState = (
   liveStatus?: CodexSessionState["liveStatus"],
 ): CodexSessionState => ({
   summary,
-  ...(() => {
-    if (model) {
-      return { model };
-    }
-    return {};
-  })(),
+  ...(model ? { model } : undefined),
   systemPrompt: input.systemPrompt ?? "",
   runtimeId,
   repoPath: input.repoPath,
   threadId: summary.externalSessionId,
   workingDirectory: input.workingDirectory,
   runtimePolicy: input.runtimePolicy,
-  ...(() => {
-    if (liveStatus) {
-      return { liveStatus };
-    }
-    return {};
-  })(),
+  ...(liveStatus ? { liveStatus } : undefined),
 });
 
 export const assertRuntimeContextCompatibleWithSession = (
@@ -94,12 +84,7 @@ const applyRuntimeContextToSession = (
     const policy = resolveCodexSessionScopePolicy(sessionScope, input.runtimePolicy, action);
     session.summary = {
       ...session.summary,
-      ...(() => {
-        if (policy.kind === "repository") {
-          return { title: policy.title };
-        }
-        return {};
-      })(),
+      ...(policy.kind === "repository" ? { title: policy.title } : undefined),
       sessionAssociation: sessionScope,
     };
   }
@@ -225,12 +210,7 @@ export const preserveRuntimeContextForExistingThread = (
           ? current.summary.sessionAssociation
           : existingThreadSession.summary.sessionAssociation,
     },
-    ...(() => {
-      if (existingThreadSession.model || !current.model) {
-        return {};
-      }
-      return { model: current.model };
-    })(),
+    ...(existingThreadSession.model || !current.model ? undefined : { model: current.model }),
     systemPrompt: existingThreadSession.systemPrompt || current.systemPrompt,
     runtimePolicy: existingThreadSession.runtimePolicy,
   };

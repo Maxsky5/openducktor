@@ -26,12 +26,7 @@ export const runElectronHostInvoke = async <A, E extends Error>(
       ok: false,
       error: {
         message: errorMessage(cause),
-        ...(() => {
-          if (failure) {
-            return { failure };
-          }
-          return {};
-        })(),
+        ...(failure ? { failure } : undefined),
       },
     };
   }

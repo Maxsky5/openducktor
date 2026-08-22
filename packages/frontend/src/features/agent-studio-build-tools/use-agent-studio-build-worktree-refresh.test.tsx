@@ -57,12 +57,7 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
           tool,
           toolType: toolTypeForFixture(tool),
           status: "completed",
-          ...(() => {
-            if (input) {
-              return { input };
-            }
-            return {};
-          })(),
+          ...(input ? { input } : undefined),
         },
       },
     ],

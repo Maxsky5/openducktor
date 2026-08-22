@@ -32,12 +32,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       message: event.message,
       parts: event.displayParts,
       state: event.state,
-      ...(() => {
-        if (event.model) {
-          return { model: event.model };
-        }
-        return {};
-      })(),
+      ...(event.model ? { model: event.model } : undefined),
     };
   }
 
@@ -48,24 +43,13 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       timestamp,
       messageId: event.messageId,
       message: event.message,
-      ...(() => {
-        if (hasRuntimeType(event.totalTokens, "number")) {
-          return { totalTokens: event.totalTokens };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(event.contextWindow, "number")) {
-          return { contextWindow: event.contextWindow };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (event.model) {
-          return { model: event.model };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(event.totalTokens, "number")
+        ? { totalTokens: event.totalTokens }
+        : undefined),
+      ...(hasRuntimeType(event.contextWindow, "number")
+        ? { contextWindow: event.contextWindow }
+        : undefined),
+      ...(event.model ? { model: event.model } : undefined),
     };
   }
 
@@ -75,12 +59,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       externalSessionId: event.threadId,
       timestamp,
       channel: event.channel,
-      ...(() => {
-        if (event.messageId) {
-          return { messageId: event.messageId };
-        }
-        return {};
-      })(),
+      ...(event.messageId ? { messageId: event.messageId } : undefined),
       delta: event.delta,
     };
   }
@@ -107,12 +86,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       type: "session_compaction_started",
       externalSessionId: event.threadId,
       timestamp,
-      ...(() => {
-        if (event.messageId) {
-          return { messageId: event.messageId };
-        }
-        return {};
-      })(),
+      ...(event.messageId ? { messageId: event.messageId } : undefined),
       message: event.message,
     };
   }
@@ -122,12 +96,7 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
       type: "session_compacted",
       externalSessionId: event.threadId,
       timestamp,
-      ...(() => {
-        if (event.messageId) {
-          return { messageId: event.messageId };
-        }
-        return {};
-      })(),
+      ...(event.messageId ? { messageId: event.messageId } : undefined),
       message: event.message,
     };
   }

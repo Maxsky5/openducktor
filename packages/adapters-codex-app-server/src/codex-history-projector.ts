@@ -20,12 +20,7 @@ export const projectCodexCanonicalEventsToHistory = (
         displayParts: event.displayParts,
         state: event.state,
         parts: [],
-        ...(() => {
-          if (resolvedModel) {
-            return { model: resolvedModel };
-          }
-          return {};
-        })(),
+        ...(resolvedModel ? { model: resolvedModel } : undefined),
       });
       continue;
     }
@@ -37,24 +32,13 @@ export const projectCodexCanonicalEventsToHistory = (
         timestamp,
         text: event.message,
         parts: [],
-        ...(() => {
-          if (resolvedModel) {
-            return { model: resolvedModel };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (hasRuntimeType(event.totalTokens, "number")) {
-            return { totalTokens: event.totalTokens };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (hasRuntimeType(event.contextWindow, "number")) {
-            return { contextWindow: event.contextWindow };
-          }
-          return {};
-        })(),
+        ...(resolvedModel ? { model: resolvedModel } : undefined),
+        ...(hasRuntimeType(event.totalTokens, "number")
+          ? { totalTokens: event.totalTokens }
+          : undefined),
+        ...(hasRuntimeType(event.contextWindow, "number")
+          ? { contextWindow: event.contextWindow }
+          : undefined),
       });
       continue;
     }
@@ -69,12 +53,7 @@ export const projectCodexCanonicalEventsToHistory = (
           timestamp,
           text: "",
           parts: [event.part],
-          ...(() => {
-            if (model) {
-              return { model };
-            }
-            return {};
-          })(),
+          ...(model ? { model } : undefined),
         });
       }
       continue;
@@ -87,12 +66,7 @@ export const projectCodexCanonicalEventsToHistory = (
         timestamp,
         text: "",
         parts: [part],
-        ...(() => {
-          if (model) {
-            return { model };
-          }
-          return {};
-        })(),
+        ...(model ? { model } : undefined),
       });
       continue;
     }

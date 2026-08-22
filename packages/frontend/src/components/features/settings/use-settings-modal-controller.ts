@@ -285,12 +285,9 @@ export const useSettingsModalController = ({
     runtimeDefinitions,
     snapshotDraft,
     checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
-    ...(() => {
-      if (runtimeExecutableValidation.results.length > 0) {
-        return { runtimeExecutableResults: runtimeExecutableValidation.results };
-      }
-      return {};
-    })(),
+    ...(runtimeExecutableValidation.results.length > 0
+      ? { runtimeExecutableResults: runtimeExecutableValidation.results }
+      : undefined),
   });
   const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
   const invalidRuntimeKind = snapshotDraft

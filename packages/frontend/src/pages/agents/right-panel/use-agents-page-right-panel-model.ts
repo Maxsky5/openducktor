@@ -131,57 +131,43 @@ export function buildAgentsPageDiffModel({
     };
   }
 
+  const openInTargetPath = openInTarget.path;
+
   return {
     ...diffData,
     contextMode: gitPanelContextMode,
     branch: resolvedGitPanelBranch,
     openInTargetPath: openInTarget.path,
     openInDisabledReason: openInTarget.disabledReason,
-    ...(() => {
-      const openInTargetPath = openInTarget.path;
-      if (!openInTargetPath) {
-        return {};
-      }
-      return {
-        openDirectoryInTool: (toolId: SystemOpenInToolId) =>
-          openDirectoryInTool(openInTargetPath, toolId),
-      };
-    })(),
-    ...(() => {
-      if (targetBranchValidationError) {
-        return {
+    ...(openInTargetPath
+      ? {
+          openDirectoryInTool: (toolId: SystemOpenInToolId) =>
+            openDirectoryInTool(openInTargetPath, toolId),
+        }
+      : undefined),
+    ...(targetBranchValidationError
+      ? {
           targetBranch: targetBranchState.displayTargetBranch,
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
     pullRequest: selectedTask?.pullRequest ?? null,
     ...targetBranchUpdateModel,
-    ...(() => {
-      if (selectedTask && detectingPullRequestTaskId === selectedTask.id) {
-        return { isDetectingPullRequest: true };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (pullRequestDetectionTask) {
-        return {
+    ...(selectedTask && detectingPullRequestTaskId === selectedTask.id
+      ? { isDetectingPullRequest: true }
+      : undefined),
+    ...(pullRequestDetectionTask
+      ? {
           onDetectPullRequest: () => onDetectPullRequest(pullRequestDetectionTask.id),
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
     ...gitActions,
-    ...(() => {
-      if (targetBranchValidationError) {
-        return {
+    ...(targetBranchValidationError
+      ? {
           isGitActionsLocked: true,
           gitActionsLockReason: targetBranchValidationError,
           showLockReasonBanner: true,
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
   };
 }
 
@@ -307,12 +293,7 @@ export function useAgentsPageRightPanelModel({
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: diffData.refresh,
     isDiffDataLoading: diffData.isLoading,
-    ...(() => {
-      if (onResolveGitConflict) {
-        return { onResolveGitConflict };
-      }
-      return {};
-    })(),
+    ...(onResolveGitConflict ? { onResolveGitConflict } : undefined),
   });
   const gitConflictQuickActionContext = useMemo<AgentStudioGitConflictQuickActionContext | null>(
     () =>
@@ -354,12 +335,7 @@ export function useAgentsPageRightPanelModel({
         selectedTask: selectedView.selectedTask,
         detectingPullRequestTaskId,
         onDetectPullRequest,
-        ...(() => {
-          if (setTaskTargetBranch) {
-            return { setTaskTargetBranch };
-          }
-          return {};
-        })(),
+        ...(setTaskTargetBranch ? { setTaskTargetBranch } : undefined),
       }),
     [
       buildToolsSnapshot,

@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
@@ -111,7 +111,7 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredH
   let parsed: JsonValue;
   try {
     // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
-    parsed = JSON.parse(payload) as JsonValue;
+    parsed = jsonValueSchema.parse(JSON.parse(payload));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -232,12 +232,7 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   if (!workspaceId) {
     return {
       hostUrl,
-      ...(() => {
-        if (resolvedHostToken) {
-          return { hostToken: resolvedHostToken };
-        }
-        return {};
-      })(),
+      ...(resolvedHostToken ? { hostToken: resolvedHostToken } : undefined),
       ...workspaceIdInputMode,
     };
   }
@@ -245,12 +240,7 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   return {
     workspaceId,
     hostUrl,
-    ...(() => {
-      if (resolvedHostToken) {
-        return { hostToken: resolvedHostToken };
-      }
-      return {};
-    })(),
+    ...(resolvedHostToken ? { hostToken: resolvedHostToken } : undefined),
     ...workspaceIdInputMode,
   };
 };

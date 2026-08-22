@@ -105,12 +105,7 @@ export const createSubagentMessage = ({
     role: "system",
     content: formatSubagentContent(meta),
     timestamp,
-    ...(() => {
-      if (timestampIsApproximate) {
-        return { timestampIsApproximate: true };
-      }
-      return {};
-    })(),
+    ...(timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
     meta,
   };
 };
@@ -256,67 +251,17 @@ const mergeSubagentMeta = (
     kind: "subagent",
     partId: incomingMeta.partId,
     correlationKey: incomingMeta.correlationKey,
-    ...(() => {
-      if (sourceMessageId) {
-        return { sourceMessageId };
-      }
-      return {};
-    })(),
+    ...(sourceMessageId ? { sourceMessageId } : undefined),
     status,
-    ...(() => {
-      if (hasRuntimeType(agent, "string")) {
-        return { agent };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(prompt, "string")) {
-        return { prompt };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(description, "string")) {
-        return { description };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(error, "string")) {
-        return { error };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(externalSessionId, "string")) {
-        return { externalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (executionMode) {
-        return { executionMode };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(startedAtMs, "number")) {
-        return { startedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(endedAtMs, "number")) {
-        return { endedAtMs };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(agent, "string") ? { agent } : undefined),
+    ...(hasRuntimeType(prompt, "string") ? { prompt } : undefined),
+    ...(hasRuntimeType(description, "string") ? { description } : undefined),
+    ...(hasRuntimeType(error, "string") ? { error } : undefined),
+    ...(hasRuntimeType(externalSessionId, "string") ? { externalSessionId } : undefined),
+    ...(executionMode ? { executionMode } : undefined),
+    ...(metadata ? { metadata } : undefined),
+    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
+    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
   };
 };
 
@@ -372,12 +317,7 @@ export const mergeSubagentMessages = (
     createSubagentMessage({
       id: loadedMessage.id,
       timestamp: loadedMessage.timestamp,
-      ...(() => {
-        if (loadedMessage.timestampIsApproximate) {
-          return { timestampIsApproximate: true };
-        }
-        return {};
-      })(),
+      ...(loadedMessage.timestampIsApproximate ? { timestampIsApproximate: true } : undefined),
       meta: nextMeta,
     }),
     loadedMessage,

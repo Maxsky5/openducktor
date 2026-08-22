@@ -329,12 +329,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
     return {
       externalSessionId: session.id,
       sessionAssociation: { kind: "unbound" },
-      ...(() => {
-        if (parentExternalSessionId) {
-          return { parentExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
       title: requireSessionTitle(session.title, session.id),
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),

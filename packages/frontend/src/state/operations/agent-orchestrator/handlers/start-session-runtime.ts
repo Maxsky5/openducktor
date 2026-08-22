@@ -49,12 +49,7 @@ export const resolveFreshStartRuntimeContext = async ({
   });
   const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
     workspaceId: ctx.workspaceId,
-    ...(() => {
-      if (targetWorkingDirectory !== undefined) {
-        return { targetWorkingDirectory };
-      }
-      return {};
-    })(),
+    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : undefined),
     runtimeKind: requestedRuntimeKind,
   });
   if (ctx.isStaleRepoOperation()) {

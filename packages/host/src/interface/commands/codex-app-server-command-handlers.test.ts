@@ -235,7 +235,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         method: "thread/start",
         params: { cwd: "/repo" },
       }),
-    ).resolves.toBe(committedResult);
+    ).resolves.toEqual(committedResult);
     expect(reportedFailures).toEqual([
       expect.objectContaining({
         _tag: "HostOperationError",

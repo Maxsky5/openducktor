@@ -803,6 +803,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "HOST_EVENT_CHANNELS",
   "hostEventEnvelopeSchema",
   "isHostEventChannel",
+  "isJsonObject",
   "parseHostEventChannel",
   "parseHostEventEnvelope",
   "hostInvokeFailureSchema",

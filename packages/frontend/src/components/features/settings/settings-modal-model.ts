@@ -60,12 +60,7 @@ export const ensureDraftAgentDefault = (
     | undefined,
 ): RepoAgentDefaultInput => {
   return {
-    ...(() => {
-      if (value?.runtimeKind) {
-        return { runtimeKind: value.runtimeKind };
-      }
-      return {};
-    })(),
+    ...(value?.runtimeKind ? { runtimeKind: value.runtimeKind } : undefined),
     providerId: value?.providerId ?? "",
     modelId: value?.modelId ?? "",
     variant: value?.variant ?? "",

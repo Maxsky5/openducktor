@@ -86,12 +86,7 @@ export function useRuntimeTranscriptSessionHistory({
       externalSessionId: targetExternalSessionId,
       runtimeKind: targetRuntimeKind,
       workingDirectory: targetWorkingDirectory,
-      ...(() => {
-        if (targetSessionScope) {
-          return { sessionScope: targetSessionScope };
-        }
-        return {};
-      })(),
+      ...(targetSessionScope ? { sessionScope: targetSessionScope } : undefined),
     };
   }, [targetExternalSessionId, targetRuntimeKind, targetSessionScope, targetWorkingDirectory]);
   let emptyReason: AgentSessionTranscriptEmptyReason | null = null;

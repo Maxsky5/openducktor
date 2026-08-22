@@ -111,12 +111,7 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
       workingDirectory: responseSession.workingDirectory,
       requestId: request.requestId,
       outcome,
-      ...(() => {
-        if (message) {
-          return { message };
-        }
-        return {};
-      })(),
+      ...(message ? { message } : undefined),
     });
   };
 

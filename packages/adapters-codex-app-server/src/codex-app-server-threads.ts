@@ -39,12 +39,7 @@ export const toSessionSummary = (input: {
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
   workingDirectory: input.workingDirectory,
-  ...(() => {
-    if (input.title) {
-      return { title: input.title };
-    }
-    return {};
-  })(),
+  ...(input.title ? { title: input.title } : undefined),
   sessionAssociation: input.sessionAssociation,
   startedAt: input.startedAt,
   status: input.status,

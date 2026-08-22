@@ -111,12 +111,9 @@ export class CodexModels {
       },
     );
     this.modelListByRuntimeId.set(runtimeId, {
-      ...(() => {
-        if (cached?.value && hasRuntimeType(cached.fetchedAtMs, "number")) {
-          return { value: cached.value, fetchedAtMs: cached.fetchedAtMs };
-        }
-        return {};
-      })(),
+      ...(cached?.value && hasRuntimeType(cached.fetchedAtMs, "number")
+        ? { value: cached.value, fetchedAtMs: cached.fetchedAtMs }
+        : undefined),
       pending,
     });
     return pending;

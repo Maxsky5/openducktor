@@ -52,31 +52,11 @@ export const projectClaudeCompletedToolResult = ({
       tool,
       ...(todoPresentation ?? {
         text: resultText,
-        ...(() => {
-          if (input) {
-            return { input };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (preview) {
-            return { preview };
-          }
-          return {};
-        })(),
+        ...(input ? { input } : undefined),
+        ...(preview ? { preview } : undefined),
       }),
-      ...(() => {
-        if (metadata) {
-          return { metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(startedAtMs, "number")) {
-          return { startedAtMs };
-        }
-        return {};
-      })(),
+      ...(metadata ? { metadata } : undefined),
+      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
     }),
   } satisfies {
     part: CompletedToolPart;

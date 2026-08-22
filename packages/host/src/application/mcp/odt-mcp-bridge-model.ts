@@ -161,12 +161,7 @@ export const mapPublicTask = (task: TaskCard): PublicTask => ({
   issueType: task.issueType,
   aiReviewEnabled: task.aiReviewEnabled,
   labels: task.labels,
-  ...(() => {
-    if (task.targetBranch) {
-      return { targetBranch: task.targetBranch };
-    }
-    return {};
-  })(),
+  ...(task.targetBranch ? { targetBranch: task.targetBranch } : undefined),
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
 });
@@ -205,12 +200,7 @@ export const persistedDocument = (
 export const latestDocument = (document: TaskMetadataDocument) => ({
   markdown: document.markdown,
   updatedAt: document.updatedAt ?? null,
-  ...(() => {
-    if (document.error) {
-      return { error: document.error };
-    }
-    return {};
-  })(),
+  ...(document.error ? { error: document.error } : undefined),
 });
 
 export const latestQaReport = (qaReport: TaskMetadataPayload["qaReport"]) =>
@@ -219,12 +209,7 @@ export const latestQaReport = (qaReport: TaskMetadataPayload["qaReport"]) =>
         markdown: qaReport.markdown,
         updatedAt: qaReport.updatedAt ?? null,
         verdict: qaReport.verdict,
-        ...(() => {
-          if (qaReport.error) {
-            return { error: qaReport.error };
-          }
-          return {};
-        })(),
+        ...(qaReport.error ? { error: qaReport.error } : undefined),
       }
     : undefined;
 

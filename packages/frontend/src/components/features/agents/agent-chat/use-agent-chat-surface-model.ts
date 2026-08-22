@@ -125,12 +125,7 @@ export function useAgentChatSurfaceModel({
     () => ({
       chatSettings,
       thread: threadModel,
-      ...(() => {
-        if (composerModel) {
-          return { composer: composerModel };
-        }
-        return {};
-      })(),
+      ...(composerModel ? { composer: composerModel } : undefined),
     }),
     [chatSettings, composerModel, threadModel],
   );

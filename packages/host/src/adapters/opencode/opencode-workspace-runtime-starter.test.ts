@@ -72,12 +72,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
   const effectiveToolDiscovery =
     toolDiscovery ??
     createToolDiscoveryAdapter({
-      ...(() => {
-        if (processEnv === undefined) {
-          return {};
-        }
-        return { env: processEnv };
-      })(),
+      ...(processEnv === undefined ? undefined : { env: processEnv }),
       systemCommands: systemCommands ?? createSystemCommands(),
     });
   return createEffectOpenCodeWorkspaceRuntimeStarter({
@@ -109,12 +104,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
           discard: () => Effect.void,
         } satisfies PreparedRuntimeLiveSessionAdapter);
       }),
-    ...(() => {
-      if (processEnv === undefined) {
-        return {};
-      }
-      return { processEnv };
-    })(),
+    ...(processEnv === undefined ? undefined : { processEnv }),
     ...starterInput,
   });
 };

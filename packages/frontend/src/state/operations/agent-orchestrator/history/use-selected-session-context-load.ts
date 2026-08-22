@@ -45,12 +45,7 @@ export const useSelectedSessionContextLoad = ({
     }
     return {
       ...stableIdentity,
-      ...(() => {
-        if (stableSessionScope) {
-          return { sessionScope: stableSessionScope };
-        }
-        return {};
-      })(),
+      ...(stableSessionScope ? { sessionScope: stableSessionScope } : undefined),
     };
   }, [stableIdentity, stableSessionScope]);
 

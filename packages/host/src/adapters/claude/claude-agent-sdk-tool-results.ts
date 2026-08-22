@@ -107,22 +107,12 @@ export const handleClaudeUserToolResultMessage = ({
     const { part, todos } = projectClaudeCompletedToolResult({
       callId: result.toolUseId,
       endedAtMs,
-      ...(() => {
-        if (input) {
-          return { input };
-        }
-        return {};
-      })(),
+      ...(input ? { input } : undefined),
       isError: result.isError,
       messageId,
       raw: result.raw,
       resultText: result.text,
-      ...(() => {
-        if (hasRuntimeType(startedAtMs, "number")) {
-          return { startedAtMs };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
       state: session.todosById,
       tool,
     });
@@ -149,12 +139,7 @@ export const handleClaudeUserToolResultMessage = ({
         session,
         timestamp,
         toolUseId: result.toolUseId,
-        ...(() => {
-          if (input) {
-            return { input };
-          }
-          return {};
-        })(),
+        ...(input ? { input } : undefined),
       });
     } else if (tool === "TaskStop") {
       emitClaudeTaskStopSubagentPart({

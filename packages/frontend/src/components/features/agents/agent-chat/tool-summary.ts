@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
@@ -85,6 +85,9 @@ const summarizeSearchToolInput = (
   return null;
 };
 
+const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const parseStructuredOutputSummary = (output: string): string | null => {
   const trimmed = output.trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
@@ -93,16 +96,11 @@ const parseStructuredOutputSummary = (output: string): string | null => {
 
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = JSON.parse(trimmed) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
-    if (Array.isArray(parsed)) {
+    const parsed = jsonValueSchema.parse(JSON.parse(trimmed));
+    if (!isJsonRecord(parsed)) {
       return null;
     }
-    if (!parsed || !hasRuntimeType(parsed, "object")) {
-      return null;
-    }
-
-    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-    const record = parsed as Record<string, JsonValue>;
+    const record = parsed;
     if (hasRuntimeType(record.message, "string") && record.message.trim().length > 0) {
       return compactText(record.message, 160);
     }
@@ -121,11 +119,10 @@ const countTodosFromUnknown = (value: JsonValue | undefined): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (!isJsonRecord(value)) {
     return null;
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = value as Record<string, JsonValue>;
+  const record = value;
   if (Array.isArray(record.todos)) {
     return record.todos.length;
   }
@@ -148,7 +145,7 @@ const countTodosFromOutput = (output: string | undefined): number | null => {
   }
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = JSON.parse(output) as JsonValue; // SAFETY: JSON.parse returns any; tool output is JSON
+    const parsed = jsonValueSchema.parse(JSON.parse(output));
     return countTodosFromUnknown(parsed);
   } catch {
     return null;

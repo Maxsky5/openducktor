@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -743,18 +742,21 @@ describe("use-agent-orchestrator-operations start and send", () => {
         agentDefaults: {},
       });
 
-      const staleError = createFocusedFixture<{ current: unknown }>({ current: null });
+      let staleError: Error | null = null;
       try {
         await startPromise;
-      } catch (error) {
-        staleError.current = error;
+      } catch (cause) {
+        if (!(cause instanceof Error)) {
+          throw new Error("Expected stale start to reject with Error.", { cause });
+        }
+        staleError = cause;
       }
 
-      if (!(staleError.current instanceof Error)) {
-        throw new Error("Expected stale start to reject with Error");
+      if (!staleError) {
+        throw new Error("Expected stale start to reject with Error.");
       }
 
-      expect(staleError.current.message).toContain("Workspace changed while starting session.");
+      expect(staleError.message).toContain("Workspace changed while starting session.");
       expect(startCalls).toBe(0);
     } finally {
       await harness.unmount();

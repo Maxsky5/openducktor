@@ -59,24 +59,13 @@ const resolvePartModelSelection = (
     return {
       providerId: existingMessage.meta.providerId,
       modelId: existingMessage.meta.modelId,
-      ...(() => {
-        if (existingMessage.meta.variant) {
-          return { variant: existingMessage.meta.variant };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (existingMessage.meta.profileId) {
-          return { profileId: existingMessage.meta.profileId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (current.selectedModel?.runtimeKind) {
-          return { runtimeKind: current.selectedModel.runtimeKind };
-        }
-        return {};
-      })(),
+      ...(existingMessage.meta.variant ? { variant: existingMessage.meta.variant } : undefined),
+      ...(existingMessage.meta.profileId
+        ? { profileId: existingMessage.meta.profileId }
+        : undefined),
+      ...(current.selectedModel?.runtimeKind
+        ? { runtimeKind: current.selectedModel.runtimeKind }
+        : undefined),
     };
   }
 
@@ -123,18 +112,8 @@ const upsertLiveAssistantMessage = ({
     timestamp: existingMessage?.timestamp ?? timestamp,
     meta: {
       ...assistantMeta,
-      ...(() => {
-        if (partId) {
-          return { partId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (sourceMessageId) {
-          return { sourceMessageId };
-        }
-        return {};
-      })(),
+      ...(partId ? { partId } : undefined),
+      ...(sourceMessageId ? { sourceMessageId } : undefined),
     },
   };
   return {
@@ -202,18 +181,8 @@ const handleTextPart = (
       },
       model: resolvePartModelSelection(context, prepared, part.messageId),
       messageId: usesPartIdentity ? toTextMessageId(part.messageId, part.partId) : part.messageId,
-      ...(() => {
-        if (usesPartIdentity) {
-          return { partId: part.partId, sourceMessageId: part.messageId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (usesPartIdentity && sourceMessage) {
-          return { replacedMessageId: part.messageId };
-        }
-        return {};
-      })(),
+      ...(usesPartIdentity ? { partId: part.partId, sourceMessageId: part.messageId } : undefined),
+      ...(usesPartIdentity && sourceMessage ? { replacedMessageId: part.messageId } : undefined),
       text: part.text,
       timestamp: event.timestamp,
     });
@@ -272,60 +241,21 @@ const handleSubagentPart = (
       correlationKey: part.correlationKey,
       sourceMessageId: part.messageId,
       status: part.status,
-      ...(() => {
-        if (hasRuntimeType(part.agent, "string")) {
-          return { agent: part.agent };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.prompt, "string")) {
-          return { prompt: part.prompt };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.description, "string")) {
-          return { description: part.description };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.error, "string")) {
-          return { error: part.error };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.externalSessionId, "string")) {
-          return { externalSessionId: part.externalSessionId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (part.executionMode) {
-          return { executionMode: part.executionMode };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (part.metadata) {
-          return { metadata: part.metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.startedAtMs, "number")) {
-          return { startedAtMs: part.startedAtMs };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(part.endedAtMs, "number")) {
-          return { endedAtMs: part.endedAtMs };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(part.agent, "string") ? { agent: part.agent } : undefined),
+      ...(hasRuntimeType(part.prompt, "string") ? { prompt: part.prompt } : undefined),
+      ...(hasRuntimeType(part.description, "string")
+        ? { description: part.description }
+        : undefined),
+      ...(hasRuntimeType(part.error, "string") ? { error: part.error } : undefined),
+      ...(hasRuntimeType(part.externalSessionId, "string")
+        ? { externalSessionId: part.externalSessionId }
+        : undefined),
+      ...(part.executionMode ? { executionMode: part.executionMode } : undefined),
+      ...(part.metadata ? { metadata: part.metadata } : undefined),
+      ...(hasRuntimeType(part.startedAtMs, "number")
+        ? { startedAtMs: part.startedAtMs }
+        : undefined),
+      ...(hasRuntimeType(part.endedAtMs, "number") ? { endedAtMs: part.endedAtMs } : undefined),
     };
     return {
       ...prepared,

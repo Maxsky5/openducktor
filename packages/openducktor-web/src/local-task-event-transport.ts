@@ -3,6 +3,7 @@ import {
   taskEventCursorSchema,
   taskEventStreamFrameSchema,
   hasRuntimeType,
+  jsonValueSchema,
 } from "@openducktor/contracts";
 import type {
   TaskStreamFrame,
@@ -103,8 +104,7 @@ export const subscribeLocalTaskEventStreamEffect = (
     }
     const created = yield* Effect.tryPromise({
       try: async () => {
-        // SAFETY: Response.json() parses a JSON-compatible response body.
-        return parseTaskEventSubscription((await createResponse.json()) as JsonValue);
+        return parseTaskEventSubscription(jsonValueSchema.parse(await createResponse.json()));
       },
       catch: (cause) =>
         new WebDependencyError({
@@ -212,8 +212,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       if (closed) return;
       let raw: JsonValue;
       try {
-        // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
-        raw = JSON.parse(event.data) as JsonValue;
+        raw = jsonValueSchema.parse(JSON.parse(event.data));
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",

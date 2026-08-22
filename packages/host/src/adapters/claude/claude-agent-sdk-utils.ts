@@ -223,12 +223,7 @@ export const toolPartPresentation = (
   const toolType = toolPartType(toolName);
   return {
     toolType,
-    ...(() => {
-      if (toolType === "todo") {
-        return { displayLabel: "todo" };
-      }
-      return {};
-    })(),
+    ...(toolType === "todo" ? { displayLabel: "todo" } : undefined),
   };
 };
 

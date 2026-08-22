@@ -342,55 +342,27 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         requestId,
         requestType: permissionRequestTypeForTool(toolName),
         title: options.title ?? options.displayName ?? `Approve ${toolName}`,
-        ...(() => {
-          if (options.description) {
-            return { summary: options.description };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (options.decisionReason) {
-            return { details: options.decisionReason };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (blockedPath) {
-            return { affectedPaths: [blockedPath] };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (command) {
-            return {
+        ...(options.description ? { summary: options.description } : undefined),
+        ...(options.decisionReason ? { details: options.decisionReason } : undefined),
+        ...(blockedPath ? { affectedPaths: [blockedPath] } : undefined),
+        ...(command
+          ? {
               command: {
                 command,
                 workingDirectory: session.input.workingDirectory,
               },
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
         tool: {
           name: toolName,
-          ...(() => {
-            if (options.displayName) {
-              return { title: options.displayName };
-            }
-            return {};
-          })(),
+          ...(options.displayName ? { title: options.displayName } : undefined),
           input: effectiveToolInput,
         },
         mutation,
         supportedReplyOutcomes: ["approve_once", "reject"],
         metadata: {
           runtime: "claude",
-          ...(() => {
-            if (options.agentID) {
-              return { agentId: options.agentID };
-            }
-            return {};
-          })(),
+          ...(options.agentID ? { agentId: options.agentID } : undefined),
         },
         ...claudeSubagentPendingInputRoute(session, options.agentID),
       };
@@ -451,12 +423,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       session,
       toolName,
       toolInput: parseClaudeJsonRecord(toolInput, "claudeToolInput"),
-      ...(() => {
-        if (options.blockedPath) {
-          return { blockedPath: options.blockedPath };
-        }
-        return {};
-      })(),
+      ...(options.blockedPath ? { blockedPath: options.blockedPath } : undefined),
       canonicalizePath,
     });
     return authorization instanceof Promise

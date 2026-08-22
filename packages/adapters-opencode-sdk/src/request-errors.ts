@@ -209,30 +209,10 @@ const extractRequestFailure = (
       message: cause.message,
       failureKind: cause.failureKind,
       hasPrefixedMessage: true,
-      ...(() => {
-        if (cause.status !== undefined) {
-          return { status: cause.status };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (cause.statusText !== undefined) {
-          return { statusText: cause.statusText };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (cause.code !== undefined) {
-          return { code: cause.code };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (cause.cause !== undefined) {
-          return { cause: cause.cause };
-        }
-        return {};
-      })(),
+      ...(cause.status !== undefined ? { status: cause.status } : undefined),
+      ...(cause.statusText !== undefined ? { statusText: cause.statusText } : undefined),
+      ...(cause.code !== undefined ? { code: cause.code } : undefined),
+      ...(cause.cause !== undefined ? { cause: cause.cause } : undefined),
     };
   }
 
@@ -261,30 +241,10 @@ const extractRequestFailure = (
           code,
         }),
       hasPrefixedMessage: true,
-      ...(() => {
-        if (resolvedStatus !== undefined) {
-          return { status: resolvedStatus };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (resolvedStatusText !== undefined) {
-          return { statusText: resolvedStatusText };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (code !== undefined) {
-          return { code };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (cause.cause !== undefined) {
-          return { cause: cause.cause };
-        }
-        return {};
-      })(),
+      ...(resolvedStatus !== undefined ? { status: resolvedStatus } : undefined),
+      ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : undefined),
+      ...(code !== undefined ? { code } : undefined),
+      ...(cause.cause !== undefined ? { cause: cause.cause } : undefined),
     };
   }
 
@@ -300,30 +260,10 @@ const extractRequestFailure = (
       code,
     }),
     hasPrefixedMessage: false,
-    ...(() => {
-      if (resolvedStatus !== undefined) {
-        return { status: resolvedStatus };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resolvedStatusText !== undefined) {
-        return { statusText: resolvedStatusText };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (code !== undefined) {
-        return { code };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (cause instanceof Error) {
-        return { cause };
-      }
-      return {};
-    })(),
+    ...(resolvedStatus !== undefined ? { status: resolvedStatus } : undefined),
+    ...(resolvedStatusText !== undefined ? { statusText: resolvedStatusText } : undefined),
+    ...(code !== undefined ? { code } : undefined),
+    ...(cause instanceof Error ? { cause } : undefined),
   };
 };
 
@@ -339,45 +279,15 @@ export const toOpenCodeRequestError = (
       ? failure.message
       : buildOpenCodeRequestErrorMessage(action, {
           message: failure.message,
-          ...(() => {
-            if (failure.status !== undefined) {
-              return { status: failure.status };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (failure.statusText !== undefined) {
-              return { statusText: failure.statusText };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (failure.code !== undefined) {
-              return { code: failure.code };
-            }
-            return {};
-          })(),
+          ...(failure.status !== undefined ? { status: failure.status } : undefined),
+          ...(failure.statusText !== undefined ? { statusText: failure.statusText } : undefined),
+          ...(failure.code !== undefined ? { code: failure.code } : undefined),
         }),
     {
       failureKind: failure.failureKind,
-      ...(() => {
-        if (failure.status !== undefined) {
-          return { status: failure.status };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (failure.statusText !== undefined) {
-          return { statusText: failure.statusText };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (failure.code !== undefined) {
-          return { code: failure.code };
-        }
-        return {};
-      })(),
+      ...(failure.status !== undefined ? { status: failure.status } : undefined),
+      ...(failure.statusText !== undefined ? { statusText: failure.statusText } : undefined),
+      ...(failure.code !== undefined ? { code: failure.code } : undefined),
     },
     failure.cause !== undefined ? { cause: failure.cause } : undefined,
   );

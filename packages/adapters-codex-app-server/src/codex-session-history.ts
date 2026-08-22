@@ -120,29 +120,14 @@ const projectCodexThreadReadToHistory = ({
           {
             item,
             index,
-            ...(() => {
-              if (timestamp) {
-                return { timestamp };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (isFinalAgentMessage) {
-                return { isFinalAgentMessage };
-              }
-              return {};
-            })(),
+            ...(timestamp ? { timestamp } : undefined),
+            ...(isFinalAgentMessage ? { isFinalAgentMessage } : undefined),
           },
           {
             source: "thread_read",
             runtimeId,
             threadId: itemOwnerThreadId,
-            ...(() => {
-              if (timestamp) {
-                return { timestamp };
-              }
-              return {};
-            })(),
+            ...(timestamp ? { timestamp } : undefined),
           },
         );
         let history: AgentSessionHistoryMessage[];

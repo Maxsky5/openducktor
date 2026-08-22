@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { gitQueryKeys } from "../../queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
@@ -815,19 +814,22 @@ describe("use-workspace-branch-operations", () => {
         throw new Error("refreshBranches promise was not captured");
       }
 
-      const caughtError = createFocusedFixture<{ current: unknown }>({ current: null });
+      const caughtErrors = new Array<Error>();
       const pendingRefresh = refreshPromise;
       await harness.run(async () => {
         currentBranchDeferred.reject(refreshError);
         try {
           await pendingRefresh;
-        } catch (error) {
-          caughtError.current = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected branch refresh to reject with Error.", { cause });
+          }
+          caughtErrors.push(cause);
         }
         await flush();
       });
 
-      expect(caughtError.current).toBe(refreshError);
+      expect(caughtErrors).toEqual([refreshError]);
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       await harness.unmount();
@@ -976,12 +978,15 @@ describe("use-workspace-branch-operations", () => {
         await value.refreshBranches();
       });
 
-      const caughtError = createFocusedFixture<{ current: unknown }>({ current: null });
+      const caughtErrors = new Array<Error>();
       await harness.run(async (value) => {
         try {
           await value.switchBranch("feature");
-        } catch (error) {
-          caughtError.current = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected branch list refresh to reject with Error.", { cause });
+          }
+          caughtErrors.push(cause);
         }
       });
 
@@ -991,7 +996,7 @@ describe("use-workspace-branch-operations", () => {
         revision: "def456",
       });
       expect(harness.getLatest().branches).toEqual(initialBranches);
-      expect(caughtError.current).toBe(branchListError);
+      expect(caughtErrors).toEqual([branchListError]);
       expect(toastError).toHaveBeenCalledWith(
         "Branch switched, but failed to refresh branch list",
         {

@@ -102,21 +102,19 @@ const createDependencies = ({
             },
           });
         }
-        // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
         return succeed(
-          (reviewThreadResponse?.(args) as JsonValue | undefined) ??
-            ({
-              data: {
-                repository: {
-                  pullRequest: {
-                    reviewThreads: {
-                      nodes: reviewThreadNodes as JsonValue[],
-                      pageInfo: { hasNextPage: false, endCursor: null },
-                    },
+          reviewThreadResponse?.(args) ?? {
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: reviewThreadNodes,
+                    pageInfo: { hasNextPage: false, endCursor: null },
                   },
                 },
               },
-            } as JsonValue),
+            },
+          },
         );
       }
       return Effect.fail(
@@ -142,36 +140,35 @@ const createDependencies = ({
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
 
-const defaultPullRequestViewResponse = () =>
-  ({
-    number: 42,
-    title: "Rework panel",
-    url: "https://github.com/openai/openducktor/pull/42",
-    state: "OPEN",
-    isDraft: false,
-    comments: [
-      {
-        id: "comment-1",
-        author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-        body: "Please check spacing.",
-        url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
-        createdAt: "2026-07-08T10:00:00Z",
-        updatedAt: "2026-07-08T10:01:00Z",
-      },
-    ],
-    reviews: [
-      {
-        id: "review-1",
-        author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
-        body: "Changes requested.",
-        state: "CHANGES_REQUESTED",
-        url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
-        createdAt: "2026-07-08T10:02:00Z",
-        submittedAt: "2026-07-08T10:02:00Z",
-        updatedAt: "2026-07-08T10:02:00Z",
-      },
-    ],
-  }) satisfies unknown;
+const defaultPullRequestViewResponse = () => ({
+  number: 42,
+  title: "Rework panel",
+  url: "https://github.com/openai/openducktor/pull/42",
+  state: "OPEN",
+  isDraft: false,
+  comments: [
+    {
+      id: "comment-1",
+      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+      body: "Please check spacing.",
+      url: "https://github.com/openai/openducktor/pull/42#issuecomment-1",
+      createdAt: "2026-07-08T10:00:00Z",
+      updatedAt: "2026-07-08T10:01:00Z",
+    },
+  ],
+  reviews: [
+    {
+      id: "review-1",
+      author: { login: "reviewer", avatarUrl: reviewerAvatarUrl },
+      body: "Changes requested.",
+      state: "CHANGES_REQUESTED",
+      url: "https://github.com/openai/openducktor/pull/42#pullrequestreview-1",
+      createdAt: "2026-07-08T10:02:00Z",
+      submittedAt: "2026-07-08T10:02:00Z",
+      updatedAt: "2026-07-08T10:02:00Z",
+    },
+  ],
+});
 
 const defaultReviewThreadNodes = [
   {
@@ -1000,7 +997,7 @@ describe("createGithubPullRequestReviewReader", () => {
               },
             },
           },
-        } satisfies unknown;
+        };
       }
       if (command.includes("threadsCursor=threads-page-2")) {
         return {
@@ -1034,7 +1031,7 @@ describe("createGithubPullRequestReviewReader", () => {
               },
             },
           },
-        } satisfies unknown;
+        };
       }
       return {
         data: {
@@ -1067,7 +1064,7 @@ describe("createGithubPullRequestReviewReader", () => {
             },
           },
         },
-      } satisfies unknown;
+      };
     };
 
     const context = await Effect.runPromise(

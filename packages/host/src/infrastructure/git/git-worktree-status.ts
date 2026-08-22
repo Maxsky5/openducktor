@@ -65,12 +65,7 @@ export const buildWorktreeStatusData = (
       fileDiffs,
       targetAheadBehind,
       upstreamAheadBehind,
-      ...(() => {
-        if (gitConflict) {
-          return { gitConflict };
-        }
-        return {};
-      })(),
+      ...(gitConflict ? { gitConflict } : undefined),
     };
   });
 export const buildWorktreeStatusSummaryData = (
@@ -113,11 +108,6 @@ export const buildWorktreeStatusSummaryData = (
       fileStatusCounts: fileStatusCounts(fileStatuses),
       targetAheadBehind,
       upstreamAheadBehind,
-      ...(() => {
-        if (gitConflict) {
-          return { gitConflict };
-        }
-        return {};
-      })(),
+      ...(gitConflict ? { gitConflict } : undefined),
     };
   });

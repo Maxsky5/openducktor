@@ -608,26 +608,20 @@ const buildPlaceholderValues = ({
     "task.status": compact(task.status),
     "task.qaRequired": task.qaRequired ? "true" : "false",
     "task.description": compact(task.description),
-    ...(() => {
-      if (humanFeedback) {
-        return {
+    ...(humanFeedback
+      ? {
           humanFeedback,
-        };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (git || pullRequestTarget) {
-        return {
+        }
+      : undefined),
+    ...(git || pullRequestTarget
+      ? {
           "git.operationLabel": compact(git?.operationLabel),
           "git.currentBranch": compact(git?.currentBranch),
           "git.targetBranch": targetBranchPlaceholder,
           "git.conflictedFiles": compactList(git?.conflictedFiles),
           "git.conflictOutput": compact(git?.conflictOutput),
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
   } satisfies Record<string, string>;
 };
 
@@ -697,12 +691,7 @@ const resolveTemplate = ({
     purpose: definition.purpose,
     source,
     builtinVersion: definition.builtinVersion,
-    ...(() => {
-      if (override) {
-        return { overrideBaseVersion: override.baseVersion };
-      }
-      return {};
-    })(),
+    ...(override ? { overrideBaseVersion: override.baseVersion } : undefined),
     hasStaleOverride: Boolean(override && override.baseVersion !== definition.builtinVersion),
     content,
   };
@@ -728,24 +717,9 @@ const buildPromptFromTemplates = ({
   const placeholderValues = buildPlaceholderValues({
     role,
     task,
-    ...(() => {
-      if (extraPlaceholders) {
-        return { extraPlaceholders };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (pullRequestTarget) {
-        return { pullRequestTarget };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (git) {
-        return { git };
-      }
-      return {};
-    })(),
+    ...(extraPlaceholders ? { extraPlaceholders } : undefined),
+    ...(pullRequestTarget ? { pullRequestTarget } : undefined),
+    ...(git ? { git } : undefined),
   });
   const templates = templateIds.map((templateId) =>
     resolveTemplate({
@@ -801,18 +775,8 @@ export const buildAgentKickoffPromptBundle = (
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(() => {
-      if (input.extraPlaceholders) {
-        return { extraPlaceholders: input.extraPlaceholders };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (pullRequestTarget) {
-        return { pullRequestTarget };
-      }
-      return {};
-    })(),
+    ...(input.extraPlaceholders ? { extraPlaceholders: input.extraPlaceholders } : undefined),
+    ...(pullRequestTarget ? { pullRequestTarget } : undefined),
     overrides: input.overrides,
   });
 };
@@ -859,12 +823,7 @@ export const buildAgentMessagePromptBundle = (
     templateIds: [input.templateId],
     role: input.role,
     task: input.task,
-    ...(() => {
-      if (input.git) {
-        return { git: input.git };
-      }
-      return {};
-    })(),
+    ...(input.git ? { git: input.git } : undefined),
     overrides: input.overrides,
   });
 };

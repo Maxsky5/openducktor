@@ -98,12 +98,7 @@ const verifyBackendReadinessEffect = (
           headers: {
             [APP_TOKEN_HEADER]: appToken,
           },
-          ...(() => {
-            if (signal) {
-              return { signal };
-            }
-            return {};
-          })(),
+          ...(signal ? { signal } : undefined),
         }),
       catch: (cause) =>
         new WebDependencyError({

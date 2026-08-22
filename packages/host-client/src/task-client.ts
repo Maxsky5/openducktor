@@ -158,12 +158,7 @@ export class HostTaskClient {
       toCommandArgs({
         repoPath,
         input: createInput,
-        ...(() => {
-          if (assetIntent) {
-            return { descriptionAssets: assetIntent };
-          }
-          return {};
-        })(),
+        ...(assetIntent ? { descriptionAssets: assetIntent } : undefined),
       }),
     );
     return taskCardSchema.parse(payload);
@@ -188,12 +183,7 @@ export class HostTaskClient {
         repoPath,
         taskId,
         patch: updatePatch,
-        ...(() => {
-          if (assetIntent) {
-            return { descriptionAssets: assetIntent };
-          }
-          return {};
-        })(),
+        ...(assetIntent ? { descriptionAssets: assetIntent } : undefined),
       }),
     );
     this.invalidateTaskMetadata(repoPath, taskId);

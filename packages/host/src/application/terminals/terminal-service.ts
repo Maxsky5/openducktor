@@ -85,12 +85,7 @@ export const createTerminalService = ({
     const engine = createTerminalSessionEngine({
       now,
       ptyPort,
-      ...(() => {
-        if (scheduleTitleSettlement) {
-          return { scheduleTitleSettlement };
-        }
-        return {};
-      })(),
+      ...(scheduleTitleSettlement ? { scheduleTitleSettlement } : undefined),
     });
     const launch = createTerminalLaunchPolicy({
       filesystem,

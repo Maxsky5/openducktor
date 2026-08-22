@@ -524,12 +524,7 @@ export const startDefaultSession = async (
     sessionScope: workflowAgentSessionScope("task-1", role),
     runtimePolicy: { kind: "opencode" },
     systemPrompt: "system prompt",
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   });
 };
 

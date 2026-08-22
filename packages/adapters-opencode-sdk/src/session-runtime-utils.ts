@@ -21,17 +21,7 @@ export const toSessionInput = (input: SessionInputSource): SessionInput => {
     workingDirectory: input.workingDirectory,
     systemPrompt: input.systemPrompt ?? "",
     ...toAgentRuntimePolicyBinding(input),
-    ...(() => {
-      if (sessionScope) {
-        return { sessionScope };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.model) {
-        return { model: input.model };
-      }
-      return {};
-    })(),
+    ...(sessionScope ? { sessionScope } : undefined),
+    ...(input.model ? { model: input.model } : undefined),
   };
 };

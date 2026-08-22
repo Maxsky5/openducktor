@@ -29,18 +29,8 @@ const subagentEvents = (
       source: ctx.source,
       mapper: "subagent",
       threadId: ctx.threadId,
-      ...(() => {
-        if (ctx.turnId) {
-          return { turnId: ctx.turnId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (eventTimestamp) {
-          return { timestamp: eventTimestamp };
-        }
-        return {};
-      })(),
+      ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
+      ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
       raw: item,
       part,
     })),

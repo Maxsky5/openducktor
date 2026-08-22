@@ -29,18 +29,8 @@ export const buildVisibleUserMessage = (input: {
   const mergedDisplayParts = mergePreservedAttachmentDisplayParts(
     input.normalizedDisplayParts,
     readPreservedAttachmentParts({
-      ...(() => {
-        if (input.metadata) {
-          return { metadata: input.metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (input.matchedQueuedSend) {
-          return { matchedQueuedSend: input.matchedQueuedSend };
-        }
-        return {};
-      })(),
+      ...(input.metadata ? { metadata: input.metadata } : undefined),
+      ...(input.matchedQueuedSend ? { matchedQueuedSend: input.matchedQueuedSend } : undefined),
     }),
   );
   const displayParts = ensureVisibleUserTextDisplayParts(

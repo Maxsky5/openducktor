@@ -86,11 +86,6 @@ export const extractLatestSessionContextUsage = ({
   return {
     totalTokens: liveContextUsage.totalTokens,
     contextWindow,
-    ...(() => {
-      if (outputLimit === undefined) {
-        return {};
-      }
-      return { outputLimit };
-    })(),
+    ...(outputLimit === undefined ? undefined : { outputLimit }),
   };
 };

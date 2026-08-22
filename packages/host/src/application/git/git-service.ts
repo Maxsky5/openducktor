@@ -138,9 +138,9 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
               fileDiffs: statusData.fileDiffs,
               targetAheadBehind: statusData.targetAheadBehind,
               upstreamAheadBehind: statusData.upstreamAheadBehind,
-              gitConflict: statusData.gitConflict
-                ? { ...statusData.gitConflict, workingDir: workingDirectory }
-                : undefined,
+              ...(statusData.gitConflict
+                ? { gitConflict: { ...statusData.gitConflict, workingDir: workingDirectory } }
+                : undefined),
               snapshot,
             }),
           catch: (cause) =>
@@ -185,9 +185,9 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
               fileStatusCounts: summaryData.fileStatusCounts,
               targetAheadBehind: summaryData.targetAheadBehind,
               upstreamAheadBehind: summaryData.upstreamAheadBehind,
-              gitConflict: summaryData.gitConflict
-                ? { ...summaryData.gitConflict, workingDir: workingDirectory }
-                : undefined,
+              ...(summaryData.gitConflict
+                ? { gitConflict: { ...summaryData.gitConflict, workingDir: workingDirectory } }
+                : undefined),
               snapshot,
             }),
           catch: (cause) =>

@@ -85,18 +85,8 @@ const readRuntimeEnsureFailureEnvelope = (
 
   return {
     failureKind: value.failureKind,
-    ...(() => {
-      if (value.message !== undefined) {
-        return { message: value.message };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (value.error !== undefined) {
-        return { error: value.error };
-      }
-      return {};
-    })(),
+    ...(value.message !== undefined ? { message: value.message } : undefined),
+    ...(value.error !== undefined ? { error: value.error } : undefined),
   };
 };
 
@@ -115,12 +105,7 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
     return {
       message: cause.message,
       failureKind: cause.failureKind,
-      ...(() => {
-        if (cause.cause !== undefined) {
-          return { cause: cause.cause };
-        }
-        return {};
-      })(),
+      ...(cause.cause !== undefined ? { cause: cause.cause } : undefined),
     };
   }
 
@@ -141,12 +126,7 @@ const extractRuntimeEnsureFailure = (cause: unknown): NormalizedRuntimeEnsureFai
   return {
     message,
     failureKind: failureEnvelope.failureKind,
-    ...(() => {
-      if (cause !== undefined) {
-        return { cause };
-      }
-      return {};
-    })(),
+    ...(cause !== undefined ? { cause } : undefined),
   };
 };
 
@@ -283,12 +263,7 @@ const codexAppServerRequest = async (
     toCommandArgs({
       runtimeId,
       method,
-      ...(() => {
-        if (params !== undefined) {
-          return { params };
-        }
-        return {};
-      })(),
+      ...(params !== undefined ? { params } : undefined),
     }),
   );
 };
@@ -316,12 +291,7 @@ const taskSessionBootstrapPrepare = async (
     taskId,
     role,
     runtimeKind,
-    ...(() => {
-      if (targetWorkingDirectory) {
-        return { targetWorkingDirectory };
-      }
-      return {};
-    })(),
+    ...(targetWorkingDirectory ? { targetWorkingDirectory } : undefined),
   });
   return taskSessionBootstrapSchema.parse(payload);
 };

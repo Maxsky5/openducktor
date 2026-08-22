@@ -204,12 +204,7 @@ export function useKanbanSessionStartFlow({
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
             humanRequestChangesTask,
-            ...(() => {
-              if (setTaskTargetBranch) {
-                return { setTaskTargetBranch };
-              }
-              return {};
-            })(),
+            ...(setTaskTargetBranch ? { setTaskTargetBranch } : undefined),
             openSessionInAgentStudio,
           });
           return session;
@@ -374,19 +369,13 @@ export function useKanbanSessionStartFlow({
             taskId: request.taskId,
             role: request.role,
             launchActionId: request.launchActionId,
-            ...(() => {
-              if (request.initialStartMode) {
-                return { initialStartMode: request.initialStartMode };
-              }
-              return {};
-            })(),
+            ...(request.initialStartMode
+              ? { initialStartMode: request.initialStartMode }
+              : undefined),
             existingSessionOptions: request.existingSessionOptions,
-            ...(() => {
-              if (request.initialSourceSession !== undefined) {
-                return { initialSourceSession: request.initialSourceSession };
-              }
-              return {};
-            })(),
+            ...(request.initialSourceSession !== undefined
+              ? { initialSourceSession: request.initialSourceSession }
+              : undefined),
             postStartAction: request.postStartAction,
             message: request.message,
             beforeStartAction: request.beforeStartAction,

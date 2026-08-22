@@ -115,18 +115,8 @@ const readGlobalEventFailureScope = (
   const parentExternalSessionId = readEventParentExternalSessionId(properties);
   return {
     directory: event.directory,
-    ...(() => {
-      if (externalSessionId) {
-        return { externalSessionId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (parentExternalSessionId) {
-        return { parentExternalSessionId };
-      }
-      return {};
-    })(),
+    ...(externalSessionId ? { externalSessionId } : undefined),
+    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
   };
 };
 

@@ -262,18 +262,8 @@ const toParsedQuestionAsked = (properties: {
     header: question.header,
     question: question.question,
     options: question.options,
-    ...(() => {
-      if (question.multiple !== undefined) {
-        return { multiple: question.multiple };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (question.custom !== undefined) {
-        return { custom: question.custom };
-      }
-      return {};
-    })(),
+    ...(question.multiple !== undefined ? { multiple: question.multiple } : undefined),
+    ...(question.custom !== undefined ? { custom: question.custom } : undefined),
   })),
 });
 
@@ -303,18 +293,8 @@ export const parseSessionControlEvent = (event: Event): ParsedSessionControlEven
           requestId: parsed.properties.id,
           permission: parsed.properties.action,
           patterns: parsed.properties.resources,
-          ...(() => {
-            if (parsed.properties.save) {
-              return { save: parsed.properties.save };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (parsed.properties.metadata) {
-              return { metadata: parsed.properties.metadata };
-            }
-            return {};
-          })(),
+          ...(parsed.properties.save ? { save: parsed.properties.save } : undefined),
+          ...(parsed.properties.metadata ? { metadata: parsed.properties.metadata } : undefined),
         },
       };
     }

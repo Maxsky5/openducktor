@@ -100,12 +100,7 @@ export const toToolResult = (payload: JsonValue | undefined): ToolResult => {
         text: JSON.stringify(payload, null, 2),
       },
     ],
-    ...(() => {
-      if (isStructuredToolPayload(payload)) {
-        return { structuredContent: payload };
-      }
-      return {};
-    })(),
+    ...(isStructuredToolPayload(payload) ? { structuredContent: payload } : undefined),
   };
 };
 
@@ -142,18 +137,8 @@ export const toToolError = (cause: unknown): ToolResult => {
     error: {
       code,
       message,
-      ...(() => {
-        if (cause instanceof OdtToolError && cause.details) {
-          return { details: cause.details };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (issues) {
-          return { issues };
-        }
-        return {};
-      })(),
+      ...(cause instanceof OdtToolError && cause.details ? { details: cause.details } : undefined),
+      ...(issues ? { issues } : undefined),
     },
   };
   return {

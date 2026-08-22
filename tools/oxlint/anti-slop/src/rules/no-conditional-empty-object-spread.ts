@@ -22,6 +22,31 @@ function isConditionalEmptyObjectSpread(node: ESTree.Expression): boolean {
   );
 }
 
+function isEmptyObjectReturn(node: ESTree.Statement): boolean {
+  if (node.type === "ReturnStatement") {
+    return node.argument !== null && isEmptyObjectExpression(unwrapParentheses(node.argument));
+  }
+  if (node.type === "BlockStatement") {
+    return node.body.some(isEmptyObjectReturn);
+  }
+  if (node.type === "IfStatement") {
+    return (
+      isEmptyObjectReturn(node.consequent) ||
+      (node.alternate !== null && isEmptyObjectReturn(node.alternate))
+    );
+  }
+  return false;
+}
+
+function isEmptyObjectSpreadIife(node: ESTree.Expression): boolean {
+  const call = unwrapParentheses(node);
+  if (call.type !== "CallExpression" || call.arguments.length !== 0) return false;
+  const callee = unwrapParentheses(call.callee);
+  return callee.type === "ArrowFunctionExpression" &&
+    callee.body.type === "BlockStatement" &&
+    callee.body.body.some(isEmptyObjectReturn);
+}
+
 /** Ban conditional empty-object spreads without changing their omission semantics. */
 export const noConditionalEmptyObjectSpreadRule = defineRule({
   meta: {
@@ -32,7 +57,7 @@ export const noConditionalEmptyObjectSpreadRule = defineRule({
     },
     messages: {
       avoid:
-        "This conditional spread hides property omission behind an empty object. Build the object in separate statements and add the property only when present.",
+        "This spread hides property omission behind an empty object. Spread `undefined` for the omitted branch or build the object before the return.",
     },
   },
   createOnce(context) {
@@ -40,7 +65,10 @@ export const noConditionalEmptyObjectSpreadRule = defineRule({
       SpreadElement(node) {
         if (node.parent.type !== "ObjectExpression") return;
 
-        if (isConditionalEmptyObjectSpread(node.argument)) {
+        if (
+          isConditionalEmptyObjectSpread(node.argument) ||
+          isEmptyObjectSpreadIife(node.argument)
+        ) {
           context.report({ node, messageId: "avoid" });
         }
       },

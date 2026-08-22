@@ -1,7 +1,7 @@
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { isRecord } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
+import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 
 type ToolStreamEntry = {
   blockIndex: number;
@@ -33,7 +33,7 @@ const toolStreamStateFor = (session: ClaudeEventSession): ToolStreamState => {
 const tryParseJsonRecord = (json: string): Record<string, JsonValue> | null => {
   try {
     // SAFETY: JSON.parse returns JSON-compatible data for the supplied text.
-    const parsed = JSON.parse(json) as JsonValue;
+    const parsed = jsonValueSchema.parse(JSON.parse(json));
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
@@ -57,12 +57,9 @@ export const rememberClaudeStreamToolStart = (
     blockIndex,
     partialInputJson: "",
     toolUse,
-    ...(() => {
-      if (toolUse.input) {
-        return { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) };
-      }
-      return {};
-    })(),
+    ...(toolUse.input
+      ? { lastEmittedInputFingerprint: toolInputFingerprint(toolUse.input) }
+      : undefined),
   };
   const state = toolStreamStateFor(session);
   state.toolsByBlockIndex.set(blockIndex, entry);

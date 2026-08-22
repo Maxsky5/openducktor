@@ -42,12 +42,7 @@ const filesystemListTree = async (
   const treeInput = normalizeWorkspaceFileTreeInput(input);
   const payload = await invokeFn("filesystem_list_tree", {
     rootPath: treeInput.rootPath,
-    ...(() => {
-      if (treeInput.targetBranch) {
-        return { targetBranch: treeInput.targetBranch };
-      }
-      return {};
-    })(),
+    ...(treeInput.targetBranch ? { targetBranch: treeInput.targetBranch } : undefined),
   });
   return workspaceFileTreeSchema.parse(payload);
 };

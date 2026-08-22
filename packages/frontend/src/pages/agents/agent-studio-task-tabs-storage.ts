@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { JsonValue, TaskCard } from "@openducktor/contracts";
 import { isRecord } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
@@ -39,7 +39,7 @@ export const parsePersistedTaskTabs = (raw: string | null): PersistedTaskTabsSta
 
   try {
     // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue` at this boundary.
-    const parsed = JSON.parse(raw) as JsonValue; // SAFETY: JSON.parse returns any; stored tabs are JSON
+    const parsed = jsonValueSchema.parse(JSON.parse(raw));
 
     if (Array.isArray(parsed)) {
       return {

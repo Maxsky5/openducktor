@@ -43,12 +43,7 @@ export const normalizeTargetBranch = (
   }
 
   return {
-    ...(() => {
-      if (normalizedRemote) {
-        return { remote: normalizedRemote };
-      }
-      return {};
-    })(),
+    ...(normalizedRemote ? { remote: normalizedRemote } : undefined),
     branch: normalizedBranch,
   };
 };

@@ -8,12 +8,7 @@ const parseListTreeInput = (args: Record<string, JsonValue> | undefined) => {
   const targetBranch = optionalString(record.targetBranch, "targetBranch");
   return {
     rootPath: requireStringPreservingWhitespace(record.rootPath, "rootPath"),
-    ...(() => {
-      if (targetBranch) {
-        return { targetBranch };
-      }
-      return {};
-    })(),
+    ...(targetBranch ? { targetBranch } : undefined),
   } satisfies { rootPath: string; targetBranch?: string };
 };
 

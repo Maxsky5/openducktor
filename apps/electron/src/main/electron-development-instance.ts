@@ -122,12 +122,7 @@ export const prepareElectronDevelopmentInstanceEffect = ({
           appName,
           profileKind,
           processEnv,
-          ...(() => {
-            if (developmentInstanceId) {
-              return { developmentInstanceId };
-            }
-            return {};
-          })(),
+          ...(developmentInstanceId ? { developmentInstanceId } : undefined),
         }),
       catch: (cause) =>
         isElectronError(cause)

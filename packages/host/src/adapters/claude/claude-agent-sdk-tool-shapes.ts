@@ -62,12 +62,7 @@ export const decodeClaudeToolUseBlock = ({
     blockType === "mcp_tool_use" || blockType === "server_tool_use"
       ? {
           blockType,
-          ...(() => {
-            if (serverName) {
-              return { serverName };
-            }
-            return {};
-          })(),
+          ...(serverName ? { serverName } : undefined),
         }
       : undefined;
 
@@ -75,18 +70,8 @@ export const decodeClaudeToolUseBlock = ({
     blockType,
     callId,
     toolName,
-    ...(() => {
-      if (input) {
-        return { input };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
+    ...(input ? { input } : undefined),
+    ...(metadata ? { metadata } : undefined),
   };
 };
 
@@ -108,12 +93,7 @@ export const createClaudeRunningToolPart = ({
     ...toolPartPresentation(toolUse.toolName),
     status: "running",
     startedAtMs,
-    ...(() => {
-      if (toolUse.metadata) {
-        return { metadata: toolUse.metadata };
-      }
-      return {};
-    })(),
+    ...(toolUse.metadata ? { metadata: toolUse.metadata } : undefined),
   };
   if (toolUse.input) {
     part.input = toolUse.input;
@@ -139,12 +119,7 @@ export const createClaudePendingToolPart = ({
   tool: toolUse.toolName,
   ...toolPartPresentation(toolUse.toolName),
   status: "pending",
-  ...(() => {
-    if (toolUse.metadata) {
-      return { metadata: toolUse.metadata };
-    }
-    return {};
-  })(),
+  ...(toolUse.metadata ? { metadata: toolUse.metadata } : undefined),
 });
 
 export const timestampMs = (timestamp: string): number => {
@@ -231,12 +206,7 @@ export const decodeClaudeToolResultValue = (
   const toolName = readStringProp(value, "tool_name") ?? readStringProp(value, "name");
   return {
     toolUseId,
-    ...(() => {
-      if (toolName) {
-        return { toolName };
-      }
-      return {};
-    })(),
+    ...(toolName ? { toolName } : undefined),
     isError: isErrorValue === true,
     raw: value,
     text: claudeToolResultContentText(value),

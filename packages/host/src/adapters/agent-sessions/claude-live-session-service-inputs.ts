@@ -58,12 +58,7 @@ export const toClaudeLoadContextInput = (
   workingDirectory: input.workingDirectory,
   externalSessionId: input.externalSessionId,
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.sessionScope === undefined) {
-      return {};
-    }
-    return { sessionScope: input.sessionScope };
-  })(),
+  ...(input.sessionScope === undefined ? undefined : { sessionScope: input.sessionScope }),
 });
 
 export const toClaudeReplyApprovalInput = (
@@ -75,12 +70,7 @@ export const toClaudeReplyApprovalInput = (
   requestId: input.requestId,
   outcome: input.outcome,
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.message === undefined) {
-      return {};
-    }
-    return { message: input.message };
-  })(),
+  ...(input.message === undefined ? undefined : { message: input.message }),
 });
 
 export const toClaudeReplyQuestionInput = (
@@ -102,12 +92,7 @@ export const toClaudeStartInput = (
   sessionScope: input.sessionScope,
   systemPrompt: input.systemPrompt,
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.model === undefined) {
-      return {};
-    }
-    return { model: input.model };
-  })(),
+  ...(input.model === undefined ? undefined : { model: input.model }),
 });
 
 export const toClaudeResumeInput = (
@@ -118,18 +103,8 @@ export const toClaudeResumeInput = (
   externalSessionId: input.externalSessionId,
   sessionScope: input.sessionScope,
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.model === undefined) {
-      return {};
-    }
-    return { model: input.model };
-  })(),
-  ...(() => {
-    if (input.systemPrompt === undefined) {
-      return {};
-    }
-    return { systemPrompt: input.systemPrompt };
-  })(),
+  ...(input.model === undefined ? undefined : { model: input.model }),
+  ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
 });
 
 export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgentSessionInput => ({
@@ -139,18 +114,10 @@ export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgen
   systemPrompt: input.systemPrompt,
   parentExternalSessionId: input.parentExternalSessionId,
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.model === undefined) {
-      return {};
-    }
-    return { model: input.model };
-  })(),
-  ...(() => {
-    if (input.runtimeHistoryAnchor === undefined) {
-      return {};
-    }
-    return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
-  })(),
+  ...(input.model === undefined ? undefined : { model: input.model }),
+  ...(input.runtimeHistoryAnchor === undefined
+    ? undefined
+    : { runtimeHistoryAnchor: input.runtimeHistoryAnchor }),
 });
 
 const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
@@ -164,12 +131,7 @@ const toClaudeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMe
       path: part.attachment.path,
       name: part.attachment.name,
       kind: part.attachment.kind,
-      ...(() => {
-        if (part.attachment.mime === undefined) {
-          return {};
-        }
-        return { mime: part.attachment.mime };
-      })(),
+      ...(part.attachment.mime === undefined ? undefined : { mime: part.attachment.mime }),
     },
   };
 };
@@ -183,18 +145,8 @@ export const toClaudeSendInput = (
   sessionScope: input.sessionScope,
   parts: input.parts.map(toClaudeUserMessagePart),
   ...CLAUDE_RUNTIME_POLICY_BINDING,
-  ...(() => {
-    if (input.model === undefined) {
-      return {};
-    }
-    return { model: input.model };
-  })(),
-  ...(() => {
-    if (input.systemPrompt === undefined) {
-      return {};
-    }
-    return { systemPrompt: input.systemPrompt };
-  })(),
+  ...(input.model === undefined ? undefined : { model: input.model }),
+  ...(input.systemPrompt === undefined ? undefined : { systemPrompt: input.systemPrompt }),
 });
 
 export const toClaudeRuntimeUserMessageEvent = (
@@ -207,10 +159,5 @@ export const toClaudeRuntimeUserMessageEvent = (
   message: event.message,
   parts: event.parts,
   state: event.state,
-  ...(() => {
-    if (event.model === undefined) {
-      return {};
-    }
-    return { model: event.model };
-  })(),
+  ...(event.model === undefined ? undefined : { model: event.model }),
 });

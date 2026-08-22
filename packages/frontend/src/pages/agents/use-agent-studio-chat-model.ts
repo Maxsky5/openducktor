@@ -104,12 +104,9 @@ const toChatContextUsage = (
   return {
     totalTokens: selectedSessionContextUsage.totalTokens,
     contextWindow: selectedSessionContextUsage.contextWindow,
-    ...(() => {
-      if (hasRuntimeType(selectedSessionContextUsage.outputLimit, "number")) {
-        return { outputLimit: selectedSessionContextUsage.outputLimit };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(selectedSessionContextUsage.outputLimit, "number")
+      ? { outputLimit: selectedSessionContextUsage.outputLimit }
+      : undefined),
   };
 };
 
@@ -357,12 +354,7 @@ export function useAgentStudioChatModel({
       stopAgentSession: sessionActions.stopAgentSession,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
-      ...(() => {
-        if (pendingSendItems) {
-          return { pendingSendItems };
-        }
-        return {};
-      })(),
+      ...(pendingSendItems ? { pendingSendItems } : undefined),
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isSending: sessionActions.isSending,

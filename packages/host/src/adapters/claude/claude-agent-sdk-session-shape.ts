@@ -26,12 +26,7 @@ export const createClaudeSessionSummary = (
     externalSessionId: sessionInput.externalSessionId,
     runtimeKind: "claude",
     workingDirectory: input.workingDirectory,
-    ...(() => {
-      if (sessionInput.title) {
-        return { title: sessionInput.title };
-      }
-      return {};
-    })(),
+    ...(sessionInput.title ? { title: sessionInput.title } : undefined),
     sessionAssociation,
     startedAt,
     status: "starting",
@@ -82,12 +77,7 @@ export const toClaudeDisplayParts = (
             name: part.command.trigger,
             path: part.command.trigger,
             title: part.command.title,
-            ...(() => {
-              if (part.command.description) {
-                return { description: part.command.description };
-              }
-              return {};
-            })(),
+            ...(part.command.description ? { description: part.command.description } : undefined),
           },
           sourceText: offsetSourceText,
         });
@@ -101,12 +91,7 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "file_reference",
           file: part.file,
-          ...(() => {
-            if (offsetSourceText) {
-              return { sourceText: offsetSourceText };
-            }
-            return {};
-          })(),
+          ...(offsetSourceText ? { sourceText: offsetSourceText } : undefined),
         });
         continue;
       }
@@ -114,12 +99,7 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "skill_mention",
           skill: part.skill,
-          ...(() => {
-            if (offsetSourceText) {
-              return { sourceText: offsetSourceText };
-            }
-            return {};
-          })(),
+          ...(offsetSourceText ? { sourceText: offsetSourceText } : undefined),
         });
         continue;
       }
@@ -127,12 +107,7 @@ export const toClaudeDisplayParts = (
         displayParts.push({
           kind: "subagent_reference",
           subagent: part.subagent,
-          ...(() => {
-            if (offsetSourceText) {
-              return { sourceText: offsetSourceText };
-            }
-            return {};
-          })(),
+          ...(offsetSourceText ? { sourceText: offsetSourceText } : undefined),
         });
       }
     }
@@ -167,12 +142,9 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
   return toAgentSessionRuntimeSnapshot({
     ref,
     snapshot: {
-      ...(() => {
-        if (session.parentExternalSessionId) {
-          return { parentExternalSessionId: session.parentExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(session.parentExternalSessionId
+        ? { parentExternalSessionId: session.parentExternalSessionId }
+        : undefined),
       title: session.summary.title ?? "Claude session",
       startedAt: session.startedAt,
       runtimeActivity,

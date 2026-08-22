@@ -1,5 +1,5 @@
 import type { GitProviderRepository, JsonValue, PullRequest } from "@openducktor/contracts";
-import { pullRequestSchema, hasRuntimeType } from "@openducktor/contracts";
+import { pullRequestSchema, hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 
 export const GITHUB_PROVIDER_ID = "github";
@@ -19,22 +19,9 @@ export const combinedCommandOutput = (stdout: string, stderr: string): string =>
   return `${trimmedStdout}\n${trimmedStderr}`;
 };
 
-export type GithubPullBranchRef = {
-  ref?: JsonValue;
-};
+export type GithubPullBranchRef = Record<string, JsonValue>;
 
-export type GithubPullResponse = {
-  number?: JsonValue;
-  html_url?: JsonValue;
-  draft?: JsonValue;
-  state?: JsonValue;
-  created_at?: JsonValue;
-  updated_at?: JsonValue;
-  merged_at?: JsonValue;
-  closed_at?: JsonValue;
-  head?: GithubPullBranchRef;
-  base?: GithubPullBranchRef;
-};
+export type GithubPullResponse = Record<string, JsonValue>;
 
 export type ResolvedPullRequest = {
   record: PullRequest;
@@ -73,6 +60,9 @@ const requireGithubNumber = (value: JsonValue | undefined, label: string): numbe
   return value;
 };
 
+const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullRequest => {
   const mergedAt = hasRuntimeType(response.merged_at, "string") ? response.merged_at : undefined;
   const closedAt = hasRuntimeType(response.closed_at, "string") ? response.closed_at : undefined;
@@ -85,6 +75,8 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
         : rawState === "open"
           ? "open"
           : "closed_unmerged";
+  const head = isJsonRecord(response.head) ? response.head : undefined;
+  const base = isJsonRecord(response.base) ? response.base : undefined;
   return {
     record: pullRequestSchema.parse({
       providerId: GITHUB_PROVIDER_ID,
@@ -94,21 +86,18 @@ const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullR
       createdAt: requireGithubString(response.created_at, "created_at"),
       updatedAt: requireGithubString(response.updated_at, "updated_at"),
       lastSyncedAt: new Date().toISOString(),
-      mergedAt,
-      closedAt,
+      ...(mergedAt !== undefined ? { mergedAt } : undefined),
+      ...(closedAt !== undefined ? { closedAt } : undefined),
     }),
-    sourceBranch: requireGithubString(response.head?.ref, "head.ref"),
-    targetBranch: requireGithubString(response.base?.ref, "base.ref"),
+    sourceBranch: requireGithubString(head?.ref, "head.ref"),
+    targetBranch: requireGithubString(base?.ref, "base.ref"),
   };
 };
 
 export const parseGithubPullListResponse = (payload: string): ResolvedPullRequest[] => {
-  // SAFETY: JSON.parse returns wire JSON; the shape is validated below and by
-  // pullRequestSchema.parse in normalizeGithubPullRequest.
-  let parsed: JsonValue | undefined;
+  let parsed: JsonValue;
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue | undefined` at this boundary.
-    parsed = JSON.parse(payload) as JsonValue | undefined;
+    parsed = jsonValueSchema.parse(JSON.parse(payload));
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",
@@ -125,24 +114,20 @@ export const parseGithubPullListResponse = (payload: string): ResolvedPullReques
   }
   const flattened = responses.every((entry) => Array.isArray(entry)) ? responses.flat() : responses;
   return flattened.map((entry) => {
-    if (!entry || !hasRuntimeType(entry, "object") || Array.isArray(entry)) {
+    if (!isJsonRecord(entry)) {
       throw new HostValidationError({
         field: "payload",
         message: "Failed to parse GitHub pull request list response: expected objects.",
       });
     }
-    // SAFETY: The preceding runtime guard establishes `GithubPullResponse` before this assertion.
-    return normalizeGithubPullRequest(entry as GithubPullResponse);
+    return normalizeGithubPullRequest(entry);
   });
 };
 
 export const parseGithubPullResponse = (payload: string): ResolvedPullRequest => {
-  // SAFETY: JSON.parse returns wire JSON; the shape is validated below and by
-  // pullRequestSchema.parse in normalizeGithubPullRequest.
-  let parsed: JsonValue | undefined;
+  let parsed: JsonValue;
   try {
-    // SAFETY: JSON.parse can only produce JSON data, which satisfies `JsonValue | undefined` at this boundary.
-    parsed = JSON.parse(payload) as JsonValue | undefined;
+    parsed = jsonValueSchema.parse(JSON.parse(payload));
   } catch (cause) {
     throw new HostValidationError({
       field: "payload",
@@ -150,14 +135,13 @@ export const parseGithubPullResponse = (payload: string): ResolvedPullRequest =>
       cause,
     });
   }
-  if (!parsed || !hasRuntimeType(parsed, "object") || Array.isArray(parsed)) {
+  if (!isJsonRecord(parsed)) {
     throw new HostValidationError({
       field: "payload",
       message: "Failed to parse GitHub pull request response: expected an object.",
     });
   }
-  // SAFETY: The preceding runtime guard establishes `GithubPullResponse` before this assertion.
-  return normalizeGithubPullRequest(parsed as GithubPullResponse);
+  return normalizeGithubPullRequest(parsed);
 };
 
 const comparablePullRequestRecord = ({

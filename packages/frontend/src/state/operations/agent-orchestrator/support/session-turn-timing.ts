@@ -90,24 +90,11 @@ export const createSessionTurnTiming = (): SessionTurnTiming => {
       const userAnchorAtMs = currentTiming.userAnchorAtMs;
       return resolveAssistantTurnDurationMs({
         completedAtMs,
-        ...(() => {
-          if (hasRuntimeType(activityStartedAtMs, "number")) {
-            return { activityStartedAtMs };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (hasRuntimeType(userAnchorAtMs, "number")) {
-            return { userAnchorAtMs };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (hasRuntimeType(previousAssistantCompletedAtMs, "number")) {
-            return { previousAssistantCompletedAtMs };
-          }
-          return {};
-        })(),
+        ...(hasRuntimeType(activityStartedAtMs, "number") ? { activityStartedAtMs } : undefined),
+        ...(hasRuntimeType(userAnchorAtMs, "number") ? { userAnchorAtMs } : undefined),
+        ...(hasRuntimeType(previousAssistantCompletedAtMs, "number")
+          ? { previousAssistantCompletedAtMs }
+          : undefined),
       });
     },
     clearTurnDuration: (sessionKey, completedTimestamp) => {

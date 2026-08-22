@@ -6,6 +6,7 @@ import {
   type OdtToolName,
   odtHostBridgeReadySchema,
   odtToolErrorPayloadSchema,
+  jsonValueSchema,
   type JsonValue,
   type WorkspaceScopedOdtToolName,
   hasRuntimeType,
@@ -205,12 +206,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          ...(() => {
-            if (this.appToken) {
-              return { "x-openducktor-app-token": this.appToken };
-            }
-            return {};
-          })(),
+          ...(this.appToken ? { "x-openducktor-app-token": this.appToken } : undefined),
         },
         body: JSON.stringify(input),
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
@@ -233,13 +229,9 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     }
   }
 
-  private async readJsonResponse(
-    response: Response,
-    action: string,
-  ): Promise<JsonValue | undefined> {
+  private async readJsonResponse(response: Response, action: string): Promise<JsonValue> {
     try {
-      // SAFETY: Response.json() parses JSON-compatible response bodies.
-      return (await response.json()) as JsonValue | undefined;
+      return jsonValueSchema.parse(await response.json());
     } catch (error) {
       throw createBridgeJsonError(action, error);
     }

@@ -15,10 +15,5 @@ export const skippedQueryOptions = <TData>({
     queryKey,
     queryFn: skipToken,
     staleTime,
-    ...(() => {
-      if (refetchOnWindowFocus === undefined) {
-        return {};
-      }
-      return { refetchOnWindowFocus };
-    })(),
+    ...(refetchOnWindowFocus === undefined ? undefined : { refetchOnWindowFocus }),
   });

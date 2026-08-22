@@ -154,12 +154,7 @@ export const parseCreateTaskInput = (input: JsonValue | undefined): CreateTaskUs
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     task: parseCreateInput(record.input),
-    ...(() => {
-      if (descriptionAssets) {
-        return { descriptionAssets };
-      }
-      return {};
-    })(),
+    ...(descriptionAssets ? { descriptionAssets } : undefined),
   };
 };
 
@@ -186,12 +181,7 @@ export const parseUpdateTaskInput = (input: JsonValue | undefined): UpdateTaskIn
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     patch,
-    ...(() => {
-      if (descriptionAssets) {
-        return { descriptionAssets };
-      }
-      return {};
-    })(),
+    ...(descriptionAssets ? { descriptionAssets } : undefined),
   };
 };
 
@@ -270,12 +260,7 @@ export const parseTaskSessionBootstrapPrepareInput = (
     taskId: requireString(record.taskId, "taskId"),
     runtimeKind: requireString(record.runtimeKind, "runtimeKind"),
     role: parsedRole.data,
-    ...(() => {
-      if (targetWorkingDirectory) {
-        return { targetWorkingDirectory };
-      }
-      return {};
-    })(),
+    ...(targetWorkingDirectory ? { targetWorkingDirectory } : undefined),
   };
 };
 
@@ -346,12 +331,7 @@ export const parseBuildCompletedInput = (input: JsonValue | undefined): BuildCom
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
-    ...(() => {
-      if (summary === undefined) {
-        return {};
-      }
-      return { summary };
-    })(),
+    ...(summary === undefined ? undefined : { summary }),
   };
 };
 
@@ -365,11 +345,6 @@ export const parseOptionalNoteInput = (
   return {
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
-    ...(() => {
-      if (note === undefined) {
-        return {};
-      }
-      return { note };
-    })(),
+    ...(note === undefined ? undefined : { note }),
   };
 };

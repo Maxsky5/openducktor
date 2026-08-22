@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
+import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { type BrowserRuntimeConfig, configureBrowserRuntimeConfig } from "./browser-config";
 import {
   errorMessage,
@@ -46,8 +46,7 @@ export const loadBrowserRuntimeConfigEffect = (
 
     const config = yield* Effect.tryPromise({
       try: async () => {
-        // SAFETY: Response.json() parses a JSON-compatible runtime config body.
-        return (await response.json()) as JsonValue;
+        return jsonValueSchema.parse(await response.json());
       },
       catch: (cause) =>
         new WebValidationError({

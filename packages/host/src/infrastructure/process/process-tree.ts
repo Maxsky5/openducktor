@@ -126,12 +126,7 @@ const runProcessCommand: ProcessCommandRunner = (command, args) =>
             status,
             stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
             stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr),
-            ...(() => {
-              if (error) {
-                return { error };
-              }
-              return {};
-            })(),
+            ...(error ? { error } : undefined),
           }),
         );
       },
@@ -178,12 +173,7 @@ export const processTreeHasChildren = (
             status: result.status,
             stderr: result.stderr.toString("utf8").trim(),
           },
-          ...(() => {
-            if (result.error) {
-              return { cause: result.error };
-            }
-            return {};
-          })(),
+          ...(result.error ? { cause: result.error } : undefined),
         }),
       );
     }
@@ -228,12 +218,7 @@ const inspectProcessTreeSignalTargets = (
             status: result.status,
             stderr: result.stderr.toString("utf8").trim(),
           },
-          ...(() => {
-            if (result.error) {
-              return { cause: result.error };
-            }
-            return {};
-          })(),
+          ...(result.error ? { cause: result.error } : undefined),
         }),
       );
     }

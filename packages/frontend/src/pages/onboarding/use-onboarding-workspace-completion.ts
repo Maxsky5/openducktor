@@ -26,12 +26,7 @@ export const useOnboardingWorkspaceCompletion = ({
       );
       await addWorkspace({
         ...input,
-        ...(() => {
-          if (defaultRuntimeKind) {
-            return { defaultRuntimeKind };
-          }
-          return {};
-        })(),
+        ...(defaultRuntimeKind ? { defaultRuntimeKind } : undefined),
       });
       setCompletionRepoPath(input.repoPath);
 

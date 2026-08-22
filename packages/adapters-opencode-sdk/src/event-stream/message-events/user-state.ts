@@ -35,22 +35,12 @@ export const takeQueuedUserSendMatch = (
   const signature = buildQueuedDisplaySignature({
     visible,
     parts,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   });
   const attachmentIdentitySignature = buildQueuedDisplayAttachmentIdentitySignature({
     visible,
     parts,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   });
   const matchIndex = session.pendingQueuedUserMessages.findIndex(
     (entry) =>

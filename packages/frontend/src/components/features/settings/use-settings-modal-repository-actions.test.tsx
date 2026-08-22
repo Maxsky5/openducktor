@@ -5,7 +5,6 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 
 enableReactActEnvironment();
@@ -109,19 +108,17 @@ describe("useSettingsModalRepositoryActions", () => {
 
     await harness.mount();
 
-    const detected = createFocusedFixture<{ current: GitProviderRepository | null }>({
-      current: null,
-    });
+    const detectedRepositories = new Array<GitProviderRepository | null>();
     await harness.run(async (state) => {
-      detected.current = await state.detectSelectedRepoGithubRepository();
+      detectedRepositories.push(await state.detectSelectedRepoGithubRepository());
     });
 
     expect(detectGithubRepository).toHaveBeenCalledWith("/repo-a");
-    expect(detected.current).not.toBeNull();
-    if (detected.current === null) {
+    const [detectedRepo] = detectedRepositories;
+    expect(detectedRepo).not.toBeNull();
+    if (!detectedRepo) {
       throw new Error("Expected detected repository");
     }
-    const detectedRepo = detected.current;
     expect(detectedRepo.host).toBe("github.com");
     expect(detectedRepo.owner).toBe("duck");
     expect(detectedRepo.name).toBe("repo");

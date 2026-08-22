@@ -242,6 +242,14 @@ export const noKnownValueWideningRule = defineRule({
 					"assertion",
 				);
 			},
+			TSSatisfiesExpression(node) {
+				if (environment === null || node.typeAnnotation.type !== "TSUnknownKeyword") return;
+				reportFlow(
+					node.expression,
+					classifyWideningTarget(node.typeAnnotation, environment),
+					"satisfies expression",
+				);
+			},
 		};
 	},
 });

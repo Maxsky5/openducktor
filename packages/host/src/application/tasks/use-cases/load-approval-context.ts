@@ -77,14 +77,16 @@ export const createTaskApprovalContextUseCase = ({
           approvalContext: {
             taskId,
             taskStatus: current.status,
-            workingDirectory,
+            ...(workingDirectory !== undefined ? { workingDirectory } : undefined),
             sourceBranch: directMerge.sourceBranch,
             targetBranch,
             publishTarget: publishTargetFromTargetBranch(targetBranch),
             defaultMergeMethod,
             hasUncommittedChanges: false,
             uncommittedFileCount: 0,
-            pullRequest: metadata.pullRequest,
+            ...(metadata.pullRequest !== undefined
+              ? { pullRequest: metadata.pullRequest }
+              : undefined),
             directMerge,
             providers,
           },
@@ -161,9 +163,13 @@ export const createTaskApprovalContextUseCase = ({
           defaultMergeMethod,
           hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
           uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
-          pullRequest: metadata.pullRequest,
+          ...(metadata.pullRequest !== undefined
+            ? { pullRequest: metadata.pullRequest }
+            : undefined),
           providers,
-          suggestedSquashCommitMessage,
+          ...(suggestedSquashCommitMessage !== undefined
+            ? { suggestedSquashCommitMessage }
+            : undefined),
         },
       };
     });

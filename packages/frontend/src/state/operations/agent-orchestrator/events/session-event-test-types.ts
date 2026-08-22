@@ -85,12 +85,9 @@ export const createSessionEventContext = (
     replyApproval: context.adapter.replyApproval,
     buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
     readOnlyApprovalAutoRejectSafe: context.readOnlyApprovalAutoRejectSafe,
-    ...(() => {
-      if (context.loadSettingsSnapshot) {
-        return { loadSettingsSnapshot: context.loadSettingsSnapshot };
-      }
-      return {};
-    })(),
+    ...(context.loadSettingsSnapshot
+      ? { loadSettingsSnapshot: context.loadSettingsSnapshot }
+      : undefined),
   },
   todos: {
     updateSessionTodos: context.updateSessionTodos,

@@ -41,12 +41,7 @@ export const createHookHarness = <Props, State>(
     await act(async () => {
       rendered = renderHook(useHook, {
         initialProps: currentProps,
-        ...(() => {
-          if (options?.wrapper) {
-            return { wrapper: options.wrapper };
-          }
-          return {};
-        })(),
+        ...(options?.wrapper ? { wrapper: options.wrapper } : undefined),
       });
     });
     await flushHookEffects();

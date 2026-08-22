@@ -56,12 +56,7 @@ export const runtimeSessionHistoryRefQueryOptions = (
       });
       return {
         ...toRuntimeSessionRefWithPolicy(input.repoPath, input, runtimePolicy),
-        ...(() => {
-          if (input.sessionScope) {
-            return { sessionScope: input.sessionScope };
-          }
-          return {};
-        })(),
+        ...(input.sessionScope ? { sessionScope: input.sessionScope } : undefined),
       };
     },
     staleTime: Number.POSITIVE_INFINITY,

@@ -54,30 +54,10 @@ export const toContextUsage = (
   try {
     return agentSessionContextUsageSchema.parse({
       totalTokens: contextUsage.totalTokens,
-      ...(() => {
-        if (model?.providerId) {
-          return { providerId: model.providerId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (model?.modelId) {
-          return { modelId: model.modelId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (model?.variant) {
-          return { variant: model.variant };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (model?.profileId) {
-          return { profileId: model.profileId };
-        }
-        return {};
-      })(),
+      ...(model?.providerId ? { providerId: model.providerId } : undefined),
+      ...(model?.modelId ? { modelId: model.modelId } : undefined),
+      ...(model?.variant ? { variant: model.variant } : undefined),
+      ...(model?.profileId ? { profileId: model.profileId } : undefined),
     });
   } catch (cause) {
     throw new HostValidationError({

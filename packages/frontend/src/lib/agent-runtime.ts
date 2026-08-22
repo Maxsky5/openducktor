@@ -89,12 +89,7 @@ export const resolveRuntimeKindSelectionState = ({
     return {
       status: "no-definitions",
       runtimeKind: null,
-      ...(() => {
-        if (requestedRuntimeKind === undefined) {
-          return {};
-        }
-        return { requestedRuntimeKind };
-      })(),
+      ...(requestedRuntimeKind === undefined ? undefined : { requestedRuntimeKind }),
     };
   }
 

@@ -48,18 +48,8 @@ export const createUpdateError = ({
     code,
     message,
     operation,
-    ...(() => {
-      if (causeName) {
-        return { causeName };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (details === undefined) {
-        return {};
-      }
-      return { details };
-    })(),
+    ...(causeName ? { causeName } : undefined),
+    ...(details === undefined ? undefined : { details }),
   };
 };
 
@@ -109,19 +99,13 @@ export const markChecking = ({
 }): AppUpdateState => ({
   status: "checking",
   currentVersion,
-  ...(() => {
-    if (availableVersionFromState(previousState)) {
-      return { availableVersion: availableVersionFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(availableVersionFromState(previousState)
+    ? { availableVersion: availableVersionFromState(previousState) }
+    : undefined),
   checkInitiator: initiator,
-  ...(() => {
-    if (checkedAtFromState(previousState)) {
-      return { checkedAt: checkedAtFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkedAtFromState(previousState)
+    ? { checkedAt: checkedAtFromState(previousState) }
+    : undefined),
 });
 
 export const markAvailable = ({
@@ -138,12 +122,9 @@ export const markAvailable = ({
   status: "available",
   currentVersion,
   availableVersion,
-  ...(() => {
-    if (checkInitiatorFromState(previousState)) {
-      return { checkInitiator: checkInitiatorFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkInitiatorFromState(previousState)
+    ? { checkInitiator: checkInitiatorFromState(previousState) }
+    : undefined),
   checkedAt,
 });
 
@@ -158,12 +139,9 @@ export const markUpToDate = ({
 }): AppUpdateState => ({
   status: "upToDate",
   currentVersion,
-  ...(() => {
-    if (checkInitiatorFromState(previousState)) {
-      return { checkInitiator: checkInitiatorFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkInitiatorFromState(previousState)
+    ? { checkInitiator: checkInitiatorFromState(previousState) }
+    : undefined),
   checkedAt,
 });
 
@@ -182,18 +160,12 @@ export const markDownloading = ({
   currentVersion,
   availableVersion,
   progressPercent: progressPercentFromState(previousState) ?? 0,
-  ...(() => {
-    if (checkInitiatorFromState(previousState)) {
-      return { checkInitiator: checkInitiatorFromState(previousState) };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (checkedAtFromState(previousState)) {
-      return { checkedAt: checkedAtFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkInitiatorFromState(previousState)
+    ? { checkInitiator: checkInitiatorFromState(previousState) }
+    : undefined),
+  ...(checkedAtFromState(previousState)
+    ? { checkedAt: checkedAtFromState(previousState) }
+    : undefined),
 });
 
 export const markDownloadProgress = ({
@@ -209,18 +181,12 @@ export const markDownloadProgress = ({
   currentVersion,
   availableVersion: previousState.availableVersion,
   progressPercent: clampProgressPercent(percent),
-  ...(() => {
-    if (checkInitiatorFromState(previousState)) {
-      return { checkInitiator: checkInitiatorFromState(previousState) };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (checkedAtFromState(previousState)) {
-      return { checkedAt: checkedAtFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkInitiatorFromState(previousState)
+    ? { checkInitiator: checkInitiatorFromState(previousState) }
+    : undefined),
+  ...(checkedAtFromState(previousState)
+    ? { checkedAt: checkedAtFromState(previousState) }
+    : undefined),
 });
 
 export const markDownloaded = ({
@@ -236,18 +202,12 @@ export const markDownloaded = ({
   currentVersion,
   availableVersion,
   progressPercent: 100,
-  ...(() => {
-    if (checkInitiatorFromState(previousState)) {
-      return { checkInitiator: checkInitiatorFromState(previousState) };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (checkedAtFromState(previousState)) {
-      return { checkedAt: checkedAtFromState(previousState) };
-    }
-    return {};
-  })(),
+  ...(checkInitiatorFromState(previousState)
+    ? { checkInitiator: checkInitiatorFromState(previousState) }
+    : undefined),
+  ...(checkedAtFromState(previousState)
+    ? { checkedAt: checkedAtFromState(previousState) }
+    : undefined),
 });
 
 export const markDownloadedInstallRequested = (
@@ -301,24 +261,9 @@ export const markUpdateError = ({
   return {
     status: "error",
     currentVersion,
-    ...(() => {
-      if (resolvedAvailableVersion) {
-        return { availableVersion: resolvedAvailableVersion };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (checkInitiator) {
-        return { checkInitiator };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (checkedAt) {
-        return { checkedAt };
-      }
-      return {};
-    })(),
+    ...(resolvedAvailableVersion ? { availableVersion: resolvedAvailableVersion } : undefined),
+    ...(checkInitiator ? { checkInitiator } : undefined),
+    ...(checkedAt ? { checkedAt } : undefined),
     error: createUpdateError({ cause, code, message, operation }),
   };
 };

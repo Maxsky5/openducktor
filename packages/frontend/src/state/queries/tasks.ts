@@ -53,12 +53,7 @@ const invalidateRepoTaskDataQueries = (
   return queryClient.invalidateQueries({
     queryKey: taskQueryKeys.repoDataPrefix(repoPath),
     exact: false,
-    ...(() => {
-      if (options?.refetchType) {
-        return { refetchType: options.refetchType };
-      }
-      return {};
-    })(),
+    ...(options?.refetchType ? { refetchType: options.refetchType } : undefined),
   });
 };
 
@@ -110,12 +105,7 @@ export const refreshCachedKanbanQueries = async (
     cachedQueryKeys.map(([, , , doneVisibleDays]) =>
       queryClient.fetchQuery({
         ...repoTaskDataQueryOptions(repoPath, doneVisibleDays),
-        ...(() => {
-          if (force) {
-            return { staleTime: 0 };
-          }
-          return {};
-        })(),
+        ...(force ? { staleTime: 0 } : undefined),
       }),
     ),
   );

@@ -362,21 +362,11 @@ export const createOdtMcpBridgeService = ({
             const updated = yield* taskService.buildCompleted({
               repoPath,
               taskId: task.id,
-              ...(() => {
-                if (parsed.summary === undefined) {
-                  return {};
-                }
-                return { summary: parsed.summary };
-              })(),
+              ...(parsed.summary === undefined ? undefined : { summary: parsed.summary }),
             });
             return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, {
               task: mapPublicTask(updated),
-              ...(() => {
-                if (parsed.summary === undefined) {
-                  return {};
-                }
-                return { summary: parsed.summary };
-              })(),
+              ...(parsed.summary === undefined ? undefined : { summary: parsed.summary }),
             });
           }
           case "odt_set_pull_request": {

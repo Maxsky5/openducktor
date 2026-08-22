@@ -124,13 +124,10 @@ export const createArtifactRuntimeDistribution = ({
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(() => {
-      if (normalizedBundledToolBinDirs === undefined) {
-        return {};
-      }
-      return {
-        bundledToolBinDirs: normalizedBundledToolBinDirs,
-      };
-    })(),
+    ...(normalizedBundledToolBinDirs === undefined
+      ? undefined
+      : {
+          bundledToolBinDirs: normalizedBundledToolBinDirs,
+        }),
   } as ArtifactRuntimeDistribution;
 };

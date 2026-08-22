@@ -79,18 +79,8 @@ export const kickoffPromptForTemplate = (
       taskId,
       ...options?.task,
     },
-    ...(() => {
-      if (options?.extraPlaceholders) {
-        return { extraPlaceholders: options.extraPlaceholders };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (options?.git) {
-        return { git: options.git };
-      }
-      return {};
-    })(),
+    ...(options?.extraPlaceholders ? { extraPlaceholders: options.extraPlaceholders } : undefined),
+    ...(options?.git ? { git: options.git } : undefined),
     overrides: options?.overrides ?? {},
   });
 };
@@ -119,12 +109,7 @@ export const buildGitConflictResolutionPrompt = (
       taskId,
       ...options?.task,
     },
-    ...(() => {
-      if (options?.git) {
-        return { git: options.git };
-      }
-      return {};
-    })(),
+    ...(options?.git ? { git: options.git } : undefined),
     overrides: options?.overrides ?? {},
   });
 };

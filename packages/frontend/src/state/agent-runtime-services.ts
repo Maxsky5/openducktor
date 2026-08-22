@@ -30,12 +30,7 @@ const toAgentSessionSummary = (
   sessionAssociation: summary.sessionAssociation,
   startedAt: summary.startedAt,
   status: summary.status,
-  ...(() => {
-    if (summary.title !== undefined) {
-      return { title: summary.title };
-    }
-    return {};
-  })(),
+  ...(summary.title !== undefined ? { title: summary.title } : undefined),
 });
 
 const toAcceptedAgentUserMessage = (
@@ -45,41 +40,18 @@ const toAcceptedAgentUserMessage = (
   // SAFETY: The surrounding boundary constructs or validates every member required by `AcceptedAgentUserMessage`.
   return {
     ...message,
-    ...(() => {
-      if (sessionRef) {
-        return { sessionRef };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (model) {
-        return {
+    ...(sessionRef ? { sessionRef } : undefined),
+    ...(model
+      ? {
           model: {
             providerId: model.providerId,
             modelId: model.modelId,
-            ...(() => {
-              if (model.runtimeKind !== undefined) {
-                return { runtimeKind: model.runtimeKind };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (model.variant !== undefined) {
-                return { variant: model.variant };
-              }
-              return {};
-            })(),
-            ...(() => {
-              if (model.profileId !== undefined) {
-                return { profileId: model.profileId };
-              }
-              return {};
-            })(),
+            ...(model.runtimeKind !== undefined ? { runtimeKind: model.runtimeKind } : undefined),
+            ...(model.variant !== undefined ? { variant: model.variant } : undefined),
+            ...(model.profileId !== undefined ? { profileId: model.profileId } : undefined),
           },
-        };
-      }
-      return {};
-    })(),
+        }
+      : undefined),
   } as AcceptedAgentUserMessage;
 };
 

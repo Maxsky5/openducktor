@@ -27,18 +27,8 @@ const streamPartEvents = (
       source: ctx.source,
       mapper: name,
       threadId: ctx.threadId,
-      ...(() => {
-        if (ctx.turnId) {
-          return { turnId: ctx.turnId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (eventTimestamp) {
-          return { timestamp: eventTimestamp };
-        }
-        return {};
-      })(),
+      ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
+      ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
       raw,
       part,
     };
@@ -86,8 +76,7 @@ export const fileChangeMapper: CodexEventMapper = {
 
     const params = isPlainObject(input.notification.params) ? input.notification.params : null;
     const itemId = extractStringField(params, ["itemId", "item_id"]);
-    // SAFETY: Codex app-server messages arrive as parsed JSON-RPC payloads, so changes is JSON-valid.
-    const changes = arrayFromUnknown(params?.changes) as JsonValue[];
+    const changes = arrayFromUnknown(params?.changes);
     if (!itemId || changes.length === 0) {
       return emptyCodexMappingResult();
     }

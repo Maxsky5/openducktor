@@ -132,12 +132,7 @@ const resolveRequestRouteContext = (
   const policySession = parentSession ?? ownerSession ?? session;
   return {
     ownerThreadId,
-    ...(() => {
-      if (ownerSession) {
-        return { ownerSession };
-      }
-      return {};
-    })(),
+    ...(ownerSession ? { ownerSession } : undefined),
     policySession,
     runtimeId: ownerSession?.runtimeId ?? policySession.runtimeId,
     route,
@@ -296,12 +291,7 @@ export const handleCodexServerRequest = async (
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: mcpElicitationApproval,
-          ...(() => {
-            if (routeContext.route) {
-              return { route: routeContext.route };
-            }
-            return {};
-          })(),
+          ...(routeContext.route ? { route: routeContext.route } : undefined),
         });
         if (!registration.isNew) {
           return;
@@ -351,12 +341,7 @@ export const handleCodexServerRequest = async (
           request: parsed.request,
           questionIds: parsed.questionIds,
           input: questionInput,
-          ...(() => {
-            if (routeContext.route) {
-              return { route: routeContext.route };
-            }
-            return {};
-          })(),
+          ...(routeContext.route ? { route: routeContext.route } : undefined),
         });
         if (!registration.isNew) {
           return;
@@ -442,12 +427,7 @@ export const handleCodexServerRequest = async (
           threadId: routeContext.ownerThreadId,
           nativeRequest: rawRequest,
           request: parsedApproval,
-          ...(() => {
-            if (routeContext.route) {
-              return { route: routeContext.route };
-            }
-            return {};
-          })(),
+          ...(routeContext.route ? { route: routeContext.route } : undefined),
         });
         if (!registration.isNew) {
           return;

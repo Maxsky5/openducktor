@@ -10,6 +10,9 @@ export type JsonValue =
 
 export type JsonObject = Record<string, JsonValue>;
 
+export const isJsonObject = (value: JsonValue | undefined): value is JsonObject =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),

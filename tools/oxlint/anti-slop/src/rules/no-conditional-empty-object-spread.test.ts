@@ -17,6 +17,7 @@ tester.run(
       "const result = { value };",
       "const result = { ...values };",
       "const result = condition ? { value } : {};",
+      "const result = { ...(condition ? { value } : undefined) };",
     ],
     invalid: [
       {
@@ -25,6 +26,10 @@ tester.run(
       },
       {
         code: "const result = { ...(condition ? {} : { value }) };",
+        errors: [error],
+      },
+      {
+        code: "const result = { ...(() => { if (condition) return { value }; return {}; })() };",
         errors: [error],
       },
     ],

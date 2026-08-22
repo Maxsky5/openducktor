@@ -68,12 +68,7 @@ const createSettingsSnapshot = ({
   if (includeChat) {
     snapshot.chat = {
       showThinkingMessages,
-      ...(() => {
-        if (includeExpandFileDiffsByDefault) {
-          return { expandFileDiffsByDefault };
-        }
-        return {};
-      })(),
+      ...(includeExpandFileDiffsByDefault ? { expandFileDiffsByDefault } : undefined),
       ...chatOverrides,
     };
   } else {

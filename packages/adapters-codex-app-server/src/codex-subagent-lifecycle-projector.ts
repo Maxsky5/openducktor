@@ -151,12 +151,7 @@ export class CodexSubagentLifecycleProjector {
       childThreadId,
       itemId: childThreadId,
       status: update.status,
-      ...(() => {
-        if (update.error) {
-          return { error: update.error };
-        }
-        return {};
-      })(),
+      ...(update.error ? { error: update.error } : undefined),
       allowStatusRestart: update.allowStatusRestart,
       ...(update.status === "running"
         ? { startedAtMs: update.timestampMs }

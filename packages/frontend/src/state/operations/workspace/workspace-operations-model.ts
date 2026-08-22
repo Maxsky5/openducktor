@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { GitCurrentBranch, JsonValue } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
@@ -77,28 +77,28 @@ export const shouldSkipBranchSwitch = (
 const toOptionalString = (value: JsonValue | undefined): string | null =>
   hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
 
-// SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-const toRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null =>
-  hasRuntimeType(value, "object") && value !== null ? (value as Record<string, JsonValue>) : null;
+const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 const extractStructuredErrorHint = (cause: unknown): string | null => {
-  // SAFETY: The preceding runtime guard establishes `JsonValue | undefined` before this assertion.
-  const record = toRecord(cause as JsonValue | undefined);
-  if (!record) {
+  const parsedCause = jsonValueSchema.safeParse(cause);
+  if (!parsedCause.success || !isRecord(parsedCause.data)) {
     return null;
   }
 
-  const directHint = toOptionalString(record.code) ?? toOptionalString(record.kind);
+  const directHint =
+    toOptionalString(parsedCause.data.code) ?? toOptionalString(parsedCause.data.kind);
   if (directHint) {
     return directHint;
   }
 
-  const causeRecord = toRecord(record.cause);
-  if (!causeRecord) {
+  if (!isRecord(parsedCause.data.cause)) {
     return null;
   }
 
-  return toOptionalString(causeRecord.code) ?? toOptionalString(causeRecord.kind);
+  return (
+    toOptionalString(parsedCause.data.cause.code) ?? toOptionalString(parsedCause.data.cause.kind)
+  );
 };
 
 const classifyBranchProbeErrorCode = (

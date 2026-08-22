@@ -1,6 +1,10 @@
 import { createFocusedTestService, createInvalidFixture } from "../../test-support/focused-service";
 import { describe, expect, mock, test } from "bun:test";
-import { type RepoConfig, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import {
+  type JsonValue,
+  type RepoConfig,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+} from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   ListAgentModelsInput,
@@ -19,6 +23,23 @@ import { createClaudeRuntimeCommandHandlers } from "./claude-runtime-command-han
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
+
+type CatalogOperation =
+  | {
+      command: "claude_runtime_list_slash_commands";
+      method: "listAvailableSlashCommands";
+      result: { commands: JsonValue[] };
+    }
+  | {
+      command: "claude_runtime_list_skills";
+      method: "listAvailableSkills";
+      result: { skills: JsonValue[] };
+    }
+  | {
+      command: "claude_runtime_list_subagents";
+      method: "listAvailableSubagents";
+      result: { subagents: JsonValue[] };
+    };
 
 const createLiveClaudeRuntimeRegistry = () =>
   createRuntimeRegistry({
@@ -170,7 +191,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
   });
 
   test("requires a live workspace and validated directory before loading Claude catalogs", async () => {
-    const catalogOperations = [
+    const catalogOperations: CatalogOperation[] = [
       {
         command: "claude_runtime_list_slash_commands",
         method: "listAvailableSlashCommands",
@@ -186,7 +207,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         method: "listAvailableSubagents",
         result: { subagents: [] },
       },
-    ] as const;
+    ];
 
     for (const operation of catalogOperations) {
       const loadCatalog = mock(() => Effect.succeed(operation.result));
@@ -221,7 +242,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
   });
 
   test("loads Claude catalogs from the managed task worktree root", async () => {
-    const catalogOperations = [
+    const catalogOperations: CatalogOperation[] = [
       {
         command: "claude_runtime_list_slash_commands",
         method: "listAvailableSlashCommands",
@@ -237,7 +258,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         method: "listAvailableSubagents",
         result: { subagents: [] },
       },
-    ] as const;
+    ];
 
     for (const operation of catalogOperations) {
       const loadCatalog = mock(() => Effect.succeed(operation.result));

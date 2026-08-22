@@ -188,12 +188,7 @@ export function useAgentStudioSessionStartFlow({
             request,
             decision,
             task: request.taskId === taskId ? selectedTask : null,
-            ...(() => {
-              if (setTaskTargetBranch) {
-                return { persistTaskTargetBranch: setTaskTargetBranch };
-              }
-              return {};
-            })(),
+            ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : undefined),
             humanRequestChangesTask,
           });
           if (workflow.postStartActionError) {
@@ -246,12 +241,7 @@ export function useAgentStudioSessionStartFlow({
         taskId: request.taskId,
         role: request.role,
         launchActionId: request.launchActionId,
-        ...(() => {
-          if (request.holdForPostStartMessage) {
-            return { holdForPostStartMessage: true };
-          }
-          return {};
-        })(),
+        ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
       });
       return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
     },
@@ -272,12 +262,7 @@ export function useAgentStudioSessionStartFlow({
         role,
         launchActionId,
         postStartAction: params.postStartAction,
-        ...(() => {
-          if (params.holdForPostStartMessage) {
-            return { holdForPostStartMessage: true };
-          }
-          return {};
-        })(),
+        ...(params.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
         initialTargetBranch: selectedTask?.targetBranch ?? null,
         initialTargetBranchError: selectedTask?.targetBranchError ?? null,
       });
@@ -299,12 +284,7 @@ export function useAgentStudioSessionStartFlow({
     }): Promise<SessionStartWorkflowResult | undefined> => {
       return runSessionStart({
         postStartAction: "none",
-        ...(() => {
-          if (options?.holdForPostStartMessage) {
-            return { holdForPostStartMessage: true };
-          }
-          return {};
-        })(),
+        ...(options?.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
       });
     },
     [runSessionStart],
@@ -400,24 +380,13 @@ export function useAgentStudioSessionStartFlow({
         role: option.role,
         launchActionId: option.launchActionId,
         postStartAction: option.postStartAction,
-        ...(() => {
-          if (option.initialStartMode) {
-            return { initialStartMode: option.initialStartMode };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (option.existingSessionOptions) {
-            return { existingSessionOptions: option.existingSessionOptions };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (option.initialSourceSession !== undefined) {
-            return { initialSourceSession: option.initialSourceSession };
-          }
-          return {};
-        })(),
+        ...(option.initialStartMode ? { initialStartMode: option.initialStartMode } : undefined),
+        ...(option.existingSessionOptions
+          ? { existingSessionOptions: option.existingSessionOptions }
+          : undefined),
+        ...(option.initialSourceSession !== undefined
+          ? { initialSourceSession: option.initialSourceSession }
+          : undefined),
       });
     },
     [canStartRole, isSessionWorking, openHumanReviewFeedback, runGatedSessionStartRequest, taskId],

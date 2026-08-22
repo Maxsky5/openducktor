@@ -68,12 +68,7 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
   const effectiveToolDiscovery =
     toolDiscovery ??
     createToolDiscoveryAdapter({
-      ...(() => {
-        if (processEnv === undefined) {
-          return {};
-        }
-        return { env: processEnv };
-      })(),
+      ...(processEnv === undefined ? undefined : { env: processEnv }),
       systemCommands: systemCommands ?? createSystemCommands(),
     });
   // SAFETY: This test controls the fixture and supplies `never` used by this case.
@@ -82,12 +77,7 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
     toolDiscovery: effectiveToolDiscovery,
     settingsConfig:
       settingsConfig ?? createDiscoveredRuntimeSettingsConfig("codex", effectiveToolDiscovery),
-    ...(() => {
-      if (processEnv === undefined) {
-        return {};
-      }
-      return { processEnv };
-    })(),
+    ...(processEnv === undefined ? undefined : { processEnv }),
     liveSessionLifecycle: liveSessionLifecycle ?? defaultLiveSessionLifecycle,
     prepareLiveSessionAdapter:
       prepareLiveSessionAdapter ??

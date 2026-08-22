@@ -14,12 +14,7 @@ const buildToolMeta = (
   tool,
   toolType,
   status: "completed",
-  ...(() => {
-    if (input) {
-      return { input };
-    }
-    return {};
-  })(),
+  ...(input ? { input } : undefined),
 });
 
 describe("shouldRefreshGitPanelAfterToolCompletion", () => {

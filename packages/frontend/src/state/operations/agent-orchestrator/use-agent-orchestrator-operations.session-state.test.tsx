@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
@@ -26,6 +25,10 @@ import {
 
 interface ReceivedHistoryInputRefContract {
   current: Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0] | null;
+}
+
+interface ReceivedContextInputRefContract {
+  current: Parameters<typeof host.agentSessionLiveLoadContext>[0] | null;
 }
 
 describe("use-agent-orchestrator-operations session state", () => {
@@ -978,7 +981,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       providerId: "openai",
       modelId: "gpt-5",
     };
-    const receivedContextInput = createFocusedFixture<{ current: unknown }>({ current: null });
+    const receivedContextInput: ReceivedContextInputRefContract = { current: null };
     let contextReadCount = 0;
     let releaseContextRead: (() => void) | undefined;
     const contextReadGate = new Promise<void>((resolve) => {

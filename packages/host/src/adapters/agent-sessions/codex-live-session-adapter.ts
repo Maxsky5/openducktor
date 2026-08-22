@@ -349,12 +349,9 @@ export const createCodexLiveSessionAdapterPreparer =
                 runtimeKind: input.runtimeKind,
                 workingDirectory: input.workingDirectory,
                 externalSessionId: input.externalSessionId,
-                ...(() => {
-                  if (input.runtimeHistoryAnchor !== undefined) {
-                    return { runtimeHistoryAnchor: input.runtimeHistoryAnchor };
-                  }
-                  return {};
-                })(),
+                ...(input.runtimeHistoryAnchor !== undefined
+                  ? { runtimeHistoryAnchor: input.runtimeHistoryAnchor }
+                  : undefined),
               }),
             catch: sessionError("codex-live-session.load-diff", input.externalSessionId),
           }),
@@ -366,12 +363,7 @@ export const createCodexLiveSessionAdapterPreparer =
                 externalSessionId: input.externalSessionId,
                 requestId: input.requestId,
                 outcome: input.outcome,
-                ...(() => {
-                  if (input.message !== undefined) {
-                    return { message: input.message };
-                  }
-                  return {};
-                })(),
+                ...(input.message !== undefined ? { message: input.message } : undefined),
               }),
             catch: sessionError("codex-live-session.reply-approval", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
@@ -453,12 +445,7 @@ export const createCodexLiveSessionAdapterPreparer =
             try: () =>
               controller.updateSessionModel({
                 ...input,
-                ...(() => {
-                  if (input.model) {
-                    return { model: input.model };
-                  }
-                  return {};
-                })(),
+                ...(input.model ? { model: input.model } : undefined),
               } as Parameters<CodexSessionController["updateSessionModel"]>[0]),
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),

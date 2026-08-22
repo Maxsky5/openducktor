@@ -115,12 +115,7 @@ const codexTodoToolInputFromPayload = (
   }
   const explanation = extractStringField(payload, ["explanation"]);
   return {
-    ...(() => {
-      if (explanation) {
-        return { explanation };
-      }
-      return {};
-    })(),
+    ...(explanation ? { explanation } : undefined),
     todos,
   };
 };
@@ -134,18 +129,8 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
     rawTodos.filter(isPlainObject).map((item, index) => ({
       id: extractStringField(item, ["id", "todoId", "todo_id"]) ?? `codex-todo:${index}`,
       content: extractStringField(item, ["content", "text", "title", "step"]) ?? "",
-      ...(() => {
-        if (hasRuntimeType(item.status, "string")) {
-          return { status: item.status };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(item.priority, "string")) {
-          return { priority: item.priority };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(item.status, "string") ? { status: item.status } : undefined),
+      ...(hasRuntimeType(item.priority, "string") ? { priority: item.priority } : undefined),
     })),
   );
   if (todos.length === 0) {
@@ -153,12 +138,7 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
   }
   const explanation = extractStringField(payload, ["explanation"]);
   return {
-    ...(() => {
-      if (explanation) {
-        return { explanation };
-      }
-      return {};
-    })(),
+    ...(explanation ? { explanation } : undefined),
     todos,
   };
 };
@@ -191,18 +171,8 @@ const todoToolCanonicalEvents = (
     source: ctx.source,
     mapper: TODO_MAPPER_NAME,
     threadId: ctx.threadId,
-    ...(() => {
-      if (ctx.turnId) {
-        return { turnId: ctx.turnId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (ctx.timestamp) {
-        return { timestamp: ctx.timestamp };
-      }
-      return {};
-    })(),
+    ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
+    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
     raw,
     invocation: {
       ...ids,
@@ -218,18 +188,8 @@ const todoToolCanonicalEvents = (
     source: ctx.source,
     mapper: TODO_MAPPER_NAME,
     threadId: ctx.threadId,
-    ...(() => {
-      if (ctx.turnId) {
-        return { turnId: ctx.turnId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (ctx.timestamp) {
-        return { timestamp: ctx.timestamp };
-      }
-      return {};
-    })(),
+    ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
+    ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
     raw,
     todos: update.todos,
   },

@@ -176,12 +176,7 @@ export function useAgentStudioSessionActions({
     workspaceRepoPath,
     runSessionStartWorkflow,
     humanRequestChangesTask,
-    ...(() => {
-      if (setTaskTargetBranch) {
-        return { setTaskTargetBranch };
-      }
-      return {};
-    })(),
+    ...(setTaskTargetBranch ? { setTaskTargetBranch } : undefined),
     scheduleQueryUpdate,
   });
 

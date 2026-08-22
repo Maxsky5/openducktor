@@ -588,26 +588,13 @@ const makeAssistantMessageUpdatedEvent = (input: {
         id: input.messageId,
         role: "assistant",
         sessionID: "external-session-1",
-        ...(() => {
-          if (input.finish) {
-            return { finish: input.finish };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (input.completedAt !== undefined) {
-            return { time: { completed: input.completedAt } };
-          }
-          return {};
-        })(),
+        ...(input.finish ? { finish: input.finish } : undefined),
+        ...(input.completedAt !== undefined
+          ? { time: { completed: input.completedAt } }
+          : undefined),
         ...input.info,
       },
-      ...(() => {
-        if (parts) {
-          return { parts };
-        }
-        return {};
-      })(),
+      ...(parts ? { parts } : undefined),
     },
   });
 };

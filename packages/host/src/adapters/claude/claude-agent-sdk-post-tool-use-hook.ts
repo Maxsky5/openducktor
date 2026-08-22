@@ -48,18 +48,8 @@ const emitFileEditResult = ({
     raw: toolResponse,
     text: hookResponseText(toolResponse),
     tool: input.tool_name,
-    ...(() => {
-      if (toolInput) {
-        return { input: toolInput };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(startedAtMs, "number")) {
-        return { startedAtMs };
-      }
-      return {};
-    })(),
+    ...(toolInput ? { input: toolInput } : undefined),
+    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
   });
   if (!part.fileDiffs) {
     return;

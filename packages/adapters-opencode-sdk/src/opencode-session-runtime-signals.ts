@@ -60,12 +60,7 @@ export const readMessageUpdatedContextSignal = (
     externalSessionId,
     contextUsage: {
       totalTokens,
-      ...(() => {
-        if (model) {
-          return { model };
-        }
-        return {};
-      })(),
+      ...(model ? { model } : undefined),
     },
   };
 };

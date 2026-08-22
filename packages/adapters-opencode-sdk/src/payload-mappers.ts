@@ -45,18 +45,8 @@ export const normalizeModelInput = (
       providerID: model.providerId,
       modelID: model.modelId,
     },
-    ...(() => {
-      if (model.variant) {
-        return { variant: model.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (model.profileId) {
-        return { agent: model.profileId };
-      }
-      return {};
-    })(),
+    ...(model.variant ? { variant: model.variant } : undefined),
+    ...(model.profileId ? { agent: model.profileId } : undefined),
   };
 };
 
@@ -168,24 +158,13 @@ export const mapProviderListToCatalog = (
         modelId,
         modelName: rawModel.name ?? modelId,
         variants,
-        ...(() => {
-          if (hasRuntimeType(contextWindow, "number") && Number.isFinite(contextWindow)) {
-            return { contextWindow };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (hasRuntimeType(outputLimit, "number") && Number.isFinite(outputLimit)) {
-            return { outputLimit };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (attachmentSupport) {
-            return { attachmentSupport };
-          }
-          return {};
-        })(),
+        ...(hasRuntimeType(contextWindow, "number") && Number.isFinite(contextWindow)
+          ? { contextWindow }
+          : undefined),
+        ...(hasRuntimeType(outputLimit, "number") && Number.isFinite(outputLimit)
+          ? { outputLimit }
+          : undefined),
+        ...(attachmentSupport ? { attachmentSupport } : undefined),
       };
     });
   });

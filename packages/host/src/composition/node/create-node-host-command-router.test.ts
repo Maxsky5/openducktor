@@ -76,12 +76,7 @@ const createRouter = (input: {
   runtimeRegistry?: RuntimeRegistryPort;
 }) =>
   createNodeEffectHostCommandRouter({
-    ...(() => {
-      if (input.eventBus) {
-        return { eventBus: input.eventBus };
-      }
-      return {};
-    })(),
+    ...(input.eventBus ? { eventBus: input.eventBus } : undefined),
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),

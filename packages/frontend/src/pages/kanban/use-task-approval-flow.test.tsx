@@ -298,21 +298,11 @@ const createConflictDirectMergeResult = (
   outcome: "conflicts" as const,
   conflict: {
     operation: "direct_merge_merge_commit" as const,
-    ...(() => {
-      if (overrides.currentBranch) {
-        return { currentBranch: overrides.currentBranch };
-      }
-      return {};
-    })(),
+    ...(overrides.currentBranch ? { currentBranch: overrides.currentBranch } : undefined),
     targetBranch: "main",
     conflictedFiles: ["src/app.ts"],
     output: "conflict output",
-    ...(() => {
-      if (overrides.workingDir) {
-        return { workingDir: overrides.workingDir };
-      }
-      return {};
-    })(),
+    ...(overrides.workingDir ? { workingDir: overrides.workingDir } : undefined),
   },
 });
 

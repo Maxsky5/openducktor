@@ -156,44 +156,16 @@ export const buildSessionStartModalRequest = ({
     role: request.role,
     launchActionId: request.launchActionId,
     postStartAction: request.postStartAction,
-    ...(() => {
-      if (requestedRuntimeKind) {
-        return { requestedRuntimeKind };
-      }
-      return {};
-    })(),
+    ...(requestedRuntimeKind ? { requestedRuntimeKind } : undefined),
     selectedModel,
     initialTargetBranch,
-    ...(() => {
-      if (initialTargetBranchError) {
-        return { initialTargetBranchError };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (request.targetWorkingDirectory !== undefined) {
-        return { targetWorkingDirectory: request.targetWorkingDirectory };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (request.initialStartMode) {
-        return { initialStartMode: request.initialStartMode };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (existingSessionOptions.length > 0) {
-        return { existingSessionOptions };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (initialSourceSession !== undefined) {
-        return { initialSourceSession };
-      }
-      return {};
-    })(),
+    ...(initialTargetBranchError ? { initialTargetBranchError } : undefined),
+    ...(request.targetWorkingDirectory !== undefined
+      ? { targetWorkingDirectory: request.targetWorkingDirectory }
+      : undefined),
+    ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : undefined),
+    ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : undefined),
+    ...(initialSourceSession !== undefined ? { initialSourceSession } : undefined),
   };
 };
 
@@ -215,66 +187,25 @@ export const executeSessionStartFromDecision = async ({
       role: request.role,
       launchActionId: request.launchActionId,
       startMode: decision.startMode,
-      ...(() => {
-        if (decision.targetBranch) {
-          return { targetBranch: decision.targetBranch };
-        }
-        return {};
-      })(),
+      ...(decision.targetBranch ? { targetBranch: decision.targetBranch } : undefined),
       postStartAction: request.postStartAction,
-      ...(() => {
-        if (request.targetWorkingDirectory !== undefined) {
-          return { targetWorkingDirectory: request.targetWorkingDirectory };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (request.holdForPostStartMessage) {
-          return { holdForPostStartMessage: true };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (request.message) {
-          return { message: request.message };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (request.beforeStartAction) {
-          return { beforeStartAction: request.beforeStartAction };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (decision.startMode === "reuse" || decision.startMode === "fork") {
-          return { sourceSession: decision.sourceSession };
-        }
-        return {};
-      })(),
+      ...(request.targetWorkingDirectory !== undefined
+        ? { targetWorkingDirectory: request.targetWorkingDirectory }
+        : undefined),
+      ...(request.holdForPostStartMessage ? { holdForPostStartMessage: true } : undefined),
+      ...(request.message ? { message: request.message } : undefined),
+      ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : undefined),
+      ...(decision.startMode === "reuse" || decision.startMode === "fork"
+        ? { sourceSession: decision.sourceSession }
+        : undefined),
     },
     selection: decision.startMode === "reuse" ? null : decision.selectedModel,
     task,
     workspaceId,
-    ...(() => {
-      if (persistTaskTargetBranch) {
-        return { persistTaskTargetBranch };
-      }
-      return {};
-    })(),
+    ...(persistTaskTargetBranch ? { persistTaskTargetBranch } : undefined),
     startAgentSession,
-    ...(() => {
-      if (sendAgentMessage) {
-        return { sendAgentMessage };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (humanRequestChangesTask) {
-        return { humanRequestChangesTask };
-      }
-      return {};
-    })(),
+    ...(sendAgentMessage ? { sendAgentMessage } : undefined),
+    ...(humanRequestChangesTask ? { humanRequestChangesTask } : undefined),
   });
 };
 
@@ -290,11 +221,6 @@ export const createSessionStartWorkflowRunner = ({
       queryClient,
       workspaceId,
       startAgentSession,
-      ...(() => {
-        if (sendAgentMessage) {
-          return { sendAgentMessage };
-        }
-        return {};
-      })(),
+      ...(sendAgentMessage ? { sendAgentMessage } : undefined),
     });
 };

@@ -112,12 +112,7 @@ export const executeForkStart = async ({
       workingDirectory,
       sessionScope,
       systemPrompt,
-      ...(() => {
-        if (selectedModel) {
-          return { model: selectedModel };
-        }
-        return {};
-      })(),
+      ...(selectedModel ? { model: selectedModel } : undefined),
       parentExternalSessionId: sourceSession.externalSessionId,
     });
 

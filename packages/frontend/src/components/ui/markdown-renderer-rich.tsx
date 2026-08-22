@@ -38,18 +38,8 @@ export default function MarkdownRendererRich({
       urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
       components={createTaskDescriptionComponents({
         components: premiumComponents,
-        ...(() => {
-          if (resolveTaskAssetSrc) {
-            return { resolveTaskAssetSrc };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (taskAssetContext) {
-            return { taskAssetContext };
-          }
-          return {};
-        })(),
+        ...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : undefined),
+        ...(taskAssetContext ? { taskAssetContext } : undefined),
       })}
     >
       {content}

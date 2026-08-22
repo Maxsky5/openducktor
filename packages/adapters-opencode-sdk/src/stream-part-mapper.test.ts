@@ -27,42 +27,12 @@ const createToolPart = ({
 }): Part => {
   const state = {
     input,
-    ...(() => {
-      if (status !== undefined) {
-        return { status };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (output !== undefined) {
-        return { output };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (error !== undefined) {
-        return { error };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (title !== undefined) {
-        return { title };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata !== undefined) {
-        return { metadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (time !== undefined) {
-        return { time };
-      }
-      return {};
-    })(),
+    ...(status !== undefined ? { status } : undefined),
+    ...(output !== undefined ? { output } : undefined),
+    ...(error !== undefined ? { error } : undefined),
+    ...(title !== undefined ? { title } : undefined),
+    ...(metadata !== undefined ? { metadata } : undefined),
+    ...(time !== undefined ? { time } : undefined),
   };
 
   // SAFETY: This test controls the fixture and supplies `Part` used by this case.
@@ -94,12 +64,7 @@ const createSyntheticTextPart = ({
     type: "text",
     synthetic: true,
     text,
-    ...(() => {
-      if (time) {
-        return { time };
-      }
-      return {};
-    })(),
+    ...(time ? { time } : undefined),
   }) as Part;
 
 describe("stream-part-mapper", () => {

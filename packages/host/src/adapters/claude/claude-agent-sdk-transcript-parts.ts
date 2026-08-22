@@ -89,30 +89,10 @@ export const createClaudeCompletedToolPart = ({
     tool,
     ...toolPartPresentation(tool),
     status: isError ? "error" : "completed",
-    ...(() => {
-      if (input) {
-        return { input };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resolvedPreview) {
-        return { preview: resolvedPreview };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(startedAtMs, "number")) {
-        return { startedAtMs };
-      }
-      return {};
-    })(),
+    ...(input ? { input } : undefined),
+    ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
+    ...(metadata ? { metadata } : undefined),
+    ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
     endedAtMs,
     ...(isError ? { error: text } : { output: text }),
   };
@@ -140,12 +120,7 @@ export const claudeAssistantTextPartEvent = ({
   timestamp,
   part: createClaudeAssistantTextPart({
     messageId,
-    ...(() => {
-      if (partId) {
-        return { partId };
-      }
-      return {};
-    })(),
+    ...(partId ? { partId } : undefined),
     text,
   }),
 });

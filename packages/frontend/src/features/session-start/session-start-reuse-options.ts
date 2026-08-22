@@ -39,12 +39,7 @@ export const buildReusableSessionOptions = ({
             runtimeKind,
           }
         : null,
-      ...(() => {
-        if (index === 0) {
-          return { secondaryLabel: "Latest" };
-        }
-        return {};
-      })(),
+      ...(index === 0 ? { secondaryLabel: "Latest" } : undefined),
     };
   });
 };

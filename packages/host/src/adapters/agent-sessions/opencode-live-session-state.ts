@@ -117,12 +117,9 @@ export const createOpenCodeLiveSessionState = ({
         }),
         title: source.title,
         startedAt: source.startedAt,
-        ...(() => {
-          if (source.parentExternalSessionId) {
-            return { parentExternalSessionId: source.parentExternalSessionId };
-          }
-          return {};
-        })(),
+        ...(source.parentExternalSessionId
+          ? { parentExternalSessionId: source.parentExternalSessionId }
+          : undefined),
         pendingApprovals,
         pendingQuestions,
         contextUsage: contextUsageBySessionId.get(source.externalSessionId) ?? null,
@@ -259,12 +256,9 @@ export const createOpenCodeLiveSessionState = ({
         }),
         title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
         startedAt: summary.startedAt,
-        ...(() => {
-          if (retainedParentExternalSessionId) {
-            return { parentExternalSessionId: retainedParentExternalSessionId };
-          }
-          return {};
-        })(),
+        ...(retainedParentExternalSessionId
+          ? { parentExternalSessionId: retainedParentExternalSessionId }
+          : undefined),
         pendingApprovals,
         pendingQuestions,
         contextUsage:

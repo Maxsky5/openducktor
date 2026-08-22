@@ -20,12 +20,9 @@ const removeWorkspaceId = (jsonSchema: Record<string, JsonValue>) => {
   return {
     ...jsonSchema,
     properties,
-    ...(() => {
-      if (Array.isArray(jsonSchema.required)) {
-        return { required: jsonSchema.required.filter((key) => key !== "workspaceId") };
-      }
-      return {};
-    })(),
+    ...(Array.isArray(jsonSchema.required)
+      ? { required: jsonSchema.required.filter((key) => key !== "workspaceId") }
+      : undefined),
   } satisfies Record<string, JsonValue>;
 };
 

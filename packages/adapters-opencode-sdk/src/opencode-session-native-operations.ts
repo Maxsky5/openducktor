@@ -57,12 +57,7 @@ export const readLatestOpencodeContextUsage = async (
   const model = readMessageModelSelection(latestAssistant.info);
   return {
     totalTokens,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
   };
 };
 
@@ -78,12 +73,7 @@ export const replyToOpencodeApproval = async (
     directory: input.ref.workingDirectory,
     requestID: input.nativeRequestId,
     reply: toOpenCodePermissionReply(input.outcome),
-    ...(() => {
-      if (input.message) {
-        return { message: input.message };
-      }
-      return {};
-    })(),
+    ...(input.message ? { message: input.message } : undefined),
   });
   if (response.error) {
     throw toOpenCodeRequestError("reply to permission request", response.error, response.response);

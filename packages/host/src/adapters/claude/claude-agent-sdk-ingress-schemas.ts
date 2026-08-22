@@ -231,24 +231,13 @@ export const parseClaudeUserToolResultIngress = (
   const normalizedMessage = {
     message: message.message,
     type: message.type,
-    ...(() => {
-      if (message.parent_tool_use_id === undefined) {
-        return {};
-      }
-      return { parent_tool_use_id: message.parent_tool_use_id };
-    })(),
-    ...(() => {
-      if (message.shouldQuery === false || message.origin === undefined) {
-        return {};
-      }
-      return { turnOriginKind: message.origin.kind };
-    })(),
-    ...(() => {
-      if (message.uuid === undefined) {
-        return {};
-      }
-      return { uuid: message.uuid };
-    })(),
+    ...(message.parent_tool_use_id === undefined
+      ? undefined
+      : { parent_tool_use_id: message.parent_tool_use_id }),
+    ...(message.shouldQuery === false || message.origin === undefined
+      ? undefined
+      : { turnOriginKind: message.origin.kind }),
+    ...(message.uuid === undefined ? undefined : { uuid: message.uuid }),
   };
   const topLevelToolUseResult = message.tool_use_result;
   if (topLevelToolUseResult?.kind === "tool_result") {

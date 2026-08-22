@@ -86,12 +86,7 @@ const validateElectronHostInvokeResult = (
         ok: false,
         error: {
           message: errorMessage(cause),
-          ...(() => {
-            if (failure) {
-              return { failure };
-            }
-            return {};
-          })(),
+          ...(failure ? { failure } : undefined),
         },
       },
     };

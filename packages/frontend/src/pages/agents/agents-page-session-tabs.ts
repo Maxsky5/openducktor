@@ -320,12 +320,9 @@ export const buildSessionCreateOptions = (params: {
       label: `Prepare ${params.roleLabelByRole[role]} session`,
       description,
       disabled: params.createSessionDisabled,
-      ...(() => {
-        if (params.createSessionDisabled) {
-          return { disabledReason: "Wait for the current session to finish." };
-        }
-        return {};
-      })(),
+      ...(params.createSessionDisabled
+        ? { disabledReason: "Wait for the current session to finish." }
+        : undefined),
     });
   };
 

@@ -182,40 +182,17 @@ const trimParagraphTokenStart = (token: MarkdownToken): MarkdownToken => {
   if (inlineTokens?.[0]) {
     inlineTokens[0] = {
       ...inlineTokens[0],
-      ...(() => {
-        if (inlineTokens[0].raw === undefined) {
-          return {};
-        }
-        return { raw: inlineTokens[0].raw.trimStart() };
-      })(),
-      ...(() => {
-        if (inlineTokens[0].text === undefined) {
-          return {};
-        }
-        return { text: inlineTokens[0].text.trimStart() };
-      })(),
+      ...(inlineTokens[0].raw === undefined ? undefined : { raw: inlineTokens[0].raw.trimStart() }),
+      ...(inlineTokens[0].text === undefined
+        ? undefined
+        : { text: inlineTokens[0].text.trimStart() }),
     };
   }
   return {
     ...token,
-    ...(() => {
-      if (token.raw === undefined) {
-        return {};
-      }
-      return { raw: token.raw.trimStart() };
-    })(),
-    ...(() => {
-      if (token.text === undefined) {
-        return {};
-      }
-      return { text: token.text.trimStart() };
-    })(),
-    ...(() => {
-      if (inlineTokens === undefined) {
-        return {};
-      }
-      return { tokens: inlineTokens };
-    })(),
+    ...(token.raw === undefined ? undefined : { raw: token.raw.trimStart() }),
+    ...(token.text === undefined ? undefined : { text: token.text.trimStart() }),
+    ...(inlineTokens === undefined ? undefined : { tokens: inlineTokens }),
   };
 };
 

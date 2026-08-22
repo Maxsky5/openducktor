@@ -166,12 +166,7 @@ const normalizeFileReferencePart = (
       name,
       kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
     },
-    ...(() => {
-      if (sourceText) {
-        return { sourceText };
-      }
-      return {};
-    })(),
+    ...(sourceText ? { sourceText } : undefined),
   };
 };
 
@@ -198,12 +193,7 @@ const normalizeSubagentReferencePart = (
   return {
     kind: "subagent_reference",
     subagent,
-    ...(() => {
-      if (sourceText) {
-        return { sourceText };
-      }
-      return {};
-    })(),
+    ...(sourceText ? { sourceText } : undefined),
   };
 };
 
@@ -386,18 +376,10 @@ export const readMessageModelSelection = (
   return {
     providerId,
     modelId,
-    ...(() => {
-      if (hasRuntimeType(variant, "string") && variant.trim().length > 0) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(profileId, "string") && profileId.trim().length > 0) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(variant, "string") && variant.trim().length > 0 ? { variant } : undefined),
+    ...(hasRuntimeType(profileId, "string") && profileId.trim().length > 0
+      ? { profileId }
+      : undefined),
   };
 };
 
@@ -433,46 +415,16 @@ const readTokenBreakdown = (value: JsonValue | undefined): TokenBreakdown | unde
   const cache =
     cacheRead !== undefined || cacheWrite !== undefined
       ? {
-          ...(() => {
-            if (cacheRead !== undefined) {
-              return { read: cacheRead };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (cacheWrite !== undefined) {
-              return { write: cacheWrite };
-            }
-            return {};
-          })(),
+          ...(cacheRead !== undefined ? { read: cacheRead } : undefined),
+          ...(cacheWrite !== undefined ? { write: cacheWrite } : undefined),
         }
       : undefined;
 
   return {
-    ...(() => {
-      if (input !== undefined) {
-        return { input };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (output !== undefined) {
-        return { output };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (reasoning !== undefined) {
-        return { reasoning };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (cache) {
-        return { cache };
-      }
-      return {};
-    })(),
+    ...(input !== undefined ? { input } : undefined),
+    ...(output !== undefined ? { output } : undefined),
+    ...(reasoning !== undefined ? { reasoning } : undefined),
+    ...(cache ? { cache } : undefined),
   };
 };
 

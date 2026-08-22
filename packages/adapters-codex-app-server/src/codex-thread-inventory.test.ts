@@ -11,21 +11,20 @@ const threadListResponse = (
   cwd = "/repo",
   status: Record<string, JsonValue> = { type: "idle" },
   extra: Record<string, JsonValue> = {},
-) =>
-  ({
-    data: [
-      {
-        id,
-        cwd,
-        createdAt: 1,
-        updatedAt: 2,
-        preview,
-        status,
-        ...extra,
-      },
-    ],
-    nextCursor: null,
-  }) satisfies unknown;
+) => ({
+  data: [
+    {
+      id,
+      cwd,
+      createdAt: 1,
+      updatedAt: 2,
+      preview,
+      status,
+      ...extra,
+    },
+  ],
+  nextCursor: null,
+});
 
 const threadReadResponse = (
   id: string,
@@ -33,19 +32,18 @@ const threadReadResponse = (
   status: Record<string, JsonValue> = { type: "idle" },
   turns: unknown[] = [{ id: "turn-1", status: "completed", items: [] }],
   extra: Record<string, JsonValue> = {},
-) =>
-  ({
-    thread: {
-      id,
-      cwd,
-      createdAt: 1,
-      updatedAt: 2,
-      preview: "Stored thread",
-      status,
-      turns,
-      ...extra,
-    },
-  }) satisfies unknown;
+) => ({
+  thread: {
+    id,
+    cwd,
+    createdAt: 1,
+    updatedAt: 2,
+    preview: "Stored thread",
+    status,
+    turns,
+    ...extra,
+  },
+});
 
 describe("CodexThreadInventoryReader", () => {
   test("preserves the Codex thread update timestamp as a lifecycle watermark", () => {

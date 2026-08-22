@@ -6,7 +6,6 @@ import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -218,12 +217,7 @@ const normalizeHookArgs = ({
     }),
   clearTaskData: rest.clearTaskData ?? (() => {}),
   clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
-  ...(() => {
-    if (rest.hostClient === undefined) {
-      return {};
-    }
-    return { hostClient: rest.hostClient };
-  })(),
+  ...(rest.hostClient === undefined ? undefined : { hostClient: rest.hostClient }),
 });
 
 const createHookHarness = (initialArgs: LegacyHookArgs) => {
@@ -893,16 +887,19 @@ describe("use-workspace-operations", () => {
         detached: false,
       });
 
-      const thrown = createFocusedFixture<{ current: unknown }>({ current: null });
+      let thrown: Error | null = null;
       await harness.run(async (value) => {
         try {
           await value.selectWorkspace("repo-a");
-        } catch (error) {
-          thrown.current = error;
+        } catch (cause) {
+          if (!(cause instanceof Error)) {
+            throw new Error("Expected workspace selection to reject with Error.", { cause });
+          }
+          thrown = cause;
         }
       });
 
-      expect(thrown.current).toBeInstanceOf(Error);
+      expect(thrown).toBeInstanceOf(Error);
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).not.toHaveBeenCalled();

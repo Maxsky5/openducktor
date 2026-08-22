@@ -35,18 +35,8 @@ export const pickDefaultVisibleSelectionForCatalog = (
     runtimeKind,
     providerId: defaultModel.providerId,
     modelId: defaultModel.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };
 
@@ -81,18 +71,8 @@ export const coerceVisibleSelectionToCatalog = (
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };
 
@@ -301,18 +281,8 @@ export const resolveModelSelectionForModelChange = ({
     runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,
-    ...(() => {
-      if (variant) {
-        return { variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (profileId) {
-        return { profileId };
-      }
-      return {};
-    })(),
+    ...(variant ? { variant } : undefined),
+    ...(profileId ? { profileId } : undefined),
   };
 };
 
@@ -340,11 +310,6 @@ export const resolveModelSelectionForVariantChange = ({
   const { variant: _currentVariant, ...selectionWithoutVariant } = currentSelection;
   return {
     ...selectionWithoutVariant,
-    ...(() => {
-      if (normalizedVariant) {
-        return { variant: normalizedVariant };
-      }
-      return {};
-    })(),
+    ...(normalizedVariant ? { variant: normalizedVariant } : undefined),
   };
 };

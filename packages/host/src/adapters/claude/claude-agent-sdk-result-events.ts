@@ -195,24 +195,9 @@ export const emitClaudePermissionDeniedToolPart = ({
       messageId,
       text: permission.message,
       tool: toolName,
-      ...(() => {
-        if (input) {
-          return { input };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (permission.metadata) {
-          return { metadata: permission.metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (hasRuntimeType(startedAtMs, "number")) {
-          return { startedAtMs };
-        }
-        return {};
-      })(),
+      ...(input ? { input } : undefined),
+      ...(permission.metadata ? { metadata: permission.metadata } : undefined),
+      ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
     }),
   });
 };
@@ -280,11 +265,6 @@ const emitSuccessfulResultText = ({
     timestamp,
     messageId,
     message: text,
-    ...(() => {
-      if (resultModel) {
-        return { model: resultModel };
-      }
-      return {};
-    })(),
+    ...(resultModel ? { model: resultModel } : undefined),
   });
 };

@@ -32,18 +32,8 @@ export const useSelectedSessionContextUsage = ({
     return extractLatestSessionContextUsage({
       liveContextUsage: selectedSession?.contextUsage ?? null,
       modelDescriptorByKey: selectedSessionModelDescriptorByKey,
-      ...(() => {
-        if (fallbackContextWindow !== null) {
-          return { fallbackContextWindow };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (fallbackOutputLimit !== null) {
-          return { fallbackOutputLimit };
-        }
-        return {};
-      })(),
+      ...(fallbackContextWindow !== null ? { fallbackContextWindow } : undefined),
+      ...(fallbackOutputLimit !== null ? { fallbackOutputLimit } : undefined),
     });
   }, [
     selectedSession,

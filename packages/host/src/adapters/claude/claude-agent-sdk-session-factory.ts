@@ -62,12 +62,9 @@ export const createClaudeAgentSdkSession = async ({
     externalSessionId: sessionInput.externalSessionId,
     input,
     model: input.model,
-    ...(() => {
-      if (sessionInput.parentExternalSessionId) {
-        return { parentExternalSessionId: sessionInput.parentExternalSessionId };
-      }
-      return {};
-    })(),
+    ...(sessionInput.parentExternalSessionId
+      ? { parentExternalSessionId: sessionInput.parentExternalSessionId }
+      : undefined),
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
     queuedSdkMessages: [],
@@ -99,12 +96,7 @@ export const createClaudeAgentSdkSession = async ({
       emit,
       sessionOptions: {
         ...sessionInput.options,
-        ...(() => {
-          if (sessionInput.title) {
-            return { title: sessionInput.title };
-          }
-          return {};
-        })(),
+        ...(sessionInput.title ? { title: sessionInput.title } : undefined),
       },
     });
     sdkQuery = query({ prompt: queue, options });

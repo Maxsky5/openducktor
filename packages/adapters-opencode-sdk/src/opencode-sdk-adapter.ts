@@ -210,12 +210,7 @@ export class OpencodeSdkAdapter
       startedMessage: `Started ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(() => {
-        if (this.logEvent) {
-          return { logEvent: this.logEvent };
-        }
-        return {};
-      })(),
+      ...(this.logEvent ? { logEvent: this.logEvent } : undefined),
     });
   }
 
@@ -278,12 +273,7 @@ export class OpencodeSdkAdapter
       startedMessage: `Resumed ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(() => {
-        if (this.logEvent) {
-          return { logEvent: this.logEvent };
-        }
-        return {};
-      })(),
+      ...(this.logEvent ? { logEvent: this.logEvent } : undefined),
     });
   }
 
@@ -361,12 +351,7 @@ export class OpencodeSdkAdapter
       subscribeToEvents: false,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(() => {
-        if (this.logEvent) {
-          return { logEvent: this.logEvent };
-        }
-        return {};
-      })(),
+      ...(this.logEvent ? { logEvent: this.logEvent } : undefined),
     });
 
     try {
@@ -380,12 +365,7 @@ export class OpencodeSdkAdapter
         sessionInput,
         now: this.now,
         emit: this.emit.bind(this),
-        ...(() => {
-          if (this.logEvent) {
-            return { logEvent: this.logEvent };
-          }
-          return {};
-        })(),
+        ...(this.logEvent ? { logEvent: this.logEvent } : undefined),
       });
     } catch (error) {
       const session = this.sessions.get(input.externalSessionId);
@@ -447,12 +427,7 @@ export class OpencodeSdkAdapter
     const forked = await client.session.fork({
       directory: input.workingDirectory,
       sessionID: input.parentExternalSessionId,
-      ...(() => {
-        if (input.runtimeHistoryAnchor) {
-          return { messageID: input.runtimeHistoryAnchor };
-        }
-        return {};
-      })(),
+      ...(input.runtimeHistoryAnchor ? { messageID: input.runtimeHistoryAnchor } : undefined),
     });
     const forkedData = unwrapData(forked, "fork session");
     const externalSessionId = forkedData.id;
@@ -499,12 +474,7 @@ export class OpencodeSdkAdapter
       startedMessage: `Forked ${policy.activityLabel} session`,
       now: this.now,
       emit: this.emit.bind(this),
-      ...(() => {
-        if (this.logEvent) {
-          return { logEvent: this.logEvent };
-        }
-        return {};
-      })(),
+      ...(this.logEvent ? { logEvent: this.logEvent } : undefined),
     });
   }
 
@@ -519,12 +489,7 @@ export class OpencodeSdkAdapter
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       now: this.now,
-      ...(() => {
-        if (input.directories) {
-          return { directories: input.directories };
-        }
-        return {};
-      })(),
+      ...(input.directories ? { directories: input.directories } : undefined),
     });
     const existingExternalSessionIds = new Set(
       snapshots.map((snapshot) => snapshot.externalSessionId),
@@ -534,12 +499,7 @@ export class OpencodeSdkAdapter
       runtimeId: runtimeClientInput.runtimeId,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
-      ...(() => {
-        if (input.directories) {
-          return { directories: input.directories };
-        }
-        return {};
-      })(),
+      ...(input.directories ? { directories: input.directories } : undefined),
       existingExternalSessionIds,
     });
     const liveSnapshots = snapshots.map((snapshot) =>
@@ -675,18 +635,10 @@ export class OpencodeSdkAdapter
     const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
-      ...(() => {
-        if (hasRuntimeType(input.limit, "number")) {
-          return { limit: input.limit };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (preservedDisplayPartsByMessageId.size > 0) {
-          return { preservedDisplayPartsByMessageId };
-        }
-        return {};
-      })(),
+      ...(hasRuntimeType(input.limit, "number") ? { limit: input.limit } : undefined),
+      ...(preservedDisplayPartsByMessageId.size > 0
+        ? { preservedDisplayPartsByMessageId }
+        : undefined),
     };
 
     return loadSessionHistory(this.createClient, this.now, historyInput);
@@ -797,18 +749,8 @@ export class OpencodeSdkAdapter
         session,
         request: input,
         tools,
-        ...(() => {
-          if (messageId) {
-            return { messageId };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (admission) {
-            return { admission: admission.promise };
-          }
-          return {};
-        })(),
+        ...(messageId ? { messageId } : undefined),
+        ...(admission ? { admission: admission.promise } : undefined),
       });
       const timestamp = this.now();
       const event: AcceptedAgentUserMessage = {
@@ -851,12 +793,7 @@ export class OpencodeSdkAdapter
     const session = requireSession(this.sessions, input.externalSessionId);
     session.input = {
       ...session.input,
-      ...(() => {
-        if (input.model) {
-          return { model: input.model };
-        }
-        return {};
-      })(),
+      ...(input.model ? { model: input.model } : undefined),
     };
     if (!input.model) {
       delete session.input.model;
@@ -1001,12 +938,7 @@ export class OpencodeSdkAdapter
           serverName: event.serverName,
           workingDirectory: event.workingDirectory,
           status: event.status,
-          ...(() => {
-            if (event.errorDetails) {
-              return { errorDetails: event.errorDetails };
-            }
-            return {};
-          })(),
+          ...(event.errorDetails ? { errorDetails: event.errorDetails } : undefined),
         });
       },
     });

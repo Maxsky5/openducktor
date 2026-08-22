@@ -53,7 +53,7 @@ const readJsonBody = async (request: IncomingMessage): Promise<JsonValue> => {
   }
 
   // SAFETY: JSON.parse returns only JSON-compatible values for valid JSON input.
-  return JSON.parse(body) as JsonValue;
+  return jsonValueSchema.parse(JSON.parse(body));
 };
 
 const writeJson = (
@@ -273,18 +273,8 @@ const createTransport = async (
   const server = await createMcpServer(
     {
       hostUrl,
-      ...(() => {
-        if (options.workspaceId) {
-          return { workspaceId: options.workspaceId };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (options.forbidWorkspaceIdInput) {
-          return { forbidWorkspaceIdInput: true };
-        }
-        return {};
-      })(),
+      ...(options.workspaceId ? { workspaceId: options.workspaceId } : undefined),
+      ...(options.forbidWorkspaceIdInput ? { forbidWorkspaceIdInput: true } : undefined),
     },
     {
       allowedToolNames: parseAllowedToolNames(options.allowedTools),
@@ -313,7 +303,7 @@ const expectToolError = (
   expect(result.isError).toBe(true);
   expect(result.structuredContent).toBeUndefined();
   // SAFETY: MCP text blocks contain JSON serialized by the server under test.
-  const textPayload = JSON.parse(result.content[0]?.text ?? "null") as JsonValue;
+  const textPayload = jsonValueSchema.parse(JSON.parse(result.content[0]?.text ?? "null"));
   expect(textPayload).toMatchObject({ ok: false });
   // SAFETY: This test controls the fixture and supplies `{ error?: JsonValue }` used by this case.
   const error = (textPayload as { error?: JsonValue }).error;

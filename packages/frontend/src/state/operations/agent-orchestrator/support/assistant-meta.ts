@@ -30,30 +30,10 @@ export const toSessionContextUsage = (
 
   return {
     totalTokens,
-    ...(() => {
-      if (effectiveModel?.providerId) {
-        return { providerId: effectiveModel.providerId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.modelId) {
-        return { modelId: effectiveModel.modelId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.variant) {
-        return { variant: effectiveModel.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.profileId) {
-        return { profileId: effectiveModel.profileId };
-      }
-      return {};
-    })(),
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
   };
 };
 
@@ -73,60 +53,17 @@ export const createAssistantMessageMeta = ({
   return {
     kind: "assistant",
     isFinal,
-    ...(() => {
-      if (role) {
-        return { agentRole: role };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.providerId) {
-        return { providerId: effectiveModel.providerId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.modelId) {
-        return { modelId: effectiveModel.modelId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.variant) {
-        return { variant: effectiveModel.variant };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (effectiveModel?.profileId) {
-        return { profileId: effectiveModel.profileId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(durationMs, "number")) {
-        return { durationMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(totalTokens, "number") && totalTokens > 0) {
-        return { totalTokens };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(contextWindow, "number") && contextWindow > 0) {
-        return { contextWindow };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(outputLimit, "number") && outputLimit > 0) {
-        return { outputLimit };
-      }
-      return {};
-    })(),
+    ...(role ? { agentRole: role } : undefined),
+    ...(effectiveModel?.providerId ? { providerId: effectiveModel.providerId } : undefined),
+    ...(effectiveModel?.modelId ? { modelId: effectiveModel.modelId } : undefined),
+    ...(effectiveModel?.variant ? { variant: effectiveModel.variant } : undefined),
+    ...(effectiveModel?.profileId ? { profileId: effectiveModel.profileId } : undefined),
+    ...(hasRuntimeType(durationMs, "number") ? { durationMs } : undefined),
+    ...(hasRuntimeType(totalTokens, "number") && totalTokens > 0 ? { totalTokens } : undefined),
+    ...(hasRuntimeType(contextWindow, "number") && contextWindow > 0
+      ? { contextWindow }
+      : undefined),
+    ...(hasRuntimeType(outputLimit, "number") && outputLimit > 0 ? { outputLimit } : undefined),
   };
 };
 

@@ -26,22 +26,7 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
 export const terminalServiceErrorToFailure = (error: TerminalServiceError): TerminalFailure => ({
   code: error.code,
   message: error.message,
-  ...(() => {
-    if (error.terminalId) {
-      return { terminalId: error.terminalId };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (error.workingDir) {
-      return { workingDir: error.workingDir };
-    }
-    return {};
-  })(),
-  ...(() => {
-    if (error.details) {
-      return { details: { ...error.details } };
-    }
-    return {};
-  })(),
+  ...(error.terminalId ? { terminalId: error.terminalId } : undefined),
+  ...(error.workingDir ? { workingDir: error.workingDir } : undefined),
+  ...(error.details ? { details: { ...error.details } } : undefined),
 });

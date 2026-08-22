@@ -58,12 +58,7 @@ export const startKanbanSessionFlow = async ({
     },
     decision,
     task,
-    ...(() => {
-      if (setTaskTargetBranch) {
-        return { persistTaskTargetBranch: setTaskTargetBranch };
-      }
-      return {};
-    })(),
+    ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : undefined),
     humanRequestChangesTask,
   });
   if (workflow.postStartActionError) {

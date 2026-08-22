@@ -83,12 +83,7 @@ const operationFailure = (
     code: "operation_failed",
     operation,
     message,
-    ...(() => {
-      if (cause !== undefined) {
-        return { cause };
-      }
-      return {};
-    })(),
+    ...(cause !== undefined ? { cause } : undefined),
   });
 
 class BunPtySession implements TerminalPtyHandle {

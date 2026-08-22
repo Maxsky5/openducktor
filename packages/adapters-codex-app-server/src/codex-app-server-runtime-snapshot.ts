@@ -78,12 +78,7 @@ const toRuntimeSnapshot = (
       runtimeKind: "codex",
       workingDirectory: session.workingDirectory,
     },
-    ...(() => {
-      if (parentExternalSessionId) {
-        return { parentExternalSessionId };
-      }
-      return {};
-    })(),
+    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
     title:
       session.summary.title ??
       (sessionAssociation.kind === "workflow" ? `Codex ${sessionAssociation.role}` : "Codex"),
@@ -117,12 +112,7 @@ export const toRuntimeSnapshotFromThread = (
       runtimeKind: "codex",
       workingDirectory: thread.cwd,
     },
-    ...(() => {
-      if (parentExternalSessionId) {
-        return { parentExternalSessionId };
-      }
-      return {};
-    })(),
+    ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
     title: thread.title,
     startedAt: thread.startedAt,
     pendingApprovals,

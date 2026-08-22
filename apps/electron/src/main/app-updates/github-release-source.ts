@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import { compare, prerelease, valid } from "semver";
 import type { JsonValue } from "@openducktor/contracts";
 
@@ -88,8 +88,7 @@ const readJson = async (
   if (!response.ok) {
     throw new Error(`${description} returned HTTP ${response.status}.`);
   }
-  // SAFETY: Response.json returns parsed JSON wire data.
-  return (await response.json()) as JsonValue | undefined;
+  return jsonValueSchema.parse(await response.json());
 };
 
 const parseReleasePage = (value: JsonValue | undefined): GitHubRelease[] => {

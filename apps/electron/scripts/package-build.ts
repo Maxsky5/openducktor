@@ -367,12 +367,7 @@ export const buildElectronPackageEffect = ({
     yield* runPackageCommandEffect({
       command: ["bun", "run", "build"],
       cwd: electronPackageDirectory,
-      ...(() => {
-        if (electronBuildEnv) {
-          return { env: electronBuildEnv };
-        }
-        return {};
-      })(),
+      ...(electronBuildEnv ? { env: electronBuildEnv } : undefined),
       label: "Electron app build",
     });
     yield* runPackageCommandEffect({

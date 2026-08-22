@@ -84,12 +84,7 @@ export const childSessionInfo = (childSessionId: string, parentID?: string): Ses
   slug: childSessionId,
   projectID: "project-1",
   directory: "/repo",
-  ...(() => {
-    if (parentID) {
-      return { parentID };
-    }
-    return {};
-  })(),
+  ...(parentID ? { parentID } : undefined),
   title: "Subagent",
   version: "1.0.0",
   time: {
@@ -231,18 +226,8 @@ export const permissionV2AskedEvent = (input: {
       sessionID: input.sessionId ?? "external-session-1",
       action: input.action ?? "edit",
       resources: input.resources ?? ["src/**"],
-      ...(() => {
-        if (input.save) {
-          return { save: input.save };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (input.metadata) {
-          return { metadata: input.metadata };
-        }
-        return {};
-      })(),
+      ...(input.save ? { save: input.save } : undefined),
+      ...(input.metadata ? { metadata: input.metadata } : undefined),
       ...input.properties,
     },
   }) satisfies EventPermissionV2Asked;
@@ -486,12 +471,7 @@ export const runEventStreamWithSession = async (
     emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
-    ...(() => {
-      if (options.logEvent) {
-        return { logEvent: options.logEvent };
-      }
-      return {};
-    })(),
+    ...(options.logEvent ? { logEvent: options.logEvent } : undefined),
   });
   const streamDone = runtimeEventTransports.get(sessionRecord.runtimeId)?.streamDone;
   if (!streamDone) {

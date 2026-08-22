@@ -152,17 +152,7 @@ export const codexToolTimingFields = (
     (options.allowStartedAtOnly === true || hasRuntimeType(endedAtMs, "number"));
 
   return {
-    ...(() => {
-      if (canEmitStartedAtMs) {
-        return { startedAtMs };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(endedAtMs, "number")) {
-        return { endedAtMs };
-      }
-      return {};
-    })(),
+    ...(canEmitStartedAtMs ? { startedAtMs } : undefined),
+    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
   };
 };

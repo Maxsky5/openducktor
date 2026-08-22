@@ -15,7 +15,7 @@ type FakeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEven
 
 export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
-  configureError = null satisfies unknown;
+  configureError: Error | null = null;
   configureOptions: ElectronUpdaterConfigureOptions | null = null;
   disposeCalls = 0;
   downloadCalls = 0;

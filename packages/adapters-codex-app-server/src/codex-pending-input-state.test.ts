@@ -26,12 +26,7 @@ const registerApproval = (
       requestType: "permission_grant",
       title: "Approve read",
     },
-    ...(() => {
-      if (fixture.route) {
-        return { route: fixture.route };
-      }
-      return {};
-    })(),
+    ...(fixture.route ? { route: fixture.route } : undefined),
   });
 
 const registerQuestion = (
@@ -51,12 +46,7 @@ const registerQuestion = (
     },
     questionIds: ["question-item-1"],
     input: { questions: [{ header: "Confirm", question: "Proceed?", options: [] }] },
-    ...(() => {
-      if (fixture.route) {
-        return { route: fixture.route };
-      }
-      return {};
-    })(),
+    ...(fixture.route ? { route: fixture.route } : undefined),
   });
 
 const route = (
@@ -64,12 +54,7 @@ const route = (
   childExternalSessionId = "child-thread",
   runtimeId?: string,
 ): CodexSubagentRoute => ({
-  ...(() => {
-    if (runtimeId) {
-      return { runtimeId };
-    }
-    return {};
-  })(),
+  ...(runtimeId ? { runtimeId } : undefined),
   parentExternalSessionId,
   childExternalSessionId,
   subagentCorrelationKey: `codex-subagent:${parentExternalSessionId}:${childExternalSessionId}`,

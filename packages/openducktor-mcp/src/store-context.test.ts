@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ODT_TOOL_SCHEMAS, type JsonValue } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS, type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { resolveStoreContext } from "./store-context";
 
 const originalFetch = globalThis.fetch;
@@ -107,7 +107,7 @@ describe("resolveStoreContext", () => {
       requests.push({
         url,
         // SAFETY: request bodies are JSON serialized by the bridge client.
-        body: JSON.parse(String(init?.body ?? "{}")) as JsonValue,
+        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       await responseBarrier;
       if (url.endsWith("/invoke/odt_mcp_ready")) {
@@ -167,7 +167,7 @@ describe("resolveStoreContext", () => {
       requests.push({
         url,
         // SAFETY: request bodies are JSON serialized by the bridge client.
-        body: JSON.parse(String(init?.body ?? "{}")) as JsonValue,
+        body: jsonValueSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
       if (url.endsWith("/invoke/odt_mcp_ready")) {
         return jsonResponse({

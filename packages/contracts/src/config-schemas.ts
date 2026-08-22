@@ -267,12 +267,7 @@ export const resolveCodexEffectivePolicy = (
     approvalsReviewerApplies: policy.approvalPolicy !== "never",
     commandNetworkAccess:
       sandboxMode === "danger-full-access" ? false : policy.commandNetworkAccess,
-    ...(() => {
-      if (adjustmentReason) {
-        return { adjustmentReason };
-      }
-      return {};
-    })(),
+    ...(adjustmentReason ? { adjustmentReason } : undefined),
   };
 };
 

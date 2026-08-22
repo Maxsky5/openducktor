@@ -127,42 +127,12 @@ export const updateMessageMetadata = (
 
   session.messageMetadataById.set(messageId, {
     timestamp,
-    ...(() => {
-      if (model) {
-        return { model };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (parentId) {
-        return { parentId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (text) {
-        return { text };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasStopSignal !== undefined) {
-        return { hasStopSignal };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (totalTokens !== undefined) {
-        return { totalTokens };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (displayParts) {
-        return { displayParts };
-      }
-      return {};
-    })(),
+    ...(model ? { model } : undefined),
+    ...(parentId ? { parentId } : undefined),
+    ...(text ? { text } : undefined),
+    ...(hasStopSignal !== undefined ? { hasStopSignal } : undefined),
+    ...(totalTokens !== undefined ? { totalTokens } : undefined),
+    ...(displayParts ? { displayParts } : undefined),
   });
 };
 
@@ -185,18 +155,12 @@ export const normalizeMessagePart = (
   // SAFETY: The runtime adapter builds this value from the contract fields required by `Part`.
   return {
     ...(rawPartRecord as Part),
-    ...(() => {
-      if (readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])) {
-        return {};
-      }
-      return { sessionID: externalSessionId };
-    })(),
-    ...(() => {
-      if (readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])) {
-        return {};
-      }
-      return { messageID: messageId };
-    })(),
+    ...(readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])
+      ? undefined
+      : { sessionID: externalSessionId }),
+    ...(readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])
+      ? undefined
+      : { messageID: messageId }),
   } as Part;
 };
 

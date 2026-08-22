@@ -1242,6 +1242,21 @@ describe("AgentChatComposerEditor", () => {
       get rangeCount() {
         return activeRange ? 1 : 0;
       },
+      get isCollapsed() {
+        return activeRange?.collapsed ?? true;
+      },
+      get anchorNode() {
+        return activeRange?.startContainer ?? null;
+      },
+      get anchorOffset() {
+        return activeRange?.startOffset ?? 0;
+      },
+      get focusNode() {
+        return activeRange?.endContainer ?? null;
+      },
+      get focusOffset() {
+        return activeRange?.endOffset ?? 0;
+      },
       getRangeAt: () => {
         if (!activeRange) {
           throw new Error("Expected active selection range");

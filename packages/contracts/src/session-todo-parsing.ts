@@ -51,24 +51,9 @@ const normalizeLooseTodoEntry = (
   return {
     id,
     content,
-    ...(() => {
-      if (hasRuntimeType(entry.status, "string")) {
-        return { status: entry.status };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(entry.priority, "string")) {
-        return { priority: entry.priority };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (hasRuntimeType(entry.completed, "boolean")) {
-        return { completed: entry.completed };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(entry.status, "string") ? { status: entry.status } : undefined),
+    ...(hasRuntimeType(entry.priority, "string") ? { priority: entry.priority } : undefined),
+    ...(hasRuntimeType(entry.completed, "boolean") ? { completed: entry.completed } : undefined),
   };
 };
 

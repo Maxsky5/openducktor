@@ -139,18 +139,8 @@ export const createCodexLiveSessionProjection = ({
         snapshots,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
-        ...(() => {
-          if (mutation.fault) {
-            return { fault: mutation.fault };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (faultRef) {
-            return { faultRef };
-          }
-          return {};
-        })(),
+        ...(mutation.fault ? { fault: mutation.fault } : undefined),
+        ...(faultRef ? { faultRef } : undefined),
       };
     });
 
@@ -195,12 +185,7 @@ export const createCodexLiveSessionProjection = ({
                 repoPath: runtime.repoPath,
                 operation: "codex-live-session.process-event",
                 message: normalized.fault,
-                ...(() => {
-                  if (normalized.faultRef) {
-                    return { ref: normalized.faultRef };
-                  }
-                  return {};
-                })(),
+                ...(normalized.faultRef ? { ref: normalized.faultRef } : undefined),
               });
             }
             return { value: undefined, changes };

@@ -37,12 +37,7 @@ const canonicalZeroUsage = (params: JsonValue | undefined): CodexSessionContextU
   }
   return {
     totalTokens: 0,
-    ...(() => {
-      if (hasRuntimeType(contextWindow, "number")) {
-        return { contextWindow };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(contextWindow, "number") ? { contextWindow } : undefined),
   };
 };
 

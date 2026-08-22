@@ -80,12 +80,7 @@ const createHarness = (
         externalSessionId: liveSession.externalSessionId,
         runtimeKind: liveSession.runtimeKind,
         workingDirectory: liveSession.workingDirectory,
-        ...(() => {
-          if (targetSessionScope) {
-            return { sessionScope: targetSessionScope };
-          }
-          return {};
-        })(),
+        ...(targetSessionScope ? { sessionScope: targetSessionScope } : undefined),
       },
       repoReadinessState: "ready" as const,
       liveSession,

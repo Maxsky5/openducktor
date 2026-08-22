@@ -574,12 +574,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const editorOptions = useMemo<EditorOptions<undefined>>(() => {
     const clipboard = getShellBridge().editorClipboard;
     return {
-      ...(() => {
-        if (clipboard) {
-          return { clipboard };
-        }
-        return {};
-      })(),
+      ...(clipboard ? { clipboard } : undefined),
       onAttach(attachedEditor) {
         attachedEditorRef.current = attachedEditor;
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });

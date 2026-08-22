@@ -92,12 +92,7 @@ const mcpToolApprovalRequest = ({
     requestedSchema: { type: "object", properties: {} },
     _meta: {
       codex_approval_kind: "mcp_tool_call",
-      ...(() => {
-        if (includeToolTitle) {
-          return { tool_title: toolName };
-        }
-        return {};
-      })(),
+      ...(includeToolTitle ? { tool_title: toolName } : undefined),
       persist: ["session"],
     },
   },

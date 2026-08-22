@@ -333,12 +333,7 @@ export const toClaudeSlashCommandCatalog = (
               id: command.name,
               trigger: command.name,
               title: command.name,
-              ...(() => {
-                if (command.description) {
-                  return { description: command.description };
-                }
-                return {};
-              })(),
+              ...(command.description ? { description: command.description } : undefined),
               source: isClaudeSkillCommand(command) ? ("skill" as const) : ("command" as const),
               hints: command.argumentHint ? [command.argumentHint] : [],
             },
@@ -379,12 +374,7 @@ export const toClaudeSkillCatalog = (commands: SlashCommand[]): AgentSkillCatalo
         name: skill.name,
         path: skill.name,
         title: skill.name,
-        ...(() => {
-          if (skill.description) {
-            return { description: skill.description };
-          }
-          return {};
-        })(),
+        ...(skill.description ? { description: skill.description } : undefined),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
   });
@@ -397,12 +387,7 @@ const toClaudeSubagentCatalog = (agents: AgentInfo[]): AgentSubagentCatalog => {
         id: agent.name,
         name: agent.name,
         label: agent.name,
-        ...(() => {
-          if (agent.description) {
-            return { description: agent.description };
-          }
-          return {};
-        })(),
+        ...(agent.description ? { description: agent.description } : undefined),
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
   });

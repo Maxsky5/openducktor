@@ -660,12 +660,7 @@ const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessag
             path: attachment.path,
             name: attachment.name,
             kind: attachment.kind,
-            ...(() => {
-              if (attachment.mime) {
-                return { mime: attachment.mime };
-              }
-              return {};
-            })(),
+            ...(attachment.mime ? { mime: attachment.mime } : undefined),
           },
         },
       ];
@@ -698,12 +693,7 @@ export const resolveDraftToUserMessageParts = async (
           path,
           name: attachment.name,
           kind: attachment.kind,
-          ...(() => {
-            if (attachment.mime) {
-              return { mime: attachment.mime };
-            }
-            return {};
-          })(),
+          ...(attachment.mime ? { mime: attachment.mime } : undefined),
         },
       } satisfies AgentUserMessagePart;
     }),

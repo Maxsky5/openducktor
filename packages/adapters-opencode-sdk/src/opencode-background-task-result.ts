@@ -125,18 +125,8 @@ const parseOpenCodeBackgroundTaskResult = (value: string): ParsedTaskResult | nu
   return {
     externalSessionId,
     status,
-    ...(() => {
-      if (summary) {
-        return { summary };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (resultText) {
-        return { resultText };
-      }
-      return {};
-    })(),
+    ...(summary ? { summary } : undefined),
+    ...(resultText ? { resultText } : undefined),
   };
 };
 
@@ -179,28 +169,13 @@ export const mapOpenCodeBackgroundTaskResultPart = (
     correlationKey:
       options.correlationKey ?? ["session", part.messageID, parsed.externalSessionId].join(":"),
     status: parsed.status,
-    ...(() => {
-      if (description) {
-        return { description };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (parsed.status === "error" && parsed.resultText) {
-        return { error: parsed.resultText };
-      }
-      return {};
-    })(),
+    ...(description ? { description } : undefined),
+    ...(parsed.status === "error" && parsed.resultText ? { error: parsed.resultText } : undefined),
     externalSessionId: parsed.externalSessionId,
     executionMode: "background",
     metadata: {
       background: true,
     },
-    ...(() => {
-      if (hasRuntimeType(endedAtMs, "number")) {
-        return { endedAtMs };
-      }
-      return {};
-    })(),
+    ...(hasRuntimeType(endedAtMs, "number") ? { endedAtMs } : undefined),
   };
 };

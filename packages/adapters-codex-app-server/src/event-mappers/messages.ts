@@ -50,12 +50,7 @@ export const userMessageMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "user_message",
           threadId: ctx.threadId,
-          ...(() => {
-            if (timestamp) {
-              return { timestamp };
-            }
-            return {};
-          })(),
+          ...(timestamp ? { timestamp } : undefined),
           raw: input.item,
           messageId,
           message,
@@ -97,12 +92,7 @@ export const assistantMessageMapper: CodexEventMapper = {
           source: ctx.source,
           mapper: "assistant_message",
           threadId: ctx.threadId,
-          ...(() => {
-            if (timestamp) {
-              return { timestamp };
-            }
-            return {};
-          })(),
+          ...(timestamp ? { timestamp } : undefined),
           raw: input.item,
           messageId,
           message,
@@ -114,12 +104,7 @@ export const assistantMessageMapper: CodexEventMapper = {
                 source: ctx.source,
                 mapper: "assistant_message",
                 threadId: ctx.threadId,
-                ...(() => {
-                  if (timestamp) {
-                    return { timestamp };
-                  }
-                  return {};
-                })(),
+                ...(timestamp ? { timestamp } : undefined),
                 raw: input.item,
                 part: terminalHistoryPart(messageId),
               },

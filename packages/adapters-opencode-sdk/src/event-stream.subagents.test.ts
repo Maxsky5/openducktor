@@ -83,20 +83,10 @@ const makeChildSessionCreatedEvent = (input: {
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
-      ...(() => {
-        if (parentPlacement === "properties") {
-          return { parentID: parentExternalSessionId };
-        }
-        return {};
-      })(),
+      ...(parentPlacement === "properties" ? { parentID: parentExternalSessionId } : undefined),
       info: {
         id: input.childSessionId,
-        ...(() => {
-          if (parentPlacement === "info") {
-            return { parentID: parentExternalSessionId };
-          }
-          return {};
-        })(),
+        ...(parentPlacement === "info" ? { parentID: parentExternalSessionId } : undefined),
         time: {
           created: input.createdAtMs ?? Date.parse("2026-02-22T12:00:10.000Z"),
         },
@@ -115,12 +105,9 @@ const makeChildPermissionAskedEvent = (input: {
     sessionId: input.childSessionId,
     permission: "read",
     patterns: ["omp.json"],
-    ...(() => {
-      if (input.parentExternalSessionId) {
-        return { properties: { info: { parentID: input.parentExternalSessionId } } };
-      }
-      return {};
-    })(),
+    ...(input.parentExternalSessionId
+      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
+      : undefined),
   });
 
 const makeChildQuestionAskedEvent = (input: {
@@ -138,12 +125,9 @@ const makeChildQuestionAskedEvent = (input: {
         options: [{ label: "Current file", description: "Inspect only the requested file" }],
       },
     ],
-    ...(() => {
-      if (input.parentExternalSessionId) {
-        return { properties: { info: { parentID: input.parentExternalSessionId } } };
-      }
-      return {};
-    })(),
+    ...(input.parentExternalSessionId
+      ? { properties: { info: { parentID: input.parentExternalSessionId } } }
+      : undefined),
   });
 
 const makeSubagentToolPartUpdatedEvent = (input: {
@@ -159,12 +143,7 @@ const makeSubagentToolPartUpdatedEvent = (input: {
   const subagentIdentity = {
     agent: "build",
     prompt: "Inspect repo",
-    ...(() => {
-      if (input.childSessionId) {
-        return { externalSessionId: input.childSessionId };
-      }
-      return {};
-    })(),
+    ...(input.childSessionId ? { externalSessionId: input.childSessionId } : undefined),
   };
   return createInvalidFixture<Event>({
     type: "message.part.updated",
@@ -191,12 +170,9 @@ const makeSubagentToolPartUpdatedEvent = (input: {
                       externalSessionId: input.childSessionId,
                     }
                   : undefined,
-                ...(() => {
-                  if (input.tool === "task" && input.childSessionId) {
-                    return { metadata: { externalSessionId: input.childSessionId } };
-                  }
-                  return {};
-                })(),
+                ...(input.tool === "task" && input.childSessionId
+                  ? { metadata: { externalSessionId: input.childSessionId } }
+                  : undefined),
               }),
         },
       },
@@ -304,30 +280,24 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   return createInvalidFixture<Event>({
     type: "message.part.updated",
     properties: {
-      ...(() => {
-        if (input.eventTimestampMs !== undefined) {
-          return {
+      ...(input.eventTimestampMs !== undefined
+        ? {
             time: input.eventTimestampMs,
-          };
-        }
-        return {};
-      })(),
+          }
+        : undefined),
       part: {
         id: input.partId,
         sessionID: "external-session-1",
         messageID: input.messageId,
         type: "text",
         synthetic: true,
-        ...(() => {
-          if (input.timestampMs !== undefined) {
-            return {
+        ...(input.timestampMs !== undefined
+          ? {
               time: {
                 end: input.timestampMs,
               },
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
         text: [
           `<task id="${input.childSessionId}" state="${input.state}">`,
           `<summary>${input.summary}</summary>`,

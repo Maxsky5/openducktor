@@ -458,12 +458,7 @@ export const buildDiagnosticsPanelModel = (
         ]
       : [],
     errors: [],
-    ...(() => {
-      if (activeWorkspace) {
-        return {};
-      }
-      return { emptyMessage: "Select a repository to load diagnostics." };
-    })(),
+    ...(activeWorkspace ? undefined : { emptyMessage: "Select a repository to load diagnostics." }),
   };
 
   const cliToolsBlockingFailure = hasCliToolCheckFailure(runtimeCheck);
@@ -506,12 +501,7 @@ export const buildDiagnosticsPanelModel = (
             failureKind: cliToolsFailureKind,
             availabilityVerb: "are",
           }),
-    ...(() => {
-      if (runtimeCheck) {
-        return {};
-      }
-      return { emptyMessage: "CLI checks are loading..." };
-    })(),
+    ...(runtimeCheck ? undefined : { emptyMessage: "CLI checks are loading..." }),
   };
 
   const runtimeSections = runtimeEntries.flatMap(({ definition, runtimeHealth }) => {
@@ -554,12 +544,7 @@ export const buildDiagnosticsPanelModel = (
     badge: getRepoStoreFailureBadge(taskStoreCheck, taskStoreCheckFailureKind),
     rows: workspaceRepoPath ? buildRepoStoreRows(taskStoreCheck) : [],
     errors: buildRepoStoreErrors(taskStoreCheck, taskStoreCheckFailureKind),
-    ...(() => {
-      if (workspaceRepoPath) {
-        return {};
-      }
-      return { emptyMessage: "Select a repository first." };
-    })(),
+    ...(workspaceRepoPath ? undefined : { emptyMessage: "Select a repository first." }),
   };
 
   return {

@@ -30,12 +30,7 @@ const resolveUserMessageDisplay = (input: {
   const initialVisibleUserMessage = buildVisibleUserMessage({
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(() => {
-      if (input.metadata) {
-        return { metadata: input.metadata };
-      }
-      return {};
-    })(),
+    ...(input.metadata ? { metadata: input.metadata } : undefined),
   });
   const matchedQueuedSend = takeQueuedUserSendMatch(
     input.runtime,
@@ -55,12 +50,7 @@ const resolveUserMessageDisplay = (input: {
   const finalVisibleUserMessage = buildVisibleUserMessage({
     fallbackText: input.fallbackText,
     normalizedDisplayParts: input.normalizedDisplayParts,
-    ...(() => {
-      if (input.metadata) {
-        return { metadata: input.metadata };
-      }
-      return {};
-    })(),
+    ...(input.metadata ? { metadata: input.metadata } : undefined),
     matchedQueuedSend,
   });
 
@@ -89,12 +79,7 @@ export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime):
       messageId,
       timestamp: metadata?.timestamp ?? runtime.now(),
       state: nextState,
-      ...(() => {
-        if (metadata?.model) {
-          return { model: metadata.model };
-        }
-        return {};
-      })(),
+      ...(metadata?.model ? { model: metadata.model } : undefined),
     });
   }
 };
@@ -127,18 +112,8 @@ export const handleUserMessageUpdated = (
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(() => {
-      if (currentMetadata) {
-        return { metadata: currentMetadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.messageModel) {
-        return { model: input.messageModel };
-      }
-      return {};
-    })(),
+    ...(currentMetadata ? { metadata: currentMetadata } : undefined),
+    ...(input.messageModel ? { model: input.messageModel } : undefined),
   });
   if (visible.trim().length === 0 && displayParts.length === 0) {
     return true;
@@ -149,18 +124,8 @@ export const handleUserMessageUpdated = (
     session,
     messageId: input.messageId,
     timestamp,
-    ...(() => {
-      if (currentMetadata) {
-        return { metadata: currentMetadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (input.messageModel) {
-        return { model: input.messageModel };
-      }
-      return {};
-    })(),
+    ...(currentMetadata ? { metadata: currentMetadata } : undefined),
+    ...(input.messageModel ? { model: input.messageModel } : undefined),
     visible,
     displayParts,
   });
@@ -174,19 +139,9 @@ export const handleUserMessageUpdated = (
     state: resolveLiveUserMessageState(runtime, {
       messageId: input.messageId,
       matchedQueuedSend,
-      ...(() => {
-        if (explicitState) {
-          return { explicitState };
-        }
-        return {};
-      })(),
+      ...(explicitState ? { explicitState } : undefined),
     }),
-    ...(() => {
-      if (input.messageModel) {
-        return { model: input.messageModel };
-      }
-      return {};
-    })(),
+    ...(input.messageModel ? { model: input.messageModel } : undefined),
   });
 };
 
@@ -210,36 +165,16 @@ export const handleUserPartUpdated = (
     fallbackText,
     normalizedDisplayParts,
     runtime,
-    ...(() => {
-      if (metadata) {
-        return { metadata };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (metadata?.model) {
-        return { model: metadata.model };
-      }
-      return {};
-    })(),
+    ...(metadata ? { metadata } : undefined),
+    ...(metadata?.model ? { model: metadata.model } : undefined),
   });
   if (visible.trim().length > 0 || displayParts.length > 0) {
     persistUserMessageMetadata({
       session,
       messageId,
       timestamp: runtime.now(),
-      ...(() => {
-        if (metadata) {
-          return { metadata };
-        }
-        return {};
-      })(),
-      ...(() => {
-        if (metadata?.model) {
-          return { model: metadata.model };
-        }
-        return {};
-      })(),
+      ...(metadata ? { metadata } : undefined),
+      ...(metadata?.model ? { model: metadata.model } : undefined),
       visible,
       displayParts,
     });
@@ -253,11 +188,6 @@ export const handleUserPartUpdated = (
       messageId,
       matchedQueuedSend,
     }),
-    ...(() => {
-      if (metadata?.model) {
-        return { model: metadata.model };
-      }
-      return {};
-    })(),
+    ...(metadata?.model ? { model: metadata.model } : undefined),
   });
 };

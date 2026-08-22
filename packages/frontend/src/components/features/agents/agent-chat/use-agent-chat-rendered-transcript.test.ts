@@ -193,17 +193,14 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
       const isAssistant = messageIndex % 2 === 1;
       return buildMessage(isAssistant ? "assistant" : "user", `Message ${messageIndex}`, {
         id: `message-${messageIndex}`,
-        ...(() => {
-          if (isAssistant) {
-            return {
+        ...(isAssistant
+          ? {
               meta: {
                 kind: "assistant" as const,
                 isFinal: messageIndex < 119,
               },
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
       });
     });
     const session = buildSession({

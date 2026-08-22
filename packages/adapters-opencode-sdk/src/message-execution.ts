@@ -221,30 +221,12 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         sessionID: session.externalSessionId,
         directory: session.input.workingDirectory,
         messageID: messageId,
-        ...(() => {
-          if (session.input.systemPrompt.trim().length > 0) {
-            return { system: session.input.systemPrompt };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (modelInput.model) {
-            return { model: modelInput.model };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (modelInput.variant) {
-            return { variant: modelInput.variant };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (modelInput.agent) {
-            return { agent: modelInput.agent };
-          }
-          return {};
-        })(),
+        ...(session.input.systemPrompt.trim().length > 0
+          ? { system: session.input.systemPrompt }
+          : undefined),
+        ...(modelInput.model ? { model: modelInput.model } : undefined),
+        ...(modelInput.variant ? { variant: modelInput.variant } : undefined),
+        ...(modelInput.agent ? { agent: modelInput.agent } : undefined),
         tools,
         parts: promptParts,
       };
@@ -275,24 +257,9 @@ const prepareSlashCommandSend = (
           messageID: messageId,
           command: slashCommandRequest.command,
           arguments: slashCommandRequest.arguments,
-          ...(() => {
-            if (commandModel) {
-              return { model: commandModel };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (modelInput.variant) {
-              return { variant: modelInput.variant };
-            }
-            return {};
-          })(),
-          ...(() => {
-            if (modelInput.agent) {
-              return { agent: modelInput.agent };
-            }
-            return {};
-          })(),
+          ...(commandModel ? { model: commandModel } : undefined),
+          ...(modelInput.variant ? { variant: modelInput.variant } : undefined),
+          ...(modelInput.agent ? { agent: modelInput.agent } : undefined),
         },
         { fetch: fetchOpenCodeCommand },
       );
@@ -421,23 +388,17 @@ export const sendUserMessage = async (input: {
     ? {
         messageId,
         signature: buildQueuedRequestSignature(input.request.parts, model ?? undefined),
-        ...(() => {
-          if (queuedAttachmentParts.length > 0) {
-            return {
+        ...(queuedAttachmentParts.length > 0
+          ? {
               attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
                 input.request.parts,
                 model ?? undefined,
               ),
-            };
-          }
-          return {};
-        })(),
-        ...(() => {
-          if (queuedAttachmentParts.length > 0) {
-            return { attachmentParts: queuedAttachmentParts };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
+        ...(queuedAttachmentParts.length > 0
+          ? { attachmentParts: queuedAttachmentParts }
+          : undefined),
       }
     : null;
 
@@ -469,12 +430,7 @@ export const sendUserMessage = async (input: {
       message: serializeAgentUserMessagePartsToText(input.request.parts),
       parts: toAdmittedUserDisplayParts(input.request.parts),
       state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
-      ...(() => {
-        if (model) {
-          return { model };
-        }
-        return {};
-      })(),
+      ...(model ? { model } : undefined),
     };
   } catch (error) {
     if (queuedEntry) {

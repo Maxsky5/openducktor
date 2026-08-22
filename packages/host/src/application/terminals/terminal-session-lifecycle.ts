@@ -26,18 +26,8 @@ export const terminalFailure = (
     code,
     operation,
     message,
-    ...(() => {
-      if (terminalId) {
-        return { terminalId };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (cause !== undefined) {
-        return { cause };
-      }
-      return {};
-    })(),
+    ...(terminalId ? { terminalId } : undefined),
+    ...(cause !== undefined ? { cause } : undefined),
   });
 
 export const terminalOperationFailure = (
@@ -82,16 +72,13 @@ export const createTerminalSessionLifecycle = ({
         type: "lifecycle",
         terminalId: session.summary.terminalId,
         lifecycle: session.summary.lifecycle,
-        ...(() => {
-          if (session.summary.exit) {
-            return {
+        ...(session.summary.exit
+          ? {
               finalSequence: session.summary.exit.finalSequence,
               exitCode: session.summary.exit.exitCode,
               signal: session.summary.exit.signal,
-            };
-          }
-          return {};
-        })(),
+            }
+          : undefined),
       }),
     );
   };

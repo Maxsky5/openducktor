@@ -38,12 +38,7 @@ export function buildFatalErrorReport(
         title: inner.name || "Error",
         message: inner.message,
         stack: inner.stack,
-        ...(() => {
-          if (location) {
-            return { location };
-          }
-          return {};
-        })(),
+        ...(location ? { location } : undefined),
         source,
         timestamp,
       };
@@ -52,12 +47,7 @@ export function buildFatalErrorReport(
       title: "Uncaught error",
       message: cause.message || String(inner ?? cause),
       stack: undefined,
-      ...(() => {
-        if (location) {
-          return { location };
-        }
-        return {};
-      })(),
+      ...(location ? { location } : undefined),
       source,
       timestamp,
     };
@@ -122,18 +112,8 @@ export function logFatalError(
     source: report.source,
     timestamp: report.timestamp,
     rawValue: cause,
-    ...(() => {
-      if (report.location) {
-        return { location: report.location };
-      }
-      return {};
-    })(),
-    ...(() => {
-      if (componentStack) {
-        return { componentStack };
-      }
-      return {};
-    })(),
+    ...(report.location ? { location: report.location } : undefined),
+    ...(componentStack ? { componentStack } : undefined),
   };
 
   console.error(
