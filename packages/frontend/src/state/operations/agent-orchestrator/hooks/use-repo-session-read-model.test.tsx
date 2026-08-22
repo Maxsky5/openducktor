@@ -778,6 +778,83 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
+    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const batchList = mock(() => deferredB.promise);
+    const state = createState(
+      (emit) => {
+        emit({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [snapshot()],
+        });
+      },
+      [],
+      {
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: batchList,
+      },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+
+      // The live stream breaks.
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
+      );
+
+      // A task-record read failure then overwrites the public slot.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list("/repo", "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      await state.harness.update({ ...state.props, taskIds: ["task-2"] });
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
+      );
+
+      // Switching task sets demotes the stale failure to loading; when the
+      // new scope loads, the still-unresolved live failure must surface again.
+      await state.harness.update({ ...state.props, taskIds: ["task-3"] });
+      deferredB.resolve([
+        {
+          taskId: "task-3",
+          agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+        },
+      ]);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      if (latest.kind !== "failed") {
+        throw new Error("Expected the live-stream failure to stay failed.");
+      }
+      expect(latest.source).toBe("live-stream");
+      expect(latest.message).toContain("The observation stream stopped.");
+    } finally {
+      await state.harness.unmount();
+      deferredB.resolve([]);
+    }
+  });
+
   test("permits historical pruning after the runtime removes a live session", async () => {
     const state = createState((emit) => {
       emit({

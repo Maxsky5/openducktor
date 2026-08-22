@@ -402,11 +402,14 @@ export const useRepoSessionReadModel = ({
       if (
         currentLoadState.kind === "loading" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath &&
-        liveMessage === null &&
         staleFailureWasDemoted
       ) {
-        // The stale-scope failure this window replaced has now resolved.
-        return readyAgentSessionReadModelLoadState(workspaceRepoPath);
+        // The stale-scope failure this window replaced resolved; an
+        // unresolved live-stream failure still surfaces here.
+        demotedStaleFailureRef.current = false;
+        return liveMessage
+          ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage)
+          : readyAgentSessionReadModelLoadState(workspaceRepoPath);
       }
       return currentLoadState;
     });
