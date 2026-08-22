@@ -108,7 +108,7 @@ export const buildLaunchedSessionState = ({
   runtimeStatusMessage: null,
   startedAt: summary.startedAt,
   workingDirectory: summary.workingDirectory,
-  historyLoadState: "loaded",
+  historyLoadState: launch.mode === "resume" ? "not_requested" : "loaded",
   messages:
     initialMessages ??
     createSessionMessagesState(
@@ -125,16 +125,23 @@ export const buildLaunchedSessionState = ({
   selectedModel: launch.selectedModel ?? null,
 });
 
-const stopLaunchedSession = async ({
+const finalizeLaunchedSession = async ({
   adapter,
   repoPath,
   identity,
+  mode,
 }: {
   adapter: AgentEnginePort;
   repoPath: string;
   identity: AgentSessionIdentity;
+  mode: PreparedSessionLaunch["mode"];
 }): Promise<void> => {
-  await adapter.stopSession({ ...identity, repoPath });
+  const sessionRef = { ...identity, repoPath };
+  if (mode === "resume") {
+    await adapter.releaseSession(sessionRef);
+    return;
+  }
+  await adapter.stopSession(sessionRef);
 };
 
 const stopAfterFailedForkHistoryLoad = async ({
@@ -142,17 +149,19 @@ const stopAfterFailedForkHistoryLoad = async ({
   adapter,
   repoPath,
   identity,
+  mode,
 }: {
   error: unknown;
   adapter: AgentEnginePort;
   repoPath: string;
   identity: AgentSessionIdentity;
+  mode: PreparedSessionLaunch["mode"];
 }): Promise<never> => {
   const messagePrefix = `Failed to initialize started session "${identity.externalSessionId}": ${errorMessage(error)}.`;
   try {
     await runOrchestratorTask(
       "start-session-stop-after-fork-history-load-failure",
-      () => stopLaunchedSession({ adapter, repoPath, identity }),
+      () => finalizeLaunchedSession({ adapter, repoPath, identity, mode }),
       { tags: launchedSessionStopTags(repoPath, identity) },
     );
   } catch (stopError) {
@@ -173,18 +182,20 @@ const rollbackFailedRegistration = async ({
   repoPath,
   identity,
   removeSession,
+  mode,
 }: {
   cause: unknown;
   adapter: AgentEnginePort;
   repoPath: string;
   identity: AgentSessionIdentity;
+  mode: PreparedSessionLaunch["mode"];
   removeSession: (identity: AgentSessionIdentity) => void;
 }): Promise<never> => {
   const messagePrefix = `Failed to register started session "${identity.externalSessionId}": ${errorMessage(cause)}.`;
   try {
     await runOrchestratorTask(
       "session-launch-stop-after-registration-failure",
-      () => stopLaunchedSession({ adapter, repoPath, identity }),
+      () => finalizeLaunchedSession({ adapter, repoPath, identity, mode }),
       { tags: launchedSessionStopTags(repoPath, identity) },
     );
     removeSession(identity);
@@ -205,16 +216,22 @@ const stopLaunchedSessionOnStaleAndThrow = async ({
   adapter,
   repoPath,
   identity,
+  mode,
 }: {
   reason: string;
   adapter: AgentEnginePort;
   repoPath: string;
   identity: AgentSessionIdentity;
+  mode: PreparedSessionLaunch["mode"];
 }): Promise<never> => {
   try {
-    await runOrchestratorTask(reason, () => stopLaunchedSession({ adapter, repoPath, identity }), {
-      tags: launchedSessionStopTags(repoPath, identity),
-    });
+    await runOrchestratorTask(
+      reason,
+      () => finalizeLaunchedSession({ adapter, repoPath, identity, mode }),
+      {
+        tags: launchedSessionStopTags(repoPath, identity),
+      },
+    );
   } catch (error) {
     throw new SessionLaunchStopError(
       `${STALE_START_ERROR} Failed to stop stale started session '${identity.externalSessionId}': ${errorMessage(error)}`,
@@ -287,6 +304,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         adapter: deps.adapter,
         repoPath: launch.repoPath,
         identity,
+        mode: launch.mode,
       });
     }
 
@@ -303,6 +321,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
           adapter: deps.adapter,
           repoPath: launch.repoPath,
           identity,
+          mode: launch.mode,
         }),
       );
 
@@ -312,6 +331,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
           adapter: deps.adapter,
           repoPath: launch.repoPath,
           identity,
+          mode: launch.mode,
         });
       }
       initialMessages = buildForkInitialMessages(launch, summary, forkHistory);
@@ -328,6 +348,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         repoPath: launch.repoPath,
         identity,
         removeSession: deps.removeSession,
+        mode: launch.mode,
       });
     }
     if (isStaleOperation()) {
@@ -337,6 +358,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         adapter: deps.adapter,
         repoPath: launch.repoPath,
         identity,
+        mode: launch.mode,
       });
     }
 

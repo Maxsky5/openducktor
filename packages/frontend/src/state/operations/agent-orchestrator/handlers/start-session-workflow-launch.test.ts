@@ -150,7 +150,6 @@ const createHarness = (
       abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
         calls.abortLease.push(leaseId);
       },
-      resolveTaskWorktree: async () => null,
       ensureRuntime: async (_repoPath, _taskId, _role, runtimeOptions) => {
         calls.ensureRuntime.push([runtimeOptions]);
         return {
@@ -375,6 +374,18 @@ describe("prepareWorkflowForkLaunch", () => {
     });
     expect(prepared.launch.systemPrompt).toContain("Implement feature");
     expect(harness.calls.abortLease).toHaveLength(0);
+  });
+
+  test("forwards holdForPostStartMessage into the prepared fork launch", async () => {
+    const harness = createHarness();
+
+    const prepared = await prepareWorkflowForkLaunch({
+      ctx: { ...harness.ctx, holdForPostStartMessage: true },
+      input: forkInput(),
+      deps: harness.deps,
+    });
+
+    expect(prepared.launch.holdForPostStartMessage).toBe(true);
   });
 
   test("aborts the lease when the source session cannot be resolved", async () => {

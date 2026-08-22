@@ -182,7 +182,6 @@ export type FlatStartSessionDependencies = Omit<
   > &
   Omit<
     StartSessionDependencies["runtime"],
-    | "resolveTaskWorktree"
     | "canonicalizePath"
     | "prepareTaskSessionStartupLease"
     | "completeTaskSessionStartupLease"
@@ -191,7 +190,6 @@ export type FlatStartSessionDependencies = Omit<
   Partial<
     Pick<
       StartSessionDependencies["runtime"],
-      | "resolveTaskWorktree"
       | "canonicalizePath"
       | "prepareTaskSessionStartupLease"
       | "completeTaskSessionStartupLease"
@@ -231,12 +229,6 @@ export const toStartSessionDependencies = (
         deps.prepareTaskSessionStartupLease ?? (async () => "lease-1"),
       completeTaskSessionStartupLease: deps.completeTaskSessionStartupLease ?? (async () => {}),
       abortTaskSessionStartupLease: deps.abortTaskSessionStartupLease ?? (async () => {}),
-      resolveTaskWorktree:
-        deps.resolveTaskWorktree ??
-        (async () => ({
-          workingDirectory: "/tmp/repo/worktree",
-          source: "active_build_run",
-        })),
       ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
     },
     task: {
@@ -278,10 +270,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadAgentSessionHistory = async () => null,
     persistSessionRecord = async () => {},
     deleteSessionRecord = async () => {},
-    resolveTaskWorktree = async () => ({
-      workingDirectory: "/tmp/repo/worktree",
-      source: "active_build_run" as const,
-    }),
     canonicalizePath = async (path: string) => path,
     prepareTaskSessionStartupLease = async () => "lease-1",
     completeTaskSessionStartupLease = async () => {},
@@ -309,42 +297,36 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       onSessionCollectionChange?.(sessionsRef.current);
     });
 
-  const agentEngine =
-    adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
-  const dependenciesInput: Parameters<typeof toStartSessionDependencies>[0] = {
-    activeRepo,
-    workspaceId,
-    adapter: agentEngine,
-    sessionsRef,
-    replaceSession,
-    removeSession,
-    taskRef,
-    repoEpochRef,
-    currentWorkspaceRepoPathRef,
-    clearSessionObservationState,
-    loadSourceSession,
-    loadAgentSessionHistory,
-    persistSessionRecord,
-    deleteSessionRecord,
-    resolveTaskWorktree,
-    canonicalizePath,
-    prepareTaskSessionStartupLease,
-    completeTaskSessionStartupLease,
-    abortTaskSessionStartupLease,
-    ensureRuntime,
-    loadTaskDocuments,
-    refreshTaskData,
-    sendAgentMessage,
-    loadRepoPromptOverrides,
-    loadSettingsSnapshot,
-  };
-  if (sessionStartGateRef) {
-    dependenciesInput.sessionStartGateRef = sessionStartGateRef;
-  }
-  if (readSessionSnapshot) {
-    dependenciesInput.readSessionSnapshot = readSessionSnapshot;
-  }
-  const start = createStartAgentSession(toStartSessionDependencies(dependenciesInput));
+  const start = createStartAgentSession(
+    toStartSessionDependencies({
+      activeRepo,
+      workspaceId,
+      adapter: adapter as AgentEnginePort,
+      sessionsRef,
+      replaceSession,
+      removeSession,
+      taskRef,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      clearSessionObservationState,
+      loadSourceSession,
+      loadAgentSessionHistory,
+      persistSessionRecord,
+       deleteSessionRecord,
+      canonicalizePath,
+      prepareTaskSessionStartupLease,
+      completeTaskSessionStartupLease,
+      abortTaskSessionStartupLease,
+      ensureRuntime,
+      loadTaskDocuments,
+      refreshTaskData,
+      sendAgentMessage,
+      loadRepoPromptOverrides,
+      loadSettingsSnapshot,
+      ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
+       ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
+     }),
+   );
 
   return {
     adapter,

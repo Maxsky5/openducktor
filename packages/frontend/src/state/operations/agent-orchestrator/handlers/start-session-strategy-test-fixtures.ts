@@ -74,7 +74,6 @@ export const createRuntimeDependenciesFixture = (
   ensureRuntime: async () => {
     throw new Error("should not resolve runtime");
   },
-  resolveTaskWorktree: async () => createBuildContinuationTargetFixture("/tmp/repo/worktree"),
   ...overrides,
 });
 

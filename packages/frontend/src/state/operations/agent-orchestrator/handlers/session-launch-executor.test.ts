@@ -49,6 +49,7 @@ const createExecutorHarness = () => {
     resumeSession: [] as unknown[][],
     forkSession: [] as unknown[][],
     stopSession: [] as unknown[][],
+    releaseSession: [] as unknown[][],
     loadSessionHistory: [] as unknown[][],
     replaceSession: [] as AgentSessionState[],
     removeSession: [] as AgentSessionIdentity[],
@@ -72,6 +73,9 @@ const createExecutorHarness = () => {
     },
     stopSession: async (input: unknown) => {
       calls.stopSession.push([input]);
+    },
+    releaseSession: async (input: unknown) => {
+      calls.releaseSession.push([input]);
     },
     loadSessionHistory: async (input: unknown) => {
       calls.loadSessionHistory.push([input]);
@@ -169,6 +173,7 @@ describe("session-launch-executor", () => {
     });
     expect(registered?.selectedModel).toEqual(launch.selectedModel);
     expect(registered?.status).toBe("idle");
+    expect(registered?.historyLoadState).toBe("loaded");
     expect(result.summary.sessionAssociation).toEqual({
       kind: "workflow",
       taskId: "task-1",
@@ -204,7 +209,71 @@ describe("session-launch-executor", () => {
     });
     expect(result.summary.externalSessionId).toBe("existing-session");
     expect(harness.calls.replaceSession[0]?.externalSessionId).toBe("existing-session");
+    expect(harness.calls.replaceSession[0]?.historyLoadState).toBe("not_requested");
     expect(harness.calls.loadSessionHistory).toHaveLength(0);
+  });
+
+  test("releases a resumed session instead of stopping it when the context becomes stale after launch", async () => {
+    const harness = createExecutorHarness();
+    const originalResume = harness.deps.adapter.resumeSession;
+    harness.deps.adapter.resumeSession = async (input) => {
+      const summary = await originalResume.call(harness.deps.adapter, input);
+      harness.repoEpochRef.current += 1;
+      return summary;
+    };
+    const launch: PreparedSessionLaunch = {
+      mode: "resume",
+      repoPath: REPO_PATH,
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo",
+      sessionAssociation: { kind: "repository" },
+      externalSessionId: "existing-session",
+    };
+
+    await expect(harness.execute({ launch })).rejects.toThrow(
+      "Workspace changed while starting session.",
+    );
+    expect(harness.calls.releaseSession).toHaveLength(1);
+    expect(harness.calls.stopSession).toHaveLength(0);
+  });
+
+  test("releases a resumed session when local registration fails", async () => {
+    const harness = createExecutorHarness();
+    harness.deps.replaceSession = () => {
+      throw new Error("registration failed");
+    };
+    const launch: PreparedSessionLaunch = {
+      mode: "resume",
+      repoPath: REPO_PATH,
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo",
+      sessionAssociation: { kind: "repository" },
+      externalSessionId: "existing-session",
+    };
+
+    await expect(harness.execute({ launch })).rejects.toThrow(
+      'Failed to register started session "existing-session": registration failed.',
+    );
+    expect(harness.calls.releaseSession).toHaveLength(1);
+    expect(harness.calls.stopSession).toHaveLength(0);
+    expect(harness.calls.removeSession).toHaveLength(1);
+  });
+
+  test("does not seed a system prompt header for a resume without a prompt", async () => {
+    const harness = createExecutorHarness();
+    const launch: PreparedSessionLaunch = {
+      mode: "resume",
+      repoPath: REPO_PATH,
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo",
+      sessionAssociation: { kind: "repository" },
+      externalSessionId: "existing-session",
+    };
+
+    await harness.execute({ launch });
+
+    const registered = harness.calls.replaceSession[0];
+    expect(registered?.messages.items.some((message) => message.role === "system")).toBe(false);
   });
 
   test("resumes a workflow-associated session with the exact association forwarded", async () => {
@@ -274,6 +343,7 @@ describe("session-launch-executor", () => {
       parentExternalSessionId: "parent-session",
     });
     expect(harness.calls.loadSessionHistory).toHaveLength(1);
+    expect(harness.calls.loadSessionHistory[0]?.[0]).toMatchObject({ limit: 600 });
     expect(result.summary.externalSessionId).toBe("forked-1");
   });
 

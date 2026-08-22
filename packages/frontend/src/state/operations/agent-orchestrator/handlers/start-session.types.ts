@@ -1,9 +1,4 @@
-import type {
-  AgentSessionRecord,
-  RepoPromptOverrides,
-  TaskCard,
-  TaskWorktreeSummary,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openducktor/core";
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -43,7 +38,6 @@ export type RuntimeDependencies = {
     taskId: string,
     leaseId: string,
   ) => Promise<void>;
-  resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;
 };

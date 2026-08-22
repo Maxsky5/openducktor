@@ -18,7 +18,6 @@ import { host } from "../../shared/host";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import {
   BUILD_SELECTION,
-  continuationTarget,
   createSessionsRef,
   createStartSessionTestHarness,
   getSession,
@@ -252,7 +251,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           clear: () => {},
         },
       },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -302,7 +300,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           clear: () => {},
         },
       },
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -524,7 +521,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         current: [createTaskCardFixture({ id: "task-1", status: "open" })],
       },
       adapter,
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1197,8 +1193,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("rejects qa start before resolving a review target when qa is unavailable", async () => {
-    let qaTargetCalls = 0;
-
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
@@ -1237,10 +1231,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      resolveTaskWorktree: async () => {
-        qaTargetCalls += 1;
-        return continuationTarget("/tmp/repo/worktree");
-      },
     });
 
     try {
@@ -1252,14 +1242,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: QA_SELECTION,
         }),
       ).rejects.toThrow("Role 'qa' is unavailable for task 'task-1' in status 'open'.");
-      expect(qaTargetCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
   test("lets host bootstrap resolve the canonical worktree for qa start", async () => {
-    let qaTargetCalls = 0;
     const ensuredWorkingDirectories: Array<string | null | undefined> = [];
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
@@ -1308,10 +1296,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      resolveTaskWorktree: async () => {
-        qaTargetCalls += 1;
-        return continuationTarget("/tmp/repo/worktree");
-      },
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
         ensuredWorkingDirectories.push(options?.targetWorkingDirectory);
         return {
@@ -1331,7 +1315,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: QA_SELECTION,
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-qa" }));
-      expect(qaTargetCalls).toBe(0);
       expect(ensuredWorkingDirectories).toEqual([undefined]);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1484,10 +1467,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const { start } = createStartSessionTestHarness({
         adapter,
         taskRef: { current: [taskFixture] },
-        resolveTaskWorktree: async () => ({
-          workingDirectory: "/tmp/repo/worktree",
-          source: "active_build_run",
-        }),
         ensureRuntime: async () => {
           runtimeCalls += 1;
           return {

@@ -8,7 +8,6 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import {
-  createBuildContinuationTargetFixture,
   createBuildSessionFixture,
   createRuntimeDependenciesFixture,
   createSessionDependenciesFixture,
@@ -73,10 +72,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createTaskDependenciesFixture(),
           model: createModelDependenciesFixture(),
         },
@@ -111,10 +107,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createTaskDependenciesFixture(),
           model: createModelDependenciesFixture(),
         },
@@ -144,9 +137,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () => null,
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createQaAvailableTaskDependencies(),
           model: createModelDependenciesFixture(),
         },
@@ -177,10 +168,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         },
         deps: {
           session: sessionDependencies,
-          runtime: createRuntimeDependenciesFixture({
-            resolveTaskWorktree: async () =>
-              createBuildContinuationTargetFixture("/tmp/repo/new-worktree"),
-          }),
+          runtime: createRuntimeDependenciesFixture({}),
           task: createQaAvailableTaskDependencies(),
           model: createModelDependenciesFixture(),
         },

@@ -266,7 +266,6 @@ export function useAgentOrchestratorOperations({
         prepareTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeasePrepare,
         completeTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseComplete,
         abortTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseAbort,
-        resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
