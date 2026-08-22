@@ -384,7 +384,10 @@ export const useRepoSessionReadModel = ({
     }
     // Current-scope records loaded: a prior task-record failure no longer
     // describes this read model. An unresolved live-stream failure still does
-    // until the stream itself recovers through a fresh snapshot.
+    // until the stream itself recovers through a fresh snapshot. A loading
+    // window created by demoting a stale-scope failure ends with this success.
+    const liveMessage = liveStreamFailureRef.current;
+    const staleFailureWasDemoted = demotedStaleFailureRef.current;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
     setSessionReadModelLoadState((currentLoadState) => {
       if (
@@ -392,8 +395,6 @@ export const useRepoSessionReadModel = ({
         currentLoadState.source === "task-records" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath
       ) {
-        const liveMessage = liveStreamFailureRef.current;
-        demotedStaleFailureRef.current = false;
         return liveMessage
           ? failedAgentSessionReadModelLoadState(workspaceRepoPath, liveMessage)
           : readyAgentSessionReadModelLoadState(workspaceRepoPath);
@@ -401,10 +402,10 @@ export const useRepoSessionReadModel = ({
       if (
         currentLoadState.kind === "loading" &&
         currentLoadState.workspaceRepoPath === workspaceRepoPath &&
-        demotedStaleFailureRef.current
+        liveMessage === null &&
+        staleFailureWasDemoted
       ) {
         // The stale-scope failure this window replaced has now resolved.
-        demotedStaleFailureRef.current = false;
         return readyAgentSessionReadModelLoadState(workspaceRepoPath);
       }
       return currentLoadState;
@@ -606,9 +607,9 @@ export const useRepoSessionReadModel = ({
       if (isStaleRepoOperation()) {
         return;
       }
+      // Any fresh authoritative snapshot proves the stream recovered.
+      liveStreamFailureRef.current = null;
       if (readLoadedWorkflowRecords()) {
-        // A fresh authoritative snapshot is live-recovery evidence.
-        liveStreamFailureRef.current = null;
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;
       }
@@ -743,6 +744,7 @@ export const useRepoSessionReadModel = ({
     };
 
     observedRepoPathRef.current = repoPath;
+    demotedStaleFailureRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     void observeLiveSessions({ repoPath }, (envelope) => {
