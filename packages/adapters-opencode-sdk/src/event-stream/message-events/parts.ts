@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import { readNumberProp, readStringProp, readUnknownProp, type UnknownRecord } from "../../guards";
 import {
@@ -32,10 +32,14 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
 };
 
 const readIsoTimestampFromTime = (time: unknown): string | undefined => {
-  if (hasRuntimeType(time, "number")) {
-    return toIsoTimestamp(time);
+  const parsed = jsonValueSchema.safeParse(time);
+  if (!parsed.success) {
+    return undefined;
   }
-  return toIsoTimestamp(readNumberProp(time, ["end", "completed", "updated", "created"]));
+  if (hasRuntimeType(parsed.data, "number")) {
+    return toIsoTimestamp(parsed.data);
+  }
+  return toIsoTimestamp(readNumberProp(parsed.data, ["end", "completed", "updated", "created"]));
 };
 
 const readPartUpdatedTimestamp = (

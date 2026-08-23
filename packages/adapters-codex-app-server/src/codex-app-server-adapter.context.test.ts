@@ -115,12 +115,12 @@ describe("CodexAppServerAdapter context loading", () => {
     const resumeStarted = createDeferred<void>();
     const resume = createDeferred<void>();
     if (transport && request) {
-      transport.request = async <Response>(input): Promise<Response> => {
+      transport.request = async (input) => {
         if (input.method === "thread/resume") {
           resumeStarted.resolve(undefined);
           await resume.promise;
         }
-        return request<Response>(input);
+        return request(input);
       };
     }
 

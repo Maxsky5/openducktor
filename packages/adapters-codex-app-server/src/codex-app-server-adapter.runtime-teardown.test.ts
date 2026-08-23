@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import {
   codexRuntimeTeardownCountsForTest,
   codexSessionRuntimeRef,
@@ -28,23 +29,20 @@ class RejectableTurnTransport extends RecordingTransport {
     this.turnStartFailure.reject(error);
   }
 
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "turn/start") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-      return (await this.turnStartFailure.promise) as Response;
+      return await this.turnStartFailure.promise;
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class DeferredSteerTransport extends RecordingTransport {
   readonly turnStartRequested = createDeferred<void>();
   readonly steerRequested = createDeferred<void>();
-  private readonly turnStartResponse = createDeferred<unknown>();
-  private readonly steerResponse = createDeferred<unknown>();
+  private readonly turnStartResponse = createDeferred<CodexAppServerJsonValue>();
+  private readonly steerResponse = createDeferred<CodexAppServerJsonValue>();
 
   constructor() {
     super("runtime-live", false);
@@ -64,22 +62,18 @@ class DeferredSteerTransport extends RecordingTransport {
     this.steerResponse.reject(error);
   }
 
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "turn/start") {
       this.calls.push(request);
       this.turnStartRequested.resolve();
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-      return (await this.turnStartResponse.promise) as Response;
+      return this.turnStartResponse.promise;
     }
     if (request.method === "turn/steer") {
       this.calls.push(request);
       this.steerRequested.resolve();
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-      return (await this.steerResponse.promise) as Response;
+      return this.steerResponse.promise;
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 

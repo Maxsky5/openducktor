@@ -14,26 +14,22 @@ import {
 import { CodexAppServerAdapter } from "./index";
 
 class NameFailingTransport extends RecordingTransport {
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/name/set") {
       this.calls.push(request);
       throw new Error("name failed");
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class ResumeFailingTransport extends RecordingTransport {
-  async request<Response>(
-    request: Parameters<RecordingTransport["request"]>[0],
-  ): Promise<Response> {
+  async request(request: Parameters<RecordingTransport["request"]>[0]) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
       throw new Error("resume failed");
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 

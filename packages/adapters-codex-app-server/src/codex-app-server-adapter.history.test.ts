@@ -112,14 +112,12 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadReadResponse(thread) as Response;
+          return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -178,22 +176,17 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadReadResponse(thread) as Response;
+          return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
           // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
           const { threadId } = request.params as { threadId: string };
           if (threadId === "root-thread") {
-            // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-            return paginatedTurnsResponse([
-              { id: "root-turn", items: [], status: "completed" },
-            ]) as Response;
+            return paginatedTurnsResponse([{ id: "root-turn", items: [], status: "completed" }]);
           }
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -269,20 +262,18 @@ describe("CodexAppServerAdapter history loading", () => {
       },
     ];
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadReadResponse({
             id: "child-thread",
             cwd: "/repo",
             createdAt: 1_783_715_580,
             status: { type: "idle" },
             turns: [],
-          }) as Response;
+          });
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsResponse(turns) as Response;
+          return paginatedTurnsResponse(turns);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -328,9 +319,8 @@ describe("CodexAppServerAdapter history loading", () => {
   test("loads child history when its fork parent is no longer readable", async () => {
     let parentReadError = "thread not loaded: missing-parent";
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadReadResponse({
             id: "child-thread",
             cwd: "/repo",
@@ -339,7 +329,7 @@ describe("CodexAppServerAdapter history loading", () => {
             forkedFromId: "missing-parent",
             parentThreadId: "missing-parent",
             turns: [],
-          }) as Response;
+          });
         }
         if (request.method === "thread/turns/list") {
           // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
@@ -347,7 +337,6 @@ describe("CodexAppServerAdapter history loading", () => {
           if (params.threadId === "missing-parent") {
             throw new Error(parentReadError);
           }
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedTurnsResponse([
             {
               id: "child-turn",
@@ -355,7 +344,7 @@ describe("CodexAppServerAdapter history loading", () => {
               status: "completed",
               items: [codexAgentMessageItemFixture({ id: "child-answer", text: "Child result" })],
             },
-          ]) as Response;
+          ]);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -386,9 +375,8 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("rejects forked history with inherited turns when its parent is no longer readable", async () => {
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadReadResponse({
             id: "child-thread",
             cwd: "/repo",
@@ -397,7 +385,7 @@ describe("CodexAppServerAdapter history loading", () => {
             forkedFromId: "missing-parent",
             parentThreadId: "missing-parent",
             turns: [],
-          }) as Response;
+          });
         }
         if (request.method === "thread/turns/list") {
           // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
@@ -405,11 +393,10 @@ describe("CodexAppServerAdapter history loading", () => {
           if (params.threadId === "missing-parent") {
             throw new Error("thread not loaded: missing-parent");
           }
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedTurnsResponse([
             { id: "inherited-turn", startedAt: 5, status: "completed", items: [] },
             { id: "child-turn", startedAt: 11, status: "completed", items: [] },
-          ]) as Response;
+          ]);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -473,13 +460,13 @@ describe("CodexAppServerAdapter history loading", () => {
   test("keeps the runtime-owned system prompt before the local thread is materialized", async () => {
     const baseTransport = new RecordingTransport("runtime-live", false);
     const transport: CodexJsonRpcTransport = {
-      request: async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+      request: async (request: CodexJsonRpcRequest) => {
         if (request.method === "thread/read") {
           throw new Error(
             "thread is not materialized yet: includeTurns is unavailable before first user message",
           );
         }
-        return baseTransport.request<Response>(request);
+        return baseTransport.request(request);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -582,27 +569,23 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-search"], nextCursor: null } as Response;
+          return { data: ["thread-search"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [{ id: "thread-search", cwd: "/repo", createdAt: 1, status: { type: "active" } }],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -672,28 +655,24 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-skill"], nextCursor: null } as Response;
+          return { data: ["thread-skill"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [{ id: "thread-skill", cwd: "/repo", createdAt: 1, status: { type: "active" } }],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -755,22 +734,18 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadReadResponse(thread) as Response;
+          return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             {
               id: "thread-unloaded-idle",
@@ -779,7 +754,7 @@ describe("CodexAppServerAdapter history loading", () => {
               preview: "Unloaded idle thread",
               status: { type: "idle" },
             },
-          ]) as Response;
+          ]);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -809,30 +784,26 @@ describe("CodexAppServerAdapter history loading", () => {
   test("loads paginated stored history when the thread is absent from inventory", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadListResponse([]) as Response;
+          return paginatedThreadListResponse([]);
         }
         if (request.method === "thread/resume") {
           throw new Error("Stored Codex history must be read without resuming the thread.");
         }
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadReadResponse({
             id: "thread-unloaded",
             cwd: "/repo",
             status: { type: "idle" },
             turns: [],
-          }) as Response;
+          });
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedTurnsResponse([
             {
               id: "turn-1",
@@ -845,7 +816,7 @@ describe("CodexAppServerAdapter history loading", () => {
                 }),
               ],
             },
-          ]) as Response;
+          ]);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -922,29 +893,25 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-contract"], nextCursor: null } as Response;
+          return { data: ["thread-contract"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               { id: "thread-contract", cwd: "/repo", createdAt: 1, status: { type: "active" } },
             ],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1059,13 +1026,11 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-command-actions"], nextCursor: null } as Response;
+          return { data: ["thread-command-actions"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             {
               id: "thread-command-actions",
@@ -1073,17 +1038,15 @@ describe("CodexAppServerAdapter history loading", () => {
               createdAt: 1,
               status: { type: "active" },
             },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1152,15 +1115,13 @@ describe("CodexAppServerAdapter history loading", () => {
   test("returns empty history when Codex has no stored thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
@@ -1211,26 +1172,22 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-todos"], nextCursor: null } as Response;
+          return { data: ["thread-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             { id: "thread-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1279,14 +1236,12 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             {
               id: "thread-history-todos",
@@ -1294,15 +1249,13 @@ describe("CodexAppServerAdapter history loading", () => {
               createdAt: 1,
               status: { type: "idle" },
             },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadReadResponse(thread) as Response;
+          return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -1367,14 +1320,12 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               {
@@ -1385,15 +1336,13 @@ describe("CodexAppServerAdapter history loading", () => {
               },
             ],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedThreadReadResponse(thread) as Response;
+          return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -1440,14 +1389,12 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         calls.push(request);
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-empty-todos"], nextCursor: null } as Response;
+          return { data: ["thread-empty-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             {
               id: "thread-empty-todos",
@@ -1455,10 +1402,9 @@ describe("CodexAppServerAdapter history loading", () => {
               createdAt: 1,
               status: { type: "idle" },
             },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/resume") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             ...codexThreadStartResultFixture("thread-empty-todos", "thread/resume"),
             thread: codexThreadFixture({
@@ -1466,17 +1412,15 @@ describe("CodexAppServerAdapter history loading", () => {
               createdAt: 1,
               status: { type: "idle" },
             }),
-          } as Response;
+          };
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1530,13 +1474,11 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: [], nextCursor: null } as Response;
+          return { data: [], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               {
@@ -1547,17 +1489,15 @@ describe("CodexAppServerAdapter history loading", () => {
               },
             ],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1599,26 +1539,22 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-plan-todos"], nextCursor: null } as Response;
+          return { data: ["thread-plan-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             { id: "thread-plan-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1663,13 +1599,11 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-plan-text-todos"], nextCursor: null } as Response;
+          return { data: ["thread-plan-text-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             {
               id: "thread-plan-text-todos",
@@ -1677,17 +1611,15 @@ describe("CodexAppServerAdapter history loading", () => {
               createdAt: 1,
               status: { type: "idle" },
             },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1735,26 +1667,22 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-named-todos"], nextCursor: null } as Response;
+          return { data: ["thread-named-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             { id: "thread-named-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1799,26 +1727,22 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-json-todos"], nextCursor: null } as Response;
+          return { data: ["thread-json-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             { id: "thread-json-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);
@@ -1868,26 +1792,22 @@ describe("CodexAppServerAdapter history loading", () => {
       ],
     };
     const transport: CodexJsonRpcTransport = {
-      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+      async request(request: CodexJsonRpcRequest) {
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread-bad-todos"], nextCursor: null } as Response;
+          return { data: ["thread-bad-todos"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return paginatedThreadListResponse([
             { id: "thread-bad-todos", cwd: "/repo", createdAt: 1, status: { type: "idle" } },
-          ]) as Response;
+          ]);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return paginatedTurnsListResponse(thread) as Response;
+          return paginatedTurnsListResponse(thread);
         }
         if (request.method !== "thread/read") {
           throw new Error(`Unexpected method '${request.method}'.`);
         }
-        // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-        return paginatedThreadReadResponse(thread) as Response;
+        return paginatedThreadReadResponse(thread);
       },
     };
     const adapter = createAdapterWithTransport(transport);

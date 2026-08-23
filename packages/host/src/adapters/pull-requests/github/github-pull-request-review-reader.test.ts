@@ -1210,7 +1210,7 @@ describe("createGithubPullRequestReviewReader", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("reviewThreads.nodes.0");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviewThreads.nodes.0");
     }
   });
 

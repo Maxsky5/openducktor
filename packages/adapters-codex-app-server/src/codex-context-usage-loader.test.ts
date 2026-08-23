@@ -18,15 +18,15 @@ const blockResume = (transport: RecordingTransport) => {
   const started = createDeferred<void>();
   const resume = createDeferred<void>();
   const completed = createDeferred<void>();
-  transport.request = async <Response>(input): Promise<Response> => {
+  transport.request = async (input) => {
     if (input.method === "thread/resume") {
       started.resolve(undefined);
       await resume.promise;
-      const response = await request<Response>(input);
+      const response = await request(input);
       completed.resolve(undefined);
       return response;
     }
-    return request<Response>(input);
+    return request(input);
   };
   return { started, resume, completed };
 };

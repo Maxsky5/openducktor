@@ -87,47 +87,33 @@ const opencodeSessionStatusSchema = exactOptionalSchema(
   ]),
 ) satisfies z.ZodType<ExactOptional<SessionStatus>>;
 
-const opencodeUnknownRecordSchema = z.record(z.string(), z.unknown());
+const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatusSchema);
+type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
+type OpencodeSessionStatusMap = z.output<typeof opencodeSessionStatusMapSchema>;
 
-const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity => {
-  if (status === undefined || status === null) {
+const toOpencodeRuntimeActivity = (
+  status: OpencodeSessionStatus | undefined,
+): AgentSessionRuntimeActivity => {
+  if (status === undefined) {
     return "idle";
   }
-  const parsedStatus = opencodeSessionStatusSchema.safeParse(status);
-  if (!parsedStatus.success) {
-    const parsedDiscriminant = z.object({ type: z.unknown() }).safeParse(status);
-    if (parsedDiscriminant.success && hasRuntimeType(parsedDiscriminant.data.type, "string")) {
-      throw new Error(
-        `Unsupported Opencode live agent session status type: ${parsedDiscriminant.data.type}`,
-      );
-    }
-    throw new Error("Malformed live agent session status payload from Opencode.");
+  switch (status.type) {
+    case "busy":
+      return "running";
+    case "idle":
+      return "idle";
+    case "retry":
+      return "retrying";
   }
-
-  const { type } = parsedStatus.data;
-  if (type === "busy") {
-    return "running";
-  }
-  if (type === "idle") {
-    return "idle";
-  }
-
-  if (type === "retry") {
-    return "retrying";
-  }
-
-  throw new Error(`Unsupported Opencode live agent session status type: ${String(type)}`);
 };
 
 const toOpencodeSessionStatusMap = (
   payload: unknown,
   directory: string,
-): Record<string, unknown> => {
-  const parsedPayload = opencodeUnknownRecordSchema.safeParse(payload);
+): OpencodeSessionStatusMap => {
+  const parsedPayload = opencodeSessionStatusMapSchema.safeParse(payload);
   if (!parsedPayload.success) {
-    throw new Error(
-      `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
-    );
+    throw new Error(`Malformed Opencode session status response for directory '${directory}'.`);
   }
   return parsedPayload.data;
 };

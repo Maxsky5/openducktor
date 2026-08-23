@@ -434,15 +434,19 @@ const readTrimmedString = (
 };
 
 const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["executionMode"] => {
-  if (hasRuntimeType(value, "string")) {
-    const normalized = value.trim().toLowerCase();
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success) {
+    return undefined;
+  }
+  if (hasRuntimeType(parsed.data, "string")) {
+    const normalized = parsed.data.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
       return normalized;
     }
   }
 
-  if (hasRuntimeType(value, "boolean")) {
-    return value ? "background" : "foreground";
+  if (hasRuntimeType(parsed.data, "boolean")) {
+    return parsed.data ? "background" : "foreground";
   }
 
   return undefined;

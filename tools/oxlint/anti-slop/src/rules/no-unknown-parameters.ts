@@ -116,12 +116,56 @@ function isParserCall(
   );
 }
 
+const equalityOperators: ReadonlySet<string> = new Set(["==", "!=", "===", "!=="]);
+
+function isParameterIdentifier(expression: ESTree.Expression, parameterName: string): boolean {
+  return expression.type === "Identifier" && expression.name === parameterName;
+}
+
+function isTypeofParameter(expression: ESTree.Expression, parameterName: string): boolean {
+  return (
+    expression.type === "UnaryExpression" &&
+    expression.operator === "typeof" &&
+    isParameterIdentifier(expression.argument, parameterName)
+  );
+}
+
+function isTypeofResultLiteral(expression: ESTree.Expression): boolean {
+  if (expression.type !== "Literal") return false;
+  return (
+    expression.value === "bigint" ||
+    expression.value === "boolean" ||
+    expression.value === "function" ||
+    expression.value === "number" ||
+    expression.value === "object" ||
+    expression.value === "string" ||
+    expression.value === "symbol" ||
+    expression.value === "undefined"
+  );
+}
+
+function isBinaryNarrowingExpression(
+  expression: ESTree.BinaryExpression,
+  parameterName: string,
+): boolean {
+  if (expression.operator === "instanceof") {
+    return isParameterIdentifier(expression.left, parameterName);
+  }
+  if (!equalityOperators.has(expression.operator)) return false;
+  const comparesTypeof =
+    (isTypeofParameter(expression.left, parameterName) &&
+      isTypeofResultLiteral(expression.right)) ||
+    (isTypeofParameter(expression.right, parameterName) &&
+      isTypeofResultLiteral(expression.left));
+  return comparesTypeof;
+}
+
 function isNarrowingExpression(expression: ESTree.Expression, parameterName: string): boolean {
   if (expression.type === "ParenthesizedExpression") {
     return isNarrowingExpression(expression.expression, parameterName);
   }
   if (expression.type === "UnaryExpression") {
-    return isNarrowingExpression(expression.argument, parameterName);
+    return expression.operator === "!" && isNarrowingExpression(expression.argument, parameterName);
   }
   if (expression.type === "LogicalExpression") {
     return (
@@ -130,19 +174,7 @@ function isNarrowingExpression(expression: ESTree.Expression, parameterName: str
     );
   }
   if (expression.type === "BinaryExpression") {
-    const referencesParameter =
-      (expression.left.type === "Identifier" && expression.left.name === parameterName) ||
-      (expression.right.type === "Identifier" && expression.right.name === parameterName);
-    const readsParameterType =
-      (expression.left.type === "UnaryExpression" &&
-        expression.left.operator === "typeof" &&
-        expression.left.argument.type === "Identifier" &&
-        expression.left.argument.name === parameterName) ||
-      (expression.right.type === "UnaryExpression" &&
-        expression.right.operator === "typeof" &&
-        expression.right.argument.type === "Identifier" &&
-        expression.right.argument.name === parameterName);
-    return referencesParameter || readsParameterType;
+    return isBinaryNarrowingExpression(expression, parameterName);
   }
   if (expression.type !== "CallExpression") return false;
   const name = calleeName(expression.callee);
@@ -151,13 +183,52 @@ function isNarrowingExpression(expression: ESTree.Expression, parameterName: str
   return isGuard && directlyReceivesParameter(expression, parameterName);
 }
 
+function isNegativeNarrowingExpression(
+  expression: ESTree.Expression,
+  parameterName: string,
+): boolean {
+  if (expression.type === "ParenthesizedExpression") {
+    return isNegativeNarrowingExpression(expression.expression, parameterName);
+  }
+  if (expression.type === "UnaryExpression" && expression.operator === "!") {
+    return isNarrowingExpression(expression.argument, parameterName);
+  }
+  if (expression.type === "LogicalExpression") {
+    return (
+      isNegativeNarrowingExpression(expression.left, parameterName) ||
+      isNegativeNarrowingExpression(expression.right, parameterName)
+    );
+  }
+  if (expression.type !== "BinaryExpression") return false;
+  return (
+    (expression.operator === "!=" || expression.operator === "!==") &&
+    isBinaryNarrowingExpression(expression, parameterName)
+  );
+}
+
+function statementAlwaysExits(statement: ESTree.Statement): boolean {
+  if (statement.type === "ReturnStatement" || statement.type === "ThrowStatement") return true;
+  if (statement.type === "BlockStatement") {
+    return statement.body.some(statementAlwaysExits);
+  }
+  if (statement.type !== "IfStatement" || statement.alternate === null) return false;
+  return statementAlwaysExits(statement.consequent) && statementAlwaysExits(statement.alternate);
+}
+
 function statementValidatesParameter(
   statement: ESTree.Statement,
   parameterName: string,
   hasOutputContract: boolean,
 ): boolean {
   if (statement.type === "IfStatement") {
-    return isNarrowingExpression(statement.test, parameterName);
+    const rejectsInvalidInput =
+      statementAlwaysExits(statement.consequent) &&
+      isNegativeNarrowingExpression(statement.test, parameterName);
+    const rejectsNonMatchingInput =
+      statement.alternate !== null &&
+      statementAlwaysExits(statement.alternate) &&
+      isNarrowingExpression(statement.test, parameterName);
+    return rejectsInvalidInput || rejectsNonMatchingInput;
   }
   if (statement.type === "ExpressionStatement") {
     if (!hasOutputContract || statement.expression.type !== "CallExpression") return false;

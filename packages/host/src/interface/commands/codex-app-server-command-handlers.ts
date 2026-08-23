@@ -56,13 +56,17 @@ const stringField = (record: Record<string, unknown>, field: string): string | u
 };
 
 const logValue = (value: unknown): string | undefined => {
-  if (hasRuntimeType(value, "string") && value.trim().length > 0) {
-    return value;
+  if (value === undefined) {
+    return undefined;
   }
-  if (hasRuntimeType(value, "boolean") || hasRuntimeType(value, "number")) {
-    return String(value);
+  const parsed = jsonValueSchema.parse(value);
+  if (hasRuntimeType(parsed, "string") && parsed.trim().length > 0) {
+    return parsed;
   }
-  if (value === null) {
+  if (hasRuntimeType(parsed, "boolean") || hasRuntimeType(parsed, "number")) {
+    return String(parsed);
+  }
+  if (parsed === null) {
     return "null";
   }
   return undefined;

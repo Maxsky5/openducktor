@@ -1,4 +1,9 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import {
+  hasRuntimeType,
+  type JsonObject,
+  type JsonValue,
+  jsonValueSchema,
+} from "@openducktor/contracts";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -15,32 +20,32 @@ export const normalizeToolInput = (
   return Object.keys(input).length > 0 ? input : undefined;
 };
 
-const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
+const isJsonRecord = (value: JsonValue | undefined): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 // SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, unknown>`.
 export const normalizeToolText = (value: unknown): string | undefined => {
-  if (hasRuntimeType(value, "string")) {
-    const trimmed = value.trim();
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = jsonValueSchema.parse(value);
+  if (hasRuntimeType(parsed, "string")) {
+    const trimmed = parsed.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
-  if (value === undefined || value === null) {
+  if (parsed === null) {
     return undefined;
   }
-  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
-    return String(value);
+  if (hasRuntimeType(parsed, "number") || hasRuntimeType(parsed, "boolean")) {
+    return String(parsed);
   }
-  if (Array.isArray(value) && value.length === 0) {
+  if (Array.isArray(parsed) && parsed.length === 0) {
     return undefined;
   }
-  if (isJsonRecord(value) && Object.keys(value).length === 0) {
+  if (isJsonRecord(parsed) && Object.keys(parsed).length === 0) {
     return undefined;
   }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
+  return JSON.stringify(parsed, null, 2);
 };
 
 export const resolveToolMessageId = (

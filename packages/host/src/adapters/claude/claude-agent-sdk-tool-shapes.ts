@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import {
@@ -138,17 +138,17 @@ export const timestampMs = (timestamp: string): number => {
 };
 
 const stringifyToolResultContent = (value: unknown): string => {
-  if (value === undefined || value === null) {
+  if (value === undefined) {
     return "";
   }
-  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
-    return String(value);
+  const parsed = jsonValueSchema.parse(value);
+  if (parsed === null) {
+    return "";
   }
-  try {
-    return JSON.stringify(value, null, 2) ?? String(value);
-  } catch {
-    return String(value);
+  if (hasRuntimeType(parsed, "number") || hasRuntimeType(parsed, "boolean")) {
+    return String(parsed);
   }
+  return JSON.stringify(parsed, null, 2);
 };
 
 const toolResultBlockText = (block: unknown): string => {

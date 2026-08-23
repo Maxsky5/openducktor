@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
@@ -271,19 +272,17 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("late old turn completion does not clear a newer active turn", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const firstTurnStart = createDeferred<unknown>();
-    const secondTurnStart = createDeferred<unknown>();
+    const firstTurnStart = createDeferred<CodexAppServerJsonValue>();
+    const secondTurnStart = createDeferred<CodexAppServerJsonValue>();
     const pendingTurnStarts = [firstTurnStart, secondTurnStart];
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
-      request: mock(async <Response>(request: CodexJsonRpcRequest): Promise<Response> => {
+      request: mock(async (request: CodexJsonRpcRequest) => {
         calls.push(request);
         if (request.method === "initialize") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return {} as Response;
+          return {};
         }
         if (request.method === "model/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               {
@@ -310,22 +309,18 @@ describe("CodexAppServerAdapter streaming", () => {
               },
             ],
             nextCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/start") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return codexThreadStartResultFixture("thread/start-runtime-live") as Response;
+          return codexThreadStartResultFixture("thread/start-runtime-live");
         }
         if (request.method === "thread/name/set") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return {} as Response;
+          return {};
         }
         if (request.method === "thread/loaded/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { data: ["thread/start-runtime-live"], nextCursor: null } as Response;
+          return { data: ["thread/start-runtime-live"], nextCursor: null };
         }
         if (request.method === "thread/list") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             data: [
               codexThreadFixture({
@@ -336,29 +331,26 @@ describe("CodexAppServerAdapter streaming", () => {
             ],
             nextCursor: null,
             backwardsCursor: null,
-          } as Response;
+          };
         }
         if (request.method === "thread/read") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
             thread: codexThreadFixture({
               id: "thread/start-runtime-live",
               createdAt: 1_778_112_000,
               status: { type: "active", activeFlags: [] },
             }),
-          } as Response;
+          };
         }
         if (request.method === "turn/start") {
           const deferred = pendingTurnStarts.shift();
           if (!deferred) {
             throw new Error("Unexpected extra turn/start request.");
           }
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return (await deferred.promise) as Response;
+          return deferred.promise;
         }
         if (request.method === "turn/steer") {
-          // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-          return { turnId: "turn-steered" } as Response;
+          return { turnId: "turn-steered" };
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       }),

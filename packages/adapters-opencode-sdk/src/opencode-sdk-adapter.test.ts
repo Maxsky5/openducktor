@@ -2391,7 +2391,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listSessionRuntimeSnapshots fails fast on malformed runtime statuses", async () => {
+  test("listSessionRuntimeSnapshots rejects malformed status values in the response map", async () => {
     const mock = makeMockClient();
     // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
     const malformedClient = {
@@ -2418,7 +2418,7 @@ describe("opencode-sdk-adapter", () => {
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
       }),
-    ).rejects.toThrow("Unsupported Opencode live agent session status type");
+    ).rejects.toThrow("Malformed Opencode session status response for directory '/repo'");
   });
 
   test("listSessionRuntimeSnapshots rejects non-object session status maps", async () => {

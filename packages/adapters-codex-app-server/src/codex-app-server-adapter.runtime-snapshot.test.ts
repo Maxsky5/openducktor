@@ -36,62 +36,58 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
 });
 
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
       // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       return {
         threadId: (request.params as { threadId: string }).threadId,
         startedAt: "2026-05-07T00:00:00.000Z",
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class DeferredInventoryTransport extends RecordingTransport {
-  readonly loadedList = createDeferred<unknown>();
-  readonly threadList = createDeferred<unknown>();
+  readonly loadedList = createDeferred<CodexAppServerJsonValue>();
+  readonly threadList = createDeferred<CodexAppServerJsonValue>();
 
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Promise<Response>` used by this case.
-      return this.loadedList.promise as Promise<Response>;
+      return this.loadedList.promise;
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Promise<Response>` used by this case.
-      return this.threadList.promise as Promise<Response>;
+      return this.threadList.promise;
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class MutableThreadListTransport extends RecordingTransport {
   threadSavedStatus: CodexAppServerThreadStatus = { type: "active", activeFlags: [] };
 
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [codexThreadFixture({ id: "thread-saved", status: this.threadSavedStatus })],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class ChildThreadListTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/list") {
       this.calls.push(request);
       // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
       const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: includesSubagents
           ? [
@@ -104,32 +100,30 @@ class ChildThreadListTransport extends RecordingTransport {
           : [],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class IdleParentThreadListTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [codexThreadFixture({ id: "parent-thread", status: { type: "idle" } })],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class IdleParentWithActiveChildTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [
           codexThreadFixture({ id: "parent-thread", status: { type: "idle" } }),
@@ -141,25 +135,24 @@ class IdleParentWithActiveChildTransport extends RecordingTransport {
         ],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
       // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
       const threadId = (request.params as { threadId: string }).threadId;
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ...codexThreadStartResultFixture(threadId, "thread/resume"),
         thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }),
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
@@ -168,29 +161,26 @@ class StoredIdleHistoryTransport extends RecordingTransport {
   loaded = false;
   threadStatus: CodexAppServerThreadStatus = { type: "idle" };
 
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: this.loaded ? ["thread-idle"] : [],
         nextCursor: null,
-      } as Response;
+      };
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: this.includeThread
           ? [codexThreadFixture({ id: "thread-idle", status: this.threadStatus })]
           : [],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
     if (request.method === "thread/read") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         thread: codexThreadFixture({
           id: "thread-idle",
@@ -211,32 +201,30 @@ class StoredIdleHistoryTransport extends RecordingTransport {
             }),
           ],
         }),
-      } as Response;
+      };
     }
     if (request.method === "thread/turns/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-      return { data: [], nextCursor: null, backwardsCursor: null } as Response;
+      return { data: [], nextCursor: null, backwardsCursor: null };
     }
     if (request.method === "thread/resume") {
       this.calls.push(request);
       this.loaded = true;
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         ...codexThreadStartResultFixture("thread-idle", "thread/resume"),
         thread: codexThreadFixture({ id: "thread-idle", status: { type: "idle" } }),
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 
 class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
   emitRestoredUsage: ((message: CodexAppServerJsonValue | undefined) => void) | null = null;
 
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
-      const response = await super.request<Response>(request);
+      const response = await super.request(request);
       setTimeout(() => {
         this.emitRestoredUsage?.({
           method: "thread/tokenUsage/updated",
@@ -249,7 +237,7 @@ class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
       }, 0);
       return response;
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 

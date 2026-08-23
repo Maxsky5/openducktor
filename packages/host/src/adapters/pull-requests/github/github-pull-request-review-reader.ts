@@ -8,17 +8,13 @@ import {
   pullRequestReviewContextSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { runGithubRepositoryCommandAllowFailure } from "../../../application/tasks/support/github-repository-command";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
-import {
-  parseGithubJson,
-  requireGithubObject,
-  requireGithubString,
-  toNullableGithubString,
-} from "./github-pull-request-review-payload";
+import { parseGithubJson } from "./github-pull-request-review-payload";
 import { loadGithubReviewThreads } from "./github-pull-request-review-threads";
 
 type GithubPullRequestReviewReadInput = {
@@ -93,26 +89,37 @@ const normalizeCheckConclusion = (
   return "unknown";
 };
 
+const optionalCheckTextSchema = z.string().nullable().optional();
+const checksResponseSchema = z.array(
+  z.object({
+    name: z.string().min(1),
+    workflow: optionalCheckTextSchema,
+    state: optionalCheckTextSchema,
+    bucket: optionalCheckTextSchema,
+    link: optionalCheckTextSchema,
+    description: optionalCheckTextSchema,
+    event: optionalCheckTextSchema,
+    startedAt: optionalCheckTextSchema,
+    completedAt: optionalCheckTextSchema,
+  }),
+);
+
+const toNullableCheckText = (value: string | null | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
+
 const parseChecks = (payload: string): PullRequestReviewCheck[] => {
-  const parsed = parseGithubJson(payload, "pull request checks");
-  if (!Array.isArray(parsed)) {
-    throw new HostValidationError({
-      field: "payload",
-      message: "Failed to parse GitHub pull request checks response: expected an array.",
-    });
-  }
-  return parsed.map((entry, index) => {
-    const check = requireGithubObject(entry, `checks.${index}`);
-    const state = toNullableGithubString(check.state);
+  const checks = parseGithubJson(payload, "pull request checks", checksResponseSchema, "checks");
+  return checks.map((check) => {
+    const state = toNullableCheckText(check.state);
     return {
-      name: requireGithubString(check.name, `checks.${index}.name`),
-      workflow: toNullableGithubString(check.workflow),
+      name: check.name,
+      workflow: toNullableCheckText(check.workflow),
       status: normalizeCheckStatus(state),
-      conclusion: normalizeCheckConclusion(toNullableGithubString(check.bucket), state),
-      url: toNullableGithubString(check.link),
-      details: toNullableGithubString(check.description) ?? toNullableGithubString(check.event),
-      startedAt: toNullableGithubString(check.startedAt),
-      completedAt: toNullableGithubString(check.completedAt),
+      conclusion: normalizeCheckConclusion(toNullableCheckText(check.bucket), state),
+      url: toNullableCheckText(check.link),
+      details: toNullableCheckText(check.description) ?? toNullableCheckText(check.event),
+      startedAt: toNullableCheckText(check.startedAt),
+      completedAt: toNullableCheckText(check.completedAt),
     };
   });
 };

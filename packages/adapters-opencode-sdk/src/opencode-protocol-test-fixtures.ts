@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { Session } from "@opencode-ai/sdk/v2/client";
 import { asUnknownRecord, readStringProp, readUnknownProp, type UnknownRecord } from "./guards";
 import {
@@ -87,10 +87,11 @@ export const createOpencodeMessageInfoFixture = (info: UnknownRecord) => {
 };
 
 const serializeToolResult = (value: unknown): string => {
-  if (hasRuntimeType(value, "string")) {
-    return value;
+  if (value === undefined) {
+    return "";
   }
-  return value === undefined ? "" : JSON.stringify(value);
+  const parsed = jsonValueSchema.parse(value);
+  return hasRuntimeType(parsed, "string") ? parsed : JSON.stringify(parsed);
 };
 
 export const createOpencodePartFixture = (part: UnknownRecord): ParsedOpencodePart => {

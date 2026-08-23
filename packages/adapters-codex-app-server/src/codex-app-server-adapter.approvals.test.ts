@@ -46,18 +46,16 @@ const isApprovalRequiredEvent = <Event>(event: Event): event is Event & Approval
 };
 
 class ReloadedParentWithChildTransport extends RecordingTransport {
-  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+  async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
-      return { data: ["parent-thread", "child-thread"], nextCursor: null } as Response;
+      return { data: ["parent-thread", "child-thread"], nextCursor: null };
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
       // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
       const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
-      // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
         data: [
           codexThreadFixture({
@@ -91,9 +89,9 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
         ],
         nextCursor: null,
         backwardsCursor: null,
-      } as Response;
+      };
     }
-    return super.request<Response>(request);
+    return super.request(request);
   }
 }
 

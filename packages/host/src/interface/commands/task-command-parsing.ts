@@ -9,6 +9,7 @@ import {
   pullRequestSchema,
   type TaskCreateInput,
   type TaskDirectMergeInput,
+  type TaskAssetDescriptionMutation,
   type TaskStatus,
   type TaskUpdatePatch,
   taskAssetDescriptionMutationSchema,
@@ -80,7 +81,9 @@ export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
   throw invalidInput(`task_update input.patch is invalid: ${parsed.error.message}`, "input.patch");
 };
 
-export const parseDescriptionAssets = (value: unknown) => {
+export const parseDescriptionAssets = (
+  value: unknown,
+): TaskAssetDescriptionMutation | undefined => {
   if (value === undefined) {
     return undefined;
   }

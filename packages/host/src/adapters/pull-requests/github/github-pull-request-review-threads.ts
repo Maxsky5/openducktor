@@ -1,21 +1,12 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   type GithubCommandDependencies,
   runGithubCommand,
 } from "../../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import {
-  type GithubPayloadValue,
-  parseGithubJsonObject,
-  parseGithubNextPageCursor,
-  requireGithubBoolean,
-  requireGithubObject,
-  requireGithubString,
-  toNullableGithubObject,
-  toNullableGithubString,
-} from "./github-pull-request-review-payload";
+import { parseGithubJson } from "./github-pull-request-review-payload";
 import {
   type GithubReviewCommentLineRange,
   parseGithubReviewCommentContent,
@@ -120,8 +111,70 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 }
 `;
 
-const toNullableNumber = (value: GithubPayloadValue): number | null =>
-  hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0 ? value : null;
+const optionalTextSchema = z.string().nullable().optional();
+const optionalLineSchema = z.number().int().positive().nullable().optional();
+const actorSchema = z
+  .object({
+    login: optionalTextSchema,
+    avatarUrl: optionalTextSchema,
+  })
+  .nullable()
+  .optional();
+const pullRequestReviewSchema = z
+  .object({ id: z.string().min(1) })
+  .nullable()
+  .optional();
+const reviewThreadCommentSchema = z.object({
+  id: z.string().min(1),
+  author: actorSchema,
+  body: z.string(),
+  pullRequestReview: pullRequestReviewSchema,
+  diffHunk: optionalTextSchema,
+  url: optionalTextSchema,
+  createdAt: optionalTextSchema,
+  updatedAt: optionalTextSchema,
+  path: optionalTextSchema,
+  line: optionalLineSchema,
+  startLine: optionalLineSchema,
+  originalLine: optionalLineSchema,
+  originalStartLine: optionalLineSchema,
+});
+const pageInfoSchema = z.discriminatedUnion("hasNextPage", [
+  z.object({ hasNextPage: z.literal(true), endCursor: z.string().min(1) }),
+  z.object({ hasNextPage: z.literal(false), endCursor: z.string().nullable() }),
+]);
+const reviewThreadSchema = z.object({
+  id: z.string().min(1),
+  isResolved: z.boolean(),
+  comments: z.object({
+    pageInfo: pageInfoSchema,
+    nodes: z.array(reviewThreadCommentSchema),
+  }),
+});
+const reviewThreadsResponseSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequest: z.object({
+        reviewThreads: z.object({
+          pageInfo: pageInfoSchema,
+          nodes: z.array(reviewThreadSchema),
+        }),
+      }),
+    }),
+  }),
+});
+const reviewThreadCommentsResponseSchema = z.object({
+  data: z.object({ node: reviewThreadSchema }),
+});
+
+type GithubReviewThread = z.output<typeof reviewThreadSchema>;
+type GithubReviewThreadComment = z.output<typeof reviewThreadCommentSchema>;
+
+const toNullableText = (value: string | null | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
+
+const nextPageCursor = (pageInfo: z.output<typeof pageInfoSchema>): string | null =>
+  pageInfo.hasNextPage ? pageInfo.endCursor : null;
 
 const toLineRange = (
   startLine: number | null,
@@ -130,73 +183,53 @@ const toLineRange = (
   endLine === null ? null : { startLine: startLine ?? endLine, endLine };
 
 const toReviewThreadComment = (
-  payloadValue: GithubPayloadValue,
-  field: string,
+  comment: GithubReviewThreadComment,
   threadId: string,
   isResolved: boolean,
 ): ParsedReviewThreadComment | null => {
-  const payload = requireGithubObject(payloadValue, field);
-  const body = hasRuntimeType(payload.body, "string") ? payload.body : "";
-  const patch = toNullableGithubString(payload.diffHunk);
-  const currentLine = toNullableNumber(payload.line);
-  const originalLine = toNullableNumber(payload.originalLine);
+  const patch = toNullableText(comment.diffHunk);
+  const currentLine = comment.line ?? null;
+  const originalLine = comment.originalLine ?? null;
   const line = currentLine ?? originalLine;
   const lineRanges = [
-    toLineRange(toNullableNumber(payload.originalStartLine), originalLine),
-    toLineRange(toNullableNumber(payload.startLine), currentLine),
+    toLineRange(comment.originalStartLine ?? null, originalLine),
+    toLineRange(comment.startLine ?? null, currentLine),
   ].filter((lineRange): lineRange is GithubReviewCommentLineRange => lineRange !== null);
   const content = parseGithubReviewCommentContent({
-    body,
+    body: comment.body,
     diffHunk: patch,
     lineRanges,
   });
   if (!content.body && content.suggestionPatches.length === 0) {
     return null;
   }
-  const author = toNullableGithubObject(payload.author, `${field}.author`);
-  const review = toNullableGithubObject(payload.pullRequestReview, `${field}.pullRequestReview`);
   return {
     activity: {
-      id: requireGithubString(payload.id, `${field}.id`),
-      author: toNullableGithubString(author?.login),
-      authorAvatarUrl: toNullableGithubString(author?.avatarUrl),
+      id: comment.id,
+      author: toNullableText(comment.author?.login),
+      authorAvatarUrl: toNullableText(comment.author?.avatarUrl),
       body: content.body,
       patch,
       suggestionPatches: content.suggestionPatches,
       suggestionWarning: content.suggestionWarning,
-      url: toNullableGithubString(payload.url),
-      createdAt: toNullableGithubString(payload.createdAt),
-      updatedAt: toNullableGithubString(payload.updatedAt),
-      path: toNullableGithubString(payload.path),
+      url: toNullableText(comment.url),
+      createdAt: toNullableText(comment.createdAt),
+      updatedAt: toNullableText(comment.updatedAt),
+      path: toNullableText(comment.path),
       line,
       threadId,
       isResolved,
       source: "review_thread",
     },
-    reviewId: review ? requireGithubString(review.id, `${field}.pullRequestReview.id`) : null,
+    reviewId: comment.pullRequestReview?.id ?? null,
   };
 };
 
-const parseThread = (threadValue: GithubPayloadValue, field: string) => {
-  const thread = requireGithubObject(threadValue, field);
-  const threadId = requireGithubString(thread.id, `${field}.id`);
-  const isResolved = requireGithubBoolean(thread.isResolved, `${field}.isResolved`);
-  const commentsConnection = requireGithubObject(thread.comments, `${field}.comments`);
-  if (!Array.isArray(commentsConnection.nodes)) {
-    throw new HostValidationError({
-      field: `${field}.comments.nodes`,
-      message: `GitHub pull request review field '${field}.comments.nodes' is missing or invalid.`,
-    });
-  }
+const parseThread = (thread: GithubReviewThread) => {
   const comments: PullRequestReviewActivity[] = [];
   const reviewIdsWithComments: string[] = [];
-  for (const [index, comment] of commentsConnection.nodes.entries()) {
-    const normalized = toReviewThreadComment(
-      comment,
-      `${field}.comments.nodes.${index}`,
-      threadId,
-      isResolved,
-    );
+  for (const comment of thread.comments.nodes) {
+    const normalized = toReviewThreadComment(comment, thread.id, thread.isResolved);
     if (normalized) {
       comments.push(normalized.activity);
       if (normalized.reviewId) {
@@ -206,35 +239,26 @@ const parseThread = (threadValue: GithubPayloadValue, field: string) => {
   }
   return {
     comments,
-    isResolved,
-    nextCommentsCursor: parseGithubNextPageCursor(
-      commentsConnection.pageInfo,
-      `${field}.comments.pageInfo`,
-    ),
+    isResolved: thread.isResolved,
+    nextCommentsCursor: nextPageCursor(thread.comments.pageInfo),
     reviewIdsWithComments,
-    threadId,
+    threadId: thread.id,
   };
 };
 
 const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
-  const parsed = parseGithubJsonObject(payload, "pull request review threads");
-  const data = requireGithubObject(parsed.data, "data");
-  const repository = requireGithubObject(data.repository, "repository");
-  const pullRequest = requireGithubObject(repository.pullRequest, "pullRequest");
-  const reviewThreads = requireGithubObject(pullRequest.reviewThreads, "reviewThreads");
-  if (!Array.isArray(reviewThreads.nodes)) {
-    throw new HostValidationError({
-      field: "reviewThreads.nodes",
-      message:
-        "Failed to parse GitHub pull request review threads response: expected data.repository.pullRequest.reviewThreads.nodes.",
-    });
-  }
+  const response = parseGithubJson(
+    payload,
+    "pull request review threads",
+    reviewThreadsResponseSchema,
+  );
+  const { reviewThreads } = response.data.repository.pullRequest;
   const comments: PullRequestReviewActivity[] = [];
   const openThreadIds: string[] = [];
   const commentPageCursors: ReviewThreadCommentsCursor[] = [];
   const reviewIdsWithComments: string[] = [];
-  for (const [index, thread] of reviewThreads.nodes.entries()) {
-    const parsedThread = parseThread(thread, `reviewThreads.nodes.${index}`);
+  for (const thread of reviewThreads.nodes) {
+    const parsedThread = parseThread(thread);
     comments.push(...parsedThread.comments);
     reviewIdsWithComments.push(...parsedThread.reviewIdsWithComments);
     if (!parsedThread.isResolved) {
@@ -250,16 +274,19 @@ const parseReviewThreadsPage = (payload: string): ParsedReviewThreadsPage => {
   return {
     comments,
     openThreadIds,
-    nextThreadsCursor: parseGithubNextPageCursor(reviewThreads.pageInfo, "reviewThreads.pageInfo"),
+    nextThreadsCursor: nextPageCursor(reviewThreads.pageInfo),
     commentPageCursors,
     reviewIdsWithComments,
   };
 };
 
 const parseReviewThreadCommentsPage = (payload: string): ParsedReviewThreadCommentsPage => {
-  const parsed = parseGithubJsonObject(payload, "pull request review thread comments");
-  const data = requireGithubObject(parsed.data, "data");
-  const thread = parseThread(data.node, "node");
+  const response = parseGithubJson(
+    payload,
+    "pull request review thread comments",
+    reviewThreadCommentsResponseSchema,
+  );
+  const thread = parseThread(response.data.node);
   return {
     comments: thread.comments,
     nextCommentsCursor: thread.nextCommentsCursor,

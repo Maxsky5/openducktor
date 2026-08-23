@@ -1,4 +1,5 @@
 import type { AgentSessionTodoItem, LoadAgentSessionTodosInput } from "@openducktor/core";
+import { z } from "zod";
 import { isNestedHistoryEntry } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
@@ -56,11 +57,11 @@ const readTaskOutput = (raw: Record<string, unknown>): Record<string, unknown> =
   return isRecord(raw.structuredContent) ? raw.structuredContent : raw;
 };
 
+const claudeTaskStatusSchema = z.enum(["pending", "in_progress", "completed"]);
+
 const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null => {
-  if (value === "pending" || value === "in_progress" || value === "completed") {
-    return value;
-  }
-  return null;
+  const parsed = claudeTaskStatusSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 };
 
 const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {

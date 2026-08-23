@@ -1,4 +1,3 @@
-import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import type {
   GitProviderRepository,
   PullRequestReviewActivity,
@@ -7,20 +6,13 @@ import type {
   PullRequestReviewState,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import {
   type GithubCommandDependencies,
   runGithubCommand,
 } from "../../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import {
-  type GithubPayloadValue,
-  parseGithubJsonObject,
-  parseGithubNextPageCursor,
-  requireGithubObject,
-  requireGithubString,
-  toNullableGithubObject,
-  toNullableGithubString,
-} from "./github-pull-request-review-payload";
+import { parseGithubJson } from "./github-pull-request-review-payload";
 
 type GithubPullRequestReviewOverviewReadInput = {
   dependencies: GithubCommandDependencies;
@@ -32,6 +24,7 @@ type GithubPullRequestReviewOverviewReadInput = {
 type GithubGraphqlVariable = {
   name: string;
   value: string | number | boolean;
+  flag: "-f" | "-F";
 };
 
 type GithubPullRequestReviewOverview = {
@@ -108,19 +101,80 @@ query PullRequestReviewOverview(
 }
 `;
 
-const requirePositiveNumber = (value: unknown, field: string): number => {
-  if (hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-  throw new HostValidationError({
-    field,
-    message: `GitHub pull request review field '${field}' is missing or invalid.`,
-  });
-};
+const optionalTextSchema = z.string().nullable().optional();
+const actorSchema = z
+  .object({
+    login: optionalTextSchema,
+    avatarUrl: optionalTextSchema,
+  })
+  .nullable()
+  .optional();
+const pageInfoSchema = z.discriminatedUnion("hasNextPage", [
+  z.object({ hasNextPage: z.literal(true), endCursor: z.string().min(1) }),
+  z.object({ hasNextPage: z.literal(false), endCursor: z.string().nullable() }),
+]);
+const overviewCommentSchema = z.object({
+  id: z.string().min(1),
+  author: actorSchema,
+  body: z.string(),
+  url: optionalTextSchema,
+  createdAt: optionalTextSchema,
+  updatedAt: optionalTextSchema,
+});
+const reviewStateSchema = z.enum(
+  ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"],
+  { error: "GitHub review state is invalid." },
+);
+const overviewReviewSchema = z.object({
+  id: z.string().min(1),
+  author: actorSchema,
+  body: z.string({ error: "GitHub review body must be a string." }),
+  state: reviewStateSchema,
+  url: optionalTextSchema,
+  createdAt: optionalTextSchema,
+  submittedAt: optionalTextSchema,
+  updatedAt: optionalTextSchema,
+});
+const overviewCommentConnectionSchema = z.object({
+  nodes: z.array(overviewCommentSchema),
+  pageInfo: pageInfoSchema,
+});
+const overviewReviewConnectionSchema = z.object({
+  nodes: z.array(overviewReviewSchema),
+  pageInfo: pageInfoSchema,
+});
+const overviewResponseSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequest: z.object({
+        number: z.number().int().positive(),
+        title: z.string().min(1),
+        url: z.string().min(1),
+        state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+        isDraft: z.boolean(),
+        comments: overviewCommentConnectionSchema.optional(),
+        reviews: overviewReviewConnectionSchema.optional(),
+      }),
+    }),
+  }),
+});
 
-const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestReviewState => {
-  const normalized = hasRuntimeType(state, "string") ? state.trim().toLowerCase() : "";
-  if (isDraft === true && normalized === "open") {
+type GithubPageInfo = z.output<typeof pageInfoSchema>;
+type GithubOverviewComment = z.output<typeof overviewCommentSchema>;
+type GithubOverviewReview = z.output<typeof overviewReviewSchema>;
+type GithubOverviewPullRequest = z.output<
+  typeof overviewResponseSchema
+>["data"]["repository"]["pullRequest"];
+
+const toNullableText = (value: string | null | undefined): string | null =>
+  value && value.trim().length > 0 ? value : null;
+
+const normalizeReviewState = (
+  state: GithubOverviewPullRequest["state"],
+  isDraft: boolean,
+): PullRequestReviewState => {
+  const normalized = state.toLowerCase();
+  if (isDraft && normalized === "open") {
     return "draft";
   }
   if (normalized === "merged") {
@@ -132,27 +186,21 @@ const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestRevi
   return "open";
 };
 
-const parseComment = (
-  payloadValue: GithubPayloadValue,
-  field: string,
-): PullRequestReviewActivity | null => {
-  const payload = requireGithubObject(payloadValue, field);
-  const body = hasRuntimeType(payload.body, "string") ? payload.body : "";
-  if (!body.trim()) {
+const parseComment = (comment: GithubOverviewComment): PullRequestReviewActivity | null => {
+  if (!comment.body.trim()) {
     return null;
   }
-  const author = toNullableGithubObject(payload.author, `${field}.author`);
   return {
-    id: requireGithubString(payload.id, `${field}.id`),
-    author: toNullableGithubString(author?.login),
-    authorAvatarUrl: toNullableGithubString(author?.avatarUrl),
-    body,
+    id: comment.id,
+    author: toNullableText(comment.author?.login),
+    authorAvatarUrl: toNullableText(comment.author?.avatarUrl),
+    body: comment.body,
     patch: null,
     suggestionPatches: [],
     suggestionWarning: null,
-    url: toNullableGithubString(payload.url),
-    createdAt: toNullableGithubString(payload.createdAt),
-    updatedAt: toNullableGithubString(payload.updatedAt),
+    url: toNullableText(comment.url),
+    createdAt: toNullableText(comment.createdAt),
+    updatedAt: toNullableText(comment.updatedAt),
     path: null,
     line: null,
     threadId: null,
@@ -162,16 +210,8 @@ const parseComment = (
 };
 
 const parseReviewOutcome = (
-  state: GithubPayloadValue,
-  field: string,
+  state: z.output<typeof reviewStateSchema>,
 ): PullRequestReviewOutcome | null => {
-  if (!hasRuntimeType(state, "string")) {
-    throw new HostValidationError({
-      field,
-      message: `GitHub pull request review state '${field}' is missing or invalid.`,
-      details: { receivedType: runtimeTypeName(state) },
-    });
-  }
   switch (state) {
     case "APPROVED":
       return "approved";
@@ -183,44 +223,25 @@ const parseReviewOutcome = (
       return "dismissed";
     case "PENDING":
       return null;
-    default:
-      throw new HostValidationError({
-        field,
-        message: `GitHub pull request review state '${field}' has unsupported value '${state}'.`,
-        details: { state },
-      });
   }
 };
 
-const parseReview = (
-  payloadValue: GithubPayloadValue,
-  field: string,
-): PullRequestReviewActivity | null => {
-  const payload = requireGithubObject(payloadValue, field);
-  const reviewOutcome = parseReviewOutcome(payload.state, `${field}.state`);
+const parseReview = (review: GithubOverviewReview): PullRequestReviewActivity | null => {
+  const reviewOutcome = parseReviewOutcome(review.state);
   if (!reviewOutcome) {
     return null;
   }
-  if (!hasRuntimeType(payload.body, "string")) {
-    throw new HostValidationError({
-      field: `${field}.body`,
-      message: `GitHub pull request review body '${field}.body' is missing or invalid.`,
-      details: { receivedType: runtimeTypeName(payload.body) },
-    });
-  }
-  const author = toNullableGithubObject(payload.author, `${field}.author`);
   return {
-    id: requireGithubString(payload.id, `${field}.id`),
-    author: toNullableGithubString(author?.login),
-    authorAvatarUrl: toNullableGithubString(author?.avatarUrl),
-    body: payload.body,
+    id: review.id,
+    author: toNullableText(review.author?.login),
+    authorAvatarUrl: toNullableText(review.author?.avatarUrl),
+    body: review.body,
     patch: null,
     suggestionPatches: [],
     suggestionWarning: null,
-    url: toNullableGithubString(payload.url),
-    createdAt:
-      toNullableGithubString(payload.submittedAt) ?? toNullableGithubString(payload.createdAt),
-    updatedAt: toNullableGithubString(payload.updatedAt),
+    url: toNullableText(review.url),
+    createdAt: toNullableText(review.submittedAt) ?? toNullableText(review.createdAt),
+    updatedAt: toNullableText(review.updatedAt),
     path: null,
     line: null,
     threadId: null,
@@ -230,32 +251,31 @@ const parseReview = (
   };
 };
 
-const parseConnection = (
-  connectionValue: GithubPayloadValue,
+const parseConnection = <Item>(
+  connection: { nodes: Item[]; pageInfo: GithubPageInfo } | undefined,
   field: string,
-  parseItem: (payload: GithubPayloadValue, field: string) => PullRequestReviewActivity | null,
+  parseItem: (item: Item) => PullRequestReviewActivity | null,
   included: boolean,
 ): ParsedConnection => {
   if (!included) {
     return { items: [], nextCursor: null };
   }
-  const connection = requireGithubObject(connectionValue, field);
-  if (!Array.isArray(connection.nodes)) {
+  if (connection === undefined) {
     throw new HostValidationError({
       field,
-      message: `GitHub pull request review field '${field}.nodes' is missing or invalid.`,
+      message: `GitHub pull request review field '${field}' is missing.`,
     });
   }
   const items: PullRequestReviewActivity[] = [];
-  for (const [index, entry] of connection.nodes.entries()) {
-    const item = parseItem(entry, `${field}.nodes.${index}`);
+  for (const entry of connection.nodes) {
+    const item = parseItem(entry);
     if (item) {
       items.push(item);
     }
   }
   return {
     items,
-    nextCursor: parseGithubNextPageCursor(connection.pageInfo, `${field}.pageInfo`),
+    nextCursor: connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : null,
   };
 };
 
@@ -264,16 +284,14 @@ const parseOverviewPage = (
   includeComments: boolean,
   includeReviews: boolean,
 ): ParsedOverviewPage => {
-  const parsed = parseGithubJsonObject(payload, "pull request review");
-  const data = requireGithubObject(parsed.data, "data");
-  const repository = requireGithubObject(data.repository, "repository");
-  const pullRequest = requireGithubObject(repository.pullRequest, "pullRequest");
+  const response = parseGithubJson(payload, "pull request review", overviewResponseSchema);
+  const { pullRequest } = response.data.repository;
   return {
     pullRequest: {
       providerId: "github",
-      number: requirePositiveNumber(pullRequest.number, "number"),
-      title: requireGithubString(pullRequest.title, "title"),
-      url: requireGithubString(pullRequest.url, "url"),
+      number: pullRequest.number,
+      title: pullRequest.title,
+      url: pullRequest.url,
       state: normalizeReviewState(pullRequest.state, pullRequest.isDraft),
     },
     comments: parseConnection(
@@ -300,10 +318,7 @@ const runOverviewGraphql = (
     "graphql",
     "-f",
     `query=${PULL_REQUEST_REVIEW_OVERVIEW_QUERY}`,
-    ...variables.flatMap(({ name, value }) => [
-      hasRuntimeType(value, "string") ? "-f" : "-F",
-      `${name}=${value}`,
-    ]),
+    ...variables.flatMap(({ name, value, flag }) => [flag, `${name}=${value}`]),
   ]).pipe(
     Effect.mapError(
       (cause) =>
@@ -330,17 +345,17 @@ export const loadGithubPullRequestReviewOverview = (
 
     do {
       const variables: GithubGraphqlVariable[] = [
-        { name: "owner", value: input.repository.owner },
-        { name: "name", value: input.repository.name },
-        { name: "number", value: input.pullRequestNumber },
-        { name: "includeComments", value: includeComments },
-        { name: "includeReviews", value: includeReviews },
+        { name: "owner", value: input.repository.owner, flag: "-f" },
+        { name: "name", value: input.repository.name, flag: "-f" },
+        { name: "number", value: input.pullRequestNumber, flag: "-F" },
+        { name: "includeComments", value: includeComments, flag: "-F" },
+        { name: "includeReviews", value: includeReviews, flag: "-F" },
       ];
       if (commentsCursor) {
-        variables.push({ name: "commentsCursor", value: commentsCursor });
+        variables.push({ name: "commentsCursor", value: commentsCursor, flag: "-f" });
       }
       if (reviewsCursor) {
-        variables.push({ name: "reviewsCursor", value: reviewsCursor });
+        variables.push({ name: "reviewsCursor", value: reviewsCursor, flag: "-f" });
       }
       const payload = yield* runOverviewGraphql(input, variables);
       const page = yield* Effect.try({

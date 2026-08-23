@@ -43,14 +43,14 @@ export const appendCapturedStderr = (current: string, line: string): string => {
   return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
 };
 
-export const extractErrorMessage = (value: unknown): string => {
-  if (hasRuntimeType(value, "string")) {
-    return value;
+export const extractErrorMessage = (cause: unknown): string => {
+  if (hasRuntimeType(cause, "string")) {
+    return cause;
   }
-  if (isJsonRecord(value) && hasRuntimeType(value.message, "string")) {
-    return value.message;
+  if (isJsonRecord(cause) && hasRuntimeType(cause.message, "string")) {
+    return cause.message;
   }
-  return JSON.stringify(value ?? null);
+  return JSON.stringify(cause ?? null);
 };
 
 type SendAutomaticServerResponse = (message: {

@@ -381,7 +381,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.state");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.state");
       expect(result.left.message).toContain("review state");
     }
   });
@@ -403,7 +403,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0.body");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0.body");
       expect(result.left.message).toContain("review body");
     }
   });
@@ -422,7 +422,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.reviews.nodes.0");
+      expect(result.left.field).toBe("data.repository.pullRequest.reviews.nodes.0");
     }
   });
 
@@ -455,7 +455,7 @@ describe("loadGithubPullRequestReviewOverview", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left._tag).toBe("HostValidationError");
-      expect(result.left.field).toBe("pullRequest.comments.pageInfo");
+      expect(result.left.field).toBe("data.repository.pullRequest.comments.pageInfo");
     }
   });
 });
