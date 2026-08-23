@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
 import {
+  jsonValueSchema,
   parseCodexAppServerRequestResult,
   type CodexAppServerRequestMethod,
   type JsonValue,
@@ -25,11 +26,14 @@ const threadStartResult = (threadId = "thread-1") =>
   codexResult("thread/start", {
     approvalPolicy: "on-request",
     approvalsReviewer: "user",
+    activePermissionProfile: null,
     cwd: "/repo",
     instructionSources: [],
     model: "gpt-5",
     modelProvider: "openai",
+    multiAgentMode: "explicitRequestOnly",
     reasoningEffort: "medium",
+    runtimeWorkspaceRoots: ["/repo"],
     sandbox: {
       type: "workspaceWrite",
       writableRoots: ["/repo"],
@@ -122,7 +126,7 @@ describe("createCodexAppServerCommandHandlers", () => {
                 error: null,
                 items: [],
                 itemsView: "full",
-                status: { type: "active" },
+                status: "inProgress",
               },
             }),
           );
@@ -234,7 +238,7 @@ describe("createCodexAppServerCommandHandlers", () => {
         method: "thread/start",
         params: { cwd: "/repo" },
       }),
-    ).resolves.toEqual(committedResult);
+    ).resolves.toEqual(jsonValueSchema.parse(committedResult));
     expect(reportedFailures).toEqual([
       expect.objectContaining({
         _tag: "HostOperationError",
@@ -247,7 +251,7 @@ describe("createCodexAppServerCommandHandlers", () => {
   test("routes Codex app-server commands to the service", async () => {
     const calls: Array<{
       method: keyof CodexAppServerService;
-      input: CodexAppServerRequestInput | JsonValue | undefined;
+      input: CodexAppServerRequestInput | unknown;
     }> = [];
     const service: CodexAppServerService = {
       request(input) {
@@ -419,7 +423,7 @@ describe("createCodexAppServerCommandHandlers", () => {
   test("rejects malformed command inputs before calling the service", async () => {
     const calls: unknown[] = [];
     const nonJsonParams = { omitted: undefined } satisfies object;
-    const unexpectedCall = (input: CodexAppServerRequestInput | JsonValue | undefined) =>
+    const unexpectedCall = (input: CodexAppServerRequestInput | unknown) =>
       Effect.sync(() => {
         calls.push(input);
       }).pipe(
@@ -471,7 +475,6 @@ describe("createCodexAppServerCommandHandlers", () => {
       router.invoke("codex_app_server_request", {
         runtimeId: "runtime-1",
         method: "model/list",
-        // @ts-expect-error -- This case verifies runtime rejection of a non-JSON request payload.
         params: nonJsonParams,
       }),
     ).rejects.toThrow("params must be JSON-serializable.");

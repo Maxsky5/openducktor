@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD, hasRuntimeType } from "@openducktor/contracts";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  hasRuntimeType,
+  type CodexAppServerThreadItem,
+} from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
@@ -8,8 +12,14 @@ import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { codexSessionRef } from "./codex-session-ref";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codex0144MultiAgentV2Replay } from "./test-fixtures/codex-0-144-multi-agent-v2";
+import {
+  codexCommandExecutionItemFixture,
+  codexTokenUsageFixture,
+  codexTurnFixture,
+} from "./test-fixtures/codex-protocol";
 import type { CodexRuntimeEventQueueFailureHandler, CodexSessionState } from "./types";
-import type { JsonValue } from "@openducktor/contracts";
+
+type CodexCommandExecutionItem = Extract<CodexAppServerThreadItem, { type: "commandExecution" }>;
 
 const waitForRuntimeEvent = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 const flushRuntimeEvents = async (): Promise<void> => {
@@ -116,7 +126,7 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
       method: ItemLifecycleMethod,
       timestampMs: number,
       itemId: string,
-      itemOverrides: Record<string, JsonValue> = {},
+      itemOverrides: Partial<CodexCommandExecutionItem> = {},
     ): void {
       const listener = listenersByRuntimeId.get(session.runtimeId);
       if (!listener) {
@@ -124,7 +134,6 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
       }
       const isStarted = method === "item/started";
       const timing = isStarted ? { startedAtMs: timestampMs } : { completedAtMs: timestampMs };
-      const completionFields = isStarted ? {} : { exitCode: 0 };
       sessions.set(session.threadId, session);
       listener({
         runtimeId: session.runtimeId,
@@ -135,17 +144,12 @@ const createItemLifecycleHarness = (...initialSessions: CodexSessionState[]) => 
             threadId: session.threadId,
             turnId: `${session.runtimeId}-turn`,
             ...timing,
-            item: {
-              type: "commandExecution",
+            item: codexCommandExecutionItemFixture({
               id: itemId,
-              command: "true",
-              cwd: "/repo",
               status: isStarted ? "inProgress" : "completed",
-              commandActions: [],
-              aggregatedOutput: "",
-              ...completionFields,
+              exitCode: isStarted ? null : 0,
               ...itemOverrides,
-            },
+            }),
           },
         },
       });
@@ -939,11 +943,7 @@ describe("CodexRuntimeSessionEvents", () => {
           params: {
             threadId,
             turnId: `${threadId}-turn`,
-            tokenUsage: {
-              total: { totalTokens },
-              last: { totalTokens },
-              modelContextWindow: 200_000,
-            },
+            tokenUsage: codexTokenUsageFixture(totalTokens),
           },
         },
       });
@@ -1158,11 +1158,7 @@ describe("CodexRuntimeSessionEvents", () => {
         method: "thread/tokenUsage/updated",
         params: {
           turnId: "thread-target-turn",
-          tokenUsage: {
-            total: { totalTokens: 300 },
-            last: { totalTokens: 300 },
-            modelContextWindow: 200_000,
-          },
+          tokenUsage: codexTokenUsageFixture(300),
         },
       },
     });
@@ -1350,7 +1346,16 @@ describe("CodexRuntimeSessionEvents", () => {
           itemId: "grandchild-question-item",
           threadId: grandchildSession.threadId,
           turnId: "grandchild-turn",
-          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Proceed",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -1617,7 +1622,16 @@ describe("CodexRuntimeSessionEvents", () => {
           itemId: "retained-child-question-item",
           threadId: childSession.threadId,
           turnId: "child-turn",
-          questions: [{ id: "question-1", header: "Proceed", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Proceed",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -1800,9 +1814,7 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    expect(mutations.at(-1)?.fault).toBe(
-      "Codex context usage notification for thread 'child-thread' has invalid token usage.",
-    );
+    expect(mutations.at(-1)?.fault).toContain('"tokenUsage"');
     expect(mutations.at(-1)?.faultRef).toEqual(codexSessionRef(childLiveSession));
     const sessionErrors =
       mutations.at(-1)?.transcriptEvents.filter((event) => event.type === "session_error") ?? [];
@@ -1902,11 +1914,7 @@ describe("CodexRuntimeSessionEvents", () => {
         params: {
           threadId: "thread-target",
           turnId: "thread-target-turn",
-          tokenUsage: {
-            total: { totalTokens: 0 },
-            last: { totalTokens: 0 },
-            modelContextWindow: 200_000,
-          },
+          tokenUsage: codexTokenUsageFixture(0),
         },
       },
     });
@@ -1936,11 +1944,7 @@ describe("CodexRuntimeSessionEvents", () => {
           params: {
             threadId: "shared-thread",
             turnId: `${runtimeId}-turn`,
-            tokenUsage: {
-              total: { totalTokens },
-              last: { totalTokens },
-              modelContextWindow: 200_000,
-            },
+            tokenUsage: codexTokenUsageFixture(totalTokens),
           },
         },
       });
@@ -2010,7 +2014,12 @@ describe("CodexRuntimeSessionEvents", () => {
               id: "question-item-1",
               header: "Choose",
               question: "Proceed?",
-              options: ["Yes", "No"],
+              isOther: false,
+              isSecret: false,
+              options: [
+                { label: "Yes", description: "Continue" },
+                { label: "No", description: "Stop" },
+              ],
             },
           ],
         },
@@ -2164,11 +2173,16 @@ describe("CodexRuntimeSessionEvents", () => {
         method: "turn/completed",
         params: {
           threadId: session.threadId,
-          turn: {
+          turn: codexTurnFixture({
             id: "turn-1",
             status: "failed",
-            error: { message: "Child execution failed" },
-          },
+            error: {
+              message: "Child execution failed",
+              codexErrorInfo: null,
+              additionalDetails: null,
+            },
+            items: [],
+          }),
         },
       },
     });

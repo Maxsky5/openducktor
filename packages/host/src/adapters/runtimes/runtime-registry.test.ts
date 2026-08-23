@@ -1167,7 +1167,7 @@ describe("createRuntimeRegistry", () => {
                   error: null,
                   items: [],
                   itemsView: "summary",
-                  status: "running",
+                  status: "inProgress",
                 },
               ],
               nextCursor: null,

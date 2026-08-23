@@ -2,7 +2,6 @@ import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
-import type { JsonValue } from "@openducktor/contracts";
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -33,7 +32,7 @@ const metadata = (version: string) => ({
 
 // SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createTaskClient = (
-  invoke: (command: string, args?: Record<string, JsonValue>) => Promise<TestHostResult>,
+  invoke: (command: string, args?: Record<string, unknown>) => Promise<TestHostResult>,
 ) => new HostTaskClient(invoke as never, new TaskMetadataCache());
 
 const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEvent => ({

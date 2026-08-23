@@ -7,13 +7,11 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
 import { createRuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
-interface PathsContract extends Record<RuntimeKind, string> {}
-
-const paths: PathsContract = {
+const paths = {
   opencode: "/tools/opencode",
   codex: "/tools/codex",
   claude: "/tools/claude",
-};
+} satisfies Record<RuntimeKind, string>;
 
 const toolDiscovery: ToolDiscoveryPort = {
   discoverTool(toolId) {

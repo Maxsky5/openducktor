@@ -41,10 +41,9 @@ export const buildTaskExecutionFileTreeGitStatusEntries = (
     if (entry.gitStatus === null) {
       continue;
     }
-    // SAFETY: The surrounding boundary constructs or validates every member required by `GitStatusEntry["status"]`.
     gitStatusEntries.push({
       path: entry.kind === "directory" ? `${entry.path}/` : entry.path,
-      status: entry.gitStatus as GitStatusEntry["status"],
+      status: entry.gitStatus,
     });
   }
 

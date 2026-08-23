@@ -1,5 +1,4 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
@@ -10,9 +9,13 @@ import type {
 } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { asUnknownRecord, readNumberProp, readRecordProp, readUnknownProp } from "./guards";
+import { asUnknownRecord, readNumberProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
-import { opencodeTokenCarrierPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
+import {
+  opencodeMessageInfoPayloadSchema,
+  opencodePartPayloadSchema,
+  type ParsedOpencodePart,
+} from "./opencode-ingress";
 
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
@@ -51,9 +54,7 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
-const normalizeSourceText = (
-  value: JsonValue | undefined,
-): AgentUserMessageSourceText | undefined => {
+const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
   const record = asUnknownRecord(value);
   if (!record) {
     return undefined;
@@ -170,12 +171,7 @@ const normalizeFileReferencePart = (
   };
 };
 
-type OpenCodeAgentPart = {
-  id?: string;
-  type: "agent";
-  name?: string;
-  source?: JsonValue;
-};
+type OpenCodeAgentPart = Extract<NormalizablePart, { type: "agent" }>;
 
 const normalizeSubagentReferencePart = (
   part: OpenCodeAgentPart,
@@ -236,8 +232,7 @@ export const normalizeUserMessageDisplayParts = (
     }
 
     if (part.type === "agent") {
-      // SAFETY: The runtime adapter builds this value from the contract fields required by `OpenCodeAgentPart`.
-      const subagentReference = normalizeSubagentReferencePart(part as OpenCodeAgentPart);
+      const subagentReference = normalizeSubagentReferencePart(part);
       if (subagentReference) {
         normalizedParts.push(subagentReference);
       }
@@ -340,140 +335,89 @@ export const readVisibleUserTextFromDisplayParts = (
   return buildOpenCodeVisibleText(userMessageParts);
 };
 
-export const readTextFromMessageInfo = (info: JsonValue | undefined): string => {
-  const record = asUnknownRecord(info);
-  if (!record) {
-    return "";
-  }
-
-  const direct =
-    readUnknownProp(record, "text") ??
-    readUnknownProp(record, "content") ??
-    readUnknownProp(readRecordProp(record, "message"), "text");
-  return hasRuntimeType(direct, "string") ? direct : "";
-};
-
 export const sanitizeAssistantMessage = (rawMessage: string): string => rawMessage.trim();
 
-export const readMessageModelSelection = (
-  info: JsonValue | undefined,
-): AgentModelSelection | undefined => {
-  const record = asUnknownRecord(info);
-  if (!record) {
+export const readMessageModelSelection = (info: unknown): AgentModelSelection | undefined => {
+  const parsed = opencodeMessageInfoPayloadSchema.safeParse(info);
+  if (!parsed.success) {
     return undefined;
   }
-
-  const nestedModel = readRecordProp(record, "model");
-  const providerId =
-    readUnknownProp(record, "providerID") ?? readUnknownProp(nestedModel, "providerID");
-  const modelId = readUnknownProp(record, "modelID") ?? readUnknownProp(nestedModel, "modelID");
-  const variant = readUnknownProp(record, "variant");
-  const profileId = readUnknownProp(record, "agent");
-  if (!hasRuntimeType(providerId, "string") || !hasRuntimeType(modelId, "string")) {
-    return undefined;
-  }
+  const message = parsed.data;
+  const providerId = message.role === "user" ? message.model.providerID : message.providerID;
+  const modelId = message.role === "user" ? message.model.modelID : message.modelID;
+  const variant = message.role === "user" ? message.model.variant : message.variant;
 
   return {
     providerId,
     modelId,
-    ...(hasRuntimeType(variant, "string") && variant.trim().length > 0 ? { variant } : undefined),
-    ...(hasRuntimeType(profileId, "string") && profileId.trim().length > 0
-      ? { profileId }
-      : undefined),
+    ...(variant?.trim() ? { variant } : undefined),
+    ...(message.agent.trim() ? { profileId: message.agent } : undefined),
   };
 };
 
 type TokenBreakdown = {
-  input?: number;
-  output?: number;
-  reasoning?: number;
-  cache?: {
-    read?: number;
-    write?: number;
+  input: number;
+  output: number;
+  reasoning: number;
+  total?: number | undefined;
+  cache: {
+    read: number;
+    write: number;
   };
 };
 
-const toFiniteNumber = (value: JsonValue | undefined): number | null => {
-  if (!hasRuntimeType(value, "number") || Number.isNaN(value) || !Number.isFinite(value)) {
+const toFiniteNumber = (value: number | undefined): number | null => {
+  if (value === undefined || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
   return value;
 };
 
-const readTokenBreakdown = (value: JsonValue | undefined): TokenBreakdown | undefined => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return undefined;
-  }
-
-  const input = readNumberProp(record, ["input"]);
-  const output = readNumberProp(record, ["output"]);
-  const reasoning = readNumberProp(record, ["reasoning"]);
-  const cacheRecord = readRecordProp(record, "cache");
-  const cacheRead = cacheRecord ? readNumberProp(cacheRecord, ["read"]) : undefined;
-  const cacheWrite = cacheRecord ? readNumberProp(cacheRecord, ["write"]) : undefined;
-  const cache =
-    cacheRead !== undefined || cacheWrite !== undefined
-      ? {
-          ...(cacheRead !== undefined ? { read: cacheRead } : undefined),
-          ...(cacheWrite !== undefined ? { write: cacheWrite } : undefined),
-        }
-      : undefined;
-
-  return {
-    ...(input !== undefined ? { input } : undefined),
-    ...(output !== undefined ? { output } : undefined),
-    ...(reasoning !== undefined ? { reasoning } : undefined),
-    ...(cache ? { cache } : undefined),
-  };
-};
-
-const sumTokenBreakdown = (breakdown: TokenBreakdown | null | undefined): number => {
-  if (!breakdown || !hasRuntimeType(breakdown, "object")) {
-    return 0;
-  }
+const sumTokenBreakdown = (breakdown: TokenBreakdown): number => {
   const input = toFiniteNumber(breakdown.input) ?? 0;
   const output = toFiniteNumber(breakdown.output) ?? 0;
   const reasoning = toFiniteNumber(breakdown.reasoning) ?? 0;
-  const cacheRead = toFiniteNumber(breakdown.cache?.read) ?? 0;
-  const cacheWrite = toFiniteNumber(breakdown.cache?.write) ?? 0;
+  const cacheRead = toFiniteNumber(breakdown.cache.read) ?? 0;
+  const cacheWrite = toFiniteNumber(breakdown.cache.write) ?? 0;
   return Math.max(0, input + output + reasoning + cacheRead + cacheWrite);
 };
 
-export const toTokenTotal = (value: JsonValue | undefined): number | undefined => {
-  const direct = toFiniteNumber(value);
-  if (direct !== null) {
-    return Math.max(0, direct);
+export const toTokenTotal = (value: TokenBreakdown | number | undefined): number | undefined => {
+  if (hasRuntimeType(value, "number")) {
+    const direct = toFiniteNumber(value);
+    return direct === null ? undefined : Math.max(0, direct);
   }
-  const breakdown = readTokenBreakdown(value);
-  if (!breakdown) {
+  if (!value) {
     return undefined;
   }
-
-  const summed = sumTokenBreakdown(breakdown);
-  if (summed > 0) {
-    return summed;
+  const explicitTotal = toFiniteNumber(value.total);
+  if (explicitTotal !== null && explicitTotal > 0) {
+    return explicitTotal;
   }
-  return undefined;
+  const summed = sumTokenBreakdown(value);
+  return summed > 0 ? summed : undefined;
 };
 
 export const extractMessageTotalTokens = (
-  info: JsonValue | undefined,
-  parts: NormalizablePart[] | JsonValue[],
+  info: unknown,
+  parts: readonly unknown[],
 ): number | undefined => {
-  const infoTokens = toTokenTotal(readUnknownProp(info, "tokens"));
-  if (hasRuntimeType(infoTokens, "number") && infoTokens > 0) {
-    return infoTokens;
+  const parsedInfo = opencodeMessageInfoPayloadSchema.safeParse(info);
+  if (parsedInfo.success && parsedInfo.data.role === "assistant") {
+    const infoTokens = toTokenTotal(parsedInfo.data.tokens);
+    if (infoTokens !== undefined) {
+      return infoTokens;
+    }
   }
 
   let maxPartTokens = 0;
   for (const part of parts) {
-    const parsedPart = opencodeTokenCarrierPayloadSchema.safeParse(part);
-    if (!parsedPart.success) {
+    const parsedPart = opencodePartPayloadSchema.safeParse(part);
+    if (!parsedPart.success || parsedPart.data.type !== "step-finish") {
       continue;
     }
-    const partTokens = toTokenTotal(readUnknownProp(parsedPart.data, "tokens"));
-    if (hasRuntimeType(partTokens, "number") && partTokens > maxPartTokens) {
+    const partTokens = toTokenTotal(parsedPart.data.tokens);
+    if (partTokens !== undefined && partTokens > maxPartTokens) {
       maxPartTokens = partTokens;
     }
   }

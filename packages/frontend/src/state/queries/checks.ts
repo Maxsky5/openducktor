@@ -152,8 +152,11 @@ export const repoRuntimeHealthQueryOptions = (
         ),
       );
 
-      // SAFETY: The surrounding boundary constructs or validates every member required by `RepoRuntimeHealthMap`.
-      return Object.fromEntries(checks) as RepoRuntimeHealthMap;
+      const healthByRuntime: RepoRuntimeHealthMap = {};
+      for (const [runtimeKind, health] of checks) {
+        healthByRuntime[runtimeKind] = health;
+      }
+      return healthByRuntime;
     },
     staleTime: (query) => repoRuntimeHealthStaleTime(query.state.data),
     refetchInterval: (query) => repoRuntimeHealthRefetchInterval(query.state.data),

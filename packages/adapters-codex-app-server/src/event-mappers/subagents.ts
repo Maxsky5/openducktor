@@ -1,15 +1,18 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { codexItemTypeMatches } from "../codex-app-server-transcript";
-import type { JsonValue } from "@openducktor/contracts";
 import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
-import type { CodexEventMapper } from "../codex-event-mapper";
+import type { CodexEventMapper, CodexTimedThreadItem } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
 import { codexSubagentPartsFromItem } from "../codex-subagent-items";
 import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 
+type CodexSubagentItem = Extract<
+  CodexTimedThreadItem,
+  { type: "collabAgentToolCall" | "subAgentActivity" }
+>;
+
 const subagentEvents = (
-  item: Record<string, JsonValue>,
+  item: CodexSubagentItem,
   ctx: CodexMappingContext,
   linkState: CodexSubagentLinkState,
   timestamp?: string,
@@ -31,37 +34,19 @@ const subagentEvents = (
       threadId: ctx.threadId,
       ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
       ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
-      raw: item,
       part,
     })),
   };
 };
 
-const shouldMapAsSubagentItem = (item: Record<string, JsonValue>): boolean => {
-  const isCollabToolCall =
-    codexItemTypeMatches(item, "collabAgentToolCall") ||
-    codexItemTypeMatches(item, "collabToolCall");
-  if (!isCollabToolCall) {
-    return codexItemTypeMatches(item, "subAgentActivity");
-  }
-
-  const tool = item.tool;
-  const receiverThreadIds = item.receiverThreadIds ?? item.receiver_thread_ids;
-  const receiverThreadId =
-    item.receiverThreadId ?? item.receiver_thread_id ?? item.newThreadId ?? item.new_thread_id;
-  if (tool === "spawnAgent") {
+const shouldMapAsSubagentItem = (item: CodexTimedThreadItem): item is CodexSubagentItem => {
+  if (codexItemTypeMatches(item, "subAgentActivity")) {
     return true;
   }
-  if (Array.isArray(receiverThreadIds)) {
-    return receiverThreadIds.length > 0;
-  }
-  if (receiverThreadIds !== undefined && receiverThreadIds !== null) {
-    return true;
-  }
-  if (hasRuntimeType(receiverThreadId, "string")) {
-    return receiverThreadId.trim().length > 0;
-  }
-  return receiverThreadId !== undefined && receiverThreadId !== null;
+  return (
+    codexItemTypeMatches(item, "collabAgentToolCall") &&
+    (item.tool === "spawnAgent" || item.receiverThreadIds.length > 0)
+  );
 };
 
 export const createSubagentMapper = (linkState: CodexSubagentLinkState): CodexEventMapper => ({

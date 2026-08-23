@@ -1,5 +1,6 @@
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerCommandExecutionApprovalDecision,
   type CodexAppServerRequestId,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   isCodexAppServerCommandRequestMethod,
@@ -7,14 +8,17 @@ import {
   isCodexAppServerPermissionRequestMethod,
   type RuntimeApprovalReplyOutcome,
   type RuntimeApprovalRequestType,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation, AgentPendingApprovalRequest } from "@openducktor/core";
-import { extractStringField, isPlainObject } from "./codex-app-server-shared";
+import {
+  CODEX_USER_INPUT_REQUEST_METHOD,
+  extractStringField,
+  isPlainObject,
+} from "./codex-app-server-shared";
 import { classifyCodexCommandRequestMutation } from "./codex-command-approvals";
 import { classifyCodexPermissionRequestMutation } from "./codex-permission-approvals";
 import type { CodexServerRequestRecord } from "./types";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
 export {
@@ -36,6 +40,20 @@ type PendingApprovalProjection = Omit<
   AgentPendingApprovalRequest,
   "requestId" | "requestInstanceId"
 >;
+type McpElicitationApprovalProjection = PendingApprovalProjection & {
+  metadata: { serverName: string };
+};
+type LegacyCommandApprovalRequest = Extract<
+  CodexServerRequestRecord,
+  { method: typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL }
+>;
+type CommandExecutionApprovalRequest = Extract<
+  CodexServerRequestRecord,
+  {
+    method: typeof CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL;
+  }
+>;
+type CodexCommandApprovalRequest = LegacyCommandApprovalRequest | CommandExecutionApprovalRequest;
 
 const APPROVE_ONCE_AND_REJECT = ["approve_once", "reject"] as const satisfies readonly [
   RuntimeApprovalReplyOutcome,
@@ -57,7 +75,7 @@ export const classifyCodexRequestMutation = (
   if (isCodexAppServerPermissionRequestMethod(method)) {
     return classifyCodexPermissionRequestMutation(request);
   }
-  if (isCodexAppServerCommandRequestMethod(method)) {
+  if (isCodexCommandApprovalRequest(request)) {
     return classifyCodexCommandRequestMutation(request);
   }
   return "unknown";
@@ -89,74 +107,70 @@ const classifyApprovalRequestType = (
   return "runtime_tool";
 };
 
-const extractCommandText = (params: JsonValue | undefined): string | null => {
-  if (!isPlainObject(params)) {
-    return null;
-  }
-  const commandActions = Array.isArray(params.commandActions)
-    ? params.commandActions
-    : Array.isArray(params.parsedCmd)
-      ? params.parsedCmd
-      : null;
-  if (commandActions) {
-    const actionCommands = commandActions
-      .map((action) => {
-        if (!isPlainObject(action)) {
-          return null;
-        }
-        const command = action.command ?? action.cmd;
-        return hasRuntimeType(command, "string") && command.trim().length > 0 ? command : null;
-      })
-      .filter((command): command is string => command !== null);
-    if (actionCommands.length === 1) {
-      return actionCommands[0] ?? null;
-    }
-    if (actionCommands.length > 1) {
-      return actionCommands.join("; ");
-    }
-  }
+const isCodexCommandApprovalRequest = (
+  request: CodexServerRequestRecord,
+): request is CodexCommandApprovalRequest =>
+  request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL ||
+  request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL;
 
-  const command = params.command;
-  if (hasRuntimeType(command, "string") && command.trim().length > 0) {
-    return command;
-  }
-  if (Array.isArray(command)) {
-    const parts = command.filter((part): part is string => typeof part === "string");
-    return parts.length > 0 ? parts.join(" ") : null;
-  }
-  return null;
+const commandTextFromActions = (commands: readonly string[]): string | null => {
+  const presentCommands = commands.filter((command) => command.trim().length > 0);
+  return presentCommands.length > 0 ? presentCommands.join("; ") : null;
 };
 
-const extractCommandWorkingDirectory = (params: JsonValue | undefined): string | null =>
-  isPlainObject(params) ? extractStringField(params, ["cwd"]) : null;
+const extractCommandText = (request: CodexCommandApprovalRequest): string | null => {
+  if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {
+    return (
+      commandTextFromActions(request.params.parsedCmd.map((action) => action.cmd)) ??
+      (request.params.command.length > 0 ? request.params.command.join(" ") : null)
+    );
+  }
 
-const hasNetworkApprovalContext = (request: CodexServerRequestRecord): boolean =>
+  return (
+    commandTextFromActions(request.params.commandActions?.map((action) => action.command) ?? []) ??
+    (request.params.command?.trim() ? request.params.command : null)
+  );
+};
+
+const extractCommandWorkingDirectory = (request: CodexCommandApprovalRequest): string | null => {
+  const workingDirectory = request.params.cwd?.trim();
+  return workingDirectory ? workingDirectory : null;
+};
+
+const hasNetworkApprovalContext = (request: CodexCommandApprovalRequest): boolean =>
   request.method ===
     CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL &&
-  isPlainObject(request.params) &&
   request.params.networkApprovalContext !== undefined &&
   request.params.networkApprovalContext !== null;
 
-const isDecisionObject = (value: JsonValue | undefined, key: string): boolean =>
-  isPlainObject(value) && key in value;
+const isNetworkPolicyDecision = (
+  decision: CodexAppServerCommandExecutionApprovalDecision,
+): boolean => {
+  if (
+    decision === "accept" ||
+    decision === "acceptForSession" ||
+    decision === "decline" ||
+    decision === "cancel"
+  ) {
+    return false;
+  }
+  return "applyNetworkPolicyAmendment" in decision;
+};
 
 const commandApprovalSupportedReplyOutcomes = (
-  request: CodexServerRequestRecord,
+  request: CodexCommandApprovalRequest,
 ): SupportedApprovalOutcomes => {
   if (request.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL) {
     return [...APPROVE_ONCE_SESSION_AND_REJECT];
   }
   if (
     request.method !==
-      CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL ||
-    !isPlainObject(request.params)
+    CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_COMMAND_EXECUTION_REQUEST_APPROVAL
   ) {
     return [...APPROVE_ONCE_AND_REJECT];
   }
 
-  const decisions = Array.isArray(request.params.availableDecisions)
-    ? request.params.availableDecisions
-    : null;
+  const decisions = request.params.availableDecisions;
   if (!decisions) {
     if (hasNetworkApprovalContext(request)) {
       return [...APPROVE_ONCE_SESSION_AND_REJECT];
@@ -174,9 +188,7 @@ const commandApprovalSupportedReplyOutcomes = (
   if (
     decisions.some(
       (decision) =>
-        decision === "decline" ||
-        decision === "cancel" ||
-        isDecisionObject(decision, "applyNetworkPolicyAmendment"),
+        decision === "decline" || decision === "cancel" || isNetworkPolicyDecision(decision),
     )
   ) {
     outcomes.push("reject");
@@ -188,7 +200,7 @@ const commandApprovalSupportedReplyOutcomes = (
 const supportedReplyOutcomesForRequest = (
   request: CodexServerRequestRecord,
 ): SupportedApprovalOutcomes => {
-  if (isCodexAppServerCommandRequestMethod(request.method)) {
+  if (isCodexCommandApprovalRequest(request)) {
     return commandApprovalSupportedReplyOutcomes(request);
   }
   if (
@@ -203,11 +215,11 @@ const supportedReplyOutcomesForRequest = (
 const commandApprovalFields = (
   request: CodexServerRequestRecord,
 ): Pick<AgentPendingApprovalRequest, "action" | "command"> => {
-  if (!isCodexAppServerCommandRequestMethod(request.method)) {
+  if (!isCodexCommandApprovalRequest(request)) {
     return {};
   }
-  const command = extractCommandText(request.params);
-  const workingDirectory = extractCommandWorkingDirectory(request.params);
+  const command = extractCommandText(request);
+  const workingDirectory = extractCommandWorkingDirectory(request);
   return {
     action: { name: hasNetworkApprovalContext(request) ? "Network access" : "Bash" },
     ...(command
@@ -224,10 +236,8 @@ const commandApprovalFields = (
 const approvalContentFields = (
   request: CodexServerRequestRecord,
 ): Pick<AgentPendingApprovalRequest, "details" | "summary" | "title"> => {
-  if (isCodexAppServerCommandRequestMethod(request.method)) {
-    const reason = isPlainObject(request.params)
-      ? extractStringField(request.params, ["reason"])
-      : null;
+  if (isCodexCommandApprovalRequest(request)) {
+    const reason = request.params.reason;
     if (hasNetworkApprovalContext(request)) {
       return {
         title: "Network access approval requested",
@@ -278,7 +288,7 @@ export const toApprovalRequest = (request: CodexServerRequestRecord): PendingApp
 
 const mcpToolApprovalMeta = (
   request: CodexServerRequestRecord,
-): Record<string, JsonValue> | null => {
+): Record<string, CodexAppServerJsonValue> | null => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
@@ -290,7 +300,7 @@ const mcpToolApprovalMeta = (
 };
 
 const mcpToolApprovalSupportsPersistMode = (
-  meta: Record<string, JsonValue>,
+  meta: Record<string, CodexAppServerJsonValue>,
   expectedMode: typeof MCP_APPROVAL_PERSIST_SESSION | typeof MCP_APPROVAL_PERSIST_ALWAYS,
 ): boolean => {
   const persist = meta[MCP_APPROVAL_PERSIST_KEY];
@@ -301,7 +311,7 @@ const mcpToolApprovalSupportsPersistMode = (
 };
 
 const mcpToolApprovalSupportedReplyOutcomes = (
-  meta: Record<string, JsonValue>,
+  meta: Record<string, CodexAppServerJsonValue>,
 ): NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> => {
   const outcomes: NonNullable<AgentPendingApprovalRequest["supportedReplyOutcomes"]> = [
     "approve_once",
@@ -318,7 +328,7 @@ const mcpToolApprovalSupportedReplyOutcomes = (
 
 export const toMcpElicitationApprovalRequest = (
   request: CodexServerRequestRecord,
-): PendingApprovalProjection | null => {
+): McpElicitationApprovalProjection | null => {
   if (request.method !== CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST) {
     return null;
   }
@@ -356,7 +366,7 @@ export const toMcpElicitationApprovalRequest = (
   };
 };
 
-export const extractTurnId = (value: JsonValue | undefined): string | null => {
+export const extractTurnId = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -368,13 +378,15 @@ export const extractTurnId = (value: JsonValue | undefined): string | null => {
   return extractStringField(turn, ["id", "turnId"]);
 };
 
-export const extractThreadIdFromParams = (value: JsonValue | undefined): string | null => {
+export const extractThreadIdFromParams = (
+  value: CodexAppServerJsonValue | undefined,
+): string | null => {
   return extractStringField(value, ["threadId", "thread_id", "conversationId"]);
 };
 
 export const codexTurnKey = (threadId: string, turnId: string): string => `${threadId}:${turnId}`;
 
-export const isTerminalTurnStatus = (value: JsonValue | undefined): boolean => {
+export const isTerminalTurnStatus = (value: CodexAppServerJsonValue | undefined): boolean => {
   if (!isPlainObject(value)) {
     return false;
   }
@@ -382,74 +394,23 @@ export const isTerminalTurnStatus = (value: JsonValue | undefined): boolean => {
   return status === "completed" || status === "failed" || status === "interrupted";
 };
 
-export const parseQuestionRequest = (request: CodexServerRequestRecord) => {
-  if (request.id === undefined) {
-    throw new Error("Codex app-server question request is missing an id.");
-  }
-  if (!isPlainObject(request.params)) {
-    throw new Error("Codex app-server question request params must be an object.");
-  }
+type CodexQuestionRequest = Extract<
+  CodexServerRequestRecord,
+  { method: typeof CODEX_USER_INPUT_REQUEST_METHOD }
+>;
 
-  const threadId = extractStringField(request.params, ["threadId"]);
-  const turnId = extractStringField(request.params, ["turnId"]);
-  if (!threadId) {
-    throw new Error("Codex app-server question request is missing threadId.");
-  }
-  if (!turnId) {
-    throw new Error("Codex app-server question request is missing turnId.");
-  }
-
-  const rawQuestions = request.params.questions;
-  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
+export const parseQuestionRequest = (request: CodexQuestionRequest) => {
+  if (request.params.questions.length === 0) {
     throw new Error("Codex app-server question request must include questions.");
   }
 
-  const questionIds: string[] = [];
-  const questions = rawQuestions.map((rawQuestion) => {
-    if (!isPlainObject(rawQuestion)) {
-      throw new Error("Codex app-server question entries must be objects.");
-    }
-    const id = extractStringField(rawQuestion, ["id", "questionId"]);
-    if (!id) {
-      throw new Error("Codex app-server question entry is missing id.");
-    }
-    questionIds.push(id);
-    const options = Array.isArray(rawQuestion.options)
-      ? rawQuestion.options.map((rawOption) => {
-          if (hasRuntimeType(rawOption, "string")) {
-            return { label: rawOption, description: "" };
-          }
-          if (!isPlainObject(rawOption)) {
-            throw new Error("Codex app-server question option entries must be strings or objects.");
-          }
-          const label = extractStringField(rawOption, ["label", "value", "text"]);
-          if (!label) {
-            throw new Error("Codex app-server question option entry is missing label.");
-          }
-          return {
-            label,
-            description: extractStringField(rawOption, ["description", "detail"]) ?? "",
-          };
-        })
-      : [];
-    const header = extractStringField(rawQuestion, ["header", "title"]);
-    const question = extractStringField(rawQuestion, ["question", "text", "prompt"]);
-    if (!header) {
-      throw new Error(`Codex app-server question '${id}' is missing header.`);
-    }
-    if (!question) {
-      throw new Error(`Codex app-server question '${id}' is missing question text.`);
-    }
+  const questionIds = request.params.questions.map(({ id }) => id);
+  const questions = request.params.questions.map((rawQuestion) => {
     return {
-      header,
-      question,
-      options,
-      ...(rawQuestion.multiple === true || rawQuestion.multi === true
-        ? { multiple: true }
-        : undefined),
-      ...(rawQuestion.isOther === true || rawQuestion.custom === true
-        ? { custom: true }
-        : undefined),
+      header: rawQuestion.header,
+      question: rawQuestion.question,
+      options: rawQuestion.options ?? [],
+      ...(rawQuestion.isOther ? { custom: true } : undefined),
     };
   });
 
@@ -457,8 +418,8 @@ export const parseQuestionRequest = (request: CodexServerRequestRecord) => {
     request: {
       questions,
     },
-    threadId,
-    turnId,
+    threadId: request.params.threadId,
+    turnId: request.params.turnId,
     questionIds,
     serverRequestId: request.id,
   } satisfies {

@@ -18,8 +18,6 @@ import {
 } from "./selected-session-context";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 
-interface ExpectedByRoleContract extends Record<AgentRole, string | null> {}
-
 const createDoc = (markdown: string): TaskDocumentState => ({
   markdown,
   updatedAt: null,
@@ -135,12 +133,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
   // SAFETY: This test creates the DOM fixture that supplies `[ AgentRole, string | null, ][]` before this lookup.
   test("maps active document from selected role semantics", () => {
-    const expectedByRole: ExpectedByRoleContract = {
+    const expectedByRole = {
       spec: "Specification",
       planner: "Implementation Plan",
       qa: "QA Report",
       build: null,
-    };
+    } satisfies Record<AgentRole, string | null>;
 
     for (const [role, expectedTitle] of Object.entries(expectedByRole) as [
       AgentRole,

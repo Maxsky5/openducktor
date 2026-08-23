@@ -1,11 +1,12 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState, JsonValue } from "@openducktor/contracts";
+import type { DevServerGroupState } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import type { DevServerEventListener } from "@/lib/shell-bridge";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -30,10 +31,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: JsonValue | undefined) => void) | null = null;
+let devServerEventListener: DevServerEventListener | null = null;
 let nextSubscriptionTransportEpoch = 0;
 let subscribeDevServerEventsMock = async (
-  listener: (payload: JsonValue | undefined) => void,
+  listener: DevServerEventListener,
 ): Promise<{ transportEpoch: string; unsubscribe: () => void }> => {
   devServerEventListener = listener;
   const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
@@ -54,7 +55,7 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: (listener: (payload: JsonValue | undefined) => void) =>
+    subscribeDevServerEvents: (listener: DevServerEventListener) =>
       subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -67,7 +68,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   nextSubscriptionTransportEpoch = 0;
-  subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
+  subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
     devServerEventListener = listener;
     const transportEpoch = `test:${nextSubscriptionTransportEpoch}`;
     nextSubscriptionTransportEpoch += 1;

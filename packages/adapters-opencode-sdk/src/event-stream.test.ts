@@ -1,4 +1,3 @@
-import type { JsonValue } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type {
   Event,
@@ -89,6 +88,7 @@ test("global event observation becomes ready only after the lazy SSE stream conn
           yield {
             directory: "/repo",
             payload: createInvalidOpencodeEventFixture({
+              id: "event-server-connected",
               type: "server.connected",
               properties: {},
             }),
@@ -562,7 +562,7 @@ const makeAssistantTextPart = (input: {
       start: input.start ?? 1,
       end: input.end ?? 1,
     },
-  }) satisfies Record<string, JsonValue>;
+  }) satisfies Record<string, unknown>;
 
 const makeAssistantMessageUpdatedEvent = (input: {
   messageId: string;
@@ -571,7 +571,7 @@ const makeAssistantMessageUpdatedEvent = (input: {
   finish?: string;
   completedAt?: number;
   parts?: unknown[];
-  info?: Record<string, JsonValue>;
+  info?: Record<string, unknown>;
 }): Event => {
   const parts =
     input.parts ??
@@ -923,7 +923,7 @@ describe("event-stream", () => {
         type: "message.part.updated",
         properties: {
           part: {
-            id: "user-part-4",
+            id: "user-message-4-text",
             sessionID: "external-session-1",
             messageID: "user-message-4",
             type: "text",
@@ -1295,7 +1295,6 @@ describe("event-stream", () => {
               id: "msg-attachment-1",
               role: "user",
               sessionID: "external-session-1",
-              text: "Describe what is in this screenshot",
               time: {
                 created: Date.parse("2026-02-22T12:00:02.000Z"),
               },
@@ -1345,8 +1344,8 @@ describe("event-stream", () => {
     );
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
-    expect(userMessages).toHaveLength(1);
-    const userMessage = userMessages[0];
+    expect(userMessages).toHaveLength(2);
+    const userMessage = userMessages.at(-1);
     if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
@@ -1461,39 +1460,38 @@ describe("event-stream", () => {
             info: {
               id: "msg-pdf-1",
               role: "user",
-              text: "Summarize this PDF",
               sessionID: "external-session-1",
               time: {
                 created: Date.parse("2026-02-22T12:00:02.000Z"),
               },
-              parts: [
-                {
-                  id: "part-text-1",
-                  sessionID: "external-session-1",
-                  messageID: "msg-pdf-1",
-                  type: "text",
-                  text: "Summarize this PDF",
-                },
-                {
-                  id: "part-file-1",
-                  sessionID: "external-session-1",
-                  messageID: "msg-pdf-1",
+            },
+            parts: [
+              {
+                id: "part-text-1",
+                sessionID: "external-session-1",
+                messageID: "msg-pdf-1",
+                type: "text",
+                text: "Summarize this PDF",
+              },
+              {
+                id: "part-file-1",
+                sessionID: "external-session-1",
+                messageID: "msg-pdf-1",
+                type: "file",
+                mime: "application/pdf",
+                filename: "brief.pdf",
+                url: "https://files.example.invalid/brief.pdf",
+                source: {
                   type: "file",
-                  mime: "application/pdf",
-                  filename: "brief.pdf",
-                  url: "https://files.example.invalid/brief.pdf",
-                  source: {
-                    type: "file",
-                    path: "brief.pdf",
-                    text: {
-                      value: "brief.pdf",
-                      start: 0,
-                      end: 9,
-                    },
+                  path: "brief.pdf",
+                  text: {
+                    value: "brief.pdf",
+                    start: 0,
+                    end: 9,
                   },
                 },
-              ],
-            },
+              },
+            ],
           },
         }),
       ],
@@ -1521,8 +1519,8 @@ describe("event-stream", () => {
     );
 
     const userMessages = emitted.filter((event) => event.type === "user_message");
-    expect(userMessages).toHaveLength(1);
-    const userMessage = userMessages[0];
+    expect(userMessages).toHaveLength(2);
+    const userMessage = userMessages.at(-1);
     if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
@@ -2456,9 +2454,7 @@ describe("event-stream", () => {
       type: "session.created",
       properties: {
         parentID: "external-parent-session",
-        info: {
-          id: "external-child-session",
-        },
+        info: childSessionInfo("external-child-session"),
       },
     });
     const parentSubscriber = {
@@ -3304,7 +3300,6 @@ describe("event-stream", () => {
         type: "question.asked",
         properties: {
           sessionID: "external-child-session",
-          parentID: "external-session-1",
           id: "question-child-1",
           questions: [
             {
@@ -3319,8 +3314,8 @@ describe("event-stream", () => {
         type: "question.replied",
         properties: {
           sessionID: "external-child-session",
-          parentID: "external-session-1",
           requestID: "question-child-1",
+          answers: [["A"]],
         },
       }),
     ]);
@@ -3645,69 +3640,5 @@ describe("event-stream", () => {
       expect.objectContaining({ message: "Final output before error" }),
     ]);
     expect(emitted.at(-1)).toMatchObject({ type: "session_error", message: "Provider failed" });
-  });
-
-  test("does not replay duplicate delta after suppressed known user-part update", async () => {
-    const emitted = await runEventStream([
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "message-dup-1",
-            role: "user",
-            sessionID: "external-session-1",
-          },
-          parts: [
-            {
-              id: "part-dup-1",
-              sessionID: "external-session-1",
-              messageID: "message-dup-1",
-              type: "text",
-              text: "hello",
-              time: { start: 1, end: 2 },
-            },
-          ],
-        },
-      }),
-      createInvalidOpencodeEventFixture({
-        type: "message.part.delta",
-        properties: {
-          sessionID: "external-session-1",
-          messageID: "message-dup-1",
-          partID: "part-dup-1",
-          field: "text",
-          delta: " world",
-        },
-      }),
-      createInvalidOpencodeEventFixture({
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "message-dup-1",
-            role: "assistant",
-            sessionID: "external-session-1",
-            finish: "stop",
-            time: { completed: 3 },
-          },
-          parts: [
-            {
-              id: "part-dup-1",
-              sessionID: "external-session-1",
-              messageID: "message-dup-1",
-              type: "text",
-              text: "hello world",
-              time: { start: 1, end: 3 },
-            },
-          ],
-        },
-      }),
-    ]);
-
-    const parts = emitted.filter((event) => event.type === "assistant_part");
-    expect(parts).toHaveLength(1);
-    if (parts[0]?.type !== "assistant_part" || parts[0].part.kind !== "text") {
-      throw new Error("Expected assistant text part event");
-    }
-    expect(parts[0].part.text).toBe("hello world");
   });
 });

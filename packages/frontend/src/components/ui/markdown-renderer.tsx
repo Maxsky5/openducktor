@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
 
-interface MARKDOWNCLASSESContract extends Record<MarkdownRendererVariant, string> {}
-
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
 const MarkdownRendererMathCandidate = lazy(() => import("./markdown-renderer-math-candidate"));
@@ -38,7 +36,7 @@ type MarkdownRendererProps = {
 const REMARK_PLUGINS = [remarkGfm];
 const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
 
-const MARKDOWN_CLASSES: MARKDOWNCLASSESContract = {
+const MARKDOWN_CLASSES = {
   compact: cn(
     "markdown-body prose prose-sm max-w-none text-[13px] leading-relaxed text-foreground",
     "prose-headings:my-1 prose-headings:text-sm prose-headings:font-semibold prose-headings:text-foreground",
@@ -62,7 +60,7 @@ const MARKDOWN_CLASSES: MARKDOWNCLASSESContract = {
     "prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-pre:text-foreground",
     "prose-blockquote:border-input prose-blockquote:bg-muted/30 prose-blockquote:px-3 prose-blockquote:py-1 prose-blockquote:text-foreground",
   ),
-};
+} satisfies Record<MarkdownRendererVariant, string>;
 
 const MarkdownSync = memo(function MarkdownSync({
   markdown,

@@ -1,13 +1,14 @@
 import {
-  type JsonValue,
   type TaskEventStreamAcknowledge,
   type TaskEventStreamFrame,
+  type TaskEventStreamSubscribe,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import type { WebContentsDidStartNavigationEventParams } from "electron";
+import { z } from "zod";
 import {
   type ElectronErrorDetails,
   ElectronValidationError,
@@ -19,6 +20,10 @@ import {
   ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL,
   ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
+  type ElectronTaskStreamFrameEnvelope,
+  type ElectronTaskStreamSubscription,
+  type ElectronTaskStreamTerminalFailureEnvelope,
+  type ElectronTaskStreamUnsubscribe,
   electronTaskStreamFrameEnvelopeSchema,
   electronTaskStreamSubscriptionSchema,
   electronTaskStreamTerminalFailureEnvelopeSchema,
@@ -44,26 +49,33 @@ type ElectronTaskStreamFrame = {
   readonly processId: number;
   readonly routingId: number;
   isDestroyed(): boolean;
-  send(channel: string, frame: JsonValue | undefined): void;
+  send(
+    channel: string,
+    frame: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
+  ): void;
 };
 
 type ElectronTaskStreamNavigationDetails = Electron.Event<WebContentsDidStartNavigationEventParams>;
 
-type ElectronTaskStreamEvent = {
+export type ElectronTaskStreamEvent = {
   readonly frameId: number;
   readonly processId: number;
   readonly sender: ElectronTaskStreamSender;
   readonly senderFrame: ElectronTaskStreamFrame | null;
 };
 
+export type ElectronTaskStreamIpcRequest =
+  | TaskEventStreamSubscribe
+  | TaskEventStreamAcknowledge
+  | ElectronTaskStreamUnsubscribe;
+export type ElectronTaskStreamIpcResult = ElectronTaskStreamSubscription | void;
+export type ElectronTaskStreamIpcHandler = (
+  event: ElectronTaskStreamEvent,
+  value: ElectronTaskStreamIpcRequest,
+) => ElectronTaskStreamIpcResult | Promise<ElectronTaskStreamIpcResult>;
+
 type ElectronIpcMainLike = {
-  handle(
-    channel: string,
-    listener: (
-      event: ElectronTaskStreamEvent,
-      value: JsonValue | undefined,
-    ) => JsonValue | void | Promise<JsonValue | undefined>,
-  ): void;
+  handle(channel: string, listener: ElectronTaskStreamIpcHandler): void;
 };
 
 type OwnedSubscription = {
@@ -118,12 +130,8 @@ const readTrustedSender = (event: ElectronTaskStreamEvent, operation: string) =>
 };
 
 const parseOrThrow = <Value>(
-  schema: {
-    safeParse(
-      value: JsonValue | undefined,
-    ): { success: true; data: Value } | { success: false; error: Error & { issues: unknown } };
-  },
-  value: JsonValue | undefined,
+  schema: z.ZodType<Value>,
+  value: ElectronTaskStreamIpcRequest,
   operation: string,
   field: string,
 ): Value => {

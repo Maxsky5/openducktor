@@ -1,5 +1,5 @@
 import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
-import type { GitCurrentBranch, JsonValue } from "@openducktor/contracts";
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 
 type ProbeBranchChangeParams = {
@@ -74,10 +74,10 @@ export const shouldSkipBranchSwitch = (
   branchName: string,
 ): boolean => activeBranch?.name === branchName && !activeBranch.detached;
 
-const toOptionalString = (value: JsonValue | undefined): string | null =>
+const toOptionalString = (value: unknown): string | null =>
   hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
 
-const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 const extractStructuredErrorHint = (cause: unknown): string | null => {

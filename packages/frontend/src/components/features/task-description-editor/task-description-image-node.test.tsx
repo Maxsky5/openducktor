@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import type { ReactNodeViewProps } from "@tiptap/react";
+import type { ComponentProps } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 
@@ -18,13 +17,13 @@ describe("TaskDescriptionImageNode", () => {
       resolveTaskAssetSrc,
     });
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
-    const props = createFocusedFixture<ReactNodeViewProps>({
-      node: createFocusedFixture<ReactNodeViewProps["node"]>({
+    const props = {
+      node: {
         attrs: { src: `odt-asset:${assetId}`, alt: "Architecture", title: null },
-      }),
+      },
       selected: false,
       updateAttributes: () => {},
-    });
+    } satisfies ComponentProps<typeof TaskDescriptionImageNode>;
     const context = {
       workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
       taskId: "task-1",
@@ -56,17 +55,17 @@ describe("TaskDescriptionImageNode", () => {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSrc: async () => "openducktor-task-asset://missing",
     });
-    const props = createFocusedFixture<ReactNodeViewProps>({
-      node: createFocusedFixture<ReactNodeViewProps["node"]>({
+    const props = {
+      node: {
         attrs: {
           src: "odt-asset:550e8400-e29b-41d4-a716-446655440000",
           alt: "Architecture",
           title: null,
         },
-      }),
+      },
       selected: false,
       updateAttributes: () => {},
-    });
+    } satisfies ComponentProps<typeof TaskDescriptionImageNode>;
     const view = render(
       <TaskDescriptionImageContext.Provider
         value={{

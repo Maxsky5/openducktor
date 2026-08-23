@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import { CodexSubagentLifecycleProjector } from "./codex-subagent-lifecycle-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 const createSession = (threadId: string, runtimeId = "runtime-1"): CodexSessionState => ({
@@ -33,14 +34,17 @@ const childLifecycleNotification = (
   receivedAt: "2026-07-10T12:00:04.000Z",
   params: {
     threadId: childThreadId,
-    turn: {
+    turn: codexTurnFixture({
       id: "child-turn",
+      items: [],
       status,
       ...(method === "turn/started"
         ? { startedAt: timestampSeconds ?? 1_783_683_602 }
         : { completedAt: timestampSeconds ?? 1_783_683_604 }),
-      ...(error ? { error: { message: error } } : undefined),
-    },
+      ...(error
+        ? { error: { additionalDetails: null, codexErrorInfo: null, message: error } }
+        : undefined),
+    }),
   },
 });
 

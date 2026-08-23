@@ -1,6 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -8,19 +7,16 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const requireRecord = (
-  value: JsonValue | undefined,
-  label: string,
-): Record<string, JsonValue> => {
+export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  return value as Record<string, JsonValue>;
+  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
+  return value as Record<string, unknown>;
 };
 
-export const requireString = (value: JsonValue | undefined, label: string): string => {
+export const requireString = (value: unknown, label: string): string => {
   if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
@@ -28,10 +24,7 @@ export const requireString = (value: JsonValue | undefined, label: string): stri
   return value.trim();
 };
 
-export const requireStringPreservingWhitespace = (
-  value: JsonValue | undefined,
-  label: string,
-): string => {
+export const requireStringPreservingWhitespace = (value: unknown, label: string): string => {
   if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
@@ -39,7 +32,7 @@ export const requireStringPreservingWhitespace = (
   return value;
 };
 
-export const optionalString = (value: JsonValue | undefined, label: string): string | undefined => {
+export const optionalString = (value: unknown, label: string): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -51,10 +44,7 @@ export const optionalString = (value: JsonValue | undefined, label: string): str
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-export const optionalBoolean = (
-  value: JsonValue | undefined,
-  label: string,
-): boolean | undefined => {
+export const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }

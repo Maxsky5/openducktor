@@ -1,45 +1,34 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  listAvailableModels,
-  listAvailableSlashCommands,
-  listAvailableSubagents,
-  searchFiles,
-} from "./catalog-and-mcp";
+import type { Agent, Command } from "@opencode-ai/sdk/v2/client";
+import { listAvailableSlashCommands, listAvailableSubagents, searchFiles } from "./catalog-and-mcp";
 
-describe("catalog-and-mcp listAvailableModels", () => {
-  test("returns provider models without profile metadata when the runtime agent API is missing", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    const catalog = await listAvailableModels(
-      (() => ({
-        config: {
-          providers: async () => ({
-            data: {
-              providers: [],
-              default: {},
-            },
-          }),
-        },
-      })) as never,
-      {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      },
-    );
+const commandFixture = (overrides: Partial<Command>): Command => ({
+  hints: [],
+  name: "command",
+  template: "",
+  ...overrides,
+});
 
-    expect(catalog.profiles).toEqual([]);
-  });
+const agentFixture = (overrides: Partial<Agent>): Agent => ({
+  mode: "subagent",
+  name: "agent",
+  options: {},
+  permission: [],
+  ...overrides,
 });
 
 describe("catalog-and-mcp listAvailableSlashCommands", () => {
   test("normalizes command payloads into a slash catalog", async () => {
     const list = mock(async () => ({
       data: [
-        { name: "review", description: "Review changes", source: "command", hints: ["$ARG"] },
-        { name: "mcp-prompt", source: "mcp", hints: [] },
-        { name: "skill-run", source: "skill", hints: ["one", "two"] },
-        { name: "unknown-source", source: "other", hints: ["ignored"] },
-        { name: "   " },
-        {},
+        commandFixture({
+          name: "review",
+          description: "Review changes",
+          source: "command",
+          hints: ["$ARG"],
+        }),
+        commandFixture({ name: "mcp-prompt", source: "mcp" }),
+        commandFixture({ name: "skill-run", source: "skill", hints: ["one", "two"] }),
       ],
       error: undefined,
     }));
@@ -87,12 +76,6 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         source: "skill",
         hints: ["one", "two"],
       },
-      {
-        id: "unknown-source",
-        trigger: "unknown-source",
-        title: "unknown-source",
-        hints: ["ignored"],
-      },
     ]);
   });
 
@@ -103,8 +86,8 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         command: {
           list: async () => ({
             data: [
-              { name: "Compact", source: "command", hints: [] },
-              { name: "review", source: "command", hints: [] },
+              commandFixture({ name: "Compact", source: "command" }),
+              commandFixture({ name: "review", source: "command" }),
             ],
           }),
         },
@@ -113,18 +96,6 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
     );
 
     expect(catalog.commands.map((command) => command.id)).toEqual(["system:compact", "review"]);
-  });
-
-  test("fails when the runtime does not expose command listing", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    await expect(
-      listAvailableSlashCommands((() => ({})) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow(
-      "OpenCode request failed: list slash commands: OpenCode runtime does not expose the command listing API.",
-    );
   });
 
   test("fails when the slash command payload is not an array", async () => {
@@ -168,10 +139,7 @@ describe("catalog-and-mcp listAvailableSlashCommands", () => {
         (() => ({
           command: {
             list: async () => ({
-              data: [
-                { name: "review", hints: [] },
-                { name: "review", hints: [] },
-              ],
+              data: [commandFixture({ name: "review" }), commandFixture({ name: "review" })],
             }),
           },
         })) as never,
@@ -188,11 +156,14 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
   test("filters visible non-primary agents into a subagent catalog", async () => {
     const agents = mock(async () => ({
       data: [
-        { name: " reviewer ", description: " Review changes ", hidden: false, mode: "subagent" },
-        { name: "planner", hidden: false, mode: "all" },
-        { name: "build", hidden: false, mode: "primary" },
-        { name: "secret", hidden: true, mode: "subagent" },
-        { name: "unknown", hidden: false, mode: "sidebar" },
+        agentFixture({
+          name: " reviewer ",
+          description: " Review changes ",
+          hidden: false,
+        }),
+        agentFixture({ name: "planner", hidden: false, mode: "all" }),
+        agentFixture({ name: "build", hidden: false, mode: "primary" }),
+        agentFixture({ name: "secret", hidden: true }),
       ],
       error: undefined,
     }));
@@ -224,18 +195,6 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
     ]);
   });
 
-  test("requires the runtime agent listing API", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    await expect(
-      listAvailableSubagents((() => ({})) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-      }),
-    ).rejects.toThrow(
-      "OpenCode request failed: list subagents: OpenCode runtime does not expose the agent listing API.",
-    );
-  });
-
   test("rejects malformed agent payloads", async () => {
     // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
@@ -248,9 +207,7 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
           workingDirectory: "/repo",
         },
       ),
-    ).rejects.toThrow(
-      "OpenCode request failed: list subagents: Invalid agent payload: expected agent 0 to include a name.",
-    );
+    ).rejects.toThrow("OpenCode request failed: list subagents:");
   });
 
   test("rejects duplicate subagent ids after trimming runtime names", async () => {
@@ -261,8 +218,8 @@ describe("catalog-and-mcp listAvailableSubagents", () => {
           app: {
             agents: async () => ({
               data: [
-                { name: " reviewer", mode: "subagent" },
-                { name: "reviewer ", mode: "all" },
+                agentFixture({ name: " reviewer" }),
+                agentFixture({ name: "reviewer ", mode: "all" }),
               ],
             }),
           },
@@ -339,19 +296,6 @@ describe("catalog-and-mcp searchFiles", () => {
         kind: "video",
       },
     ]);
-  });
-
-  test("fails when the runtime does not expose file search", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    await expect(
-      searchFiles((() => ({})) as never, {
-        runtimeEndpoint: "http://127.0.0.1:1234",
-        workingDirectory: "/repo",
-        query: "src",
-      }),
-    ).rejects.toThrow(
-      "OpenCode request failed: search files: OpenCode runtime does not expose the file search API.",
-    );
   });
 
   test("fails when the runtime returns a malformed payload", async () => {

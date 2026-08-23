@@ -65,7 +65,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   test("keeps the selected file draft mounted across responsive layout changes", () => {
     let isNarrow = false;
     const listeners = new Set<EventListenerOrEventListenerObject>();
-    const mediaQueryList = createFocusedFixture<MediaQueryList>({
+    const mediaQueryList = createFocusedFixture<MediaQueryList>()({
       get matches() {
         return isNarrow;
       },

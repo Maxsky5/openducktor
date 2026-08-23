@@ -19,7 +19,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { parseArray } from "./invoke-utils";
 import { toCommandArgs } from "./invoke-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type {
   WorkspaceRepoConfigInput,
@@ -35,13 +34,13 @@ export type ResolvedLocalAttachment = {
   path: string;
 };
 
-const parseStagedLocalAttachment = (payload: JsonValue | undefined): StagedLocalAttachment => {
+const parseStagedLocalAttachment = (payload: unknown): StagedLocalAttachment => {
   if (!payload || !hasRuntimeType(payload, "object")) {
     throw new Error("Expected staged local attachment payload from host command");
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const candidate = payload as Record<string, JsonValue>;
+  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
+  const candidate = payload as Record<string, unknown>;
   const path = candidate.path;
   if (!hasRuntimeType(path, "string") || path.trim().length === 0) {
     throw new Error("Expected non-empty 'path' in staged local attachment payload");
@@ -50,7 +49,7 @@ const parseStagedLocalAttachment = (payload: JsonValue | undefined): StagedLocal
   return { path };
 };
 
-const parseResolvedLocalAttachment = (payload: JsonValue | undefined): ResolvedLocalAttachment => {
+const parseResolvedLocalAttachment = (payload: unknown): ResolvedLocalAttachment => {
   return parseStagedLocalAttachment(payload);
 };
 

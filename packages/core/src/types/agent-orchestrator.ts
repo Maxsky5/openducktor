@@ -44,8 +44,6 @@ import type {
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 
-interface AGENTROLETOOLPOLICYContract extends AgentRoleToolPolicy {}
-
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
 export type AgentSessionActivity = ContractsAgentSessionActivity;
@@ -214,7 +212,7 @@ export type AgentSessionStatus = ContractsAgentTranscriptSessionStatus;
 
 export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 
-export const AGENT_ROLE_TOOL_POLICY: AGENTROLETOOLPOLICYContract = {
+export const AGENT_ROLE_TOOL_POLICY = {
   spec: ["odt_read_task", "odt_read_task_assets", "odt_read_task_documents", "odt_set_spec"],
   planner: ["odt_read_task", "odt_read_task_assets", "odt_read_task_documents", "odt_set_plan"],
   build: [
@@ -233,7 +231,7 @@ export const AGENT_ROLE_TOOL_POLICY: AGENTROLETOOLPOLICYContract = {
     "odt_qa_approved",
     "odt_qa_rejected",
   ],
-};
+} satisfies AgentRoleToolPolicy;
 
 /**
  * Runtime adapters may emit this contract before a session ref is attached.

@@ -92,10 +92,10 @@ export const requireWorkflowAgentSessionScope = (
   return scope;
 };
 
-export const assertAgentRuntimePolicyBinding = (
+export function assertAgentRuntimePolicyBinding(
   input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
   action: string,
-): void => {
+): asserts input is AgentRuntimePolicyBinding {
   if (!input.runtimePolicy) {
     throw new Error(`Cannot ${action} without resolved runtime policy.`);
   }
@@ -104,15 +104,14 @@ export const assertAgentRuntimePolicyBinding = (
       `Cannot ${action} with runtime '${input.runtimeKind}' and '${input.runtimePolicy.kind}' runtime policy.`,
     );
   }
-};
+}
 
 export const toAgentRuntimePolicyBinding = (input: {
   runtimeKind: RuntimeKind;
   runtimePolicy: AgentSessionRuntimePolicy;
 }): AgentRuntimePolicyBinding => {
   assertAgentRuntimePolicyBinding(input, "bind runtime policy");
-  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentRuntimePolicyBinding`.
-  return input as AgentRuntimePolicyBinding;
+  return input;
 };
 
 export type PolicyBoundSessionRef = AgentSessionRef &

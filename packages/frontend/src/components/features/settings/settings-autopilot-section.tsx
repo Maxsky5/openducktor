@@ -18,6 +18,9 @@ type SettingsAutopilotSectionProps = {
   onUpdateAutopilot: (updater: (current: AutopilotSettings) => AutopilotSettings) => void;
 };
 
+const isAutopilotSelectValue = (value: string): value is AutopilotSelectValue =>
+  value === AUTOPILOT_DISABLED_VALUE || Object.hasOwn(AUTOPILOT_ACTION_DEFINITIONS, value);
+
 export function SettingsAutopilotSection({
   autopilot,
   disabled,
@@ -69,13 +72,11 @@ export function SettingsAutopilotSection({
                 searchPlaceholder="Search actions..."
                 triggerClassName="justify-between"
                 onValueChange={(value) => {
-                  // SAFETY: The surrounding boundary constructs or validates every member required by `AutopilotSelectValue`.
+                  if (!isAutopilotSelectValue(value)) {
+                    return;
+                  }
                   onUpdateAutopilot((current) =>
-                    setAutopilotRuleAction(
-                      current,
-                      eventDefinition.id,
-                      value as AutopilotSelectValue,
-                    ),
+                    setAutopilotRuleAction(current, eventDefinition.id, value),
                   );
                 }}
               />

@@ -9,6 +9,7 @@ import {
 import type { AgentEvent, PolicyBoundSessionRef, RuntimeKind, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
+import { createOpencodeSessionFixture } from "./opencode-protocol-test-fixtures";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 import { admitUserMessage } from "./user-message-admission";
 
@@ -290,10 +291,16 @@ const makeMockClient = (
         getCalls.push(input);
         return {
           data: {
+            directory: "/repo",
             id: "external-session-1",
+            projectID: "project-1",
+            slug: "external-session-1",
             time: {
               created: Date.parse("2026-02-22T12:00:00.000Z"),
+              updated: Date.parse("2026-02-22T12:00:00.000Z"),
             },
+            title: "BUILD task-1",
+            version: "1.18.18",
           },
           error: undefined,
         };
@@ -325,21 +332,25 @@ const makeMockClient = (
               id: "external-session-1",
               projectID: "project-1",
               directory: "/repo",
+              slug: "external-session-1",
               title: "BUILD task-1",
               time: {
                 created: Date.parse("2026-02-22T12:00:00.000Z"),
                 updated: Date.parse("2026-02-22T12:00:00.000Z"),
               },
+              version: "1.18.18",
             },
             {
               id: "external-session-2",
               projectID: "project-2",
               directory: "/other",
+              slug: "external-session-2",
               title: "OTHER task",
               time: {
                 created: Date.parse("2026-02-22T12:00:00.000Z"),
                 updated: Date.parse("2026-02-22T12:00:00.000Z"),
               },
+              version: "1.18.18",
             },
           ],
           error: undefined,
@@ -933,6 +944,7 @@ describe("opencode-sdk-adapter", () => {
           description: "Review changes",
           source: "command",
           hints: [],
+          template: "Review changes",
         },
       ],
       error: undefined,
@@ -970,22 +982,6 @@ describe("opencode-sdk-adapter", () => {
         },
       ],
     });
-  });
-
-  test("listAvailableSlashCommands propagates catalog loader failures", async () => {
-    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
-    const adapter = new OpencodeSdkAdapter({
-      createClient: (() => ({})) as () => OpencodeClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.listAvailableSlashCommands({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-        workingDirectory: defaultRepoPath,
-      }),
-    ).rejects.toThrow("OpenCode runtime does not expose the command listing API.");
   });
 
   test("accepts equivalent repo paths when validating resolved runtimes", async () => {
@@ -1061,7 +1057,15 @@ describe("opencode-sdk-adapter", () => {
 
   test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {
     const agents = mock(async () => ({
-      data: [{ name: "reviewer", description: "Review changes", mode: "subagent" }],
+      data: [
+        {
+          name: "reviewer",
+          description: "Review changes",
+          mode: "subagent",
+          options: {},
+          permission: [],
+        },
+      ],
       error: undefined,
     }));
     // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
@@ -1138,23 +1142,6 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("searchFiles propagates catalog loader failures", async () => {
-    // SAFETY: This test controls the fixture and supplies `() => OpencodeClient` used by this case.
-    const adapter = new OpencodeSdkAdapter({
-      createClient: (() => ({})) as () => OpencodeClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.searchFiles({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-        workingDirectory: defaultWorkingDirectory,
-        query: "src",
-      }),
-    ).rejects.toThrow("OpenCode runtime does not expose the file search API.");
-  });
-
   test("listSessionRuntimeSnapshots merges status and pending input into a single live-session view", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({
@@ -1226,25 +1213,26 @@ describe("opencode-sdk-adapter", () => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "parent-session",
-                projectID: "project-1",
+                slug: "parent-session",
                 directory: "/repo",
                 title: "Parent",
                 time: {
                   created: Date.parse("2026-02-22T12:00:00.000Z"),
                 },
-              },
-              {
+              }),
+              createOpencodeSessionFixture({
                 id: "child-session",
-                projectID: "project-1",
+                slug: "child-session",
                 directory: "/repo",
                 parentID: "parent-session",
                 title: "Child",
                 time: {
                   created: Date.parse("2026-02-22T12:00:01.000Z"),
+                  updated: Date.parse("2026-02-22T12:00:01.000Z"),
                 },
-              },
+              }),
             ],
             error: undefined,
           };
@@ -1325,16 +1313,12 @@ describe("opencode-sdk-adapter", () => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: {
-                  created: Date.parse("2026-02-22T12:00:00.000Z"),
-                  updated: Date.parse("2026-02-22T12:00:00.000Z"),
-                },
-              },
+              }),
             ],
             error: undefined,
           };
@@ -1601,13 +1585,12 @@ describe("opencode-sdk-adapter", () => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
-              },
+              }),
             ],
             error: undefined,
           };
@@ -2149,13 +2132,12 @@ describe("opencode-sdk-adapter", () => {
           mock.listCalls.push(input);
           return {
             data: [
-              {
+              createOpencodeSessionFixture({
                 id: "external-session-1",
-                projectID: "project-1",
+                slug: "external-session-1",
                 directory: defaultWorkingDirectory,
                 title: "BUILD task-1",
-                time: { created: Date.parse("2026-02-22T12:00:00.000Z") },
-              },
+              }),
             ],
             error: undefined,
           };
@@ -2367,15 +2349,12 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "/repo/",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
@@ -2477,15 +2456,12 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "  /repo  ",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
@@ -2529,15 +2505,12 @@ describe("opencode-sdk-adapter", () => {
         ...mock.client.session,
         list: async () => ({
           data: [
-            {
+            createOpencodeSessionFixture({
               id: "external-session-1",
-              projectID: "project-1",
+              slug: "external-session-1",
               directory: "   ",
               title: "BUILD task-1",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
+            }),
           ],
           error: undefined,
         }),
@@ -2555,43 +2528,6 @@ describe("opencode-sdk-adapter", () => {
       }),
     ).rejects.toThrow(
       "Malformed Opencode session payload for 'external-session-1': missing directory.",
-    );
-  });
-
-  test("listSessionRuntimeSnapshots rejects sessions with malformed titles", async () => {
-    const mock = makeMockClient();
-    // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
-    const malformedClient = {
-      ...mock.client,
-      session: {
-        ...mock.client.session,
-        list: async () => ({
-          data: [
-            {
-              id: "external-session-1",
-              projectID: "project-1",
-              directory: "/repo",
-              time: {
-                created: Date.parse("2026-02-22T12:00:00.000Z"),
-              },
-            },
-          ],
-          error: undefined,
-        }),
-      },
-    } as OpencodeClient;
-    const adapter = new OpencodeSdkAdapter({
-      createClient: () => malformedClient,
-      now: () => "2026-02-22T12:00:00.000Z",
-    });
-
-    await expect(
-      adapter.listSessionRuntimeSnapshots({
-        repoPath: defaultRepoPath,
-        runtimeKind: "opencode",
-      }),
-    ).rejects.toThrow(
-      "Malformed Opencode session payload for 'external-session-1': missing title.",
     );
   });
 

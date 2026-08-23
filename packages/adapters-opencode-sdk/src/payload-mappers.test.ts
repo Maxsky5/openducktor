@@ -1,10 +1,43 @@
 import { describe, expect, test } from "bun:test";
+import type { Model, Provider } from "@opencode-ai/sdk/v2/client";
 import {
   mapProviderListToCatalog,
   normalizeModelInput,
   resolveAssistantResponseMessageId,
   toToolIdList,
 } from "./payload-mappers";
+
+const modelFixture = (overrides: Partial<Model> = {}): Model => ({
+  api: { id: "model", npm: "@ai-sdk/test", url: "https://example.test" },
+  capabilities: {
+    attachment: true,
+    input: { audio: false, image: true, pdf: false, text: true, video: false },
+    interleaved: false,
+    output: { audio: false, image: false, pdf: false, text: true, video: false },
+    reasoning: true,
+    temperature: true,
+    toolcall: true,
+  },
+  cost: { cache: { read: 0, write: 0 }, input: 0, output: 0 },
+  headers: {},
+  id: "model",
+  limit: { context: 200_000, output: 32_000 },
+  name: "Model",
+  options: {},
+  providerID: "provider",
+  release_date: "2026-01-01",
+  status: "active",
+  ...overrides,
+});
+
+const providerFixture = (models: Record<string, Model>): Provider => ({
+  env: [],
+  id: "openai",
+  models,
+  name: "OpenAI",
+  options: {},
+  source: "custom",
+});
 
 describe("payload-mappers", () => {
   test("normalizeModelInput maps model selection to SDK shape", () => {
@@ -43,31 +76,31 @@ describe("payload-mappers", () => {
   test("mapProviderListToCatalog converts provider payload", () => {
     const catalog = mapProviderListToCatalog({
       providers: [
-        {
-          id: "openai",
-          name: "OpenAI",
-          models: {
-            "gpt-5": {
-              name: "GPT-5",
-              limit: {
-                context: 200_000,
-                output: 32_000,
-              },
-              capabilities: {
-                input: {
-                  image: true,
-                  audio: false,
-                  video: true,
-                  pdf: false,
-                },
-              },
-              variants: {
-                high: {},
-                low: {},
+        providerFixture({
+          "gpt-5": modelFixture({
+            id: "gpt-5",
+            name: "GPT-5",
+            providerID: "openai",
+            limit: {
+              context: 200_000,
+              output: 32_000,
+            },
+            capabilities: {
+              ...modelFixture().capabilities,
+              input: {
+                ...modelFixture().capabilities.input,
+                image: true,
+                audio: false,
+                video: true,
+                pdf: false,
               },
             },
-          },
-        },
+            variants: {
+              high: {},
+              low: {},
+            },
+          }),
+        }),
       ],
       default: {
         openai: "gpt-5",
@@ -95,22 +128,30 @@ describe("payload-mappers", () => {
     ]);
   });
 
-  test("mapProviderListToCatalog falls back to modality arrays when capability flags are absent", () => {
+  test("mapProviderListToCatalog reads exact capability flags", () => {
     const catalog = mapProviderListToCatalog({
       providers: [
         {
+          ...providerFixture({
+            "claude-sonnet": modelFixture({
+              id: "claude-sonnet",
+              name: "Claude Sonnet",
+              providerID: "anthropic",
+              capabilities: {
+                ...modelFixture().capabilities,
+                input: {
+                  ...modelFixture().capabilities.input,
+                  image: true,
+                  pdf: true,
+                },
+              },
+            }),
+          }),
           id: "anthropic",
           name: "Anthropic",
-          models: {
-            "claude-sonnet": {
-              name: "Claude Sonnet",
-              modalities: {
-                input: ["text", "pdf", "image"],
-              },
-            },
-          },
         },
       ],
+      default: {},
     });
 
     expect(catalog.models).toEqual([
@@ -121,6 +162,8 @@ describe("payload-mappers", () => {
         modelId: "claude-sonnet",
         modelName: "Claude Sonnet",
         variants: [],
+        contextWindow: 200_000,
+        outputLimit: 32_000,
         attachmentSupport: {
           image: true,
           audio: false,

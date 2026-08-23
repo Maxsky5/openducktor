@@ -1,7 +1,10 @@
 import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
+import {
+  type HostErrorDetails,
+  HostOperationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 
 export type SqliteValue = bigint | number | string | null | Uint8Array;
 export type SqliteRow = Record<string, SqliteValue>;
@@ -95,7 +98,7 @@ const isSqliteValue = (value: SqliteValue): boolean =>
 const unsupportedSqliteDriver = (
   operation: string,
   message: string,
-  details: Readonly<Record<string, JsonValue>>,
+  details: HostErrorDetails,
 ): HostOperationError =>
   new HostOperationError({
     operation,

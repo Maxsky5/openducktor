@@ -1,4 +1,4 @@
-import type { JsonValue, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentKickoffTemplateId,
   AgentMessageTemplateId,
@@ -119,9 +119,7 @@ export const defaultSessionLaunchActionForRole = (role: AgentRole): SessionLaunc
   return action.id;
 };
 
-export const isSessionLaunchActionId = (
-  value: JsonValue | undefined,
-): value is SessionLaunchActionId =>
+export const isSessionLaunchActionId = (value: unknown): value is SessionLaunchActionId =>
   typeof value === "string" && sessionLaunchActionIdSet.has(value);
 
 export const isLaunchStartModeAllowed = (

@@ -1,9 +1,10 @@
 import { errorMessage, ElectronValidationError } from "../effect/electron-errors";
 import {
   ELECTRON_HOST_INVOKE_CHANNEL,
+  type ElectronHostInvokeRequest,
   type ElectronHostInvokeResponse,
 } from "../shared/electron-bridge-contract";
-import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
 import { hostInvokeFailureFromError, parseHostCommandResponse } from "@openducktor/host";
 import type { IpcMainInvokeEvent } from "electron";
 import type { UnvalidatedElectronHostInvokeResult } from "./electron-host-invoke";
@@ -13,7 +14,7 @@ type ElectronIpcMainLike = {
     channel: string,
     listener: (
       event: IpcMainInvokeEvent,
-      request: Parameters<typeof jsonValueSchema.safeParse>[0],
+      request: ElectronHostInvokeRequest,
     ) => Promise<ElectronHostInvokeResponse>,
   ): void;
 };
@@ -22,20 +23,20 @@ type ElectronHostInvokeHandlerOptions = {
   isHostShutdownStarted(): boolean;
   invoke(
     command: string,
-    args?: Record<string, JsonValue>,
+    args?: Record<string, unknown>,
   ): Promise<UnvalidatedElectronHostInvokeResult>;
 };
 
 type ValidatedElectronHostInvokeRequest = {
   command: string;
-  args?: Record<string, JsonValue>;
+  args?: Record<string, unknown>;
 };
 
-const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const readElectronHostInvokeRequest = (
-  request: Parameters<typeof jsonValueSchema.safeParse>[0],
+  request: ElectronHostInvokeRequest,
 ): ValidatedElectronHostInvokeRequest => {
   const parsedRequest = jsonValueSchema.safeParse(request);
   if (!parsedRequest.success || !isRecord(parsedRequest.data)) {

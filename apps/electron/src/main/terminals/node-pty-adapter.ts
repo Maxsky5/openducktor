@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createRequire } from "node:module";
+import { hasRuntimeType } from "@openducktor/contracts";
 import {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,
@@ -24,8 +25,17 @@ type CreateNodePtyPortInput = {
 
 const loadNodePty = (): NodePtyModule => {
   const require = createRequire(import.meta.url);
-  // SAFETY: The surrounding boundary constructs or validates every member required by `NodePtyModule`.
-  return require("node-pty") as NodePtyModule;
+  const candidate: unknown = require("node-pty");
+  if (
+    !hasRuntimeType(candidate, "object") ||
+    candidate === null ||
+    !("spawn" in candidate) ||
+    !hasRuntimeType(candidate.spawn, "function")
+  ) {
+    throw new Error("The installed node-pty module does not export spawn().");
+  }
+  // SAFETY: The installed node-pty package defines spawn with NodePtyModule's signature, and the runtime guard above verifies that the CommonJS export exists and is callable.
+  return candidate as NodePtyModule;
 };
 
 const operation = (

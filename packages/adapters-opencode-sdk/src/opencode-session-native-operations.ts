@@ -3,7 +3,6 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { SessionRef } from "@openducktor/core";
 import { toOpenCodePermissionReply } from "./approval-translation";
 import { unwrapData } from "./data-utils";
-import { readStringProp } from "./guards";
 import { extractMessageTotalTokens, readMessageModelSelection } from "./message-normalizers";
 import { opencodeSessionMessagesPayloadSchema } from "./opencode-ingress";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
@@ -46,7 +45,7 @@ export const readLatestOpencodeContextUsage = async (
   );
   const latestAssistant = [...messages]
     .reverse()
-    .find((message) => readStringProp(message.info, ["role"]) === "assistant");
+    .find((message) => message.info.role === "assistant");
   if (!latestAssistant) {
     return null;
   }

@@ -81,15 +81,9 @@ const processRuntimeSessionLineage = (
   const {
     type: eventType,
     properties,
-    info,
     externalSessionId: childExternalSessionId,
     parentExternalSessionId,
   } = lifecycleEvent;
-  if (!childExternalSessionId || !info) {
-    throw new Error(
-      `OpenCode ${eventType} event is missing its session id or info payload; update the runtime or adapter to a supported event contract.`,
-    );
-  }
 
   if (!parentExternalSessionId) {
     const hasNonAuthoritativeParent = Boolean(readEventParentExternalSessionId(properties));

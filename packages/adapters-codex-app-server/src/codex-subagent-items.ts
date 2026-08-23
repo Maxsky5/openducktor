@@ -1,32 +1,26 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import type {
+  CodexAppServerCollabAgentState,
+  CodexAppServerCollabAgentTool,
+  CodexAppServerCollabAgentToolCallStatus,
+  CodexAppServerJsonValue,
+} from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
-import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 import type { CodexMappingContext } from "./codex-canonical-events";
+import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import type { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import { codexToolTimingFields } from "./codex-tool-timing";
 
-type CodexCollabTool = "spawnAgent" | "sendInput" | "resumeAgent" | "wait" | "closeAgent";
-type CodexCollabCallStatus = "inProgress" | "completed" | "failed";
-type CodexCollabAgentStatus =
-  | "pendingInit"
-  | "running"
-  | "interrupted"
-  | "completed"
-  | "errored"
-  | "shutdown"
-  | "notFound";
-type CodexSubagentActivityKind = "started" | "interacted" | "interrupted";
+type CodexCollabItem = Extract<CodexTimedThreadItem, { type: "collabAgentToolCall" }>;
+type CodexSubagentActivityItem = Extract<CodexTimedThreadItem, { type: "subAgentActivity" }>;
+type CodexSubagentItem = CodexCollabItem | CodexSubagentActivityItem;
 
 type StatusMapping = {
   status: AgentSubagentStatus;
   error?: string;
 };
 
-type CodexCollabItemType = "collabAgentToolCall" | "collabToolCall";
-
 interface CodexSubagentMetadata {
-  [key: string]: JsonValue;
+  [key: string]: CodexAppServerJsonValue;
 }
 
 class CodexSubagentItemError extends Error {
@@ -36,130 +30,25 @@ class CodexSubagentItemError extends Error {
   }
 }
 
-const COLLAB_TOOLS = new Set<CodexCollabTool>([
-  "spawnAgent",
-  "sendInput",
-  "resumeAgent",
-  "wait",
-  "closeAgent",
-]);
-
-const COLLAB_CALL_STATUSES = new Set<CodexCollabCallStatus>(["inProgress", "completed", "failed"]);
-
-const COLLAB_AGENT_STATUSES = new Set<CodexCollabAgentStatus>([
-  "pendingInit",
-  "running",
-  "interrupted",
-  "completed",
-  "errored",
-  "shutdown",
-  "notFound",
-]);
-
-const ACTIVITY_KINDS = new Set<CodexSubagentActivityKind>(["started", "interacted", "interrupted"]);
-
 const itemError = (
-  item: Record<string, JsonValue>,
+  item: CodexSubagentItem,
   message: string,
-  context: Record<string, JsonValue | undefined> = {},
-): CodexSubagentItemError => {
-  const id = extractStringField(item, ["id"]) ?? "<missing>";
-  const type = extractStringField(item, ["type"]) ?? "<missing>";
-  return new CodexSubagentItemError(
-    `Malformed Codex subagent item '${id}' of type '${type}': ${message}. Context: ${JSON.stringify(
+  context: Record<string, CodexAppServerJsonValue | undefined> = {},
+): CodexSubagentItemError =>
+  new CodexSubagentItemError(
+    `Malformed Codex subagent item '${item.id}' of type '${item.type}': ${message}. Context: ${JSON.stringify(
       context,
     )}`,
   );
-};
-
-const requireStringField = (
-  item: Record<string, JsonValue>,
-  keys: string[],
-  label: string,
-): string => {
-  const value = extractStringField(item, keys);
-  if (!value) {
-    throw itemError(item, `missing ${label}`);
-  }
-  return value;
-};
-
-// SAFETY: The preceding runtime guard establishes `CodexCollabTool` before this assertion.
-const collabTool = (item: Record<string, JsonValue>): CodexCollabTool => {
-  const tool = requireStringField(item, ["tool"], "tool");
-  if (!COLLAB_TOOLS.has(tool as CodexCollabTool)) {
-    throw itemError(item, "unknown collab tool", { tool });
-  }
-  // SAFETY: The preceding runtime guard establishes `CodexCollabTool` before this assertion.
-  return tool as CodexCollabTool;
-};
-
-// SAFETY: The preceding runtime guard establishes `CodexCollabCallStatus` before this assertion.
-const collabCallStatus = (item: Record<string, JsonValue>): CodexCollabCallStatus => {
-  const status = requireStringField(item, ["status"], "status");
-  if (!COLLAB_CALL_STATUSES.has(status as CodexCollabCallStatus)) {
-    throw itemError(item, "unknown collab tool-call status", { status });
-  }
-  // SAFETY: The preceding runtime guard establishes `CodexCollabCallStatus` before this assertion.
-  return status as CodexCollabCallStatus;
-};
-
-const stringArrayField = (value: JsonValue | undefined): string[] =>
-  arrayFromUnknown(value).filter(
-    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-  );
-
-const receiverThreadIds = (item: Record<string, JsonValue>): string[] => {
-  const receivers = [
-    ...stringArrayField(item.receiverThreadIds ?? item.receiver_thread_ids),
-    extractStringField(item, ["receiverThreadId", "receiver_thread_id"]),
-    extractStringField(item, ["newThreadId", "new_thread_id"]),
-  ].filter((entry): entry is string => Boolean(entry));
-  return [...new Set(receivers)];
-};
-
-const agentsStates = (item: Record<string, JsonValue>): Record<string, JsonValue> => {
-  const states = item.agentsStates ?? item.agents_states;
-  return isPlainObject(states) ? states : {};
-};
-
-const agentStateForChild = (
-  item: Record<string, JsonValue>,
-  childThreadId: string,
-): Record<string, JsonValue> | null => {
-  const state = agentsStates(item)[childThreadId];
-  if (isPlainObject(state)) {
-    return state;
-  }
-  const status = extractStringField(item, ["agentStatus", "agent_status"]);
-  if (!status) {
-    return null;
-  }
-  return {
-    status,
-    message: extractStringField(item, ["agentMessage", "agent_message"]),
-  };
-};
 
 const assertNever = (value: never): never => value;
 
-// SAFETY: The preceding runtime guard establishes `CodexCollabAgentStatus` before this assertion.
 const mapAgentStatus = (
-  item: Record<string, JsonValue>,
-  status: JsonValue | undefined,
-  message: JsonValue | undefined,
+  state: CodexAppServerCollabAgentState,
   childThreadId: string,
 ): StatusMapping => {
-  if (
-    !hasRuntimeType(status, "string") ||
-    !COLLAB_AGENT_STATUSES.has(status as CodexCollabAgentStatus)
-  ) {
-    throw itemError(item, "unknown collab agent status", { status, childThreadId });
-  }
-  const text = hasRuntimeType(message, "string") && message.trim().length > 0 ? message : undefined;
-  // SAFETY: The preceding runtime guard establishes `CodexCollabAgentStatus` before this assertion.
-  const agentStatus = status as CodexCollabAgentStatus;
-  switch (agentStatus) {
+  const error = state.message?.trim() || undefined;
+  switch (state.status) {
     case "pendingInit":
       return { status: "pending" };
     case "running":
@@ -174,16 +63,16 @@ const mapAgentStatus = (
     case "notFound":
       return {
         status: "error",
-        error: text ?? `Codex subagent '${childThreadId}' status is ${agentStatus}.`,
+        error: error ?? `Codex subagent '${childThreadId}' status is ${state.status}.`,
       };
     default:
-      return assertNever(agentStatus);
+      return assertNever(state.status);
   }
 };
 
 const mapAggregateStatus = (
-  status: CodexCollabCallStatus,
-  tool: CodexCollabTool,
+  status: CodexAppServerCollabAgentToolCallStatus,
+  tool: CodexAppServerCollabAgentTool,
 ): StatusMapping => {
   if (status === "inProgress") {
     return { status: "running" };
@@ -191,53 +80,35 @@ const mapAggregateStatus = (
   if (status === "failed") {
     return { status: "error", error: `Codex ${tool} subagent call failed.` };
   }
-  if (tool === "closeAgent") {
+  return { status: tool === "closeAgent" ? "cancelled" : "completed" };
+};
+
+const statusForChild = (item: CodexCollabItem, childThreadId: string): StatusMapping => {
+  const state = item.agentsStates[childThreadId];
+  if (state) {
+    return mapAgentStatus(state, childThreadId);
+  }
+  if (item.tool === "closeAgent" && item.status === "completed") {
     return { status: "cancelled" };
   }
-  return { status: "completed" };
-};
-
-const statusForChild = (
-  item: Record<string, JsonValue>,
-  tool: CodexCollabTool,
-  aggregateStatus: CodexCollabCallStatus,
-  childThreadId: string,
-): StatusMapping => {
-  const state = agentStateForChild(item, childThreadId);
-  if (!state) {
-    if (tool === "closeAgent" && aggregateStatus === "completed") {
-      return { status: "cancelled" };
-    }
-    if (aggregateStatus === "failed") {
-      return mapAggregateStatus(aggregateStatus, tool);
-    }
-    if (tool === "wait" && aggregateStatus !== "inProgress") {
-      throw itemError(item, "missing collab agent state", {
-        aggregateStatus,
-        childThreadId,
-        tool,
-      });
-    }
-    return { status: "running" };
+  if (item.status === "failed") {
+    return mapAggregateStatus(item.status, item.tool);
   }
-  return mapAgentStatus(item, state.status, state.message, childThreadId);
-};
-
-// SAFETY: The preceding runtime guard establishes `CodexSubagentActivityKind` before this assertion.
-const activityKind = (item: Record<string, JsonValue>): CodexSubagentActivityKind => {
-  const kind = requireStringField(item, ["kind"], "kind");
-  if (!ACTIVITY_KINDS.has(kind as CodexSubagentActivityKind)) {
-    throw itemError(item, "unknown subagent activity kind", { kind });
+  if (item.tool === "wait" && item.status !== "inProgress") {
+    throw itemError(item, "missing collab agent state", {
+      aggregateStatus: item.status,
+      childThreadId,
+      tool: item.tool,
+    });
   }
-  // SAFETY: The preceding runtime guard establishes `CodexSubagentActivityKind` before this assertion.
-  return kind as CodexSubagentActivityKind;
+  return { status: "running" };
 };
 
 const SUBAGENT_DESCRIPTION_MAX_LENGTH = 140;
 
 const creationDescriptionForPrompt = (
-  tool: CodexCollabTool,
-  prompt: string | undefined,
+  tool: CodexAppServerCollabAgentTool,
+  prompt: string | null,
 ): string | undefined => {
   if (tool !== "spawnAgent") {
     return undefined;
@@ -253,127 +124,114 @@ const creationDescriptionForPrompt = (
 };
 
 const collabMetadata = (
-  item: Record<string, JsonValue>,
-  source: CodexCollabItemType,
+  item: CodexCollabItem,
   parentThreadId: string,
   childThreadId?: string,
 ): CodexSubagentMetadata => ({
   codexSubagent: {
-    source,
-    itemId: extractStringField(item, ["id"]),
-    tool: extractStringField(item, ["tool"]),
+    source: item.type,
+    itemId: item.id,
+    tool: item.tool,
     parentThreadId,
     ...(childThreadId ? { childThreadId } : undefined),
   },
 });
 
 const activityMetadata = (
-  item: Record<string, JsonValue>,
+  item: CodexSubagentActivityItem,
   parentThreadId: string,
-  childThreadId: string,
-): CodexSubagentMetadata => {
-  const agentPath = extractStringField(item, ["agentPath", "agent_path"]);
-  return {
-    codexSubagent: {
-      source: "subAgentActivity",
-      itemId: extractStringField(item, ["id"]),
-      kind: extractStringField(item, ["kind"]),
-      parentThreadId,
-      childThreadId,
-      ...(agentPath ? { agentPath } : undefined),
-    },
-  };
-};
+): CodexSubagentMetadata => ({
+  codexSubagent: {
+    source: item.type,
+    itemId: item.id,
+    kind: item.kind,
+    parentThreadId,
+    childThreadId: item.agentThreadId,
+    agentPath: item.agentPath,
+  },
+});
 
-export const codexSubagentPartsFromItem = (
-  item: Record<string, JsonValue>,
+const collabAgentParts = (
+  item: CodexCollabItem,
   ctx: CodexMappingContext,
   linkState: CodexSubagentLinkState,
 ): AgentStreamPart[] => {
-  const type = extractStringField(item, ["type"]);
-  if (type === "collabAgentToolCall" || type === "collabToolCall") {
-    const itemId = requireStringField(item, ["id"], "id");
-    const tool = collabTool(item);
-    const aggregateStatus = collabCallStatus(item);
-    const parentThreadId = requireStringField(
-      item,
-      ["senderThreadId", "sender_thread_id"],
-      "senderThreadId",
-    );
-    const prompt = extractStringField(item, ["prompt"]) ?? undefined;
-    const creationDescription = creationDescriptionForPrompt(tool, prompt);
-    const receivers = receiverThreadIds(item);
-    if (receivers.length === 0) {
-      if (tool !== "spawnAgent") {
-        throw itemError(item, "missing receiverThreadIds for linked collab tool", {
-          tool,
-          parentThreadId,
-        });
-      }
-      const mapped = mapAggregateStatus(aggregateStatus, tool);
-      return [
-        linkState.upsertLink({
-          ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
-          parentThreadId,
-          itemId,
-          status: mapped.status,
-          ...(prompt ? { prompt } : undefined),
-          ...(creationDescription ? { description: creationDescription } : undefined),
-          ...(mapped.error ? { error: mapped.error } : undefined),
-          metadata: collabMetadata(item, type, parentThreadId),
-        }),
-      ];
-    }
-    return receivers.map((childThreadId) => {
-      const mapped = statusForChild(item, tool, aggregateStatus, childThreadId);
-      return linkState.upsertLink({
-        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
-        parentThreadId,
-        childThreadId,
-        itemId,
-        status: mapped.status,
-        ...(prompt ? { prompt } : undefined),
-        ...(creationDescription ? { description: creationDescription } : undefined),
-        ...(mapped.error ? { error: mapped.error } : undefined),
-        metadata: collabMetadata(item, type, parentThreadId, childThreadId),
-        preferItemCorrelationKey: tool === "spawnAgent",
-        allowStatusRestart: tool === "resumeAgent" && mapped.status === "running",
-        ...codexToolTimingFields(item, { allowStartedAtOnly: mapped.status === "running" }),
-      });
-    });
-  }
-
-  if (type === "subAgentActivity") {
-    const itemId = requireStringField(item, ["id"], "id");
-    const childThreadId = requireStringField(
-      item,
-      ["agentThreadId", "agent_thread_id"],
-      "agentThreadId",
-    );
-    const sourceThreadId = ctx.threadId;
-    const kind = activityKind(item);
-    const route = linkState.routeForChild(childThreadId, ctx.runtimeId);
-    if (sourceThreadId === childThreadId) {
-      throw itemError(item, "subAgentActivity parent thread matches child thread", {
-        parentThreadId: sourceThreadId,
-        childThreadId,
+  const creationDescription = creationDescriptionForPrompt(item.tool, item.prompt);
+  if (item.receiverThreadIds.length === 0) {
+    if (item.tool !== "spawnAgent") {
+      throw itemError(item, "missing receiverThreadIds for linked collab tool", {
+        tool: item.tool,
+        parentThreadId: item.senderThreadId,
       });
     }
-    if (!route && kind !== "started") {
-      return [];
-    }
-    const runtimeId = route?.runtimeId ?? ctx.runtimeId;
+    const mapped = mapAggregateStatus(item.status, item.tool);
     return [
       linkState.upsertLink({
-        ...(runtimeId ? { runtimeId } : undefined),
-        parentThreadId: sourceThreadId,
-        childThreadId,
-        itemId,
-        status: "running",
-        metadata: activityMetadata(item, sourceThreadId, childThreadId),
+        ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
+        parentThreadId: item.senderThreadId,
+        itemId: item.id,
+        status: mapped.status,
+        ...(item.prompt ? { prompt: item.prompt } : undefined),
+        ...(creationDescription ? { description: creationDescription } : undefined),
+        ...(mapped.error ? { error: mapped.error } : undefined),
+        metadata: collabMetadata(item, item.senderThreadId),
       }),
     ];
   }
 
-  return [];
+  return [...new Set(item.receiverThreadIds)].map((childThreadId) => {
+    const mapped = statusForChild(item, childThreadId);
+    return linkState.upsertLink({
+      ...(ctx.runtimeId ? { runtimeId: ctx.runtimeId } : undefined),
+      parentThreadId: item.senderThreadId,
+      childThreadId,
+      itemId: item.id,
+      status: mapped.status,
+      ...(item.prompt ? { prompt: item.prompt } : undefined),
+      ...(creationDescription ? { description: creationDescription } : undefined),
+      ...(mapped.error ? { error: mapped.error } : undefined),
+      metadata: collabMetadata(item, item.senderThreadId, childThreadId),
+      preferItemCorrelationKey: item.tool === "spawnAgent",
+      allowStatusRestart: item.tool === "resumeAgent" && mapped.status === "running",
+      ...codexToolTimingFields(item, { allowStartedAtOnly: mapped.status === "running" }),
+    });
+  });
 };
+
+const subagentActivityParts = (
+  item: CodexSubagentActivityItem,
+  ctx: CodexMappingContext,
+  linkState: CodexSubagentLinkState,
+): AgentStreamPart[] => {
+  const sourceThreadId = ctx.threadId;
+  if (sourceThreadId === item.agentThreadId) {
+    throw itemError(item, "subAgentActivity parent thread matches child thread", {
+      parentThreadId: sourceThreadId,
+      childThreadId: item.agentThreadId,
+    });
+  }
+  const route = linkState.routeForChild(item.agentThreadId, ctx.runtimeId);
+  if (!route && item.kind !== "started") {
+    return [];
+  }
+  const runtimeId = route?.runtimeId ?? ctx.runtimeId;
+  return [
+    linkState.upsertLink({
+      ...(runtimeId ? { runtimeId } : undefined),
+      parentThreadId: sourceThreadId,
+      childThreadId: item.agentThreadId,
+      itemId: item.id,
+      status: "running",
+      metadata: activityMetadata(item, sourceThreadId),
+    }),
+  ];
+};
+
+export const codexSubagentPartsFromItem = (
+  item: CodexSubagentItem,
+  ctx: CodexMappingContext,
+  linkState: CodexSubagentLinkState,
+): AgentStreamPart[] =>
+  item.type === "collabAgentToolCall"
+    ? collabAgentParts(item, ctx, linkState)
+    : subagentActivityParts(item, ctx, linkState);

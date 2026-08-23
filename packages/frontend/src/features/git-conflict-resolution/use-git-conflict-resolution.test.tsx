@@ -8,7 +8,6 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
 import { useGitConflictResolution } from "./use-git-conflict-resolution";
-import type { JsonValue } from "@openducktor/contracts";
 
 const buildSession = (
   overrides: AgentSessionFixtureOverrides & { externalSessionId: string; workingDirectory: string },
@@ -42,7 +41,7 @@ const sessionIdentity = (
   workingDirectory,
 });
 
-const createConflict = (overrides: Record<string, JsonValue | undefined> = {}) => ({
+const createConflict = (overrides: Record<string, unknown> = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
   targetBranch: "origin/main",

@@ -756,7 +756,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     );
   });
 
-  test("maps todowrite tool part with ended timing to completed even when status is pending", async () => {
+  test("maps a completed todowrite tool part", async () => {
     // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
@@ -776,7 +776,7 @@ describe("OpencodeSdkAdapter event stream", () => {
               type: "tool",
               tool: "todowrite",
               state: {
-                status: "pending",
+                status: "completed",
                 input: {
                   todos: [
                     {
@@ -785,6 +785,9 @@ describe("OpencodeSdkAdapter event stream", () => {
                     },
                   ],
                 },
+                output: "",
+                title: "",
+                metadata: {},
                 time: {
                   start: 100,
                   end: 175,

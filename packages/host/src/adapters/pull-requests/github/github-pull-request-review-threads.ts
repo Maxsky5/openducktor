@@ -1,9 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type {
-  GitProviderRepository,
-  JsonValue,
-  PullRequestReviewActivity,
-} from "@openducktor/contracts";
+import type { GitProviderRepository, PullRequestReviewActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type GithubCommandDependencies,
@@ -11,6 +7,7 @@ import {
 } from "../../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
+  type GithubPayloadValue,
   parseGithubJsonObject,
   parseGithubNextPageCursor,
   requireGithubBoolean,
@@ -123,7 +120,7 @@ query PullRequestReviewThreadComments($threadId: ID!, $commentsCursor: String) {
 }
 `;
 
-const toNullableNumber = (value: JsonValue | undefined): number | null =>
+const toNullableNumber = (value: GithubPayloadValue): number | null =>
   hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0 ? value : null;
 
 const toLineRange = (
@@ -133,7 +130,7 @@ const toLineRange = (
   endLine === null ? null : { startLine: startLine ?? endLine, endLine };
 
 const toReviewThreadComment = (
-  payloadValue: JsonValue | undefined,
+  payloadValue: GithubPayloadValue,
   field: string,
   threadId: string,
   isResolved: boolean,
@@ -180,7 +177,7 @@ const toReviewThreadComment = (
   };
 };
 
-const parseThread = (threadValue: JsonValue | undefined, field: string) => {
+const parseThread = (threadValue: GithubPayloadValue, field: string) => {
   const thread = requireGithubObject(threadValue, field);
   const threadId = requireGithubString(thread.id, `${field}.id`);
   const isResolved = requireGithubBoolean(thread.isResolved, `${field}.isResolved`);

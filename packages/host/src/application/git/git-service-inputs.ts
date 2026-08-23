@@ -140,7 +140,7 @@ const requireGlobalConfig = (
   return Effect.succeed(payload);
 };
 export const findRepoConfigByPath = (
-  settingsConfig: SettingsConfigPort,
+  settingsConfig: Pick<SettingsConfigPort, "canonicalizePath" | "readConfig">,
   canonicalRepoPath: string,
 ) =>
   Effect.gen(function* () {

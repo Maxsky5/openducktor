@@ -1,18 +1,13 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { CodexAppServerTurn } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { CodexAppServerError, CodexAppServerPort } from "../../ports/codex-app-server-port";
-import { isJsonRecord, parseThreadTurnsListResponse } from "./codex-app-server-response-parsers";
+import { parseThreadTurnsListResponse } from "./codex-app-server-response-parsers";
 
 type CodexTurnReaderPort = Pick<CodexAppServerPort, "request">;
 
 const isActiveCodexTurn = (turn: CodexAppServerTurn): boolean =>
-  isJsonRecord(turn) &&
-  hasRuntimeType(turn.id, "string") &&
-  turn.id.length > 0 &&
-  turn.startedAt !== null &&
-  turn.completedAt === null;
+  turn.id.length > 0 && turn.startedAt !== null && turn.completedAt === null;
 
 const parseCodexTurnCandidates = (
   value: Parameters<typeof parseThreadTurnsListResponse>[0],

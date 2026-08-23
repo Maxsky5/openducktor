@@ -4,14 +4,19 @@ import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/pr
 import path from "node:path";
 import { promisify } from "node:util";
 import { hasRuntimeType, jsonValueSchema, taskAssetIdSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
-export type TaskAssetFileOwner = {
-  version: 1;
-  instanceId: string;
-  processId: number;
-  startedAtMs: number;
-};
+const taskAssetFileOwnerSchema = z
+  .object({
+    version: z.literal(1),
+    instanceId: taskAssetIdSchema,
+    processId: z.number().int().positive(),
+    startedAtMs: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type TaskAssetFileOwner = z.infer<typeof taskAssetFileOwnerSchema>;
 
 export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
@@ -62,27 +67,12 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateOwner = (
-  value: Parameters<typeof jsonValueSchema.safeParse>[0],
-): TaskAssetFileOwner => {
-  if (!hasRuntimeType(value, "object") || value === null) {
-    throw new Error("Task asset owner record must be an object.");
+const validateOwner = (value: unknown): TaskAssetFileOwner => {
+  const result = taskAssetFileOwnerSchema.safeParse(value);
+  if (!result.success) {
+    throw new Error("Task asset owner record is invalid.", { cause: result.error });
   }
-  // SAFETY: the owner record shape is validated field-by-field below; the record is re-exported
-  // through the typed TaskAssetFileOwner boundary only after every field passes.
-  const owner = value as Partial<TaskAssetFileOwner>;
-  if (
-    owner.version !== 1 ||
-    !taskAssetIdSchema.safeParse(owner.instanceId).success ||
-    !Number.isSafeInteger(owner.processId) ||
-    (owner.processId ?? 0) <= 0 ||
-    !Number.isSafeInteger(owner.startedAtMs) ||
-    (owner.startedAtMs ?? -1) < 0
-  ) {
-    throw new Error("Task asset owner record is invalid.");
-  }
-  // SAFETY: The surrounding boundary constructs or validates every member required by `TaskAssetFileOwner`.
-  return owner as TaskAssetFileOwner;
+  return result.data;
 };
 
 const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({

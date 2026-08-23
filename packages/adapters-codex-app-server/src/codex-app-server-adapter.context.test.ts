@@ -10,17 +10,14 @@ import {
   createRuntimeStreamSubscription,
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
+import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
 const tokenUsageNotification = (totalTokens: number, threadId = "thread/start-runtime-live") => ({
   method: "thread/tokenUsage/updated",
   params: {
     threadId,
     turnId: "turn-1",
-    tokenUsage: {
-      total: { totalTokens },
-      last: { totalTokens },
-      modelContextWindow: 200_000,
-    },
+    tokenUsage: codexTokenUsageFixture(totalTokens),
   },
 });
 

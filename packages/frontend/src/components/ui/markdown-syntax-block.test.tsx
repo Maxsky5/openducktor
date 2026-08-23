@@ -21,7 +21,7 @@ const actualThemeProviderModule = { ...(await import("@/components/layout/theme-
 let currentTheme: Theme = "light";
 let yamlLanguageShouldFail = false;
 const registerLanguageMock = mock((_language: string, _grammar: JsonValue) => {});
-const syntaxHighlighterRenderMock = mock((_props: Record<string, JsonValue>) => {});
+const syntaxHighlighterRenderMock = mock((_props: Record<string, unknown>) => {});
 const darkThemeModuleLoadMock = mock(() => DARK_THEME);
 
 mock.module("@/components/layout/theme-provider", () => ({
@@ -35,7 +35,7 @@ mock.module("react-syntax-highlighter", () => {
   const PrismLight = ({
     children,
     ...props
-  }: Record<string, JsonValue> & { children?: ReactElement | string }): ReactElement => {
+  }: Record<string, unknown> & { children?: ReactElement | string }): ReactElement => {
     syntaxHighlighterRenderMock(props);
     return createElement("mock-syntax-highlighter", props, children);
   };

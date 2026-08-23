@@ -2,8 +2,8 @@ import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { BrowserLiveControlEvent, BrowserLiveControlEventKind } from "@/types";
-import type { JsonValue } from "@openducktor/contracts";
 
 export function browserLiveControlEvent(
   kind: typeof BROWSER_LIVE_RECONNECTED_EVENT_KIND,
@@ -35,25 +35,28 @@ export function browserLiveControlEvent(
   };
 }
 
-export const isBrowserLiveControlEvent = (
-  payload: JsonValue | undefined,
-): payload is BrowserLiveControlEvent => {
-  if (!payload || typeof payload !== "object") {
+export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserLiveControlEvent => {
+  if (!hasRuntimeType(payload, "object") || payload === null) {
     return false;
   }
 
-  // SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, JsonValue>`.
-  const record = payload as Record<string, JsonValue>;
-  if (record.__openducktorBrowserLive !== true) {
+  if (!("__openducktorBrowserLive" in payload) || payload.__openducktorBrowserLive !== true) {
     return false;
   }
 
-  if (record.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
-    return typeof record.transportEpoch === "string" && record.transportEpoch.length > 0;
+  if ("kind" in payload && payload.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
+    return (
+      "transportEpoch" in payload &&
+      hasRuntimeType(payload.transportEpoch, "string") &&
+      payload.transportEpoch.length > 0
+    );
   }
 
   return (
-    record.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND &&
-    (record.message === undefined || typeof record.message === "string")
+    "kind" in payload &&
+    payload.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND &&
+    (!("message" in payload) ||
+      payload.message === undefined ||
+      hasRuntimeType(payload.message, "string"))
   );
 };

@@ -23,8 +23,7 @@ import {
 
 export { invokeStopAgentSession };
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, string>`.
-const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
+const EMPTY_SESSION_AGENT_COLORS = Object.freeze<Record<string, string>>({});
 
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;

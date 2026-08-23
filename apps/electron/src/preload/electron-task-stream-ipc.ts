@@ -1,8 +1,8 @@
 import {
-  type JsonValue,
   type TaskEventCursor,
   type TaskEventStreamFrame,
   type TaskEventStreamSubscribe,
+  type TaskEventStreamAcknowledge,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
@@ -14,7 +14,9 @@ import {
   ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
   type ElectronTaskStreamFrameEnvelope,
+  type ElectronTaskStreamSubscription,
   type ElectronTaskStreamTerminalFailureEnvelope,
+  type ElectronTaskStreamUnsubscribe,
   electronTaskStreamFrameEnvelopeSchema,
   electronTaskStreamSubscriptionSchema,
   electronTaskStreamTerminalFailureEnvelopeSchema,
@@ -22,14 +24,23 @@ import {
 } from "../shared/electron-bridge-contract";
 
 type ElectronIpcRendererLike = {
-  invoke(channel: string, value: JsonValue | undefined): Promise<JsonValue | undefined>;
+  invoke(
+    channel: string,
+    value: TaskEventStreamSubscribe | TaskEventStreamAcknowledge | ElectronTaskStreamUnsubscribe,
+  ): Promise<ElectronTaskStreamSubscription | void>;
   off(
     channel: string,
-    listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+    listener: (
+      event: IpcRendererEvent,
+      value: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
+    ) => void,
   ): void;
   on(
     channel: string,
-    listener: (event: IpcRendererEvent, value: JsonValue | undefined) => void,
+    listener: (
+      event: IpcRendererEvent,
+      value: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
+    ) => void,
   ): void;
 };
 
@@ -46,7 +57,10 @@ export const createElectronTaskStreamApi = (
     let closed = false;
     const bufferedFrames: ElectronTaskStreamFrameEnvelope[] = [];
     const bufferedTerminalFailures: ElectronTaskStreamTerminalFailureEnvelope[] = [];
-    const handleFrame = (_event: IpcRendererEvent, value: JsonValue | undefined): void => {
+    const handleFrame = (
+      _event: IpcRendererEvent,
+      value: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
+    ): void => {
       const envelope = electronTaskStreamFrameEnvelopeSchema.parse(value);
       if (closed) return;
       if (!established) {
@@ -68,7 +82,7 @@ export const createElectronTaskStreamApi = (
     };
     const handleTerminalFailure = (
       _event: IpcRendererEvent,
-      value: JsonValue | undefined,
+      value: ElectronTaskStreamFrameEnvelope | ElectronTaskStreamTerminalFailureEnvelope,
     ): void => {
       const envelope = electronTaskStreamTerminalFailureEnvelopeSchema.parse(value);
       if (closed) return;

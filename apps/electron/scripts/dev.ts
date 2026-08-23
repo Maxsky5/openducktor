@@ -16,6 +16,7 @@ import {
 } from "../src/effect/electron-config";
 import {
   causeToElectronBoundaryError,
+  type ElectronErrorDetails,
   ElectronOperationError,
   type ElectronValidationError,
   errorMessage,
@@ -25,7 +26,6 @@ import {
   copySqliteTaskStoreMigrationsEffect,
   resolveSqliteTaskStoreMigrationCopyPlan,
 } from "./build";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type ManagedElectronProcess = {
   readonly exited: Promise<number>;
@@ -240,7 +240,7 @@ const runDevFileOperationEffect = (
   operation: string,
   filePath: string,
   action: () => Promise<void>,
-  details?: Record<string, JsonValue>,
+  details?: ElectronErrorDetails,
 ): Effect.Effect<void, ElectronOperationError> =>
   Effect.tryPromise({
     try: async () => {

@@ -21,7 +21,7 @@ type StoreContextEnvKey = (typeof STORE_CONTEXT_ENV_KEYS)[number];
 type StoreContextEnvSnapshot = Record<StoreContextEnvKey, string | undefined>;
 let previousStoreContextEnv: StoreContextEnvSnapshot;
 
-const jsonResponse = (payload: JsonValue | undefined, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,

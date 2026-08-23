@@ -1,12 +1,12 @@
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type JsonValue,
   type RuntimeRoute,
   hasRuntimeType,
   runtimeTypeName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
+  type HostErrorDetails,
   errorMessage,
   HostOperationError,
   HostValidationError,
@@ -33,7 +33,7 @@ type RuntimeSessionRouteInput = {
   workingDirectory: string;
 };
 
-interface RuntimeProbeFailureDetails extends Record<string, JsonValue> {
+type RuntimeProbeFailureDetails = HostErrorDetails & {
   detail?: string;
   failureKind?: "timeout";
   method?: string;
@@ -42,7 +42,7 @@ interface RuntimeProbeFailureDetails extends Record<string, JsonValue> {
   status?: number;
   url?: string;
   workingDirectory: string;
-}
+};
 
 const requireOpenCodeLocalHttpEndpoint = (runtimeRoute: RuntimeRoute, operation: string) =>
   Effect.gen(function* () {
@@ -90,10 +90,10 @@ const mcpEndpoint = (endpoint: URL, routePath: string, workingDirectory: string)
   return url;
 };
 
-const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isLiveSessionStatus = (value: JsonValue | undefined): boolean => {
+const isLiveSessionStatus = (value: unknown): boolean => {
   if (!isJsonRecord(value)) {
     return false;
   }
@@ -101,7 +101,7 @@ const isLiveSessionStatus = (value: JsonValue | undefined): boolean => {
   return status === "busy" || status === "retry";
 };
 
-const requireObjectPayload = (value: JsonValue | undefined, context: string) => {
+const requireObjectPayload = (value: unknown, context: string) => {
   if (!isJsonRecord(value)) {
     return Effect.fail(
       new HostValidationError({
@@ -113,7 +113,7 @@ const requireObjectPayload = (value: JsonValue | undefined, context: string) => 
   return Effect.succeed(value);
 };
 
-const readStringProperty = (value: Record<string, JsonValue>, property: string): string | null => {
+const readStringProperty = (value: Record<string, unknown>, property: string): string | null => {
   const raw = value[property];
   return hasRuntimeType(raw, "string") && raw.trim().length > 0 ? raw.trim() : null;
 };
@@ -127,7 +127,7 @@ const timeoutMcpProbeResult = (detail: string): RuntimeMcpStatusProbeResult => (
   failureKind: "timeout",
 });
 
-const parseToolIds = (payload: JsonValue | undefined) => {
+const parseToolIds = (payload: unknown) => {
   if (!Array.isArray(payload)) {
     return Effect.fail(
       new HostValidationError({

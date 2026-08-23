@@ -32,7 +32,7 @@ const createCleanupHarness = ({
 }: CleanupHarnessInput) => {
   const calls: string[] = [];
   let resolvedPathIndex = 0;
-  const gitPort = createFocusedTestService<GitPort>({
+  const gitPort = createFocusedTestService<GitPort>()({
     isRegisteredWorktree(repoPath: string, worktreePath: string) {
       return Effect.sync(() => {
         calls.push(`isRegisteredWorktree:${repoPath}|${worktreePath}`);
@@ -54,10 +54,17 @@ const createCleanupHarness = ({
       });
     },
   });
-  const settingsConfig = createFocusedTestService<SettingsConfigPort>({
-    join: (...paths: string[]) => paths.join("/"),
+  const settingsConfig = createFocusedTestService<SettingsConfigPort>()({
+    canonicalizePath: () => Effect.die("canonicalizePath is not used with a managed root"),
+    defaultWorktreeBasePath: () => {
+      throw new Error("defaultWorktreeBasePath is not used with a managed root");
+    },
     pathExists: () =>
       Effect.sync(() => (hasRuntimeType(pathExists, "function") ? pathExists() : pathExists)),
+    readConfig: () => Effect.die("readConfig is not used with a managed root"),
+    resolveConfiguredPath: () => {
+      throw new Error("resolveConfiguredPath is not used with a managed root");
+    },
   });
   const worktreeFiles: WorktreeFilePort = {
     ensureDirectory: () => Effect.void,

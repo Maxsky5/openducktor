@@ -108,6 +108,14 @@ tester.run("anti-slop/no-known-value-widening", noKnownValueWideningRule, {
 			code: `${prelude} type Index<T = Command> = Record<string, T>; const commands: Index = { start: startCommand };`,
 			errors: [error],
 		},
+		{
+			code: `${prelude} interface CommandsContract extends Record<string, Command> {} const commands: CommandsContract = { start: startCommand };`,
+			errors: [error],
+		},
+		{
+			code: `${prelude} type Open = Record<string, Command>; interface CommandsContract extends Open {} const commands: CommandsContract = { start: startCommand };`,
+			errors: [error],
+		},
 		{ code: "const value: unknown = 1;", errors: [error] },
 		{ code: "const value: object = [];", errors: [error] },
 		{ code: "const value = { answer: 42 } satisfies unknown;", errors: [error] },

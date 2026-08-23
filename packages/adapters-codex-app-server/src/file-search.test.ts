@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import { searchCodexFiles } from "./file-search";
 import type { CodexAppServerClient } from "./types";
 
 // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
 const createClient = (
-  response: JsonValue | undefined,
+  response: CodexAppServerJsonValue | undefined,
   calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }>,
 ): CodexAppServerClient =>
   ({

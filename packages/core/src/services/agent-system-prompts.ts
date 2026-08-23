@@ -1,4 +1,5 @@
 import {
+  agentPromptTemplateIdValues,
   type AgentPromptTemplateId,
   type GitTargetBranch,
   type RepoPromptOverrides,
@@ -9,13 +10,6 @@ import {
   type AgentRole,
   type AgentToolName,
 } from "../types/agent-orchestrator";
-
-interface TOOLARGSPECContract extends Record<AgentToolName, string> {}
-
-interface AGENTPROMPTDEFINITIONSContract extends Record<
-  AgentPromptTemplateId,
-  AgentPromptTemplateDefinition
-> {}
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -121,7 +115,7 @@ export type BuiltAgentPrompt = {
   warnings: AgentPromptWarning[];
 };
 
-const TOOL_ARG_SPEC: TOOLARGSPECContract = {
+const TOOL_ARG_SPEC = {
   odt_read_task: `odt_read_task({"taskId": string})`,
   odt_read_task_assets: `odt_read_task_assets({"taskId": string, "assetIds": string[]})`,
   odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
@@ -133,7 +127,7 @@ const TOOL_ARG_SPEC: TOOLARGSPECContract = {
   odt_set_pull_request: `odt_set_pull_request({"taskId": string, "providerId": "github", "number": number})`,
   odt_qa_approved: `odt_qa_approved({"taskId": string, "reportMarkdown": string})`,
   odt_qa_rejected: `odt_qa_rejected({"taskId": string, "reportMarkdown": string})`,
-};
+} satisfies Record<AgentToolName, string>;
 
 const joinPromptBlocks = (...blocks: string[]): string => {
   return blocks
@@ -150,7 +144,7 @@ const lineSection = (title: string, lines: string[]): string => {
   return `${title}:\n${lines.join("\n")}`;
 };
 
-const AGENT_PROMPT_DEFINITIONS: AGENTPROMPTDEFINITIONSContract = {
+const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
@@ -533,7 +527,7 @@ const AGENT_PROMPT_DEFINITIONS: AGENTPROMPTDEFINITIONSContract = {
     template:
       "Rejected by OpenDucktor {{role}} read-only policy: this role cannot use mutating tools in this session.",
   },
-};
+} satisfies Record<AgentPromptTemplateId, AgentPromptTemplateDefinition>;
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
@@ -856,14 +850,11 @@ export const mergePromptOverrides = ({
   repoOverrides,
 }: MergePromptOverridesInput): RepoPromptOverrides => {
   const result: RepoPromptOverrides = {};
-  const keys = new Set([
-    ...Object.keys(globalOverrides ?? {}),
-    ...Object.keys(repoOverrides ?? {}),
-  ]);
+  const keys = agentPromptTemplateIdValues.filter(
+    (templateId) => globalOverrides?.[templateId] || repoOverrides?.[templateId],
+  );
 
-  for (const key of keys) {
-    // SAFETY: The surrounding boundary constructs or validates every member required by `AgentPromptTemplateId`.
-    const templateId = key as AgentPromptTemplateId;
+  for (const templateId of keys) {
     const repoOverride = repoOverrides?.[templateId];
     if (repoOverride) {
       if (repoOverride.enabled !== false) {

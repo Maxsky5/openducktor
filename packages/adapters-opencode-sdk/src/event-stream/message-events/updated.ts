@@ -113,11 +113,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
         continue;
       }
 
-      const normalizedPart = normalizeMessagePart(
-        rawPartRecord,
-        messageId,
-        runtime.externalSessionId,
-      );
+      const normalizedPart = normalizeMessagePart(rawPartRecord);
       const partWithPendingDelta = applyPendingDeltas(runtime, rawPartId, normalizedPart);
 
       setMessagePart(runtime.session, partWithPendingDelta);

@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
 import type { IpcMainInvokeEvent } from "electron";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 
@@ -11,10 +10,8 @@ const request = {
   args: { repoPath: "/workspace" },
 };
 
-type ElectronHostInvokeHandler = (
-  event: IpcMainInvokeEvent,
-  request: JsonValue | undefined,
-) => Promise<JsonValue>;
+type ElectronIpcMainLike = Parameters<typeof registerElectronHostInvokeHandler>[0];
+type ElectronHostInvokeHandler = Parameters<ElectronIpcMainLike["handle"]>[1];
 
 const createRegisteredHandler = () => {
   let channel: string | undefined;

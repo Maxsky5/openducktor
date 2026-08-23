@@ -13,8 +13,6 @@ import {
   upsertSessionMessage,
 } from "./messages";
 
-interface SUBAGENTSTATUSPRECEDENCEContract extends Record<SubagentMeta["status"], number> {}
-
 export type SubagentMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
 export type SubagentMessage = AgentChatMessage & {
   role: "system";
@@ -33,13 +31,13 @@ export const isSubagentMessage = (
   return message?.role === "system" && message.meta?.kind === "subagent";
 };
 
-const SUBAGENT_STATUS_PRECEDENCE: SUBAGENTSTATUSPRECEDENCEContract = {
+const SUBAGENT_STATUS_PRECEDENCE = {
   pending: 0,
   running: 1,
   completed: 2,
   cancelled: 3,
   error: 4,
-};
+} satisfies Record<SubagentMeta["status"], number>;
 
 const resolveSubagentStatus = (
   existingStatus: SubagentMeta["status"] | undefined,

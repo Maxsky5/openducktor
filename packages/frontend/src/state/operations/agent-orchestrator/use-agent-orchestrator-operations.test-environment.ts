@@ -28,22 +28,21 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   host.taskWorktreeGet = async () => ({
     workingDirectory: "/tmp/repo/worktree",
   });
-  // SAFETY: The surrounding boundary constructs or validates every member required by `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>`.
-  host.workspaceGetRepoConfig = async () =>
-    ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+  const repoConfig: Awaited<ReturnType<typeof host.workspaceGetRepoConfig>> = {
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath: "/tmp/repo",
+    defaultRuntimeKind: "opencode",
+    branchPrefix: "odt",
+    defaultTargetBranch: { remote: "origin", branch: "main" },
+    git: { providers: {} },
+    hooks: { preStart: [], postComplete: [] },
+    devServers: [],
+    worktreeCopyPaths: [],
+    promptOverrides: {},
+    agentDefaults: {},
+  };
+  host.workspaceGetRepoConfig = async () => repoConfig;
   host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   host.runtimeList = async () => [createWorktreeRuntimeFixture()];
   host.runtimeEnsure = async (repoPath, runtimeKind) => ({

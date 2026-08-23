@@ -5,9 +5,7 @@ import {
   type PullRequestReviewCheckConclusion,
   type PullRequestReviewCheckStatus,
   type PullRequestReviewContext,
-  type JsonValue,
   pullRequestReviewContextSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { combinedCommandOutput } from "../../../application/tasks/support/github-pull-request-model";
@@ -45,8 +43,8 @@ const isNoChecksReported = (result: {
   result.stdout.trim().length === 0 &&
   result.stderr.toLowerCase().includes("no checks reported");
 
-const normalizeCheckStatus = (state: JsonValue | undefined): PullRequestReviewCheckStatus => {
-  const normalized = hasRuntimeType(state, "string") ? state.trim().toLowerCase() : "";
+const normalizeCheckStatus = (state: string | null): PullRequestReviewCheckStatus => {
+  const normalized = state?.trim().toLowerCase() ?? "";
   if (
     normalized.includes("queued") ||
     normalized.includes("pending") ||
@@ -64,15 +62,10 @@ const normalizeCheckStatus = (state: JsonValue | undefined): PullRequestReviewCh
 };
 
 const normalizeCheckConclusion = (
-  bucket: JsonValue | undefined,
-  state: JsonValue | undefined,
+  bucket: string | null,
+  state: string | null,
 ): PullRequestReviewCheckConclusion | null => {
-  const value =
-    hasRuntimeType(bucket, "string") && bucket.trim().length > 0
-      ? bucket.trim().toLowerCase()
-      : hasRuntimeType(state, "string")
-        ? state.trim().toLowerCase()
-        : "";
+  const value = bucket?.trim().toLowerCase() || state?.trim().toLowerCase() || "";
   if (!value || value === "pending" || value === "queued" || value === "in_progress") {
     return null;
   }
@@ -110,11 +103,12 @@ const parseChecks = (payload: string): PullRequestReviewCheck[] => {
   }
   return parsed.map((entry, index) => {
     const check = requireGithubObject(entry, `checks.${index}`);
+    const state = toNullableGithubString(check.state);
     return {
       name: requireGithubString(check.name, `checks.${index}.name`),
       workflow: toNullableGithubString(check.workflow),
-      status: normalizeCheckStatus(check.state),
-      conclusion: normalizeCheckConclusion(check.bucket, check.state),
+      status: normalizeCheckStatus(state),
+      conclusion: normalizeCheckConclusion(toNullableGithubString(check.bucket), state),
       url: toNullableGithubString(check.link),
       details: toNullableGithubString(check.description) ?? toNullableGithubString(check.event),
       startedAt: toNullableGithubString(check.startedAt),

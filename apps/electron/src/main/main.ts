@@ -5,7 +5,6 @@ import {
   type AppUpdateOperation,
   type AppUpdateState,
   HOST_EVENT_CHANNELS,
-  type JsonValue,
   appPlatformSchema,
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
@@ -570,7 +569,12 @@ const resolveLocalAttachmentPathForPreviewEffect = (
           });
         }),
       );
-    if (!hasRuntimeType(resolved, "object") || resolved === null || !("path" in resolved)) {
+    if (
+      !hasRuntimeType(resolved, "object") ||
+      resolved === null ||
+      !("path" in resolved) ||
+      !hasRuntimeType(resolved.path, "string")
+    ) {
       return yield* Effect.fail(
         new ElectronValidationError({
           operation: "electron.preview.resolve-host-path",
@@ -601,9 +605,7 @@ const resolveLocalAttachmentPathForPreview = (
 ): Promise<string> =>
   runElectronEffect(resolveLocalAttachmentPathForPreviewEffect(hostCommandRouter, filePath));
 
-const readElectronAppUpdateCheckInput = (
-  input: JsonValue | undefined,
-): ElectronAppUpdateCheckInput => {
+const readElectronAppUpdateCheckInput = (input: unknown): ElectronAppUpdateCheckInput => {
   const parsed = appUpdateCheckInputSchema.safeParse(input);
   if (parsed.success) {
     return parsed.data;
@@ -691,16 +693,13 @@ const registerIpcHandlers = (
     await runElectronEffect(openExternalUrlEffect(url));
   });
 
-  ipcMain.handle(
-    ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
-    async (_event, filePath: JsonValue | undefined) => {
-      const resolvedPath = await resolveLocalAttachmentPathForPreview(
-        hostCommandRouter,
-        readLocalAttachmentPreviewPath(filePath),
-      );
-      return createElectronLocalAttachmentPreviewUrl(resolvedPath);
-    },
-  );
+  ipcMain.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL, async (_event, filePath: string) => {
+    const resolvedPath = await resolveLocalAttachmentPathForPreview(
+      hostCommandRouter,
+      readLocalAttachmentPreviewPath(filePath),
+    );
+    return createElectronLocalAttachmentPreviewUrl(resolvedPath);
+  });
 
   ipcMain.handle(ELECTRON_APP_UPDATE_GET_STATE_CHANNEL, () =>
     readAppUpdateStateForIpc(appUpdateService.getState()),
@@ -708,7 +707,7 @@ const registerIpcHandlers = (
 
   ipcMain.handle(
     ELECTRON_APP_UPDATE_CHECK_CHANNEL,
-    async (_event, input: JsonValue | undefined) => {
+    async (_event, input: ElectronAppUpdateCheckInput) => {
       let checkInput: ElectronAppUpdateCheckInput;
       try {
         checkInput = readElectronAppUpdateCheckInput(input);

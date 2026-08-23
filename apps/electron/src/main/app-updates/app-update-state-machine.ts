@@ -5,7 +5,6 @@ import type {
   AppUpdateOperation,
   AppUpdateState,
 } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
 
 type DisabledAppUpdateState = Extract<AppUpdateState, { status: "disabled" }>;
 type DownloadingAppUpdateState = Extract<AppUpdateState, { status: "downloading" }>;
@@ -39,7 +38,7 @@ export const createUpdateError = ({
 }: {
   cause?: unknown;
   code: AppUpdateErrorCode;
-  details?: Record<string, JsonValue>;
+  details?: Record<string, unknown>;
   message: string;
   operation: AppUpdateOperation;
 }): AppUpdateError => {

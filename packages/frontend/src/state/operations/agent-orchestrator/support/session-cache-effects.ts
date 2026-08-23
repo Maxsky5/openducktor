@@ -7,11 +7,6 @@ import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 import { requireWorkspaceRepoPath } from "./session-invariants";
 
-interface CacheRefreshFailureTitlesContract extends Record<
-  SessionCacheRefreshFailure["operation"],
-  string
-> {}
-
 type SessionCacheRefreshFailure = {
   operation: "delete" | "save";
   repoPath: string;
@@ -39,10 +34,10 @@ export const sessionCacheRefreshFailureDescription = ({
   error: unknown;
 }): string => `${repoPath} · ${taskId}: ${errorMessage(error)}`;
 
-const cacheRefreshFailureTitles: CacheRefreshFailureTitlesContract = {
+const cacheRefreshFailureTitles = {
   delete: "Session deleted, but metadata refresh failed",
   save: "Session saved, but metadata refresh failed",
-};
+} satisfies Record<SessionCacheRefreshFailure["operation"], string>;
 
 const reportDefaultCacheRefreshFailure = (failure: SessionCacheRefreshFailure): void => {
   toast.error(cacheRefreshFailureTitles[failure.operation], {

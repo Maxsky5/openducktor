@@ -19,8 +19,10 @@ import type { EventStreamSubscriber, OpencodeEventLogger } from "./types";
 
 type ProcessOpencodeEventInput = ProjectOpencodeAgentSessionEventInput;
 
+type GlobalEventClient = Pick<OpencodeClient, "global">;
+
 type SubscribeGlobalEventsInput = {
-  client: OpencodeClient;
+  client: GlobalEventClient;
   controller: AbortController;
   onEvent: (event: Event) => void | Promise<void>;
   onEventError?: (cause: unknown, scope: OpencodeGlobalEventFailureScope) => void | Promise<void>;
@@ -56,20 +58,18 @@ type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
 
-const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `OpencodeClient & { global?: { event?: unknown } }`.
-  const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
-  if (!globalApi || !hasRuntimeType(globalApi.event, "function")) {
+const getGlobalEventApi = (client: GlobalEventClient): GlobalEventApi => {
+  const globalApi = client.global;
+  if (!hasRuntimeType(globalApi.event, "function")) {
     throw new Error(
       "OpenCode SDK does not expose global event streaming via client.global.event(). Update @opencode-ai/sdk before using the adapter.",
     );
   }
-  // SAFETY: The preceding runtime guard establishes `GlobalEventApi` before this assertion.
-  return globalApi as GlobalEventApi;
+  return globalApi;
 };
 
 const resolveGlobalEventStream = async (
-  client: OpencodeClient,
+  client: GlobalEventClient,
   signal: AbortSignal,
 ): Promise<AsyncIterable<OpencodeGlobalEvent>> => {
   const stream = await getGlobalEventApi(client).event({ signal });
@@ -150,7 +150,7 @@ export const logStreamEvent = ({ subscriber, event, relevant, logEvent }: LogEve
   });
 };
 
-export const assertGlobalEventSupport = (client: OpencodeClient): void => {
+export const assertGlobalEventSupport = (client: GlobalEventClient): void => {
   void getGlobalEventApi(client);
 };
 

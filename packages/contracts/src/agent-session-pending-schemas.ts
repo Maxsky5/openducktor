@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { exactOptionalSchema } from "./exact-optional";
 
 const agentSessionQuestionOptionSchema = z
   .object({
@@ -7,24 +8,16 @@ const agentSessionQuestionOptionSchema = z
   })
   .strict();
 
-export type AgentTranscriptQuestionItem = {
-  header: string;
-  question: string;
-  options: Array<{ label: string; description: string }>;
-  multiple?: boolean;
-  custom?: boolean;
-};
+export const agentSessionQuestionItemSchema = exactOptionalSchema(
+  z
+    .object({
+      header: z.string(),
+      question: z.string(),
+      options: z.array(agentSessionQuestionOptionSchema),
+      multiple: z.boolean().optional(),
+      custom: z.boolean().optional(),
+    })
+    .strict(),
+);
 
-const inferredAgentSessionQuestionItemSchema = z
-  .object({
-    header: z.string(),
-    question: z.string(),
-    options: z.array(agentSessionQuestionOptionSchema),
-    multiple: z.boolean().optional(),
-    custom: z.boolean().optional(),
-  })
-  .strict();
-
-// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptQuestionItem>`.
-export const agentSessionQuestionItemSchema =
-  inferredAgentSessionQuestionItemSchema as z.ZodType<AgentTranscriptQuestionItem>;
+export type AgentTranscriptQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;

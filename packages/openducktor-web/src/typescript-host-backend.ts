@@ -29,6 +29,8 @@ import {
   errorMessage,
   runWebBoundary,
   toWebOperationError,
+  type WebErrorDetails,
+  type WebErrorDetailValue,
   WebHostRequestError,
   WebOperationError,
 } from "./effect/web-errors";
@@ -177,13 +179,13 @@ const tryUpgradeTerminalWebSocket = ({
   };
 };
 
-const jsonResponseBody = (payload: JsonValue | undefined): string => {
+const jsonResponseBody = (payload: JsonValue): string => {
   const serialized = JSON.stringify(payload);
   return serialized === undefined ? "null" : serialized;
 };
 
 const jsonResponse = (
-  payload: JsonValue | undefined,
+  payload: JsonValue,
   init: ResponseInit = {},
   corsHeaders?: HeadersInit,
 ): Response =>
@@ -255,23 +257,40 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isCauseRecord = (cause: unknown): cause is Record<string, JsonValue> =>
+const isCauseRecord = (cause: unknown): cause is Record<string, unknown> =>
   typeof cause === "object" && cause !== null && !Array.isArray(cause);
 
-const readCauseProperty = (cause: unknown, property: string): JsonValue | undefined =>
-  isCauseRecord(cause) ? cause[property] : undefined;
-
-const readValidFailureKind = (value: JsonValue | undefined): string | undefined => {
+const readValidFailureKind = (value: unknown): string | undefined => {
   const parsed = failureKindSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 };
 
-const readCauseStructuredDetails = (cause: unknown): Record<string, JsonValue> | undefined => {
-  const details = readCauseProperty(cause, "details");
-  return isJsonRecord(details) ? details : undefined;
+const isWebErrorDetailValue = (value: unknown): value is WebErrorDetailValue => {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value instanceof Error
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isWebErrorDetailValue);
+  }
+  return isJsonRecord(value) && Object.values(value).every(isWebErrorDetailValue);
+};
+
+const isWebErrorDetails = (value: unknown): value is WebErrorDetails =>
+  isJsonRecord(value) && Object.values(value).every(isWebErrorDetailValue);
+
+const readCauseStructuredDetails = (cause: unknown): WebErrorDetails | undefined => {
+  const details = isCauseRecord(cause) ? cause.details : undefined;
+  return isWebErrorDetails(details) ? details : undefined;
 };
 
 const extractHostCommandFailureKind = (
@@ -286,18 +305,18 @@ const extractHostCommandFailureKind = (
   }
   visited.add(cause);
 
-  const direct = readValidFailureKind(readCauseProperty(cause, "failureKind"));
+  const direct = readValidFailureKind(cause.failureKind);
   if (direct) {
     return direct;
   }
 
   const details = readCauseStructuredDetails(cause);
-  const detailsFailureKind = readValidFailureKind(readCauseProperty(details, "failureKind"));
+  const detailsFailureKind = readValidFailureKind(details?.failureKind);
   if (detailsFailureKind) {
     return detailsFailureKind;
   }
 
-  return extractHostCommandFailureKind(readCauseProperty(cause, "cause"), visited);
+  return extractHostCommandFailureKind(cause.cause, visited);
 };
 
 const hostCommandFailureToWebError = (command: string, cause: unknown): WebHostRequestError => {
@@ -495,12 +514,11 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const isJsonObject = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
-  isJsonRecord(value);
+const isJsonObject = (value: unknown): value is Record<string, unknown> => isJsonRecord(value);
 
 const parseJsonObjectBody = (
   request: Request,
-): Effect.Effect<Record<string, JsonValue>, WebHostRequestError> =>
+): Effect.Effect<Record<string, unknown>, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed: JsonValue = yield* Effect.tryPromise({
       try: async () => {

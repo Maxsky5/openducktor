@@ -1,13 +1,17 @@
-import { hasRuntimeType, jsonValueSchema, runtimeTypeName } from "@openducktor/contracts";
+import {
+  hasRuntimeType,
+  isJsonObject,
+  type JsonObject,
+  type JsonValue,
+  jsonValueSchema,
+  runtimeTypeName,
+} from "@openducktor/contracts";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
 
-export type GithubPayloadObject = Record<string, JsonValue>;
+export type GithubPayloadObject = JsonObject;
+export type GithubPayloadValue = JsonValue | undefined;
 
-const isGithubPayloadObject = (value: JsonValue | undefined): value is GithubPayloadObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const githubPayloadValueType = (value: JsonValue | undefined): string => {
+const githubPayloadValueType = (value: GithubPayloadValue): string => {
   if (value === null) {
     return "null";
   }
@@ -30,10 +34,10 @@ export const parseGithubJson = (payload: string, responseLabel: string): JsonVal
 };
 
 export const requireGithubObject = (
-  value: JsonValue | undefined,
+  value: GithubPayloadValue,
   field: string,
 ): GithubPayloadObject => {
-  if (!isGithubPayloadObject(value)) {
+  if (value === undefined || !isJsonObject(value)) {
     throw new HostValidationError({
       field,
       message: `GitHub pull request review field '${field}' is missing or invalid.`,
@@ -49,7 +53,7 @@ export const parseGithubJsonObject = (
 ): GithubPayloadObject => requireGithubObject(parseGithubJson(payload, responseLabel), "payload");
 
 export const toNullableGithubObject = (
-  value: JsonValue | undefined,
+  value: GithubPayloadValue,
   field: string,
 ): GithubPayloadObject | null => {
   if (value === null || value === undefined) {
@@ -58,10 +62,10 @@ export const toNullableGithubObject = (
   return requireGithubObject(value, field);
 };
 
-export const toNullableGithubString = (value: JsonValue | undefined): string | null =>
+export const toNullableGithubString = (value: GithubPayloadValue): string | null =>
   hasRuntimeType(value, "string") && value.trim().length > 0 ? value : null;
 
-export const requireGithubString = (value: JsonValue | undefined, field: string): string => {
+export const requireGithubString = (value: GithubPayloadValue, field: string): string => {
   const parsed = toNullableGithubString(value);
   if (!parsed) {
     throw new HostValidationError({
@@ -72,7 +76,7 @@ export const requireGithubString = (value: JsonValue | undefined, field: string)
   return parsed;
 };
 
-export const requireGithubBoolean = (value: JsonValue | undefined, field: string): boolean => {
+export const requireGithubBoolean = (value: GithubPayloadValue, field: string): boolean => {
   if (!hasRuntimeType(value, "boolean")) {
     throw new HostValidationError({
       field,
@@ -83,7 +87,7 @@ export const requireGithubBoolean = (value: JsonValue | undefined, field: string
 };
 
 export const parseGithubNextPageCursor = (
-  pageInfoValue: JsonValue | undefined,
+  pageInfoValue: GithubPayloadValue,
   field: string,
 ): string | null => {
   const pageInfo = requireGithubObject(pageInfoValue, field);

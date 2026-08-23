@@ -1,76 +1,12 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import type { AgentUserMessagePart } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
-import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
 import { utf8ByteLength } from "./codex-user-input-display";
-import type { CodexTextElement, CodexUserInput } from "./types";
+import type { CodexUserInput } from "./types";
 
-const codexTextElementFromUnknown = (entry: JsonValue | undefined): CodexTextElement | null => {
-  if (!isPlainObject(entry)) {
-    return null;
-  }
-  const byteRange = entry.byteRange ?? entry.byte_range;
-  if (!isPlainObject(byteRange)) {
-    return null;
-  }
-  const start = byteRange.start;
-  const end = byteRange.end;
-  if (
-    !hasRuntimeType(start, "number") ||
-    !hasRuntimeType(end, "number") ||
-    !Number.isFinite(start) ||
-    !Number.isFinite(end)
-  ) {
-    return null;
-  }
-  const placeholder = entry.placeholder;
-  return {
-    byteRange: { start, end },
-    placeholder: hasRuntimeType(placeholder, "string") ? placeholder : null,
-  };
-};
+type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
 
-const codexTextElementsFromUnknown = (value: JsonValue | undefined): CodexTextElement[] =>
-  arrayFromUnknown(value)
-    .map(codexTextElementFromUnknown)
-    .filter((entry): entry is CodexTextElement => Boolean(entry));
-
-const codexUserInputFromUnknown = (entry: JsonValue | undefined): CodexUserInput | null => {
-  if (!isPlainObject(entry)) {
-    return null;
-  }
-  if (entry.type === "text" && hasRuntimeType(entry.text, "string")) {
-    return {
-      type: "text",
-      text: entry.text,
-      text_elements: codexTextElementsFromUnknown(entry.text_elements ?? entry.textElements ?? []),
-    };
-  }
-  if (
-    entry.type === "mention" &&
-    hasRuntimeType(entry.name, "string") &&
-    hasRuntimeType(entry.path, "string")
-  ) {
-    return { type: "mention", name: entry.name, path: entry.path };
-  }
-  if (
-    entry.type === "skill" &&
-    hasRuntimeType(entry.name, "string") &&
-    hasRuntimeType(entry.path, "string")
-  ) {
-    return { type: "skill", name: entry.name, path: entry.path };
-  }
-  if (entry.type === "localImage" && hasRuntimeType(entry.path, "string")) {
-    return { type: "localImage", path: entry.path };
-  }
-  return null;
-};
-
-export const codexUserInputsFromItem = (item: Record<string, JsonValue>): CodexUserInput[] => {
-  return arrayFromUnknown(item.content)
-    .map(codexUserInputFromUnknown)
-    .filter((entry): entry is CodexUserInput => Boolean(entry));
-};
+export const codexUserInputsFromItem = (item: CodexUserMessageItem): CodexUserInput[] =>
+  item.content;
 
 const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "text") {

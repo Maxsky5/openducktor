@@ -1,40 +1,37 @@
-import type {
-  CanUseTool,
-  HookInput,
-  SDKMessage,
-  SessionStoreEntry,
-} from "@anthropic-ai/claude-agent-sdk";
-import type { JsonValue } from "@openducktor/contracts";
+import type { HookInput, SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import { type JsonObject, jsonValueSchema } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 import { z } from "zod";
 
-const claudeJsonValueSchema = z.json();
+const claudeUnknownValueSchema = z.unknown();
 
 type ClaudeSdkUserMessage = Extract<SDKMessage, { type: "user" }>;
 
-const claudeJsonRecordSchema = z.object({}).catchall(claudeJsonValueSchema);
+const claudeUnknownRecordSchema = z.object({}).catchall(claudeUnknownValueSchema);
+const claudePlainUnknownRecordSchema = z.record(z.string(), claudeUnknownValueSchema);
+const claudeCanonicalJsonObjectSchema = z.record(z.string(), jsonValueSchema);
 
 const claudeToolHookSchema = z.object({
   agent_id: z.string().min(1).optional(),
-  tool_input: claudeJsonRecordSchema,
+  tool_input: claudeCanonicalJsonObjectSchema,
   tool_name: z.string().min(1),
   tool_use_id: z.string().min(1),
 });
 
-const claudeContentBlockSchema = claudeJsonRecordSchema.extend({
+const claudeContentBlockSchema = claudeUnknownRecordSchema.extend({
   type: z.string().min(1),
 });
 
-const claudeUserMessagePayloadSchema = claudeJsonRecordSchema.extend({
+const claudeUserMessagePayloadSchema = claudeUnknownRecordSchema.extend({
   content: z.union([z.string(), z.array(claudeContentBlockSchema)]),
 });
 
 const claudeToolResultBlockSchema = z.discriminatedUnion("type", [
-  claudeJsonRecordSchema.extend({
+  claudeUnknownRecordSchema.extend({
     tool_use_id: z.string().min(1),
     type: z.literal("tool_result"),
   }),
-  claudeJsonRecordSchema.extend({
+  claudeUnknownRecordSchema.extend({
     tool_use_id: z.string().min(1),
     type: z.literal("mcp_tool_result"),
   }),
@@ -52,15 +49,15 @@ const claudeUserToolResultContentBlockSchema = z.union([
   claudeNonToolResultContentBlockSchema.transform((raw) => ({ kind: "content" as const, raw })),
 ]);
 
-const claudeUserToolResultMessagePayloadSchema = claudeJsonRecordSchema.extend({
+const claudeUserToolResultMessagePayloadSchema = claudeUnknownRecordSchema.extend({
   content: z.union([z.string(), z.array(claudeUserToolResultContentBlockSchema)]),
 });
 
-const claudeUserTurnOriginSchema = claudeJsonRecordSchema.extend({
+const claudeUserTurnOriginSchema = claudeUnknownRecordSchema.extend({
   kind: z.string().min(1),
 });
 
-const claudeStructuredToolUseResultSchema = claudeJsonRecordSchema.extend({
+const claudeStructuredToolUseResultSchema = claudeUnknownRecordSchema.extend({
   type: z
     .string()
     .min(1)
@@ -76,27 +73,27 @@ const claudeTopLevelToolUseResultSchema = z.union([
   })),
 ]);
 
-const claudeAssistantMessagePayloadSchema = claudeJsonRecordSchema.extend({
+const claudeAssistantMessagePayloadSchema = claudeUnknownRecordSchema.extend({
   content: z.array(claudeContentBlockSchema),
 });
 
-const claudeHistoryConversationEntrySchema = claudeJsonRecordSchema.extend({
+const claudeHistoryConversationEntrySchema = claudeUnknownRecordSchema.extend({
   message: claudeUserMessagePayloadSchema,
 });
 
-const claudeHistoryAssistantEntrySchema = claudeJsonRecordSchema.extend({
+const claudeHistoryAssistantEntrySchema = claudeUnknownRecordSchema.extend({
   message: claudeAssistantMessagePayloadSchema,
 });
 
-const claudeHistoryAttachmentSchema = claudeJsonRecordSchema.extend({
+const claudeHistoryAttachmentSchema = claudeUnknownRecordSchema.extend({
   isMeta: z.boolean().optional(),
   prompt: z.string().optional(),
   timestamp: z.string().optional(),
   type: z.string().min(1),
 });
 
-const claudeHistoryAttachmentEntrySchema = claudeJsonRecordSchema.extend({
-  attachment: claudeJsonValueSchema,
+const claudeHistoryAttachmentEntrySchema = claudeUnknownRecordSchema.extend({
+  attachment: claudeUnknownValueSchema,
 });
 
 const claudeMetaQueuedCommandAttachmentSchema = claudeHistoryAttachmentSchema.extend({
@@ -105,7 +102,7 @@ const claudeMetaQueuedCommandAttachmentSchema = claudeHistoryAttachmentSchema.ex
   type: z.literal("queued_command"),
 });
 
-export const claudeHistoryStoreEntrySchema = claudeJsonRecordSchema.extend({
+export const claudeHistoryStoreEntrySchema = claudeUnknownRecordSchema.extend({
   timestamp: z.string().optional(),
   type: z.string().min(1),
   uuid: z.string().optional(),
@@ -118,7 +115,7 @@ export const claudePreToolUseIngressSchema = claudeToolHookSchema.extend({
 const claudePostToolUseSuccessIngressSchema = claudeToolHookSchema.extend({
   duration_ms: z.number().finite().nonnegative().optional(),
   hook_event_name: z.literal("PostToolUse"),
-  tool_response: claudeJsonValueSchema,
+  tool_response: claudeUnknownValueSchema,
 });
 
 const claudePostToolUseFailureIngressSchema = claudeToolHookSchema.extend({
@@ -132,7 +129,7 @@ export const claudePostToolUseIngressSchema = z.discriminatedUnion("hook_event_n
   claudePostToolUseFailureIngressSchema,
 ]);
 
-export const claudeUserToolResultIngressSchema = claudeJsonRecordSchema.extend({
+export const claudeUserToolResultIngressSchema = claudeUnknownRecordSchema.extend({
   message: claudeUserToolResultMessagePayloadSchema,
   origin: claudeUserTurnOriginSchema.optional(),
   parent_tool_use_id: z.string().min(1).nullable().optional(),
@@ -207,15 +204,10 @@ export const parseClaudePostToolUseIngress = (value: HookInput): ClaudePostToolU
   parseClaudeIngress(claudePostToolUseIngressSchema, value, "claudePostToolUse");
 
 export const parseClaudeFileEditToolResponse = <Input>(value: Input) =>
-  parseClaudeIngress(claudeJsonRecordSchema, value, "claudeFileEditToolResponse");
+  parseClaudeIngress(claudePlainUnknownRecordSchema, value, "claudeFileEditToolResponse");
 
-export const parseClaudeJsonValue = <Input>(value: Input, field: string): JsonValue =>
-  parseClaudeIngress(claudeJsonValueSchema, value, field);
-
-export const parseClaudeJsonRecord = (
-  value: Parameters<CanUseTool>[1],
-  field: string,
-): Record<string, JsonValue> => parseClaudeIngress(claudeJsonRecordSchema, value, field);
+export const parseClaudeCanonicalJsonObject = <Input>(value: Input, field: string): JsonObject =>
+  parseClaudeIngress(claudeCanonicalJsonObjectSchema, value, field);
 
 export const parseClaudeUserToolResultIngress = (
   value: ClaudeSdkUserMessage,

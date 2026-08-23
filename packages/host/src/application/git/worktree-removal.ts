@@ -13,11 +13,24 @@ export type RemoveWorktreeAndFilesystemPathInput = {
   worktreePath: string;
 };
 export type RemoveWorktreeAndFilesystemPathDependencies = {
-  gitPort: GitPort;
-  settingsConfig: SettingsConfigPort;
-  worktreeFiles: WorktreeFilePort;
+  gitPort: Pick<GitPort, "isRegisteredWorktree" | "removeWorktree">;
+  settingsConfig: Pick<
+    SettingsConfigPort,
+    | "canonicalizePath"
+    | "defaultWorktreeBasePath"
+    | "pathExists"
+    | "readConfig"
+    | "resolveConfiguredPath"
+  >;
+  worktreeFiles: Pick<
+    WorktreeFilePort,
+    "pathIsWithinRoot" | "removePathIfPresent" | "resolvePathWithinRoot" | "resolveWorktreePath"
+  >;
 };
-const managedWorktreeBasePath = (settingsConfig: SettingsConfigPort, canonicalRepoPath: string) =>
+const managedWorktreeBasePath = (
+  settingsConfig: RemoveWorktreeAndFilesystemPathDependencies["settingsConfig"],
+  canonicalRepoPath: string,
+) =>
   Effect.map(findRepoConfigByPath(settingsConfig, canonicalRepoPath), (repoConfig) =>
     repoConfig.worktreeBasePath !== undefined
       ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)

@@ -1,13 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { HostClient } from "@openducktor/host-client";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
+import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import { createClaudeRuntimeAdapter } from "./claude-runtime-adapter";
 
 describe("createClaudeRuntimeAdapter", () => {
   test("exposes the Claude runtime descriptor", () => {
     const adapter = createClaudeRuntimeAdapter({
-      hostClient: createFocusedFixture<HostClient>({}),
+      hostClient: createHostClientFixture({}),
     });
 
     expect(adapter.getRuntimeDefinition()).toBe(CLAUDE_RUNTIME_DESCRIPTOR);
@@ -20,7 +19,7 @@ describe("createClaudeRuntimeAdapter", () => {
     const listModels = mock(async () => models);
     const listSlashCommands = mock(async () => commands);
     const loadSessionHistory = mock(async () => history);
-    const hostClient = createFocusedFixture<HostClient>({
+    const hostClient = createHostClientFixture({
       claudeRuntimeListModels: listModels,
       claudeRuntimeListSlashCommands: listSlashCommands,
       claudeRuntimeLoadSessionHistory: loadSessionHistory,

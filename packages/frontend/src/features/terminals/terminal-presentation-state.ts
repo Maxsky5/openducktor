@@ -1,11 +1,6 @@
 import { arrayMove } from "@dnd-kit/sortable";
 import type { TerminalLifecycle, TerminalSummary } from "@openducktor/contracts";
 
-interface TerminalSummaryComparatorsContract extends Record<
-  keyof TerminalSummary,
-  TerminalSummaryComparator
-> {}
-
 type ReadyTerminalTab = {
   tabId: string;
   terminalId: string;
@@ -67,7 +62,7 @@ const terminalExitsEqual = (
 
 type TerminalSummaryComparator = (left: TerminalSummary, right: TerminalSummary) => boolean;
 
-const terminalSummaryComparators: TerminalSummaryComparatorsContract = {
+const terminalSummaryComparators = {
   terminalId: (left, right) => left.terminalId === right.terminalId,
   label: (left, right) => left.label === right.label,
   context: (left, right) => terminalContextsEqual(left.context, right.context),
@@ -75,7 +70,7 @@ const terminalSummaryComparators: TerminalSummaryComparatorsContract = {
   createdAt: (left, right) => left.createdAt === right.createdAt,
   lifecycle: (left, right) => left.lifecycle === right.lifecycle,
   exit: (left, right) => terminalExitsEqual(left.exit, right.exit),
-};
+} satisfies Record<keyof TerminalSummary, TerminalSummaryComparator>;
 
 const terminalSummaryFieldComparators = Object.values<TerminalSummaryComparator>(
   terminalSummaryComparators,

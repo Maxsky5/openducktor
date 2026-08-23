@@ -1,4 +1,4 @@
-import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
+import { hasOwnKey, LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import {
@@ -6,13 +6,7 @@ import {
   createComposerAttachment,
 } from "./agent-chat-composer-draft";
 
-interface ATTACHMENTEXTENSIONKINDContract extends Record<string, AgentAttachmentKind> {}
-
-interface ATTACHMENTEXTENSIONMIMEContract extends Record<string, string> {}
-
-interface ATTACHMENTKINDDEFAULTNAMEContract extends Record<AgentAttachmentKind, string> {}
-
-const ATTACHMENT_EXTENSION_KIND: ATTACHMENTEXTENSIONKINDContract = {
+const ATTACHMENT_EXTENSION_KIND = {
   ".avif": "image",
   ".png": "image",
   ".jpg": "image",
@@ -41,9 +35,9 @@ const ATTACHMENT_EXTENSION_KIND: ATTACHMENTEXTENSIONKINDContract = {
   ".mkv": "video",
   ".avi": "video",
   ".pdf": "pdf",
-};
+} satisfies Record<string, AgentAttachmentKind>;
 
-const ATTACHMENT_EXTENSION_MIME: ATTACHMENTEXTENSIONMIMEContract = {
+const ATTACHMENT_EXTENSION_MIME = {
   ".avif": "image/avif",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -72,7 +66,7 @@ const ATTACHMENT_EXTENSION_MIME: ATTACHMENTEXTENSIONMIMEContract = {
   ".mkv": "video/x-matroska",
   ".avi": "video/x-msvideo",
   ".pdf": "application/pdf",
-};
+} satisfies Record<string, string>;
 
 const ATTACHMENT_MIME_EXTENSION = Object.entries(ATTACHMENT_EXTENSION_MIME).reduce<
   Record<string, string>
@@ -81,12 +75,12 @@ const ATTACHMENT_MIME_EXTENSION = Object.entries(ATTACHMENT_EXTENSION_MIME).redu
   return acc;
 }, {});
 
-const ATTACHMENT_KIND_DEFAULT_NAME: ATTACHMENTKINDDEFAULTNAMEContract = {
+const ATTACHMENT_KIND_DEFAULT_NAME = {
   image: "pasted-image",
   audio: "pasted-audio",
   video: "pasted-video",
   pdf: "pasted-pdf",
-};
+} satisfies Record<AgentAttachmentKind, string>;
 
 const GENERIC_ATTACHMENT_DEFAULT_NAME = "pasted-attachment";
 
@@ -119,7 +113,10 @@ export const classifyAttachment = (input: {
     }
   }
 
-  return ATTACHMENT_EXTENSION_KIND[readFileExtension(input.name)] ?? null;
+  const extension = readFileExtension(input.name);
+  return hasOwnKey(ATTACHMENT_EXTENSION_KIND, extension)
+    ? ATTACHMENT_EXTENSION_KIND[extension]
+    : null;
 };
 
 const inferAttachmentMime = (name: string, mime?: string): string | undefined => {
@@ -127,7 +124,10 @@ const inferAttachmentMime = (name: string, mime?: string): string | undefined =>
   if (trimmedMime) {
     return trimmedMime;
   }
-  return ATTACHMENT_EXTENSION_MIME[readFileExtension(name)];
+  const extension = readFileExtension(name);
+  return hasOwnKey(ATTACHMENT_EXTENSION_MIME, extension)
+    ? ATTACHMENT_EXTENSION_MIME[extension]
+    : undefined;
 };
 
 const buildGeneratedAttachmentName = (kind: AgentAttachmentKind | null, mime?: string): string => {
@@ -239,7 +239,10 @@ const readAttachmentValidationError = (
     return null;
   }
 
-  const inferredMime = ATTACHMENT_EXTENSION_MIME[readFileExtension(attachment.name)];
+  const extension = readFileExtension(attachment.name);
+  const inferredMime = hasOwnKey(ATTACHMENT_EXTENSION_MIME, extension)
+    ? ATTACHMENT_EXTENSION_MIME[extension]
+    : undefined;
   if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
     return null;
   }

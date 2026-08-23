@@ -1,16 +1,19 @@
-export const createFocusedFixture = <Value extends object>(value: Partial<Value>): Value => {
-  const guardedValue = new Proxy(value, {
-    get(target, property) {
-      if (!(property in target)) {
-        throw new Error(`Focused test fixture does not implement '${String(property)}'.`);
-      }
-      // SAFETY: The property-existence check proves this key is present on the partial fixture.
-      return target[property as keyof Value];
-    },
-  });
-  // SAFETY: The proxy rejects every read of an omitted member, while Partial checks each supplied member.
-  return guardedValue as Value;
-};
+import { createHostClient, type HostClient } from "@openducktor/host-client";
+
+export const createFocusedFixture =
+  <Value extends object>() =>
+  <Fixture extends Partial<Value>>(fixture: Fixture): Fixture =>
+    fixture;
+
+export const createHostClientFixture = <Overrides extends Partial<HostClient>>(
+  overrides: Overrides,
+): HostClient =>
+  Object.assign(
+    createHostClient(async () => {
+      throw new Error("Host client method is not configured for this test.");
+    }),
+    overrides,
+  );
 
 export const createTimerFixture = (): ReturnType<typeof setTimeout> => {
   const timer = setTimeout(() => {}, 60_000);
@@ -47,3 +50,34 @@ export const createDataTransferItemListFixture = (
     clear: () => {},
     remove: () => {},
   });
+
+export const createDataTransferFixture = ({
+  files = createFileListFixture([]),
+  items = createDataTransferItemListFixture([]),
+  types = [],
+}: {
+  files?: FileList;
+  items?: DataTransferItemList;
+  types?: string[];
+} = {}): DataTransfer => {
+  const data = new Map<string, string>();
+  return {
+    dropEffect: "none",
+    effectAllowed: "uninitialized",
+    files,
+    items,
+    types,
+    clearData: (format) => {
+      if (format === undefined) {
+        data.clear();
+      } else {
+        data.delete(format);
+      }
+    },
+    getData: (format) => data.get(format) ?? "",
+    setData: (format, value) => {
+      data.set(format, value);
+    },
+    setDragImage: () => {},
+  };
+};

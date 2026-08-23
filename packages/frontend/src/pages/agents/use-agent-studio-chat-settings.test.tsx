@@ -6,7 +6,6 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 const actualHostOperationsModule = await import("@/state/operations/host");
 
@@ -51,7 +50,7 @@ const createSettingsSnapshot = ({
   expandFileDiffsByDefault?: boolean;
   includeExpandFileDiffsByDefault?: boolean;
   includeChat?: boolean;
-  chatOverrides?: Record<string, JsonValue>;
+  chatOverrides?: Record<string, unknown>;
 } = {}): SettingsSnapshot => {
   // SAFETY: This test controls the fixture and supplies `Omit<SettingsSnapshot, "chat"> & { chat?: unknown }` used by this case.
   const snapshot = createSettingsSnapshotFixture({

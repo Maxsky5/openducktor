@@ -2,14 +2,12 @@ import { Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 
-interface RuntimeLabelsContract extends Record<WorkspaceRuntimeKind, string> {}
-
 type WorkspaceRuntimeKind = "codex" | "opencode";
 
-const runtimeLabels: RuntimeLabelsContract = {
+const runtimeLabels = {
   codex: "Codex",
   opencode: "OpenCode",
-};
+} satisfies Record<WorkspaceRuntimeKind, string>;
 
 export const resolveWorkspaceRuntimeMcpBridgeConnection = (
   bridge: McpHostBridgeServer | undefined,

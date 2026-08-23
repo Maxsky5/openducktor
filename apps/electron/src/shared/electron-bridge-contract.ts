@@ -19,7 +19,6 @@ import {
 } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 import { z } from "zod";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
@@ -49,7 +48,7 @@ export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
 export type ElectronHostInvokeRequest = {
   command: string;
-  args?: Record<string, JsonValue>;
+  args?: Record<string, unknown>;
 };
 
 const electronHostInvokeResultWireSchema = z.discriminatedUnion("ok", [
@@ -143,7 +142,7 @@ export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   invoke(
     command: HostCommandName,
-    args?: Record<string, JsonValue>,
+    args?: Record<string, unknown>,
   ): Promise<ElectronHostInvokeResult>;
   subscribe<Channel extends HostEventChannel>(
     channel: Channel,

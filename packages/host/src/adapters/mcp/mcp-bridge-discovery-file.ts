@@ -10,7 +10,6 @@ import { resolveDevelopmentInstanceIdFromEnvironment } from "../../config/develo
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostValidationError } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type McpBridgeDiscoveryMode = "development" | "production";
 
@@ -48,8 +47,8 @@ const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDi
     });
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = parsed as Record<string, JsonValue>;
+  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
+  const record = parsed as Record<string, unknown>;
   if (!hasRuntimeType(record.hostUrl, "string") || record.hostUrl.trim().length === 0) {
     throw new HostValidationError({
       message: `Invalid MCP bridge discovery file at ${discoveryPath}: hostUrl must be a non-empty string.`,

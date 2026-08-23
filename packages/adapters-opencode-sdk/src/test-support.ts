@@ -1,11 +1,18 @@
-import type { JsonValue } from "@openducktor/contracts";
+import { hasRuntimeType } from "@openducktor/contracts";
 import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./index";
+import type { ParsedOpencodeMessage, ParsedOpencodeGlobalEventPayload } from "./opencode-ingress";
 import { buildQueuedRequestSignature } from "./user-message-signatures";
+import { asUnknownRecord, readStringProp } from "./guards";
+import {
+  createOpencodeEventFixtures,
+  createOpencodeMessageInfoFixture,
+  createOpencodePartFixture,
+} from "./opencode-protocol-test-fixtures";
 
 type OpencodePolicyBoundSessionRef = Extract<PolicyBoundSessionRef, { runtimeKind: "opencode" }>;
 type ClientMethodInput<
@@ -22,9 +29,35 @@ type MockSessionMessage = {
     id: string;
     role: "user" | "assistant";
     time: { created: number };
-    [key: string]: JsonValue;
+    [key: string]: unknown;
   };
   parts: Part[];
+};
+
+const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage => ({
+  info: createOpencodeMessageInfoFixture(message.info),
+  parts: message.parts.map((part) => {
+    const partRecord = asUnknownRecord(part);
+    if (!partRecord) {
+      throw new Error("Expected an OpenCode part fixture object.");
+    }
+    return createOpencodePartFixture(partRecord);
+  }),
+});
+
+export const completeMockEvent = (
+  event: Event,
+  index: number,
+): ParsedOpencodeGlobalEventPayload => {
+  const eventRecord = asUnknownRecord(event);
+  if (!eventRecord) {
+    throw new Error("Expected an OpenCode event fixture object.");
+  }
+  const fixtures = createOpencodeEventFixtures(eventRecord, index);
+  if (fixtures.length !== 1) {
+    throw new Error("Expected one OpenCode event fixture.");
+  }
+  return fixtures[0];
 };
 
 type MockChildSession = {
@@ -347,9 +380,16 @@ export const makeMockClient = ({
         session.getCalls.push(input);
         return {
           data: {
+            directory: defaultRuntimeConnection.workingDirectory,
             id: sessionId,
-            role: "assistant",
-            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+            projectID: "project-1",
+            slug: sessionId,
+            time: {
+              created: Date.parse("2026-02-17T12:00:00Z"),
+              updated: Date.parse("2026-02-17T12:00:00Z"),
+            },
+            title: "OpenDucktor test session",
+            version: "1.18.18",
           },
           error: undefined,
         };
@@ -369,7 +409,7 @@ export const makeMockClient = ({
       messages: async (input: ClientMethodInput<"session", "messages">) => {
         session.messagesCalls.push(input);
         return {
-          data: session.messagesResponse,
+          data: session.messagesResponse.map(completeMockMessage),
           error: undefined,
         };
       },
@@ -423,15 +463,35 @@ export const makeMockClient = ({
           data: {
             providers: [
               {
+                env: [],
                 id: "openai",
                 name: "OpenAI",
+                options: {},
+                source: "custom",
                 models: {
                   "gpt-5": {
+                    api: { id: "gpt-5", npm: "@ai-sdk/openai", url: "https://api.openai.com" },
+                    capabilities: {
+                      attachment: true,
+                      input: { audio: false, image: true, pdf: true, text: true, video: false },
+                      interleaved: false,
+                      output: { audio: false, image: false, pdf: false, text: true, video: false },
+                      reasoning: true,
+                      temperature: true,
+                      toolcall: true,
+                    },
+                    cost: { cache: { read: 0, write: 0 }, input: 0, output: 0 },
+                    headers: {},
+                    id: "gpt-5",
                     name: "GPT-5",
                     limit: {
                       context: 400_000,
                       output: 32_000,
                     },
+                    options: {},
+                    providerID: "openai",
+                    release_date: "2026-01-01",
+                    status: "active",
                     variants: {
                       high: {},
                       low: {},
@@ -454,7 +514,14 @@ export const makeMockClient = ({
           throw agentsResult.error;
         }
         return {
-          data: agentsResult?.mode === "api_error" ? undefined : agentsResponse,
+          data:
+            agentsResult?.mode === "api_error"
+              ? undefined
+              : agentsResponse.map((agent) =>
+                  hasRuntimeType(agent, "object") && agent !== null
+                    ? { options: {}, permission: [], ...agent }
+                    : agent,
+                ),
           error: agentsResult?.mode === "api_error" ? agentsResult.error : undefined,
         };
       },
@@ -493,16 +560,22 @@ export const makeMockClient = ({
     },
     global: {
       event: async (options?: { signal?: AbortSignal }) => {
-        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
-          for (const event of stream.events) {
+        async function* iterator() {
+          for (const [index, rawEvent] of stream.events.entries()) {
             if (options?.signal?.aborted) {
               return;
             }
-            // SAFETY: This test controls the fixture and supplies `Event & { properties?: { directory?: string } }` used by this case.
+            const eventRecord = asUnknownRecord(rawEvent);
+            if (!eventRecord) {
+              throw new Error("Expected an OpenCode event fixture object.");
+            }
+            const properties = asUnknownRecord(eventRecord.properties);
             const directory =
-              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
+              readStringProp(properties, ["directory"]) ??
               defaultRuntimeConnection.workingDirectory;
-            yield { directory, payload: event };
+            for (const payload of createOpencodeEventFixtures(eventRecord, index)) {
+              yield { directory, payload };
+            }
           }
         }
         return { stream: iterator() };

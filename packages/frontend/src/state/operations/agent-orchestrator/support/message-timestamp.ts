@@ -21,7 +21,7 @@ export const applyMessageTimestamp = <T extends AgentChatMessage>(
 ): T => {
   const { timestampIsApproximate: _discardedAccuracy, ...messageWithoutTimestampAccuracy } =
     message;
-  // SAFETY: The surrounding boundary constructs or validates every member required by `T`.
+  // SAFETY: The spread preserves every field of T and replaces only the two timestamp fields declared by AgentChatMessage.
   return {
     ...messageWithoutTimestampAccuracy,
     timestamp: timestamp.timestamp,

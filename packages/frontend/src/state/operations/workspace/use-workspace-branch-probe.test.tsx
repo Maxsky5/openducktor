@@ -13,14 +13,6 @@ interface QueryClientCaptureContract {
   current: QueryClient | null;
 }
 
-interface QueryClientCaptureContract101 {
-  current: QueryClient | null;
-}
-
-interface QueryClientCaptureContract152 {
-  current: QueryClient | null;
-}
-
 let workspaceHost = createWorkspaceHostClient();
 
 beforeEach(() => {
@@ -110,7 +102,7 @@ describe("use-workspace-branch-probe", () => {
   test("retries a failed branch-list refresh when the branch identity is unchanged", async () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: QueryClientCaptureContract101 = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     const gitGetBranches = mock(async () => []);
     gitGetBranches.mockImplementationOnce(async () => {
       throw new Error("branch list unavailable");
@@ -161,7 +153,7 @@ describe("use-workspace-branch-probe", () => {
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
     const currentBranchDeferred = createDeferred<{ name: string | undefined; detached: boolean }>();
     const setBranchSyncDegraded = mock((_repoPath: string, _value: boolean) => {});
-    const queryClientCapture: QueryClientCaptureContract152 = { current: null };
+    const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
 
     const originalToastError = toast.error;

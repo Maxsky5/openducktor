@@ -1,9 +1,11 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { Cause, Chunk, Data, Option } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type HostErrorDetailValue =
-  | JsonValue
+  | string
+  | number
+  | boolean
+  | null
   | Error
   | undefined
   | ReadonlyArray<HostErrorDetailValue>

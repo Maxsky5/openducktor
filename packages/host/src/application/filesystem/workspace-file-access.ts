@@ -1,14 +1,13 @@
 import { Data, Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
 import { isContainedPath } from "./workspace-files-paths";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const workspaceFileValidationError = (
   cause: unknown,
   message: string,
-  details?: Record<string, JsonValue | undefined>,
+  details?: HostErrorDetails,
 ): HostValidationError =>
   new HostValidationError({
     message,
@@ -56,7 +55,10 @@ export const canonicalizeWorkspaceRoot = (filesystem: FilesystemPort, rootPath: 
     return canonicalRoot;
   });
 
-export const loadWorkspaceFilePaths = (gitPort: GitPort, canonicalRoot: string) =>
+export const loadWorkspaceFilePaths = (
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  canonicalRoot: string,
+) =>
   Effect.gen(function* () {
     const isGitRepository = yield* gitPort
       .isGitRepository(canonicalRoot)

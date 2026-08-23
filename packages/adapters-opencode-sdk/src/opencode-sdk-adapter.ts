@@ -4,7 +4,6 @@ import {
   type RuntimeKind,
   hasRuntimeType,
 } from "@openducktor/contracts";
-import { asUnknownRecord } from "./guards";
 import type {
   AcceptedAgentUserMessage,
   AgentCatalogPort,
@@ -258,7 +257,7 @@ export class OpencodeSdkAdapter
       workingDirectory: input.workingDirectory,
     });
     const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
-    const startedAt = toIsoFromEpoch(asUnknownRecord(detailRecord?.time)?.created, this.now);
+    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toSessionInput(input);
     return registerSession({
       sessions: this.sessions,
@@ -334,7 +333,7 @@ export class OpencodeSdkAdapter
       });
     }
     const detailRecord = opencodeSessionDetailPayloadSchema.parse(detailData);
-    const startedAt = toIsoFromEpoch(asUnknownRecord(detailRecord?.time)?.created, this.now);
+    const startedAt = toIsoFromEpoch(detailRecord.time.created, this.now);
     const sessionInput = toExistingSessionInput(input);
 
     const summary = registerSession({

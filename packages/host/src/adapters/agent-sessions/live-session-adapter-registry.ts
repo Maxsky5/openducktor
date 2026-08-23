@@ -1,3 +1,4 @@
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostInvariantError, HostResourceError } from "../../effect/host-errors";
 import type {
@@ -9,20 +10,29 @@ import type {
 export const createLiveSessionAdapterRegistry = (): AgentSessionLiveAdapterRegistryPort => {
   const adaptersByRuntimeId = new Map<string, AgentSessionLiveAdapterPort>();
 
+  const isControlAdapter = (
+    adapter: AgentSessionLiveAdapterPort,
+  ): adapter is AgentSessionRuntimeAdapterPort =>
+    "startSession" in adapter &&
+    hasRuntimeType(adapter.startSession, "function") &&
+    "resumeSession" in adapter &&
+    hasRuntimeType(adapter.resumeSession, "function") &&
+    "forkSession" in adapter &&
+    hasRuntimeType(adapter.forkSession, "function") &&
+    "sendUserMessage" in adapter &&
+    hasRuntimeType(adapter.sendUserMessage, "function") &&
+    "updateSessionModel" in adapter &&
+    hasRuntimeType(adapter.updateSessionModel, "function") &&
+    "stopSession" in adapter &&
+    hasRuntimeType(adapter.stopSession, "function") &&
+    "releaseSession" in adapter &&
+    hasRuntimeType(adapter.releaseSession, "function");
+
   const requireControlAdapter = (
     adapter: AgentSessionLiveAdapterPort,
   ): Effect.Effect<AgentSessionRuntimeAdapterPort, HostResourceError> => {
-    if (
-      "startSession" in adapter &&
-      "resumeSession" in adapter &&
-      "forkSession" in adapter &&
-      "sendUserMessage" in adapter &&
-      "updateSessionModel" in adapter &&
-      "stopSession" in adapter &&
-      "releaseSession" in adapter
-    ) {
-      // SAFETY: The surrounding boundary constructs or validates every member required by `AgentSessionRuntimeAdapterPort`.
-      return Effect.succeed(adapter as AgentSessionRuntimeAdapterPort);
+    if (isControlAdapter(adapter)) {
+      return Effect.succeed(adapter);
     }
     return Effect.fail(
       new HostResourceError({

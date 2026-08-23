@@ -27,7 +27,7 @@ export const parseTodosFromToolOutput = (
 };
 
 export const parseTodosFromToolInput = (
-  input: Record<string, JsonValue> | undefined,
+  input: Record<string, unknown> | undefined,
 ): AgentSessionTodoItem[] | null => {
   if (!input) {
     return null;

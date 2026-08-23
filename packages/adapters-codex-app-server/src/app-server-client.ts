@@ -13,7 +13,6 @@ import type {
   CodexTurnSteerParams,
 } from "./types";
 import {
-  jsonValueSchema,
   parseCodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
   type CodexAppServerRequestMethod,
@@ -26,8 +25,7 @@ const requestCodex = async <Method extends CodexAppServerRequestMethod>(
   params: CodexAppServerRequestParams<Method>,
 ) => {
   const request = parseCodexAppServerClientRequest({ method, params });
-  const wireParams = jsonValueSchema.parse(request.params);
-  const result = await transport.request({ method, params: wireParams });
+  const result = await transport.request(request);
   return parseCodexAppServerRequestResult(method, result);
 };
 

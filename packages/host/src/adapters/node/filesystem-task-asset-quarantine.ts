@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  type JsonValue,
   taskAssetIdSchema,
   taskAssetRenderContextSchema,
   hasRuntimeType,
@@ -28,7 +27,7 @@ const existingStat = async (target: string) => {
   }
 };
 
-const validateManifest = (value: JsonValue | undefined): QuarantineManifest => {
+const validateManifest = (value: unknown): QuarantineManifest => {
   if (!hasRuntimeType(value, "object") || value === null) {
     throw new Error("Task asset quarantine manifest must be an object.");
   }

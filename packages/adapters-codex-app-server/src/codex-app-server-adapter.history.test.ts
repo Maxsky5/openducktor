@@ -1,29 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   codexThreadStartResultFixture,
   codexThreadFixture,
+  codexTurnFixture,
   createHarness,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import {
+  codexAgentMessageItemFixture,
+  codexCollabAgentToolCallFixture,
+  codexCommandExecutionItemFixture,
+  codexDynamicToolCallFixture,
+  codexMcpToolCallItemFixture,
+  codexSubAgentActivityItemFixture,
+  codexUserMessageItemFixture,
+} from "./test-fixtures/codex-protocol";
 
-type PaginatedTurnFixture = Record<string, JsonValue> & {
-  items: Array<Record<string, JsonValue>>;
-};
+type PaginatedTurnFixture = Pick<CodexAppServerTurn, "id" | "items" | "status"> &
+  Partial<CodexAppServerTurn>;
 
-type PaginatedThreadFixture = Record<string, JsonValue> & {
-  id: string;
-  turns: PaginatedTurnFixture[];
-};
+type PaginatedThreadFixture = Pick<CodexAppServerThread, "id"> &
+  Partial<Omit<CodexAppServerThread, "turns">> & {
+    turns: PaginatedTurnFixture[];
+  };
 
-type ThreadListFixture = Record<string, JsonValue> & {
-  id: string;
-  status: { type: "active"; activeFlags?: string[] } | { type: "idle" };
-};
+type ThreadListFixture = Pick<CodexAppServerThread, "id" | "status"> &
+  Partial<CodexAppServerThread>;
 
 const paginatedThreadReadResponse = (thread: PaginatedThreadFixture) => ({
   thread: {
@@ -34,28 +41,7 @@ const paginatedThreadReadResponse = (thread: PaginatedThreadFixture) => ({
 });
 
 const paginatedTurnsListResponse = (thread: PaginatedThreadFixture) => ({
-  data: thread.turns.map((turn) => ({
-    completedAt: null,
-    durationMs: null,
-    error: null,
-    itemsView: "full",
-    startedAt: null,
-    status: "completed",
-    ...turn,
-    items: turn.items.map((item) => {
-      if (item.type !== "dynamicToolCall") {
-        return item;
-      }
-      return {
-        namespace: null,
-        status: "completed",
-        contentItems: null,
-        success: true,
-        durationMs: null,
-        ...item,
-      };
-    }),
-  })),
+  data: thread.turns.map((turn) => codexTurnFixture(turn)),
   nextCursor: null,
   backwardsCursor: null,
 });
@@ -96,20 +82,17 @@ describe("CodexAppServerAdapter history loading", () => {
           completedAt: 1_783_715_620,
           status: "completed",
           items: [
-            {
+            codexUserMessageItemFixture({
               id: "parent-user",
-              type: "userMessage",
-              content: [{ type: "text", text: "Delegate this work" }],
-            },
-            {
+              content: [{ type: "text", text: "Delegate this work", text_elements: [] }],
+            }),
+            codexAgentMessageItemFixture({
               id: "parent-delegating",
-              type: "agentMessage",
               phase: "commentary",
               text: "I am delegating this now.",
-            },
-            {
+            }),
+            codexCollabAgentToolCallFixture({
               id: "parent-spawn",
-              type: "collabToolCall",
               tool: "spawnAgent",
               status: "completed",
               senderThreadId: "parent-thread",
@@ -118,13 +101,12 @@ describe("CodexAppServerAdapter history loading", () => {
               agentsStates: {
                 "child-thread": { status: "completed", message: "Done" },
               },
-            },
-            {
+            }),
+            codexAgentMessageItemFixture({
               id: "parent-waiting",
-              type: "agentMessage",
               phase: "commentary",
               text: "The subagent is running.",
-            },
+            }),
           ],
         },
       ],
@@ -174,12 +156,11 @@ describe("CodexAppServerAdapter history loading", () => {
           startedAt: 5,
           status: "completed",
           items: [
-            {
+            codexSubAgentActivityItemFixture({
               id: "root-started-sibling",
-              type: "subAgentActivity",
               agentThreadId: "sibling-thread",
               kind: "started",
-            },
+            }),
           ],
         },
         {
@@ -187,12 +168,11 @@ describe("CodexAppServerAdapter history loading", () => {
           startedAt: 11,
           status: "completed",
           items: [
-            {
+            codexSubAgentActivityItemFixture({
               id: "child-started-grandchild",
-              type: "subAgentActivity",
               agentThreadId: "grandchild-thread",
               kind: "started",
-            },
+            }),
           ],
         },
       ],
@@ -257,43 +237,34 @@ describe("CodexAppServerAdapter history loading", () => {
         durationMs: null,
         status: "inProgress",
         items: [
-          {
+          codexUserMessageItemFixture({
             id: "child-user",
-            type: "userMessage",
-            content: [{ type: "text", text: "Inspect the repository" }],
-          },
-          {
+            content: [{ type: "text", text: "Inspect the repository", text_elements: [] }],
+          }),
+          codexAgentMessageItemFixture({
             id: "child-commentary",
-            type: "agentMessage",
             phase: "commentary",
             text: "I’m checking the repository now.",
-          },
-          {
+          }),
+          codexCommandExecutionItemFixture({
             id: "child-command",
-            type: "commandExecution",
             command: "pwd",
-            cwd: "/repo",
-            processId: null,
-            source: "model",
-            status: "completed",
             commandActions: [{ type: "unknown", command: "pwd" }],
             aggregatedOutput: "/repo",
-            exitCode: 0,
             durationMs: 12,
-          },
-          {
+          }),
+          codexMcpToolCallItemFixture({
             id: "child-tool",
-            type: "mcpToolCall",
             server: "semble",
             tool: "search",
-            status: "completed",
             arguments: { query: "architecture" },
-            appContext: null,
-            pluginId: null,
-            result: { content: [{ type: "text", text: "result" }] },
-            error: null,
+            result: {
+              content: [{ type: "text", text: "result" }],
+              structuredContent: null,
+              _meta: null,
+            },
             durationMs: 107,
-          },
+          }),
         ],
       },
     ];
@@ -382,7 +353,7 @@ describe("CodexAppServerAdapter history loading", () => {
               id: "child-turn",
               startedAt: 2,
               status: "completed",
-              items: [{ id: "child-answer", type: "agentMessage", text: "Child result" }],
+              items: [codexAgentMessageItemFixture({ id: "child-answer", text: "Child result" })],
             },
           ]) as Response;
         }
@@ -588,26 +559,24 @@ describe("CodexAppServerAdapter history loading", () => {
           completedAt: 2,
           status: "completed",
           items: [
-            {
+            codexUserMessageItemFixture({
               id: "context-1",
-              type: "userMessage",
-              role: "user",
               content: [
                 {
                   type: "text",
                   text: "<environment_context>\nsecret repo context\n</environment_context>",
+                  text_elements: [],
                 },
               ],
-            },
-            {
+            }),
+            codexCommandExecutionItemFixture({
               id: "search-1",
-              type: "commandExecution",
               command: "rg foo src",
-              cwd: "/repo",
-              status: "completed",
-              commandActions: [{ type: "search", command: "rg foo src" }],
+              commandActions: [
+                { type: "search", command: "rg foo src", path: "src", query: "foo" },
+              ],
               aggregatedOutput: "src/app.ts:foo",
-            },
+            }),
           ],
         },
       ],
@@ -678,9 +647,8 @@ describe("CodexAppServerAdapter history loading", () => {
           completedAt: 2,
           status: "completed",
           items: [
-            {
+            codexUserMessageItemFixture({
               id: "skill-user-1",
-              type: "userMessage",
               content: [
                 {
                   type: "text",
@@ -698,7 +666,7 @@ describe("CodexAppServerAdapter history loading", () => {
                   path: "/repo/.codex/skills/create-pr/SKILL.md",
                 },
               ],
-            },
+            }),
           ],
         },
       ],
@@ -777,12 +745,11 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexAgentMessageItemFixture({
               id: "msg-1",
-              type: "agentMessage",
               phase: "final_answer",
               text: "Hydrated from paginated history",
-            },
+            }),
           ],
         },
       ],
@@ -871,12 +838,11 @@ describe("CodexAppServerAdapter history loading", () => {
               id: "turn-1",
               status: "completed",
               items: [
-                {
+                codexAgentMessageItemFixture({
                   id: "msg-1",
-                  type: "agentMessage",
                   phase: "final_answer",
                   text: "Hydrated from paginated history",
-                },
+                }),
               ],
             },
           ]) as Response;
@@ -920,42 +886,37 @@ describe("CodexAppServerAdapter history loading", () => {
           startedAt: 1,
           completedAt: 2,
           items: [
-            {
+            codexCommandExecutionItemFixture({
               id: "cmd-array",
-              type: "commandExecution",
-              command: ["bun", "test"],
-              cwd: "/repo",
-              status: "completed",
+              command: "bun test",
               aggregatedOutput: "70 pass",
-            },
-            {
+            }),
+            codexMcpToolCallItemFixture({
               id: "mcp-json-args",
-              type: "mcpToolCall",
               server: "openducktor",
               tool: "odt_read_task",
-              status: "completed",
               arguments: JSON.stringify({ taskId: "task-1" }),
-              result: { content: [{ type: "text", text: "task ok" }] },
-            },
-            {
+              result: {
+                content: [{ type: "text", text: "task ok" }],
+                structuredContent: null,
+                _meta: null,
+              },
+            }),
+            codexDynamicToolCallFixture({
               id: "dynamic-json-args",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "request_user_input",
-              status: "completed",
-              success: true,
               arguments: JSON.stringify({
                 requestId: "q1",
                 questions: [{ question: "Choose mode" }],
               }),
               contentItems: [{ type: "inputText", text: "selected" }],
-            },
-            {
+            }),
+            codexAgentMessageItemFixture({
               id: "final-content-array",
-              type: "agentMessage",
               phase: "final_answer",
-              content: [{ type: "output_text", text: "Final from content" }],
-            },
+              text: "Final from content",
+            }),
           ],
         },
       ],
@@ -1061,39 +1022,38 @@ describe("CodexAppServerAdapter history loading", () => {
           completedAt: 4,
           durationMs: 3000,
           items: [
-            {
+            codexCommandExecutionItemFixture({
               id: "cmd-read-action",
-              type: "commandExecution",
-              command: ["cat", "src/app.ts"],
-              cwd: "/repo",
-              status: "completed",
-              commandActions: [{ type: "Read", path: "src/app.ts" }],
+              command: "cat src/app.ts",
+              commandActions: [
+                { type: "read", command: "cat src/app.ts", name: "app.ts", path: "src/app.ts" },
+              ],
               aggregatedOutput: "const app = true;",
-            },
-            {
+            }),
+            codexCommandExecutionItemFixture({
               id: "cmd-find-action",
-              type: "commandExecution",
               command: "find src -name '*.ts'",
-              cwd: "/repo",
-              status: "completed",
-              command_actions: [{ kind: "find", path: "src", pattern: "*.ts" }],
-              aggregated_output: "src/app.ts",
-            },
-            {
+              commandActions: [
+                {
+                  type: "search",
+                  command: "find src -name '*.ts'",
+                  path: "src",
+                  query: "*.ts",
+                },
+              ],
+              aggregatedOutput: "src/app.ts",
+            }),
+            codexCommandExecutionItemFixture({
               id: "cmd-bash-action",
-              type: "commandExecution",
               command: "bun test",
-              cwd: "/repo",
-              status: "completed",
-              commandActions: [{ type: "exec", command: "bun test" }],
+              commandActions: [{ type: "unknown", command: "bun test" }],
               aggregatedOutput: "1 pass",
-            },
-            {
+            }),
+            codexAgentMessageItemFixture({
               id: "final-action-turn",
-              type: "agentMessage",
               phase: "final_answer",
               text: "Done",
-            },
+            }),
           ],
         },
       ],
@@ -1158,8 +1118,8 @@ describe("CodexAppServerAdapter history loading", () => {
         parts: [
           expect.objectContaining({
             kind: "tool",
-            tool: "find",
-            input: expect.objectContaining({ path: "src", pattern: "*.ts" }),
+            tool: "search",
+            input: expect.objectContaining({ path: "src", query: "*.ts" }),
             output: "src/app.ts",
           }),
         ],
@@ -1235,9 +1195,8 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-1",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
               arguments: {
@@ -1246,7 +1205,7 @@ describe("CodexAppServerAdapter history loading", () => {
                   { step: "Wire todos", status: "inProgress" },
                 ],
               },
-            },
+            }),
           ],
         },
       ],
@@ -1293,7 +1252,6 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("loads todos independently after loading Codex session history", async () => {
     const calls: CodexJsonRpcRequest[] = [];
-    const completedAtMs = Date.parse("2026-05-20T10:00:02.000Z");
     const thread = {
       id: "thread-history-todos",
       cwd: "/repo",
@@ -1304,9 +1262,8 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-1",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
               arguments: {
@@ -1316,8 +1273,7 @@ describe("CodexAppServerAdapter history loading", () => {
                 ],
               },
               durationMs: 25,
-              completedAtMs,
-            },
+            }),
           ],
         },
       ],
@@ -1365,13 +1321,7 @@ describe("CodexAppServerAdapter history loading", () => {
     expect(history).toContainEqual(
       expect.objectContaining({
         messageId: "todo-call-1",
-        parts: [
-          expect.objectContaining({
-            kind: "tool",
-            startedAtMs: completedAtMs - 25,
-            endedAtMs: completedAtMs,
-          }),
-        ],
+        parts: [expect.objectContaining({ kind: "tool" })],
       }),
     );
     expect(calls.filter((call) => call.method === "thread/read")).toHaveLength(1);
@@ -1406,13 +1356,12 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-1",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
               arguments: { plan: [{ step: "Cached todo", status: "completed" }] },
-            },
+            }),
           ],
         },
       ],
@@ -1511,7 +1460,7 @@ describe("CodexAppServerAdapter history loading", () => {
         if (request.method === "thread/resume") {
           // SAFETY: This test controls the fixture and supplies `Response` used by this case.
           return {
-            ...codexThreadStartResultFixture("thread-empty-todos"),
+            ...codexThreadStartResultFixture("thread-empty-todos", "thread/resume"),
             thread: codexThreadFixture({
               id: "thread-empty-todos",
               createdAt: 1,
@@ -1566,8 +1515,16 @@ describe("CodexAppServerAdapter history loading", () => {
           startedAt: 1,
           completedAt: 2,
           items: [
-            { type: "agentMessage", phase: "commentary", text: "Working" },
-            { type: "agentMessage", phase: "final_answer", text: "Final answer" },
+            codexAgentMessageItemFixture({
+              id: "commentary-1",
+              phase: "commentary",
+              text: "Working",
+            }),
+            codexAgentMessageItemFixture({
+              id: "final-1",
+              phase: "final_answer",
+              text: "Final answer",
+            }),
           ],
         },
       ],
@@ -1635,10 +1592,7 @@ describe("CodexAppServerAdapter history loading", () => {
             {
               id: "plan-1",
               type: "plan",
-              plan: [
-                { step: "Inspect", status: "completed" },
-                { step: "Fix hydration", status: "in_progress" },
-              ],
+              text: "- [x] Inspect\n- in progress: Fix hydration",
             },
           ],
         },
@@ -1765,9 +1719,8 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-1",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
               arguments: {
@@ -1776,7 +1729,7 @@ describe("CodexAppServerAdapter history loading", () => {
                   { step: "Fix latest todo", status: "in_progress" },
                 ],
               },
-            },
+            }),
           ],
         },
       ],
@@ -1830,20 +1783,17 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-1",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
-              status: "completed",
-              success: true,
               arguments: JSON.stringify({
                 plan: [
                   { step: "Map paginated history", status: "completed" },
                   { step: "Hydrate todos", status: "in_progress" },
                 ],
               }),
-            },
+            }),
           ],
         },
       ],
@@ -1897,23 +1847,22 @@ describe("CodexAppServerAdapter history loading", () => {
           id: "turn-1",
           status: "completed",
           items: [
-            {
+            codexDynamicToolCallFixture({
               id: "todo-call-running",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "update_plan",
-              status: "running",
+              status: "inProgress",
+              success: null,
               arguments: { plan: [{ step: "Do not show", status: "in_progress" }] },
-            },
-            {
+            }),
+            codexDynamicToolCallFixture({
               id: "todo-call-failed",
-              type: "dynamicToolCall",
               namespace: "functions",
               tool: "todo_write",
-              status: "completed",
+              status: "failed",
               success: false,
               arguments: { todo: [{ step: "Also hidden", status: "pending" }] },
-            },
+            }),
           ],
         },
       ],

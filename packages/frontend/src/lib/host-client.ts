@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasOwnKey, hasRuntimeType } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { getShellBridge, type HostBridge } from "./shell-bridge";
 
@@ -8,18 +8,18 @@ const shellClientMethodBindings = new WeakMap<object, Map<PropertyKey, HostClien
 
 const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undefined => {
   const client = getShellBridge().client;
-  // SAFETY: The preceding runtime guard establishes `keyof HostClient` before this assertion.
-  const value = client[propertyKey as keyof HostClient];
+  if (!hasOwnKey(client, propertyKey)) {
+    return undefined;
+  }
+  const value = client[propertyKey];
   if (!hasRuntimeType(value, "function")) {
     return value;
   }
 
-  // SAFETY: The preceding runtime guard establishes `object` before this assertion.
-  const clientObject = client as object;
-  let existingBindings = shellClientMethodBindings.get(clientObject);
+  let existingBindings = shellClientMethodBindings.get(client);
   if (!existingBindings) {
     existingBindings = new Map();
-    shellClientMethodBindings.set(clientObject, existingBindings);
+    shellClientMethodBindings.set(client, existingBindings);
   }
   const existingBinding = existingBindings.get(propertyKey);
   if (existingBinding) {
@@ -32,7 +32,7 @@ const readShellClientValue = (propertyKey: PropertyKey): HostClientValue | undef
   return boundValue;
 };
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `HostClient`.
+// SAFETY: Every HostClient property read is forwarded to the schema-backed shell client after hasOwnKey validation; the proxy target stores no independent state.
 const hostClientProxy = new Proxy(
   {},
   {

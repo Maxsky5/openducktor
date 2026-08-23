@@ -3,8 +3,6 @@ import { normalizeAgentSessionTodoList, type AgentSessionTodoItem } from "@opend
 
 const todoPayloadListSchema = agentSessionTodoPayloadListSchema();
 
-export const normalizeTodoList = (
-  payload: Parameters<typeof todoPayloadListSchema.parse>[0],
-): AgentSessionTodoItem[] => {
+export const normalizeTodoList = (payload: unknown): AgentSessionTodoItem[] => {
   return normalizeAgentSessionTodoList(todoPayloadListSchema.parse(payload));
 };

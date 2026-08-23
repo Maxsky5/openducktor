@@ -1,10 +1,5 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { describe, expect, mock, test } from "bun:test";
-import {
-  type RepoConfig,
-  RUNTIME_DESCRIPTORS_BY_KIND,
-  jsonValueSchema,
-} from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, jsonValueSchema } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentSkillCatalog,
@@ -15,7 +10,6 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
-import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import {
   type CreateHostCommandRouterInput,
@@ -61,7 +55,6 @@ const createLiveClaudeRuntimeRegistry = () =>
     ],
   });
 
-// SAFETY: This test controls the fixture and supplies `RepoConfig` used by this case.
 const claudeCommandDependencies: Parameters<typeof createClaudeRuntimeCommandHandlers>[2] = {
   settingsConfig: {
     canonicalizePath: (path) => Effect.succeed(path),
@@ -73,13 +66,43 @@ const claudeCommandDependencies: Parameters<typeof createClaudeRuntimeCommandHan
     getRepoConfigByRepoPath: () =>
       Effect.succeed({
         workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "claude",
+        branchPrefix: "odt/",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        promptOverrides: {},
+        worktreeCopyPaths: [],
+        agentDefaults: {},
         worktreeBasePath: "/worktrees/repo",
-      } as RepoConfig),
+      }),
   },
 };
 
+type ClaudeCommandService = Parameters<typeof createClaudeRuntimeCommandHandlers>[0];
+
+const createClaudeCommandService = <Overrides extends Partial<ClaudeCommandService>>(
+  overrides: Overrides,
+): ClaudeCommandService => ({
+  listAvailableModels: () => Effect.die("listAvailableModels is not configured for this test"),
+  listAvailableSkills: () => Effect.die("listAvailableSkills is not configured for this test"),
+  listAvailableSlashCommands: () =>
+    Effect.die("listAvailableSlashCommands is not configured for this test"),
+  listAvailableSubagents: () =>
+    Effect.die("listAvailableSubagents is not configured for this test"),
+  loadFileStatus: () => Effect.die("loadFileStatus is not configured for this test"),
+  loadSessionDiff: () => Effect.die("loadSessionDiff is not configured for this test"),
+  loadSessionHistory: () => Effect.die("loadSessionHistory is not configured for this test"),
+  loadSessionTodos: () => Effect.die("loadSessionTodos is not configured for this test"),
+  searchFiles: () => Effect.die("searchFiles is not configured for this test"),
+  ...overrides,
+});
+
 const createHandlers = (
-  service: ClaudeAgentSdkService,
+  service: ClaudeCommandService,
   runtimeRegistry: RuntimeRegistryPort = createRuntimeRegistry(),
 ) => createClaudeRuntimeCommandHandlers(service, runtimeRegistry, claudeCommandDependencies);
 
@@ -94,13 +117,42 @@ describe("createClaudeRuntimeCommandHandlers", () => {
       listAvailableModels(_input: ListAgentModelsInput) {
         return Effect.succeed(this.catalog);
       }
+
+      listAvailableSkills() {
+        return Effect.die("listAvailableSkills is not configured for this test");
+      }
+
+      listAvailableSlashCommands() {
+        return Effect.die("listAvailableSlashCommands is not configured for this test");
+      }
+
+      listAvailableSubagents() {
+        return Effect.die("listAvailableSubagents is not configured for this test");
+      }
+
+      loadFileStatus() {
+        return Effect.die("loadFileStatus is not configured for this test");
+      }
+
+      loadSessionDiff() {
+        return Effect.die("loadSessionDiff is not configured for this test");
+      }
+
+      loadSessionHistory() {
+        return Effect.die("loadSessionHistory is not configured for this test");
+      }
+
+      loadSessionTodos() {
+        return Effect.die("loadSessionTodos is not configured for this test");
+      }
+
+      searchFiles() {
+        return Effect.die("searchFiles is not configured for this test");
+      }
     }
 
     const router = createHostCommandRouter({
-      handlers: createHandlers(
-        createFocusedTestService<ClaudeAgentSdkService>(new ServiceWithReceiver()),
-        createLiveClaudeRuntimeRegistry(),
-      ),
+      handlers: createHandlers(new ServiceWithReceiver(), createLiveClaudeRuntimeRegistry()),
     });
 
     await expect(
@@ -123,7 +175,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
         defaultModelsByProvider: {},
       }),
     );
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ listAvailableModels });
+    const service = createClaudeCommandService({ listAvailableModels });
     const router = createHostCommandRouter({
       handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
     });
@@ -145,7 +197,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("allows empty file search queries for initial autocomplete", async () => {
     const searchFiles = mock((_input: SearchAgentFilesInput) => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ searchFiles });
+    const service = createClaudeCommandService({ searchFiles });
     const router = createHostCommandRouter({
       handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
     });
@@ -171,7 +223,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("requires a live Claude workspace runtime before searching files", async () => {
     const searchFiles = mock((_input: SearchAgentFilesInput) => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ searchFiles });
+    const service = createClaudeCommandService({ searchFiles });
     const router = createHostCommandRouter({
       handlers: createHandlers(service),
     });
@@ -214,7 +266,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
     for (const operation of catalogOperations) {
       const loadCatalog = mock(() => Effect.succeed(operation.result));
-      const service = createFocusedTestService<ClaudeAgentSdkService>({
+      const service = createClaudeCommandService({
         [operation.method]: loadCatalog,
       });
       const input = {
@@ -265,7 +317,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
     for (const operation of catalogOperations) {
       const loadCatalog = mock(() => Effect.succeed(operation.result));
-      const service = createFocusedTestService<ClaudeAgentSdkService>({
+      const service = createClaudeCommandService({
         [operation.method]: loadCatalog,
       });
       const router = createHostCommandRouter({
@@ -286,7 +338,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("allows file search in the managed task worktree root", async () => {
     const searchFiles = mock((_input: SearchAgentFilesInput) => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ searchFiles });
+    const service = createClaudeCommandService({ searchFiles });
     const router = createHostCommandRouter({
       handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
     });
@@ -307,7 +359,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("rejects file search outside the selected workspace", async () => {
     const searchFiles = mock((_input: SearchAgentFilesInput) => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ searchFiles });
+    const service = createClaudeCommandService({ searchFiles });
     const router = createHostCommandRouter({
       handlers: createHandlers(service, createLiveClaudeRuntimeRegistry()),
     });
@@ -332,7 +384,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
   test("rejects service output that violates the selected command contract", async () => {
     // @ts-expect-error -- This case verifies runtime rejection of an invalid service result.
     const invalidCatalog: AgentModelCatalog = { unrelated: true };
-    const service = createFocusedTestService<ClaudeAgentSdkService>({
+    const service = createClaudeCommandService({
       listAvailableModels: () =>
         // SAFETY: this test returns invalid adapter output to verify result validation.
         Effect.succeed(invalidCatalog),
@@ -356,7 +408,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("requires a live Claude workspace runtime before loading session history", async () => {
     const loadSessionHistory = mock(() => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ loadSessionHistory });
+    const service = createClaudeCommandService({ loadSessionHistory });
     const router = createHostCommandRouter({
       handlers: createHandlers(service),
     });
@@ -387,7 +439,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("loads session history after resolving the live Claude workspace runtime", async () => {
     const loadSessionHistory = mock(() => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ loadSessionHistory });
+    const service = createClaudeCommandService({ loadSessionHistory });
     const runtimeRegistry = createLiveClaudeRuntimeRegistry();
     const router = createHostCommandRouter({
       handlers: createHandlers(service, runtimeRegistry),
@@ -427,7 +479,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("requires a live Claude workspace runtime before loading session todos", async () => {
     const loadSessionTodos = mock(() => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ loadSessionTodos });
+    const service = createClaudeCommandService({ loadSessionTodos });
     const router = createHostCommandRouter({
       handlers: createHandlers(service),
     });
@@ -452,7 +504,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
   test("loads session todos after resolving the live Claude workspace runtime", async () => {
     const loadSessionTodos = mock(() => Effect.succeed([]));
-    const service = createFocusedTestService<ClaudeAgentSdkService>({ loadSessionTodos });
+    const service = createClaudeCommandService({ loadSessionTodos });
     const runtimeRegistry = createLiveClaudeRuntimeRegistry();
     const router = createHostCommandRouter({
       handlers: createHandlers(service, runtimeRegistry),
@@ -492,7 +544,7 @@ describe("createClaudeRuntimeCommandHandlers", () => {
 
     for (const operation of readOperations) {
       const loadSessionData = mock(() => Effect.succeed([]));
-      const service = createFocusedTestService<ClaudeAgentSdkService>({
+      const service = createClaudeCommandService({
         [operation.method]: loadSessionData,
       });
       const router = createHostCommandRouter({

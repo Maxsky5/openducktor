@@ -27,7 +27,17 @@ export const computeComposerEditorLayout = (scrollHeight: number) => {
   };
 };
 
-const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: number): number => {
+type ComposerResizableElement = {
+  readonly scrollHeight: number;
+  readonly style: Pick<CSSStyleDeclaration, "height" | "overflowY">;
+  readonly textContent: string | null;
+  getBoundingClientRect(): Pick<DOMRect, "height">;
+};
+
+const readComposerEditorHeight = (
+  editor: ComposerResizableElement,
+  previousHeightPx?: number,
+): number => {
   const inlineHeight = readInlineHeightPx(editor.style.height);
   if (inlineHeight !== null) {
     return inlineHeight;
@@ -43,7 +53,7 @@ const readComposerEditorHeight = (editor: HTMLDivElement, previousHeightPx?: num
 };
 
 export const resizeComposerEditorElement = (
-  editor: HTMLDivElement,
+  editor: ComposerResizableElement,
   serializedDraftText?: string,
   previousHeightPx?: number,
 ) => {
@@ -88,9 +98,8 @@ export const resizeComposerEditorElement = (
   };
 };
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `HTMLDivElement`.
 export const resizeComposerTextareaElement = (
-  editor: HTMLDivElement | HTMLTextAreaElement,
+  editor: ComposerResizableElement & { value?: string },
   serializedDraftText?: string,
   previousHeightPx?: number,
 ): {
@@ -98,11 +107,8 @@ export const resizeComposerTextareaElement = (
   overflowY: "auto" | "hidden";
 } =>
   resizeComposerEditorElement(
-    editor as HTMLDivElement,
-    serializedDraftText ??
-      ("value" in editor ? editor.value : undefined) ??
-      editor.textContent ??
-      "",
+    editor,
+    serializedDraftText ?? editor.value ?? editor.textContent ?? "",
     previousHeightPx,
   );
 

@@ -5,6 +5,7 @@ import {
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
   type DevServerGroupState,
+  type CodexAppServerClientRequest,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -255,15 +256,14 @@ const repoRuntimeHealthStatus = async (
 const codexAppServerRequest = async (
   invokeFn: InvokeFn,
   runtimeId: string,
-  method: string,
-  params?: JsonValue | undefined,
+  request: CodexAppServerClientRequest,
 ): Promise<JsonValue> => {
   return invokeFn(
     "codex_app_server_request",
     toCommandArgs({
       runtimeId,
-      method,
-      ...(params !== undefined ? { params } : undefined),
+      method: request.method,
+      params: request.params,
     }),
   );
 };
@@ -613,10 +613,9 @@ export class HostAgentClient {
 
   async codexAppServerRequest(
     runtimeId: string,
-    method: string,
-    params?: JsonValue | undefined,
+    request: CodexAppServerClientRequest,
   ): Promise<JsonValue> {
-    return codexAppServerRequest(this.invokeFn, runtimeId, method, params);
+    return codexAppServerRequest(this.invokeFn, runtimeId, request);
   }
 
   async buildStart(

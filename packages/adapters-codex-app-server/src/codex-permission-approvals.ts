@@ -1,12 +1,9 @@
-import {
-  codexAppServerRequestPermissionProfileSchema,
-  type JsonValue,
-} from "@openducktor/contracts";
+import { codexAppServerRequestPermissionProfileSchema } from "@openducktor/contracts";
 import type { AgentApprovalMutation } from "@openducktor/core";
 import { isPlainObject } from "./codex-app-server-shared";
 import type { CodexServerRequestRecord } from "./types";
 
-const hasArrayEntries = (value: JsonValue | undefined): boolean =>
+const hasArrayEntries = (value: readonly string[] | null | undefined): boolean =>
   Array.isArray(value) && value.length > 0;
 
 export const classifyCodexPermissionRequestMutation = (

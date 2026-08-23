@@ -19,6 +19,7 @@ import type {
   CodexAppServerThreadTurnsListResponse,
   CodexAppServerThreadTurnsListParams,
   CodexAppServerJsonValue,
+  CodexAppServerClientRequest,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerRequestId,
@@ -38,7 +39,6 @@ import type {
   CodexAppServerTurnStartParams,
   CodexAppServerTurnSteerParams,
   CodexAppServerUserInput,
-  JsonValue,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
@@ -66,13 +66,10 @@ import type {
   CodexRuntimeNotification,
   CodexRuntimeServerRequest,
 } from "./codex-runtime-event-schema";
-export type CodexJsonRpcRequest = {
-  method: string;
-  params?: JsonValue | undefined;
-};
+export type CodexJsonRpcRequest = CodexAppServerClientRequest;
 
 export type CodexJsonRpcTransport = {
-  request(request: CodexJsonRpcRequest): Promise<JsonValue>;
+  request(request: CodexJsonRpcRequest): Promise<CodexAppServerJsonValue>;
 };
 
 export type CodexJsonRpcTransportFactory = (runtimeId: string) => CodexJsonRpcTransport;
@@ -120,7 +117,7 @@ export type CodexAppServerStreamEvent = {
   runtimeId: string;
   kind: "notification" | "server_request";
   receivedAt: string;
-  message: JsonValue;
+  message: CodexAppServerJsonValue;
 };
 
 export type CodexRepoRuntimeResolverPort = {

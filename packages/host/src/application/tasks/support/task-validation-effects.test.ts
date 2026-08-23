@@ -47,7 +47,7 @@ describe("task validation effects", () => {
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
     const current = task({ issueType: "bug", status: "human_review" });
-    const taskStore = createFocusedTestService<TaskStorePort>({
+    const taskStore = createFocusedTestService<TaskStorePort>()({
       transitionTask() {
         return Effect.die("transition should not run");
       },

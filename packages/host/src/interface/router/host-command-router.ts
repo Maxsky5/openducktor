@@ -18,7 +18,7 @@ import { jsonValueSchema, type JsonValue } from "@openducktor/contracts";
 
 export type HostCommandResult = JsonValue;
 export type UnvalidatedHostCommandResult = object | string | number | boolean | null | void;
-export type HostCommandArgs = Record<string, JsonValue> | undefined;
+export type HostCommandArgs = Record<string, unknown> | undefined;
 export type HostCommandContext = {
   command: HostCommandName;
   args: HostCommandArgs;
@@ -43,13 +43,13 @@ export type EffectHostCommandRouter = {
   initialize(): Effect.Effect<void, HostCommandHandlerError>;
   invoke(
     command: string,
-    args?: Record<string, JsonValue>,
+    args?: Record<string, unknown>,
   ): Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 };
 export type HostCommandRouter = {
   dispose(): Promise<void>;
   initialize(): Promise<void>;
-  invoke(command: string, args?: Record<string, JsonValue>): Promise<HostCommandResult>;
+  invoke(command: string, args?: Record<string, unknown>): Promise<HostCommandResult>;
 };
 export type CreateHostCommandRouterInput = {
   dispose?: () => Effect.Effect<void, HostCommandHandlerError>;

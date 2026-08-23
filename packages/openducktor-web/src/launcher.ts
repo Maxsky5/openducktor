@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { Server as HttpServer } from "node:http";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV, hasRuntimeType } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
@@ -341,8 +340,21 @@ const startViteServerEffect = (
               details: { frontendPort: options.frontendPort },
             }),
         });
-        // SAFETY: The surrounding boundary constructs or validates every member required by `HttpServer`.
-        const httpServer = server.httpServer as HttpServer;
+        const httpServer = server.httpServer;
+        if (
+          !httpServer ||
+          !("closeAllConnections" in httpServer) ||
+          !hasRuntimeType(httpServer.closeAllConnections, "function")
+        ) {
+          return yield* Effect.fail(
+            new WebDependencyError({
+              dependency: "vite",
+              operation: "create-server",
+              message: "Vite did not create the expected HTTP/1 server.",
+              details: { frontendPort: options.frontendPort },
+            }),
+          );
+        }
         const close = (): Promise<void> =>
           closeViteFrontendServer({
             close: () => server.close(),

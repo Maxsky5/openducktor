@@ -2,11 +2,6 @@ import { posix, win32 } from "node:path";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import type { ToolDiscoveryId, ToolDiscoverySourceCategory } from "../../ports/tool-discovery-port";
 
-interface TOOLDISCOVERYDESCRIPTORSContract extends Record<
-  ToolDiscoveryId,
-  ToolDiscoveryDescriptor
-> {}
-
 export type ToolDiscoveryPathOptions = {
   applicationsDir?: string;
   bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
@@ -163,11 +158,11 @@ const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   ],
 });
 
-export const TOOL_DISCOVERY_DESCRIPTORS: TOOLDISCOVERYDESCRIPTORSContract = {
+export const TOOL_DISCOVERY_DESCRIPTORS = {
   bun: BUN_TOOL_DESCRIPTOR,
   claude: CLAUDE_TOOL_DESCRIPTOR,
   codex: CODEX_TOOL_DESCRIPTOR,
   git: GIT_TOOL_DESCRIPTOR,
   githubCli: GITHUB_CLI_TOOL_DESCRIPTOR,
   opencode: OPENCODE_TOOL_DESCRIPTOR,
-};
+} satisfies Record<ToolDiscoveryId, ToolDiscoveryDescriptor>;

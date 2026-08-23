@@ -177,7 +177,7 @@ describe("CodexAppServerAdapter approvals", () => {
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "server_request",
-      message: { id: 71, method: "approval/request", params: { tool: "network" } },
+      message: { id: 71, method: "attestation/generate", params: {} },
     });
 
     // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
@@ -339,11 +339,12 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 72,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-concurrent-approval",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-concurrent-approval",
-          tool: "network",
         },
       },
     });
@@ -402,7 +403,16 @@ describe("CodexAppServerAdapter approvals", () => {
           threadId: "thread/start-runtime-live",
           turnId: "turn-concurrent-question",
           itemId: "question-item",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -460,11 +470,12 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 74,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-retry-approval",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-retry-approval",
-          tool: "network",
         },
       },
     });
@@ -517,7 +528,16 @@ describe("CodexAppServerAdapter approvals", () => {
           threadId: "thread/start-runtime-live",
           turnId: "turn-retry-question",
           itemId: "question-item-retry",
-          questions: [{ id: "question-retry", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-retry",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });
@@ -569,12 +589,12 @@ describe("CodexAppServerAdapter approvals", () => {
       kind: "server_request",
       message: {
         id: 31,
-        method: "approval/request",
+        method: "item/fileChange/requestApproval",
         params: {
+          itemId: "item-approval-initial",
+          startedAtMs: 1,
           threadId: "thread/start-runtime-live",
           turnId: "turn-approval-initial",
-          tool: "network",
-          url: "https://example.com",
         },
       },
     });
@@ -644,7 +664,16 @@ describe("CodexAppServerAdapter approvals", () => {
           threadId: "thread/start-runtime-live",
           turnId: "turn-question",
           itemId: "item-1",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });

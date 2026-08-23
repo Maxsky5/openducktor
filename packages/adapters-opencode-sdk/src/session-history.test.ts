@@ -3,6 +3,7 @@ import type { Event, Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
 import {
   defaultRepoRuntimeInput,
+  completeMockEvent,
   defaultRuntimeConnection,
   flushAsync,
   makeMockClient,
@@ -165,8 +166,8 @@ describe("OpencodeSdkAdapter session history", () => {
             model: {
               providerID: "openai",
               modelID: "gpt-5",
+              variant: "high",
             },
-            variant: "high",
             time: { created: Date.parse("2026-02-17T11:59:00Z") },
           },
           parts: [
@@ -1118,7 +1119,7 @@ describe("OpencodeSdkAdapter session history", () => {
         }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
       }
     ).event = async (options?: { signal?: AbortSignal }) => {
-      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+      async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
           options?.signal?.addEventListener("abort", () => resolve(), { once: true });
@@ -1126,8 +1127,11 @@ describe("OpencodeSdkAdapter session history", () => {
         if (options?.signal?.aborted) {
           return;
         }
-        for (const event of streamEvents) {
-          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        for (const [index, event] of streamEvents.entries()) {
+          yield {
+            directory: defaultRuntimeConnection.workingDirectory,
+            payload: completeMockEvent(event, index),
+          };
         }
       }
 
@@ -1256,7 +1260,7 @@ describe("OpencodeSdkAdapter session history", () => {
         }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
       }
     ).event = async (options?: { signal?: AbortSignal }) => {
-      async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
+      async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
           options?.signal?.addEventListener("abort", () => resolve(), { once: true });
@@ -1264,8 +1268,11 @@ describe("OpencodeSdkAdapter session history", () => {
         if (options?.signal?.aborted) {
           return;
         }
-        for (const event of streamEvents) {
-          yield { directory: defaultRuntimeConnection.workingDirectory, payload: event };
+        for (const [index, event] of streamEvents.entries()) {
+          yield {
+            directory: defaultRuntimeConnection.workingDirectory,
+            payload: completeMockEvent(event, index),
+          };
         }
       }
 
@@ -1489,10 +1496,16 @@ describe("OpencodeSdkAdapter session history", () => {
           info: {
             id: "msg-user-1",
             role: "user",
-            text: "  @src/alpha.ts @src/beta.ts  ",
             time: { created: Date.parse("2026-02-17T11:59:00Z") },
           },
           parts: [
+            {
+              id: "text-user-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-1",
+              type: "text",
+              text: "  @src/alpha.ts @src/beta.ts  ",
+            },
             {
               id: "file-alpha",
               sessionID: "session-opencode-1",

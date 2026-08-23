@@ -1,9 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { hasRuntimeType } from "@openducktor/contracts";
+import { z } from "zod";
+
+const sdkMessageTimestampSchema = z.object({ timestamp: z.string().optional() });
 
 export const readClaudeSdkMessageTimestamp = (message: SDKMessage, now: () => string): string => {
-  // SAFETY: Claude SDK messages may carry a runtime timestamp that its public union omits.
-  const timestamp = (message as { timestamp?: unknown }).timestamp;
-  if (!hasRuntimeType(timestamp, "string")) return now();
+  const parsed = sdkMessageTimestampSchema.safeParse(message);
+  const timestamp = parsed.success ? parsed.data.timestamp : undefined;
+  if (timestamp === undefined) return now();
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
 };

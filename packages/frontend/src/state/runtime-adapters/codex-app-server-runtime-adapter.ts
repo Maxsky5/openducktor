@@ -11,8 +11,7 @@ import { hostRepoRuntimeResolver } from "./host-repo-runtime-resolver";
 
 const createCodexHostTransportFactory = (): CodexJsonRpcTransportFactory => {
   return (runtimeId) => ({
-    request: (request: CodexJsonRpcRequest) =>
-      host.codexAppServerRequest(runtimeId, request.method, request.params),
+    request: (request: CodexJsonRpcRequest) => host.codexAppServerRequest(runtimeId, request),
   });
 };
 

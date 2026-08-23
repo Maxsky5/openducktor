@@ -1,6 +1,7 @@
 import { jsonValueSchema, type HostInvokeFailure, hasRuntimeType } from "@openducktor/contracts";
 import type { HostCommandName } from "@openducktor/host";
 import type { JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 
 export class HostInvokeError extends Error {
   override readonly cause: unknown;
@@ -18,10 +19,10 @@ export class HostInvokeError extends Error {
 
 export type InvokeFn = (
   command: HostCommandName,
-  args?: Record<string, JsonValue>,
+  args?: Record<string, unknown>,
 ) => Promise<JsonValue>;
 
-export const toCommandArgs = <T>(parsed: T): Record<string, JsonValue> => {
+export const toCommandArgs = <T>(parsed: T): Record<string, unknown> => {
   const serialized = JSON.stringify(parsed);
   if (serialized === undefined) {
     throw new Error("Host command arguments must be a JSON object.");
@@ -36,12 +37,17 @@ export const toCommandArgs = <T>(parsed: T): Record<string, JsonValue> => {
 export type OkResult = { ok: boolean };
 export type UpdatedAtResult = { updatedAt: string };
 
+const okResultSchema = z.object({ ok: z.boolean() });
+const updatedAtResultSchema = z.object({
+  updatedAt: z.string().refine((value) => value.trim().length > 0),
+});
+
 /**
  * Parse an array payload returned by a host command and validate each entry.
  */
 export const parseArray = <T>(
   schema: { parse: (value: JsonValue) => T },
-  payload: JsonValue | undefined,
+  payload: unknown,
   command: string,
 ): T[] => {
   if (!Array.isArray(payload)) {
@@ -53,41 +59,21 @@ export const parseArray = <T>(
 /**
  * Parse the canonical `{ ok: boolean }` ack shape returned by host mutations.
  */
-// SAFETY: The preceding runtime guard establishes `{ ok?: JsonValue }` before this assertion.
-export const parseOkResult = (payload: JsonValue | undefined, command: string): OkResult => {
-  if (
-    !payload ||
-    !hasRuntimeType(payload, "object") ||
-    !hasRuntimeType((payload as { ok?: JsonValue }).ok, "boolean")
-  ) {
+export const parseOkResult = (payload: unknown, command: string): OkResult => {
+  const parsed = okResultSchema.safeParse(payload);
+  if (!parsed.success) {
     throw new Error(`Expected { ok: boolean } payload from host command ${command}`);
   }
-
-  // SAFETY: The preceding runtime guard establishes `{ ok: boolean }` before this assertion.
-  return {
-    ok: (payload as { ok: boolean }).ok,
-  };
+  return parsed.data;
 };
 
 /**
  * Parse the canonical `{ updatedAt: string }` document-write result from the host.
  */
-// SAFETY: The preceding runtime guard establishes the asserted shape before this assertion.
-export const parseUpdatedAtResult = (
-  payload: JsonValue | undefined,
-  command: string,
-): UpdatedAtResult => {
-  if (
-    !payload ||
-    !hasRuntimeType(payload, "object") ||
-    !hasRuntimeType((payload as { updatedAt?: JsonValue }).updatedAt, "string") ||
-    (payload as { updatedAt: string }).updatedAt.trim().length === 0
-  ) {
+export const parseUpdatedAtResult = (payload: unknown, command: string): UpdatedAtResult => {
+  const parsed = updatedAtResultSchema.safeParse(payload);
+  if (!parsed.success) {
     throw new Error(`Expected { updatedAt: string } payload from host command ${command}`);
   }
-
-  // SAFETY: The preceding runtime guard establishes `{ updatedAt: string }` before this assertion.
-  return {
-    updatedAt: (payload as { updatedAt: string }).updatedAt,
-  };
+  return parsed.data;
 };

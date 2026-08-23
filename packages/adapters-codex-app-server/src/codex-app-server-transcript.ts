@@ -2,14 +2,10 @@ import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
   arrayFromUnknown,
   extractNumberField,
-  extractOptionalObject,
   extractStringField,
-  extractText,
   isCodexApplyPatchTool,
   isCodexContextualUserMessage,
   isPlainObject,
-  readPathFromCommand,
-  searchInputFromCommand,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
@@ -39,7 +35,6 @@ import {
   codexItemTimestamp,
   codexToolTimingFields,
   safeCodexTimestampFromMilliseconds,
-  withCodexItemCompletedAtMs,
 } from "./codex-tool-timing";
 import {
   codexUserInputListToText,
@@ -47,8 +42,27 @@ import {
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
-import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  type CodexAppServerCommandAction,
+  type CodexAppServerThreadItem,
+  type CodexAppServerTurn,
+  type CodexAppServerWebSearchAction,
+  type CodexAppServerJsonValue,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import type { CodexThreadHistoryReadResponse } from "./types";
+import type { CodexTimedThreadItem } from "./codex-event-mapper";
+
+type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
+type CodexCommandExecutionItem = Extract<CodexTimedThreadItem, { type: "commandExecution" }>;
+type CodexDynamicToolCallItem = Extract<CodexTimedThreadItem, { type: "dynamicToolCall" }>;
+type CodexFileChangeItem = Extract<CodexTimedThreadItem, { type: "fileChange" }>;
+type CodexMcpToolCallItem = Extract<CodexTimedThreadItem, { type: "mcpToolCall" }>;
+type CodexCollabAgentToolCallItem = Extract<CodexTimedThreadItem, { type: "collabAgentToolCall" }>;
+type CodexPlanItem = Extract<CodexTimedThreadItem, { type: "plan" }>;
+type CodexReasoningItem = Extract<CodexTimedThreadItem, { type: "reasoning" }>;
+type CodexWebSearchItem = Extract<CodexTimedThreadItem, { type: "webSearch" }>;
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -60,7 +74,7 @@ export type CodexTurnTiming = {
 };
 
 export type CodexThreadReadItem = {
-  item: Record<string, JsonValue>;
+  item: CodexTimedThreadItem;
   turnIndex: number;
   turnId: string | null;
   timestamp: string | null;
@@ -78,7 +92,9 @@ export type CodexHistoryTokenUsageFields = {
 export type { AgentToolStatus } from "./codex-tool-normalizer";
 export { type CodexTodoUpdate, codexTodosFromThreadRead };
 
-export const timestampFromCodexParams = (params: JsonValue | undefined): string | null => {
+export const timestampFromCodexParams = (
+  params: CodexAppServerJsonValue | undefined,
+): string | null => {
   const millis = extractNumberField(params, [
     "occurredAtMs",
     "occurred_at_ms",
@@ -101,84 +117,39 @@ const codexTimestampFromSeconds = (seconds: number | null): string | undefined =
   return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined;
 };
 
-const codexTurnTimestampSeconds = (
-  turn: Record<string, JsonValue>,
-  keys: [string, string],
-): number | null => {
-  const [camelKey, snakeKey] = keys;
-  const camelValue = turn[camelKey];
-  if (hasRuntimeType(camelValue, "number")) {
-    return camelValue;
-  }
-
-  const snakeValue = turn[snakeKey];
-  return hasRuntimeType(snakeValue, "number") ? snakeValue : null;
-};
-
 export const timestampFromCodexTurn = (
-  turn: JsonValue | undefined,
-  keys: [string, string],
-): string | null =>
-  isPlainObject(turn)
-    ? (codexTimestampFromSeconds(codexTurnTimestampSeconds(turn, keys)) ?? null)
-    : null;
+  turn: Pick<CodexAppServerTurn, "completedAt" | "startedAt">,
+  key: "completedAt" | "startedAt",
+): string | null => codexTimestampFromSeconds(turn[key]) ?? null;
 
-export const codexItemId = (item: Record<string, JsonValue>, fallbackId: string): string => {
-  return extractStringField(item, ["id", "itemId", "item_id"]) ?? fallbackId;
-};
+export const codexItemId = (item: CodexTimedThreadItem, _fallbackId: string): string => item.id;
 
-const codexItemType = (item: Record<string, JsonValue>): string => {
-  return extractStringField(item, ["type", "kind", "itemType"]) ?? "";
-};
+export const codexItemTypeMatches = <Type extends CodexAppServerThreadItem["type"]>(
+  item: CodexTimedThreadItem,
+  expected: Type,
+): item is Extract<CodexTimedThreadItem, { type: Type }> => item.type === expected;
 
-export const codexItemTypeMatches = (
-  item: Record<string, JsonValue>,
-  expected: string,
-): boolean => {
-  const normalize = (value: string) => value.replace(/[_-]/g, "").toLowerCase();
-  return normalize(codexItemType(item)) === normalize(expected);
-};
+const codexAgentMessagePhase = (item: CodexAgentMessageItem): CodexAgentMessageItem["phase"] =>
+  item.phase;
 
-const codexAgentMessagePhase = (item: Record<string, JsonValue>): string | null => {
-  return extractStringField(item, ["phase"]);
-};
+const isCodexFinalAnswerPhase = (phase: CodexAgentMessageItem["phase"]): boolean =>
+  phase === "final_answer";
 
-const isCodexFinalAnswerPhase = (phase: string | null): boolean => {
-  return phase === "final_answer" || phase === "finalAnswer" || phase === "final-answer";
-};
+const isCodexCommentaryPhase = (phase: CodexAgentMessageItem["phase"]): boolean =>
+  phase === "commentary";
 
-const isCodexCommentaryPhase = (phase: string | null): boolean => {
-  return phase === "commentary";
-};
-
-const hasVisibleCodexAgentMessageText = (item: Record<string, JsonValue>): boolean => {
+const hasVisibleCodexAgentMessageText = (item: CodexAgentMessageItem): boolean => {
   return codexAgentMessageText(item).trim().length > 0;
 };
 
-const codexAgentMessageText = (item: Record<string, JsonValue>): string => {
-  const directText = extractStringField(item, ["text", "message", "summary", "delta"]);
-  if (directText) {
-    return directText;
-  }
-  const contentText = arrayFromUnknown(item.content)
-    .map((entry) => {
-      if (hasRuntimeType(entry, "string")) {
-        return entry;
-      }
-      return isPlainObject(entry)
-        ? (extractStringField(entry, ["text", "output_text", "content"]) ?? "")
-        : "";
-    })
-    .filter((entry) => entry.trim().length > 0)
-    .join("\n");
-  return contentText;
-};
+const codexAgentMessageText = (item: CodexAgentMessageItem): string => item.text;
 
 const selectCodexFinalAgentMessage = (
-  items: Record<string, JsonValue>[],
-): Record<string, JsonValue> | null => {
+  items: CodexTimedThreadItem[],
+): CodexAgentMessageItem | null => {
   const visibleAgentMessages = items.filter(
-    (item) => codexItemTypeMatches(item, "agentMessage") && hasVisibleCodexAgentMessageText(item),
+    (item): item is CodexAgentMessageItem =>
+      item.type === "agentMessage" && hasVisibleCodexAgentMessageText(item),
   );
   return (
     [...visibleAgentMessages]
@@ -193,8 +164,8 @@ const selectCodexFinalAgentMessage = (
 };
 
 export const shouldReplaceCodexBufferedFinalAgentMessage = (
-  current: Record<string, JsonValue>,
-  next: Record<string, JsonValue>,
+  current: CodexAgentMessageItem,
+  next: CodexAgentMessageItem,
 ): boolean => {
   return selectCodexFinalAgentMessage([current, next]) === next;
 };
@@ -202,46 +173,26 @@ export const shouldReplaceCodexBufferedFinalAgentMessage = (
 export const codexTurnItemsFromThreadRead = (
   value: CodexThreadHistoryReadResponse | undefined,
 ): CodexThreadReadItem[] => {
-  if (!value || !isPlainObject(value.thread)) {
+  if (!value) {
     throw new Error("Codex thread/read response is missing thread data.");
   }
-  if (!Array.isArray(value.thread.turns)) {
-    throw new Error("Codex thread/read response is missing thread turns.");
-  }
-  const threadModelProvider = extractStringField(value.thread, ["modelProvider", "model_provider"]);
   return value.thread.turns.flatMap((turn, turnIndex): CodexThreadReadItem[] => {
-    if (!isPlainObject(turn)) {
-      return [];
-    }
-    const items = arrayFromUnknown(turn.items).filter(isPlainObject);
-    const turnId = extractStringField(turn, ["id", "turnId", "turn_id"]) ?? null;
-    const isCompletedTurn = extractStringField(turn, ["status"]) === "completed";
+    const items = turn.items;
+    const turnId = turn.id;
+    const isCompletedTurn = turn.status === "completed";
     const finalAgentMessageId = isCompletedTurn ? selectCodexFinalAgentMessage(items) : null;
-    const startedAtSeconds = codexTurnTimestampSeconds(turn, ["startedAt", "started_at"]);
-    const completedAtSeconds = codexTurnTimestampSeconds(turn, ["completedAt", "completed_at"]);
+    const startedAtSeconds = turn.startedAt;
+    const completedAtSeconds = turn.completedAt;
     const durationMs =
-      extractNumberField(turn, ["durationMs", "duration_ms"]) ??
+      turn.durationMs ??
       (hasRuntimeType(startedAtSeconds, "number") && hasRuntimeType(completedAtSeconds, "number")
         ? Math.max(0, (completedAtSeconds - startedAtSeconds) * 1000)
         : null);
-    const modelId = extractStringField(turn, ["model", "modelId", "model_id"]);
-    const providerId =
-      extractStringField(turn, ["modelProvider", "model_provider", "providerId", "provider_id"]) ??
-      threadModelProvider;
-    const variant = extractStringField(turn, ["effort", "reasoningEffort", "reasoning_effort"]);
-    const model =
-      modelId && providerId
-        ? {
-            providerId,
-            modelId,
-            ...(variant ? { variant } : undefined),
-          }
-        : undefined;
     return items.map((item) => {
       const itemIsFinalAgentMessage = finalAgentMessageId !== null && item === finalAgentMessageId;
       const itemTimestamp = codexItemTimestamp(item);
       let semanticTimestampSeconds: number | null;
-      if (codexItemType(item) === "userMessage") {
+      if (item.type === "userMessage") {
         semanticTimestampSeconds = startedAtSeconds;
       } else if (itemIsFinalAgentMessage) {
         semanticTimestampSeconds = completedAtSeconds;
@@ -255,7 +206,7 @@ export const codexTurnItemsFromThreadRead = (
         null;
       const timestampIsApproximate = itemTimestamp === null && semanticTimestampSeconds === null;
       return {
-        item: withCodexItemCompletedAtMs(item),
+        item,
         turnIndex,
         turnId,
         timestamp,
@@ -265,14 +216,13 @@ export const codexTurnItemsFromThreadRead = (
           itemIsFinalAgentMessage && hasRuntimeType(durationMs, "number") && durationMs > 0
             ? { durationMs }
             : null,
-        ...(model ? { model } : undefined),
       };
     });
   });
 };
 
 export const toHistoryMessage = (
-  item: JsonValue | undefined,
+  item: CodexTimedThreadItem | undefined,
   fallbackId: string,
   model?: AgentModelSelection,
   timestamp?: string,
@@ -280,20 +230,14 @@ export const toHistoryMessage = (
   turnTiming?: CodexTurnTiming | null,
   tokenUsage?: CodexTokenUsageTotals | null,
 ): import("@openducktor/core").AgentSessionHistoryMessage | null => {
-  if (!isPlainObject(item)) {
+  if (!item) {
     return null;
   }
   const messageId = codexItemId(item, fallbackId);
-  const messageTimestamp =
-    timestamp ??
-    (hasRuntimeType(item.timestamp, "string")
-      ? item.timestamp
-      : hasRuntimeType(item.createdAt, "string")
-        ? item.createdAt
-        : new Date().toISOString());
-  if (codexItemTypeMatches(item, "userMessage") || item.role === "user") {
-    const input = codexItemTypeMatches(item, "userMessage") ? codexUserInputsFromItem(item) : [];
-    const text = input.length > 0 ? codexUserInputListToText(input) : (extractText(item) ?? "");
+  const messageTimestamp = timestamp ?? new Date().toISOString();
+  if (item.type === "userMessage") {
+    const input = codexUserInputsFromItem(item);
+    const text = codexUserInputListToText(input);
     if (isCodexContextualUserMessage(item)) {
       return null;
     }
@@ -311,7 +255,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : undefined),
     };
   }
-  if (codexItemTypeMatches(item, "agentMessage") || item.role === "assistant") {
+  if (item.type === "agentMessage") {
     const text = codexAgentMessageText(item);
     return {
       messageId,
@@ -328,7 +272,7 @@ export const toHistoryMessage = (
       ...(model ? { model } : undefined),
     };
   }
-  const parts = toStreamPart(withCodexItemCompletedAtMs(item), messageId, messageId);
+  const parts = toStreamPart(item, messageId, messageId);
   if (parts.length > 0) {
     return {
       messageId,
@@ -352,7 +296,7 @@ export const codexTokenUsageHistoryFields = (
 });
 
 const toHistoryParts = (
-  item: Record<string, JsonValue>,
+  item: CodexTimedThreadItem,
   messageId: string,
   fallbackText: string,
   options: {
@@ -363,13 +307,7 @@ const toHistoryParts = (
 ): import("@openducktor/core").AgentStreamPart[] => {
   const isFinalAgentMessage = options.isFinalAgentMessage === true;
   const includeTextFallback = options.includeTextFallback !== false;
-  const rawParts = arrayFromUnknown(item.parts ?? item.items ?? item.content);
-  const parts = rawParts.flatMap((part, index): import("@openducktor/core").AgentStreamPart[] => {
-    if (!isPlainObject(part)) {
-      return [];
-    }
-    return toStreamPart(part, messageId, `codex-history-part-${index}`);
-  });
+  const parts = toStreamPart(item, messageId, item.id);
   if (parts.length > 0) {
     return isFinalAgentMessage
       ? [...parts, terminalHistoryPart(messageId, options.tokenUsage)]
@@ -404,97 +342,52 @@ export const terminalHistoryPart = (
   ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : undefined),
 });
 
-const firstPlainObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
+const firstPlainObject = (
+  value: CodexAppServerJsonValue | undefined,
+): Record<string, CodexAppServerJsonValue> | null => {
   return arrayFromUnknown(value).find(isPlainObject) ?? null;
 };
 
-const parseObjectString = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
-  if (!hasRuntimeType(value, "string")) {
-    return null;
-  }
-  try {
-    const parsed = jsonValueSchema.safeParse(JSON.parse(value));
-    return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
-  } catch {
-    return null;
-  }
-};
-
-const commandActionToolName = (action: Record<string, JsonValue> | null): string => {
+const commandActionToolName = (action: CodexAppServerCommandAction | undefined): string => {
   if (!action) {
     return "bash";
   }
-  const actionType = extractStringField(action, ["type", "kind", "tool", "name"])
-    ?.replace(/[_-]/g, "")
-    .toLowerCase();
-  if (actionType === "read") {
+  if (action.type === "read") {
     return "read";
   }
-  if (actionType === "list" || actionType === "listfiles") {
+  if (action.type === "listFiles") {
     return "list";
   }
-  if (actionType === "search" || actionType === "grep") {
+  if (action.type === "search") {
     return "search";
-  }
-  if (actionType === "find" || actionType === "glob") {
-    return "find";
   }
   return "bash";
 };
 
 const commandActionInput = (
-  action: Record<string, JsonValue> | null,
+  action: CodexAppServerCommandAction | undefined,
   command: string,
-  cwd: string | null,
+  cwd: string,
 ) => {
   if (!action) {
-    return {
-      command,
-      ...(cwd ? { cwd } : undefined),
-    } satisfies Record<string, JsonValue>;
+    return { command, cwd };
   }
-  const actionCommand = extractStringField(action, ["command"]) ?? command;
-  const tool = commandActionToolName(action);
   const path =
-    extractStringField(action, ["path", "file", "directory"]) ??
-    (tool === "read" ? readPathFromCommand(actionCommand) : null) ??
-    (tool === "search"
-      ? extractStringField(searchInputFromCommand(actionCommand), ["path"])
-      : null);
-  const query =
-    extractStringField(action, ["query", "pattern"]) ??
-    (tool === "search"
-      ? extractStringField(searchInputFromCommand(actionCommand), ["query"])
-      : null);
-  const pattern = extractStringField(action, ["pattern", "glob"]);
-  const name = extractStringField(action, ["name"]);
+    action.type === "read" ? action.path : action.type !== "unknown" ? action.path : null;
+  const query = action.type === "search" ? action.query : null;
+  const name = action.type === "read" ? action.name : null;
   return {
-    command: actionCommand,
-    ...(cwd ? { cwd } : undefined),
+    command: action.command,
+    cwd,
     ...(path ? { path } : undefined),
     ...(query ? { query } : undefined),
-    ...(pattern ? { pattern } : undefined),
     ...(name ? { name } : undefined),
-  } satisfies Record<string, JsonValue>;
+  };
 };
 
-const codexCommandText = (value: JsonValue | undefined): string | null => {
-  if (hasRuntimeType(value, "string") && value.trim().length > 0) {
-    return value;
-  }
-  const argv = Array.isArray(value)
-    ? value
-    : isPlainObject(value) && Array.isArray(value.command)
-      ? value.command
-      : null;
-  if (!argv) {
-    return null;
-  }
-  const parts = argv.filter((part): part is string => typeof part === "string");
-  return parts.length > 0 ? parts.join(" ") : null;
-};
-
-const codexObjectInput = (value: JsonValue | undefined): Record<string, JsonValue> | undefined => {
+const codexObjectInput = (
+  value: CodexAppServerJsonValue | undefined,
+): Record<string, CodexAppServerJsonValue> | undefined => {
   if (isPlainObject(value)) {
     return value;
   }
@@ -509,7 +402,7 @@ const codexObjectInput = (value: JsonValue | undefined): Record<string, JsonValu
   }
 };
 
-const codexToolResultText = (value: JsonValue | undefined): string | null => {
+const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -519,7 +412,7 @@ const codexToolResultText = (value: JsonValue | undefined): string | null => {
   const content = Array.isArray(value)
     ? value
     : isPlainObject(value)
-      ? arrayFromUnknown(value.content ?? value.contentItems ?? value.content_items)
+      ? arrayFromUnknown(value.content)
       : [];
   const text = content
     .map((entry) => {
@@ -533,7 +426,7 @@ const codexToolResultText = (value: JsonValue | undefined): string | null => {
       if (entryType === "inputImage" || entryType === "image") {
         return "";
       }
-      return extractStringField(entry, ["text", "inputText", "outputText", "content"]) ?? "";
+      return extractStringField(entry, ["text"]) ?? "";
     })
     .filter((entry) => entry.trim().length > 0)
     .join("\n");
@@ -541,36 +434,28 @@ const codexToolResultText = (value: JsonValue | undefined): string | null => {
 };
 
 const webSearchActionInput = (
-  action: JsonValue | undefined,
-): Record<string, JsonValue> | undefined => {
-  if (!isPlainObject(action)) {
+  action: CodexAppServerWebSearchAction | null,
+): Record<string, CodexAppServerJsonValue> | undefined => {
+  if (!action) {
     return undefined;
   }
 
-  const type = extractStringField(action, ["type"]);
-  if (type === "search") {
-    const query =
-      extractStringField(action, ["query"]) ??
-      arrayFromUnknown(action.queries).find(
-        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-      );
+  if (action.type === "search") {
+    const query = action.query ?? action.queries?.find((entry) => entry.trim().length > 0);
     return query ? { query } : undefined;
   }
 
-  if (type === "openPage" || type === "open_page") {
-    const url = extractStringField(action, ["url"]);
-    return url ? { url } : undefined;
+  if (action.type === "openPage") {
+    return action.url ? { url: action.url } : undefined;
   }
 
-  if (type === "findInPage" || type === "find_in_page") {
-    const url = extractStringField(action, ["url"]);
-    const pattern = extractStringField(action, ["pattern"]);
-    if (!url && !pattern) {
+  if (action.type === "findInPage") {
+    if (!action.url && !action.pattern) {
       return undefined;
     }
     return {
-      ...(pattern ? { pattern } : undefined),
-      ...(url ? { url } : undefined),
+      ...(action.pattern ? { pattern: action.pattern } : undefined),
+      ...(action.url ? { url: action.url } : undefined),
     };
   }
 
@@ -578,17 +463,16 @@ const webSearchActionInput = (
 };
 
 const webSearchInput = (
-  value: Record<string, JsonValue>,
-): Record<string, JsonValue> | undefined => {
-  const query = extractStringField(value, ["query"]);
-  if (query) {
-    return { query };
+  value: CodexWebSearchItem,
+): Record<string, CodexAppServerJsonValue> | undefined => {
+  if (value.query) {
+    return { query: value.query };
   }
   return webSearchActionInput(value.action);
 };
 
 export const extractCodexTokenUsageTotals = (
-  params: JsonValue | undefined,
+  params: CodexAppServerJsonValue | undefined,
 ): CodexTokenUsageTotals | null => {
   if (!isPlainObject(params)) {
     return null;
@@ -600,7 +484,7 @@ export const extractCodexTokenUsageTotals = (
   }
   const last = firstPlainObject(
     [usage.last, usage.lastTokenUsage, usage.last_token_usage].filter(
-      (value): value is JsonValue => value !== undefined,
+      (value): value is CodexAppServerJsonValue => value !== undefined,
     ),
   );
   const totalTokens =
@@ -624,8 +508,8 @@ export const extractCodexTokenUsageTotals = (
 };
 
 const codexTokenUsagePayload = (
-  params: Record<string, JsonValue>,
-): Record<string, JsonValue> | null => {
+  params: Record<string, CodexAppServerJsonValue>,
+): Record<string, CodexAppServerJsonValue> | null => {
   const directUsage = params.tokenUsage ?? params.token_usage;
   if (isPlainObject(directUsage)) {
     return directUsage;
@@ -651,22 +535,22 @@ const normalizedCodexToolPart = (input: NormalizedCodexToolInvocation): AgentStr
 };
 
 const codexReasoningStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexReasoningItem,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
-  const text = [...arrayFromUnknown(value.summary), ...arrayFromUnknown(value.content)]
-    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+  const text = [...value.summary, ...value.content]
+    .filter((entry) => entry.trim().length > 0)
     .join("\n");
   return text ? [{ kind: "reasoning", messageId, partId, text, completed: true }] : [];
 };
 
 const codexPlanStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexPlanItem,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
-  const text = extractStringField(value, ["text"]);
+  const text = value.text;
   if (!text) {
     return [];
   }
@@ -682,26 +566,24 @@ const codexPlanStreamParts = (
       title: "Plan",
       status: "completed",
       preview: text,
-      metadata: { codexItem: value },
     }),
   ];
 };
 
 const codexCommandExecutionStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexCommandExecutionItem,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
-  const command = codexCommandText(value.command) ?? "command";
-  const cwd = extractStringField(value, ["cwd"]);
-  const firstAction = firstPlainObject(value.commandActions ?? value.command_actions);
+  const command = value.command;
+  const cwd = value.cwd;
+  const firstAction = value.commandActions[0];
   const tool = commandActionToolName(firstAction);
   const input = commandActionInput(firstAction, command, cwd);
-  const output = codexToolResultText(value.aggregatedOutput ?? value.aggregated_output);
-  const explicitError = stringifyJsonValue(value.error);
+  const output = value.aggregatedOutput;
   const status = statusFromCodexStatus(value.status);
-  const error = explicitError ?? (status === "error" ? output : null);
+  const error = status === "error" ? output : null;
   const timing = codexToolTimingFields(value, timingOptions);
 
   return normalizedCodexToolPart({
@@ -715,12 +597,11 @@ const codexCommandExecutionStreamParts = (
     output,
     error,
     ...timing,
-    metadata: { codexItem: value },
   });
 };
 
 const codexFileChangeStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexFileChangeItem,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
@@ -748,20 +629,19 @@ const codexFileChangeStreamParts = (
     ...(!fileDiffsResult.error && diff ? { input: { patch: diff }, output: diff } : undefined),
     error,
     fileDiffs: fileDiffsResult.fileDiffs,
-    metadata: { codexItem: value },
   });
 };
 
 const codexMcpToolCallStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexMcpToolCallItem,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
-  const server = extractStringField(value, ["server"]);
-  const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
-  const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
-  const error = codexMcpToolErrorFromResult(value.result, value);
+  const server = value.server;
+  const tool = value.tool;
+  const args = codexObjectInput(value.arguments);
+  const error = codexMcpToolErrorFromResult(value);
   const output = codexToolResultText(value.result);
   return normalizedCodexToolPart({
     messageId,
@@ -774,26 +654,17 @@ const codexMcpToolCallStreamParts = (
     error,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
-      codexItem: value,
-      ...(server ? { server } : undefined),
+      server,
     },
   });
 };
 
 const codexCollabAgentToolCallStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexCollabAgentToolCallItem,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
-  const tool = extractStringField(value, ["tool"]) ?? "collab_agent";
-  const prompt = extractStringField(value, ["prompt"]);
-  const receivers = [
-    ...arrayFromUnknown(value.receiverThreadIds ?? value.receiver_thread_ids).filter(
-      (entry): entry is string => typeof entry === "string",
-    ),
-    extractStringField(value, ["receiverThreadId", "receiver_thread_id"]),
-    extractStringField(value, ["newThreadId", "new_thread_id"]),
-  ].filter((entry): entry is string => Boolean(entry));
+  const tool = value.tool;
   return [
     syntheticToolPart({
       kind: "tool",
@@ -804,15 +675,16 @@ const codexCollabAgentToolCallStreamParts = (
       toolType: "generic",
       title: `Collab ${tool}`,
       status: statusFromCodexStatus(value.status),
-      ...(prompt ? { input: { prompt } } : undefined),
-      ...(receivers.length > 0 ? { output: receivers.join("\n") } : undefined),
-      metadata: { codexItem: value },
+      ...(value.prompt ? { input: { prompt: value.prompt } } : undefined),
+      ...(value.receiverThreadIds.length > 0
+        ? { output: value.receiverThreadIds.join("\n") }
+        : undefined),
     }),
   ];
 };
 
 const codexDynamicToolCallStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexDynamicToolCallItem,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -830,25 +702,17 @@ const codexDynamicToolCallStreamParts = (
     );
   }
 
-  const namespace = extractStringField(value, ["namespace"]);
-  const rawTool = codexNamespacedToolName(
-    namespace,
-    extractStringField(value, ["tool", "name"]) ?? "dynamic_tool",
-  );
-  const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
-  const parsedInput = parseObjectString(value.input);
-  const inputObject = args ?? parsedInput;
-  const patch = isCodexApplyPatchTool(rawTool)
-    ? codexPatchInputFromToolPayload(value, inputObject)
-    : null;
+  const namespace = value.namespace;
+  const rawTool = codexNamespacedToolName(namespace, value.tool);
+  const inputObject = codexObjectInput(value.arguments);
+  const patch = isCodexApplyPatchTool(rawTool) ? codexPatchInputFromToolPayload(inputObject) : null;
   const input = patch ? { ...inputObject, patch } : (inputObject ?? undefined);
   const fileDiffs = patch ? codexApplyPatchFileDiffs(patch) : [];
   const patchOutput = fileDiffsPatchOutput(fileDiffs);
   const resultPayload = codexDynamicToolDisplayPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
-  const success = hasRuntimeType(value.success, "boolean") ? value.success : true;
-  const failed = !success || error !== null;
+  const failed = value.success === false || error !== null || value.status === "failed";
   return normalizedCodexToolPart({
     messageId,
     partId,
@@ -860,20 +724,17 @@ const codexDynamicToolCallStreamParts = (
     error: error ?? (failed ? output : null),
     fileDiffs,
     ...codexToolTimingFields(value, timingOptions),
-    metadata: { codexItem: value },
   });
 };
 
 const codexWebSearchStreamParts = (
-  value: Record<string, JsonValue>,
+  value: CodexWebSearchItem,
   messageId: string,
   partId: string,
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const input = webSearchInput(value);
-  const output = stringifyJsonValue(
-    value.output ?? value.result ?? value.results ?? value.contentItems ?? value.content_items,
-  );
+  const output = stringifyJsonValue(value.results);
   return normalizedCodexToolPart({
     messageId,
     partId,
@@ -884,12 +745,11 @@ const codexWebSearchStreamParts = (
     ...(output ? { output } : undefined),
     ...(input ? { preview: Object.values(input).join(" ") } : undefined),
     ...codexToolTimingFields(value, timingOptions),
-    metadata: { codexItem: value },
   });
 };
 
 export const toStreamPart = (
-  value: Record<string, JsonValue>,
+  value: CodexTimedThreadItem,
   messageId: string,
   fallbackPartId: string,
   timingOptions?: CodexToolTimingOptions,
@@ -910,10 +770,7 @@ export const toStreamPart = (
   if (codexItemTypeMatches(value, "mcpToolCall")) {
     return codexMcpToolCallStreamParts(value, messageId, partId, timingOptions);
   }
-  if (
-    codexItemTypeMatches(value, "collabAgentToolCall") ||
-    codexItemTypeMatches(value, "collabToolCall")
-  ) {
+  if (codexItemTypeMatches(value, "collabAgentToolCall")) {
     return codexCollabAgentToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "dynamicToolCall")) {

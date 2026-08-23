@@ -1,6 +1,5 @@
-import { jsonValueSchema } from "@openducktor/contracts";
+import { type JsonValue, jsonValueSchema } from "@openducktor/contracts";
 import { compare, prerelease, valid } from "semver";
-import type { JsonValue } from "@openducktor/contracts";
 import { z } from "zod";
 
 export type GitHubRelease = {
@@ -31,7 +30,7 @@ const githubReleasePayloadSchema = z.object({
   tag_name: z.string().min(1),
 });
 
-const readRelease = (value: JsonValue | undefined): Omit<GitHubRelease, "version"> => {
+const readRelease = (value: JsonValue): Omit<GitHubRelease, "version"> => {
   const parsed = githubReleasePayloadSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(`GitHub release is invalid: ${parsed.error.message}`);
@@ -42,7 +41,7 @@ const readRelease = (value: JsonValue | undefined): Omit<GitHubRelease, "version
   };
 };
 
-const parseRelease = (value: JsonValue | undefined): GitHubRelease => {
+const parseRelease = (value: JsonValue): GitHubRelease => {
   const release = readRelease(value);
   const { tagName } = release;
   const version = valid(tagName);
@@ -55,17 +54,14 @@ const parseRelease = (value: JsonValue | undefined): GitHubRelease => {
   };
 };
 
-const readJson = async (
-  response: Response,
-  description: string,
-): Promise<JsonValue | undefined> => {
+const readJson = async (response: Response, description: string): Promise<JsonValue> => {
   if (!response.ok) {
     throw new Error(`${description} returned HTTP ${response.status}.`);
   }
   return jsonValueSchema.parse(await response.json());
 };
 
-const parseReleasePage = (value: JsonValue | undefined): GitHubRelease[] => {
+const parseReleasePage = (value: JsonValue): GitHubRelease[] => {
   if (!Array.isArray(value)) {
     throw new Error("GitHub releases response is not an array.");
   }
@@ -80,7 +76,7 @@ const fetchReleaseJson = async (
   fetch: typeof globalThis.fetch,
   url: string,
   description: string,
-): Promise<{ response: Response; value: JsonValue | undefined }> => {
+): Promise<{ response: Response; value: JsonValue }> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();

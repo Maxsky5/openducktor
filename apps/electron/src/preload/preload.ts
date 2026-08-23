@@ -1,8 +1,8 @@
 import {
-  type JsonValue,
   appPlatformSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
+  type AppUpdateState,
 } from "@openducktor/contracts";
 import electron from "electron";
 import {
@@ -54,7 +54,7 @@ const appUpdates: OpenDucktorElectronAppUpdateApi = {
     );
   },
   subscribe(listener) {
-    const handleEvent = (_event: Electron.IpcRendererEvent, state: JsonValue | undefined) => {
+    const handleEvent = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => {
       const parsedState = appUpdateStateSchema.safeParse(state);
       if (!parsedState.success) {
         console.error("Received invalid app update state from Electron main process.", {
@@ -83,7 +83,7 @@ const terminals: OpenDucktorElectronTerminalApi = {
   subscribe(clientId, listener) {
     const handleEvent = (
       _event: Electron.IpcRendererEvent,
-      value: ElectronTerminalEventEnvelope | JsonValue | undefined,
+      value: ElectronTerminalEventEnvelope,
     ) => {
       const parsedEnvelope = electronTerminalEventEnvelopeSchema.safeParse(value);
       if (parsedEnvelope.success && parsedEnvelope.data.clientId === clientId) {

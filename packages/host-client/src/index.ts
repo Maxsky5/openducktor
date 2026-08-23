@@ -261,7 +261,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const claudeRuntimeClient = new HostClaudeRuntimeClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
-  // SAFETY: This scope populates or freezes the value as `HostClientApi` before it can escape.
+  // SAFETY: HostClientApi is defined from the ten method-name tuples above, and every tuple is bound to its matching client before this object returns.
   const hostClient = {} as HostClientApi;
 
   bindDelegates(hostClient, workspaceClient, WORKSPACE_METHODS);

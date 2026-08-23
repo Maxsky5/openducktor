@@ -1,5 +1,4 @@
 import {
-  ODT_TOOL_SCHEMAS,
   type JsonValue,
   type OdtPersistedDocument,
   type OdtToolName,
@@ -14,7 +13,6 @@ import { Effect } from "effect";
 import type { z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
-type OdtToolInput<Name extends OdtToolName> = ReturnType<(typeof ODT_TOOL_SCHEMAS)[Name]["parse"]>;
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
 const MAX_TASK_CANDIDATES = 5;
@@ -236,13 +234,13 @@ export const createdSubtaskIds = (
     .map((task) => task.id)
     .filter((taskId) => !before.has(taskId));
 
-// SAFETY: The schema parser validates every field required by `OdtToolInput<Name>` before returning.
-export const parseToolInput = <Name extends OdtToolName>(
-  toolName: Name,
-  input: JsonValue | undefined,
+export const parseToolInput = <Output>(
+  toolName: OdtToolName,
+  schema: z.ZodType<Output>,
+  input: JsonValue,
 ) =>
   Effect.try({
-    try: () => ODT_TOOL_SCHEMAS[toolName].parse(input) as OdtToolInput<Name>,
+    try: () => schema.parse(input),
     catch: (cause) =>
       new HostValidationError({
         message: cause instanceof Error ? cause.message : String(cause),

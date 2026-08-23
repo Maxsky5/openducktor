@@ -10,7 +10,6 @@ import {
   withAnimationFrameTestDriver,
 } from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
@@ -75,13 +74,13 @@ const setGlobalWindow = (value: Window | undefined): void => {
 };
 
 const createContainer = () => {
-  return createFocusedFixture<HTMLDivElement>({
-    addEventListener: mock(() => {}),
-    clientHeight: 320,
-    removeEventListener: mock(() => {}),
-    scrollHeight: 2_000,
-    scrollTop: 1_680,
+  const container = document.createElement("div");
+  Object.defineProperties(container, {
+    clientHeight: { configurable: true, value: 320 },
+    scrollHeight: { configurable: true, value: 2_000 },
   });
+  container.scrollTop = 1_680;
+  return container;
 };
 
 type ScrollContainerMock = {
@@ -1359,11 +1358,7 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo stack first appears", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = createFocusedFixture<{
-      current: (() => void) | null;
-    }>({
-      current: null,
-    });
+    const syncBottomAfterComposerLayoutRef = createRef<() => void>();
     const session = buildSession();
     const model = {
       ...buildBaseModel(),
@@ -1420,11 +1415,7 @@ describe("AgentChatThread", () => {
 
   test("resyncs the transcript when the todo panel expands", async () => {
     const syncBottomAfterComposerLayout = mock(() => {});
-    const syncBottomAfterComposerLayoutRef = createFocusedFixture<{
-      current: (() => void) | null;
-    }>({
-      current: null,
-    });
+    const syncBottomAfterComposerLayoutRef = createRef<() => void>();
     const session = buildSession();
     const model = {
       ...buildBaseModel(),

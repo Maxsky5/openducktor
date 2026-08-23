@@ -15,12 +15,6 @@ import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
 
-interface WORKFLOWSTEPCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
-
-interface WORKFLOWCONNECTORCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
-
-interface WORKFLOWSELECTIONCLASSESContract extends Record<AgentWorkflowStepState["tone"], string> {}
-
 type WorkflowRailProps = {
   steps: AgentWorkflowStep[];
   selectedRole: AgentRole | null;
@@ -30,7 +24,7 @@ type WorkflowRailProps = {
 
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
 
-const WORKFLOW_STEP_CLASSES: WORKFLOWSTEPCLASSESContract = {
+const WORKFLOW_STEP_CLASSES = {
   in_progress: "border-info-border bg-info-surface hover:bg-info-surface text-info-muted shadow-sm",
   done: "border-success-border bg-success-surface hover:bg-success-surface text-success-muted shadow-sm",
   available: "border-input bg-card text-foreground",
@@ -42,9 +36,9 @@ const WORKFLOW_STEP_CLASSES: WORKFLOWSTEPCLASSESContract = {
   failed:
     "border-destructive-border bg-destructive-surface hover:bg-destructive-surface text-destructive-muted shadow-sm",
   blocked: "border-border bg-muted text-muted-foreground",
-};
+} satisfies Record<AgentWorkflowStepState["tone"], string>;
 
-const WORKFLOW_CONNECTOR_CLASSES: WORKFLOWCONNECTORCLASSESContract = {
+const WORKFLOW_CONNECTOR_CLASSES = {
   done: "text-success-ring",
   in_progress: "text-info-ring",
   available: "text-muted-foreground/40",
@@ -53,9 +47,9 @@ const WORKFLOW_CONNECTOR_CLASSES: WORKFLOWCONNECTORCLASSESContract = {
   waiting_input: "text-warning-ring",
   failed: "text-destructive-ring",
   blocked: "text-muted-foreground/20",
-};
+} satisfies Record<AgentWorkflowStepState["tone"], string>;
 
-const WORKFLOW_SELECTION_CLASSES: WORKFLOWSELECTIONCLASSESContract = {
+const WORKFLOW_SELECTION_CLASSES = {
   done: "ring-2 ring-offset-2 ring-offset-card ring-success-ring",
   in_progress: "ring-2 ring-offset-2 ring-offset-card ring-info-ring",
   available: "ring-2 ring-offset-2 ring-offset-card ring-muted-foreground/50",
@@ -64,7 +58,7 @@ const WORKFLOW_SELECTION_CLASSES: WORKFLOWSELECTIONCLASSESContract = {
   waiting_input: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
   failed: "ring-2 ring-offset-2 ring-offset-card ring-destructive-ring",
   blocked: "ring-2 ring-offset-2 ring-offset-card ring-warning-ring",
-};
+} satisfies Record<AgentWorkflowStepState["tone"], string>;
 
 const requireWorkflowToneClass = (
   classes: Record<AgentWorkflowStepState["tone"], string>,

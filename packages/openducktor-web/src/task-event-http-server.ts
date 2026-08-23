@@ -7,7 +7,6 @@ import {
 import { Effect } from "effect";
 import { errorMessage, WebHostRequestError } from "./effect/web-errors";
 import type { TaskEventLeaseManager } from "./task-event-leases";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const TASK_EVENT_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "/task-events/subscriptions";
@@ -22,7 +21,7 @@ type TaskEventHttpServerContext = {
   corsHeaders: HeadersInit;
   parseJsonObjectBody: (
     request: Request,
-  ) => Effect.Effect<Record<string, JsonValue>, WebHostRequestError>;
+  ) => Effect.Effect<Record<string, unknown>, WebHostRequestError>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
@@ -37,11 +36,16 @@ type TaskEventHttpServerContext = {
   ) => Effect.Effect<void, WebHostRequestError>;
 };
 
+type TaskEventSubscriptionResponse = {
+  streamToken: string;
+  subscriptionId: string;
+};
+
 const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(new WebHostRequestError({ message, status }));
 
 const jsonResponse = (
-  payload: JsonValue | undefined,
+  payload: TaskEventSubscriptionResponse,
   init: ResponseInit,
   corsHeaders: HeadersInit,
 ): Response =>
@@ -118,7 +122,7 @@ const createTaskEventSseResponse = (
 };
 
 const parseTaskEventAckCursor = (
-  body: Record<string, JsonValue>,
+  body: Record<string, unknown>,
 ): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
   Effect.gen(function* () {
     if (Object.keys(body).length !== 1 || !("cursor" in body)) {

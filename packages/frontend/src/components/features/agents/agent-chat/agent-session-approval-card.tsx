@@ -4,19 +4,14 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
-import type { JsonValue } from "@openducktor/contracts";
 
-interface APPROVALOUTCOMELABELSContract extends Partial<
-  Record<RuntimeApprovalReplyOutcome, string>
-> {}
-
-const APPROVAL_OUTCOME_LABELS: APPROVALOUTCOMELABELSContract = {
+const APPROVAL_OUTCOME_LABELS = {
   approve_once: "Approve once",
   approve_turn: "Approve for turn",
   approve_session: "Approve for session",
   approve_always: "Always allow",
   reject: "Reject",
-};
+} satisfies Partial<Record<RuntimeApprovalReplyOutcome, string>>;
 
 const getApprovalOutcomeButtonVariant = (
   outcome: RuntimeApprovalReplyOutcome,
@@ -33,8 +28,7 @@ const getApprovalOutcomeButtonVariant = (
 const AFFECTED_PATH_CODE_CLASS_NAME =
   "rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground";
 
-const formatToolInput = (input: Record<string, JsonValue>): string =>
-  JSON.stringify(input, null, 2);
+const formatToolInput = (input: Record<string, unknown>): string => JSON.stringify(input, null, 2);
 
 type AgentSessionApprovalCardProps = {
   request: AgentApprovalRequest;

@@ -1,4 +1,4 @@
-import type { FileDiff } from "@openducktor/contracts";
+import { hasOwnKey, hasRuntimeType, type FileDiff } from "@openducktor/contracts";
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import {
   AlertTriangle,
@@ -67,6 +67,20 @@ type FileDiffEntryProps = {
 type GitDiffCommentAnnotationMetadata =
   | { kind: "new-comment-form" }
   | { kind: "comment"; commentId: string };
+
+const isGitDiffCommentAnnotationMetadata = (
+  value: unknown,
+): value is GitDiffCommentAnnotationMetadata => {
+  if (!hasRuntimeType(value, "object") || value === null || !("kind" in value)) {
+    return false;
+  }
+  if (value.kind === "new-comment-form") {
+    return true;
+  }
+  return (
+    value.kind === "comment" && "commentId" in value && hasRuntimeType(value.commentId, "string")
+  );
+};
 
 type FileDiffAnnotationState = {
   selectedLines: SelectedLineRange | null;
@@ -263,8 +277,12 @@ function FileDiffEntry({
 }: FileDiffEntryProps): ReactElement {
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
   const { canReset, isResetDisabled } = resetState;
-  const StatusIcon = FILE_STATUS_ICON[diff.type] ?? FileText;
-  const statusColor = FILE_STATUS_COLOR[diff.type] ?? "text-muted-foreground";
+  const StatusIcon = hasOwnKey(FILE_STATUS_ICON, diff.type)
+    ? FILE_STATUS_ICON[diff.type]
+    : FileText;
+  const statusColor = hasOwnKey(FILE_STATUS_COLOR, diff.type)
+    ? FILE_STATUS_COLOR[diff.type]
+    : "text-muted-foreground";
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);
@@ -386,8 +404,10 @@ function FileDiffEntry({
   }, [fileComments, pendingSelection]);
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
-      // SAFETY: The surrounding boundary constructs or validates every member required by `GitDiffCommentAnnotationMetadata`.
-      const metadata = annotation.metadata as GitDiffCommentAnnotationMetadata;
+      if (!isGitDiffCommentAnnotationMetadata(annotation.metadata)) {
+        return null;
+      }
+      const metadata = annotation.metadata;
       if (metadata.kind === "new-comment-form") {
         if (pendingSelection == null) {
           return null;

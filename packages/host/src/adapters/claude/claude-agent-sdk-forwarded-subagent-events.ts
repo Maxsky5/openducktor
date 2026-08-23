@@ -9,7 +9,6 @@ import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-tr
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 type ForwardedClaudeSubagentMessage = {
   message: SDKMessage;
@@ -23,26 +22,15 @@ const hasToolResultForParent = (
   const content = message.message.content;
   if (Array.isArray(content)) {
     for (const block of content) {
-      const result = decodeClaudeToolResultValue(
-        parseClaudeJsonValue(block, "claudeUserMessage.content"),
-        null,
-      );
+      const result = decodeClaudeToolResultValue(block, null);
       if (result?.toolUseId === parentToolUseId) {
         return true;
       }
     }
   }
-  const rawMessage = parseClaudeJsonValue(message, "claudeUserMessage");
-  if (!isRecord(rawMessage)) {
-    return false;
-  }
-  const directResult =
-    decodeClaudeToolResultValue(rawMessage.tool_use_result, parentToolUseId, {
-      allowNonToolResultType: true,
-    }) ??
-    decodeClaudeToolResultValue(rawMessage.toolUseResult, parentToolUseId, {
-      allowNonToolResultType: true,
-    });
+  const directResult = decodeClaudeToolResultValue(message.tool_use_result, parentToolUseId, {
+    allowNonToolResultType: true,
+  });
   return directResult?.toolUseId === parentToolUseId;
 };
 
@@ -51,7 +39,7 @@ const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "use
   if (
     Array.isArray(content) &&
     content.some((block) => {
-      const contentBlock = parseClaudeJsonValue(block, "claudeUserMessage.content");
+      const contentBlock = block;
       return (
         isRecord(contentBlock) &&
         (readStringProp(contentBlock, "type") === "tool_result" ||
@@ -61,11 +49,7 @@ const isClaudeToolResultUserMessage = (message: Extract<SDKMessage, { type: "use
   ) {
     return true;
   }
-  const rawMessage = parseClaudeJsonValue(message, "claudeUserMessage");
-  if (!isRecord(rawMessage)) {
-    return false;
-  }
-  return isRecord(rawMessage.tool_use_result) || isRecord(rawMessage.toolUseResult);
+  return isRecord(message.tool_use_result);
 };
 
 export const emitClaudeSubagentUserMessage = ({
@@ -79,8 +63,8 @@ export const emitClaudeSubagentUserMessage = ({
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
-  const messageValue = parseClaudeJsonValue(message, "claudeUserMessage");
-  const content = parseClaudeJsonValue(message.message, "claudeUserMessage.content");
+  const messageValue = message;
+  const content = message.message;
   if (
     !isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
     isClaudeToolResultUserMessage(message) ||

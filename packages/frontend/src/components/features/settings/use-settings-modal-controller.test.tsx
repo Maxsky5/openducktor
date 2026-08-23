@@ -28,18 +28,6 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
-interface AttemptCountByKindContract extends Record<RuntimeKind, number> {}
-
-interface InitialValidationByKindContract extends Record<
-  RuntimeKind,
-  ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-> {}
-
-interface RepeatedValidationByKindContract extends Record<
-  RuntimeKind,
-  ReturnType<typeof createDeferred<RuntimeExecutableCheck>>
-> {}
-
 enableReactActEnvironment();
 
 const createSettingsSnapshot = (): SettingsSnapshot =>
@@ -531,21 +519,21 @@ describe("useSettingsModalController", () => {
   test("fails closed when runtime executable validation cannot load", async () => {
     const originalCheck = host.runtimeExecutablesCheck;
     const requestedKinds: RuntimeKind[] = [];
-    const attemptCountByKind: AttemptCountByKindContract = {
+    const attemptCountByKind = {
       opencode: 0,
       codex: 0,
       claude: 0,
-    };
-    const initialValidationByKind: InitialValidationByKindContract = {
+    } satisfies Record<RuntimeKind, number>;
+    const initialValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
-    };
-    const repeatedValidationByKind: RepeatedValidationByKindContract = {
+    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
+    const repeatedValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
-    };
+    } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>

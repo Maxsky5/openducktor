@@ -1,10 +1,8 @@
-import type { JsonValue } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import {
   normalizeUserMessageDisplayParts,
   type readMessageModelSelection,
-  readTextFromMessageInfo,
 } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionMessageMetadata } from "../../types";
 import { admitUserMessage } from "../../user-message-admission";
@@ -89,8 +87,8 @@ export const handleUserMessageUpdated = (
   input: {
     messageId: string;
     messageTimestamp: string;
-    infoRecord: JsonValue | undefined;
-    properties: JsonValue | undefined;
+    infoRecord: unknown;
+    properties: unknown;
     normalizedParts: Part[];
     messageModel?: ReturnType<typeof readMessageModelSelection>;
   },
@@ -107,7 +105,7 @@ export const handleUserMessageUpdated = (
   });
   const currentMetadata = session.messageMetadataById.get(input.messageId);
   const normalizedDisplayParts = normalizeUserMessageDisplayParts(userParts);
-  const fallbackText = currentMetadata?.text ?? readTextFromMessageInfo(input.infoRecord);
+  const fallbackText = currentMetadata?.text ?? "";
   const { displayParts, matchedQueuedSend, visible } = resolveUserMessageDisplay({
     fallbackText,
     normalizedDisplayParts,

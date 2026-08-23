@@ -13,7 +13,7 @@ import {
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
-interface EarlyExitContract {
+interface LauncherEarlyExitRef {
   current:
     | { readonly _tag: "exit-code"; readonly exitCode: number }
     | { readonly _tag: "failure"; readonly cause: unknown }
@@ -172,7 +172,7 @@ export const waitForBackendEffect = (
   Effect.gen(function* () {
     const startedAt = Date.now();
     let lastError: unknown;
-    const earlyExit: EarlyExitContract = { current: null };
+    const earlyExit: LauncherEarlyExitRef = { current: null };
 
     yield* Effect.sync(() => {
       void hostProcess.exited.then(

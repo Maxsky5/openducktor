@@ -1,5 +1,4 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
 import type { OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentSessionHistoryMessage,
@@ -9,45 +8,30 @@ import type {
 } from "@openducktor/core";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { asUnknownRecord } from "./guards";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
   mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
-  readTextFromMessageInfo,
   readTextFromParts,
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 import { mapOpenCodeBackgroundTaskResultPart } from "./opencode-background-task-result";
-import { opencodeSessionMessagesPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
+import {
+  opencodeSessionMessagesPayloadSchema,
+  type ParsedOpencodeMessage,
+  type ParsedOpencodePart,
+} from "./opencode-ingress";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
 import type { ClientFactory } from "./types";
 
-const asRecord = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
-  return asUnknownRecord(value) ?? null;
-};
-
-const readString = (record: Record<string, JsonValue>, keys: string[]): string | undefined => {
-  for (const key of keys) {
-    const value = record[key];
-    if (hasRuntimeType(value, "string") && value.trim().length > 0) {
-      return value;
-    }
-  }
-  return undefined;
-};
-
-const hasCompletedAssistantMessage = (value: JsonValue | undefined): boolean => {
-  const record = asRecord(value);
-  const time = record ? asRecord(record.time) : null;
-  return hasRuntimeType(time?.completed, "number");
-};
+const hasCompletedAssistantMessage = (value: ParsedOpencodeMessage["info"]): boolean =>
+  value.role === "assistant" && value.time.completed !== undefined;
 
 const isCompactionMarkerEntry = (entry: { parts: ParsedOpencodePart[] }): boolean =>
   entry.parts.some((part) => part.type === "compaction");
@@ -107,15 +91,6 @@ const listChildSessionLinks = async (
     externalSessionId: string;
   },
 ): Promise<ChildSessionLink[]> => {
-  // SAFETY: The preceding runtime guard establishes `OpencodeClient & { session?: { children?: unknown } }` before this assertion.
-  const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
-    ?.children;
-  if (!hasRuntimeType(childrenApi, "function")) {
-    throw new Error(
-      "OpenCode SDK does not expose session.children(); cannot load subagent transcript links.",
-    );
-  }
-
   const response = await client.session.children({
     sessionID: input.externalSessionId,
     directory: input.workingDirectory,
@@ -394,7 +369,7 @@ export const loadSessionHistory = async (
     .filter((entry) => !isCompactionMarkerEntry(entry))
     .map((entry) => {
       const info = entry.info;
-      const infoText = readTextFromMessageInfo(info);
+      const infoText = "";
       const displayParts =
         entry.info.role === "user"
           ? ensureVisibleUserTextDisplayParts(
@@ -417,13 +392,9 @@ export const loadSessionHistory = async (
       const rawText = rawTextFromParts.length > 0 ? rawTextFromParts : infoText;
       const text = entry.info.role === "assistant" ? sanitizeAssistantMessage(rawText) : rawText;
       const totalTokens = extractMessageTotalTokens(info, entry.parts);
-      const infoRecord = asRecord(info);
-      const infoTime = asRecord(infoRecord?.time);
-      const timestamp = toIsoFromEpoch(infoTime?.created, now);
+      const timestamp = toIsoFromEpoch(info.time.created, now);
       const model = readMessageModelSelection(info);
-      const parentId = infoRecord
-        ? readString(infoRecord, ["parentID", "parentId", "parent_id"])
-        : undefined;
+      const parentId = info.role === "assistant" ? info.parentID : undefined;
 
       return {
         entry,
@@ -532,12 +503,7 @@ export const loadSessionTodos = async (
       ...(trimmedWorkingDirectory.length > 0 ? { directory: trimmedWorkingDirectory } : undefined),
     });
     if (response.data === undefined || response.data === null) {
-      // SAFETY: The runtime adapter builds this value from the contract fields required by `{ response?: { status?: unknown; statusText?: unknown } }`.
-      throw toOpenCodeRequestError(
-        "load session todos",
-        response.error,
-        (response as { response?: { status?: unknown; statusText?: unknown } }).response,
-      );
+      throw toOpenCodeRequestError("load session todos", response.error, response.response);
     }
     return normalizeTodoList(response.data);
   } catch (error) {

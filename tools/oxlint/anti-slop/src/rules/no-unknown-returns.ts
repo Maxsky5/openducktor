@@ -45,6 +45,13 @@ export const noUnknownReturnsRule = defineRule({
       visited = new Set<string>(),
     ): boolean => {
       if (type.type === "TSUnknownKeyword") return true;
+      if (
+        /^Parameters\s*<\s*typeof\s+.+\.(?:parse|safeParse)\s*>\s*\[\s*0\s*\]$/u.test(
+          context.sourceCode.getText(type),
+        )
+      ) {
+        return true;
+      }
       if (type.type === "TSParenthesizedType") {
         return resolvesToUnknown(type.typeAnnotation, shadowedAliases, visited);
       }

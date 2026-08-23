@@ -16,7 +16,6 @@ import type {
   ClaudeSessionContext,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import type { JsonValue } from "@openducktor/contracts";
 
 const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   acceptedUserMessages: [],
@@ -163,7 +162,7 @@ const preToolUseHook = async (
   options: Awaited<ReturnType<typeof buildClaudeAgentSdkOptions>>,
   input: {
     permissionMode: string;
-    toolInput: Record<string, JsonValue>;
+    toolInput: Record<string, unknown>;
     toolName: string;
   },
 ) => {
@@ -511,7 +510,7 @@ describe("buildClaudeAgentSdkOptions", () => {
         hookOutput as {
           hookSpecificOutput?: {
             permissionDecision?: unknown;
-            updatedInput?: Record<string, JsonValue>;
+            updatedInput?: Record<string, unknown>;
           };
         }
       ).hookSpecificOutput;
@@ -552,6 +551,20 @@ describe("buildClaudeAgentSdkOptions", () => {
 
     expect(options.model).toBe("claude-sonnet-4-6-20260601");
     expect(options.effort).toBe("xhigh");
+  });
+
+  test("rejects a Claude effort variant that the SDK does not support", async () => {
+    const session = createSession();
+    session.input.model = {
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-sonnet-4-6-20260601",
+      variant: "turbo",
+    };
+
+    await expect(buildOptions(session)).rejects.toThrow(
+      "Claude Agent SDK does not support effort 'turbo'.",
+    );
   });
 
   test("removes the session-scoped MCP token directory when the session is aborted", async () => {

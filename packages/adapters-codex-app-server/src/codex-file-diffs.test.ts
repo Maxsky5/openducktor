@@ -7,7 +7,7 @@ describe("Codex file diffs", () => {
       toFileDiffs([
         {
           path: "src/app.ts",
-          kind: "update",
+          kind: { type: "update", move_path: null },
           diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line",
         },
       ]),
@@ -22,74 +22,38 @@ describe("Codex file diffs", () => {
     ]);
   });
 
-  test("derives counts when Codex runtime counts are not finite", () => {
-    expect(
+  test("rejects an empty Codex file path", () => {
+    expect(() =>
       toFileDiffs([
         {
-          path: "src/app.ts",
-          additions: Number.NaN,
-          deletions: Number.POSITIVE_INFINITY,
-          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line",
+          path: "   ",
+          kind: { type: "update", move_path: null },
+          diff: "@@\n+new",
         },
       ]),
-    ).toEqual([
-      {
-        file: "src/app.ts",
-        type: "modified",
-        additions: 2,
-        deletions: 1,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n",
-      },
-    ]);
-  });
-
-  test("parses nested Codex turn diff entries", () => {
-    expect(
-      toFileDiffs({
-        data: [
-          {
-            fileChanges: [
-              {
-                file: "src/app.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 0,
-                diff: "@@\n+new",
-              },
-            ],
-          },
-        ],
-      }),
-    ).toEqual([
-      {
-        file: "src/app.ts",
-        type: "modified",
-        additions: 1,
-        deletions: 0,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n+new\n",
-      },
-    ]);
-  });
-
-  test("rejects malformed Codex file change entries", () => {
-    expect(() => toFileDiffs([{ file: "src/app.ts" }])).toThrow(CodexFileDiffParseError);
-    expect(() => toFileDiffs([{ file: "src/app.ts" }])).toThrow(
-      "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
-    );
-    expect(() => toFileDiffs([{ file: "   ", diff: "@@\n+new" }])).toThrow(
-      "Malformed Codex file change: entry 0 has empty file path.",
-    );
+    ).toThrow(CodexFileDiffParseError);
+    expect(() =>
+      toFileDiffs([
+        {
+          path: "   ",
+          kind: { type: "update", move_path: null },
+          diff: "@@\n+new",
+        },
+      ]),
+    ).toThrow("Malformed Codex file change: entry 0 has empty file path.");
   });
 
   test("infers added and deleted file diffs with CRLF headers", () => {
     expect(
       toFileDiffs([
         {
-          file: "src/new.ts",
+          path: "src/new.ts",
+          kind: { type: "add" },
           diff: "--- /dev/null\r\n+++ b/src/new.ts\r\n@@\r\n+new",
         },
         {
-          file: "src/old.ts",
+          path: "src/old.ts",
+          kind: { type: "delete" },
           diff: "--- a/src/old.ts\r\n+++ /dev/null\r\n@@\r\n-old",
         },
       ]),
@@ -115,8 +79,8 @@ describe("Codex file diffs", () => {
     expect(
       toFileDiffs([
         {
-          file: "src/app.ts",
-          type: "modified",
+          path: "src/app.ts",
+          kind: { type: "update", move_path: null },
           diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
         },
       ]),
@@ -135,8 +99,8 @@ describe("Codex file diffs", () => {
     expect(
       toFileDiffs([
         {
-          file: "src/AuthContext.test.tsx",
-          type: "added",
+          path: "src/AuthContext.test.tsx",
+          kind: { type: "add" },
           diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
         },
       ]),
@@ -196,7 +160,7 @@ describe("Codex file diffs", () => {
       toFileDiffs([
         {
           path: "src/old.ts",
-          kind: { type: "update", movePath: "src/new.ts" },
+          kind: { type: "update", move_path: "src/new.ts" },
           diff: "--- a/src/old.ts\n+++ b/src/old.ts\n@@\n-old\n+new\n\nMoved to: src/new.ts",
         },
       ]),
@@ -215,7 +179,8 @@ describe("Codex file diffs", () => {
     expect(
       toFileDiffs([
         {
-          file: "src/AuthContext.test.tsx",
+          path: "src/AuthContext.test.tsx",
+          kind: { type: "update", move_path: null },
           diff: `import { render } from "@testing-library/react";
 function AuthConsumer() {}
 

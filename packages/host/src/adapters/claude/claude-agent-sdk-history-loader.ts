@@ -15,7 +15,6 @@ import {
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 export type ClaudeLiveHistoryContext = {
   source: "fresh" | "persisted";
@@ -26,9 +25,7 @@ export const isClaudeSubagentTranscriptComplete = (
   messages: readonly SessionMessage[],
 ): boolean => {
   const lastMessage = messages.at(-1);
-  const lastMessageValue = lastMessage
-    ? parseClaudeJsonValue(lastMessage.message, "claudeSessionMessage")
-    : undefined;
+  const lastMessageValue = lastMessage ? lastMessage.message : undefined;
   return (
     lastMessage?.type === "assistant" &&
     isRecord(lastMessageValue) &&
@@ -38,9 +35,7 @@ export const isClaudeSubagentTranscriptComplete = (
 
 const hasClaudeSubagentFinalText = (messages: readonly SessionMessage[]): boolean => {
   const lastMessage = messages.at(-1);
-  const lastMessageValue = lastMessage
-    ? parseClaudeJsonValue(lastMessage.message, "claudeSessionMessage")
-    : undefined;
+  const lastMessageValue = lastMessage ? lastMessage.message : undefined;
   if (lastMessage?.type !== "assistant" || !isRecord(lastMessageValue)) {
     return false;
   }

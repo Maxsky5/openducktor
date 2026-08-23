@@ -56,6 +56,16 @@ type AgentRuntimesSectionProps = {
 };
 
 type CodexPolicyField = keyof CodexPolicyFields;
+type CodexRoleOverride = {
+  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
+};
+type CodexPolicyValuesByField = {
+  readonly [Field in CodexPolicyField]: readonly CodexPolicyFields[Field][];
+};
+type PolicyValueDisplay = {
+  label: string;
+  description: string;
+};
 
 const AGENT_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
@@ -66,31 +76,31 @@ const POLICY_LABELS = {
   commandNetworkAccess: "Command network access",
 } satisfies Record<CodexPolicyField, string>;
 
-const VALUE_LABELS = {
-  "read-only": "Read-only",
-  "workspace-write": "Workspace-write",
-  "danger-full-access": "Danger full access",
-  untrusted: "Untrusted",
-  "on-request": "On request",
-  never: "Never",
-  user: "User",
-  auto_review: "Auto review",
-  true: "On",
-  false: "Off",
-} satisfies Record<string, string>;
+const VALUE_LABELS: ReadonlyMap<string, string> = new Map([
+  ["read-only", "Read-only"],
+  ["workspace-write", "Workspace-write"],
+  ["danger-full-access", "Danger full access"],
+  ["untrusted", "Untrusted"],
+  ["on-request", "On request"],
+  ["never", "Never"],
+  ["user", "User"],
+  ["auto_review", "Auto review"],
+  ["true", "On"],
+  ["false", "Off"],
+]);
 
-const VALUE_HELP = {
-  "read-only": "Codex can inspect files but cannot change the workspace.",
-  "workspace-write": "Codex can edit files in the workspace while keeping sandbox boundaries.",
-  "danger-full-access": "Codex runs without sandbox boundaries. Use only for trusted tasks.",
-  untrusted: "Codex asks before writes or commands that need trust.",
-  "on-request": "Codex asks when it decides a command needs approval.",
-  never: "Codex does not ask for approval prompts.",
-  user: "Approval prompts go to the user.",
-  auto_review: "Eligible prompts go through Codex automatic review.",
-  true: "Allow network for commands in sandboxed Codex turns.",
-  false: "Keep command network blocked in sandboxed Codex turns.",
-} satisfies Record<string, string>;
+const VALUE_HELP: ReadonlyMap<string, string> = new Map([
+  ["read-only", "Codex can inspect files but cannot change the workspace."],
+  ["workspace-write", "Codex can edit files in the workspace while keeping sandbox boundaries."],
+  ["danger-full-access", "Codex runs without sandbox boundaries. Use only for trusted tasks."],
+  ["untrusted", "Codex asks before writes or commands that need trust."],
+  ["on-request", "Codex asks when it decides a command needs approval."],
+  ["never", "Codex does not ask for approval prompts."],
+  ["user", "Approval prompts go to the user."],
+  ["auto_review", "Eligible prompts go through Codex automatic review."],
+  ["true", "Allow network for commands in sandboxed Codex turns."],
+  ["false", "Keep command network blocked in sandboxed Codex turns."],
+]);
 
 const FEATURE_HELP = {
   sandboxMode:
@@ -123,24 +133,16 @@ const openClaudeSetupUrl = (url: string): void => {
   });
 };
 
+const CODEX_POLICY_VALUES_BY_FIELD: CodexPolicyValuesByField = {
+  sandboxMode: CODEX_SANDBOX_MODE_VALUES,
+  approvalPolicy: CODEX_APPROVAL_POLICY_VALUES,
+  approvalsReviewer: CODEX_APPROVALS_REVIEWER_VALUES,
+  commandNetworkAccess: [false, true],
+};
+
 const defaultValuesForField = <Field extends CodexPolicyField>(
   field: Field,
-): CodexPolicyFields[Field][] => {
-  if (field === "sandboxMode") {
-    // SAFETY: The sandboxMode branch returns only the canonical sandboxMode values.
-    return [...CODEX_SANDBOX_MODE_VALUES] as CodexPolicyFields[Field][];
-  }
-  if (field === "approvalPolicy") {
-    // SAFETY: The approvalPolicy branch returns only the canonical approvalPolicy values.
-    return [...CODEX_APPROVAL_POLICY_VALUES] as CodexPolicyFields[Field][];
-  }
-  if (field === "approvalsReviewer") {
-    // SAFETY: The approvalsReviewer branch returns only the canonical approvalsReviewer values.
-    return [...CODEX_APPROVALS_REVIEWER_VALUES] as CodexPolicyFields[Field][];
-  }
-  // SAFETY: The remaining boolean fields accept exactly false and true.
-  return [false, true] as CodexPolicyFields[Field][];
-};
+): readonly CodexPolicyFields[Field][] => CODEX_POLICY_VALUES_BY_FIELD[field];
 
 const sortRuntimeDefinitionsForSettings = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -163,25 +165,33 @@ const codexConfigWithDefaults = (config: CodexRuntimeConfig): CodexRuntimeConfig
   roleOverrides: config.roleOverrides ?? {},
 });
 
-// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `CodexPolicyField[]`.
-const removeUndefinedFields = (override: {
-  [Field in CodexPolicyField]?: CodexPolicyFields[Field] | undefined;
-}): Partial<CodexPolicyFields> => {
-  const next: Partial<CodexPolicyFields> = {};
-  for (const field of Object.keys(override) as CodexPolicyField[]) {
-    if (override[field] !== undefined) {
-      // SAFETY: field selects the matching value type, but indexed assignment loses that generic link.
-      next[field] = override[field] as never;
-    }
+const removeUndefinedFields = (override: CodexRoleOverride): Partial<CodexPolicyFields> => ({
+  ...(override.sandboxMode === undefined ? undefined : { sandboxMode: override.sandboxMode }),
+  ...(override.approvalPolicy === undefined
+    ? undefined
+    : { approvalPolicy: override.approvalPolicy }),
+  ...(override.approvalsReviewer === undefined
+    ? undefined
+    : { approvalsReviewer: override.approvalsReviewer }),
+  ...(override.commandNetworkAccess === undefined
+    ? undefined
+    : { commandNetworkAccess: override.commandNetworkAccess }),
+});
+
+const policyValueDisplay = (value: string | boolean): PolicyValueDisplay => {
+  const key = String(value);
+  const label = VALUE_LABELS.get(key);
+  const description = VALUE_HELP.get(key);
+  if (!label || !description) {
+    throw new Error(`Unknown Codex policy value: ${key}`);
   }
-  return next;
+  return { label, description };
 };
 
-// SAFETY: VALUE_LABELS covers every string and boolean policy option passed to this formatter.
-const valueKey = (value: string | boolean): keyof typeof VALUE_LABELS =>
-  String(value) as keyof typeof VALUE_LABELS;
-
-const policyValueFromOption = <T extends string | boolean>(values: T[], nextValue: string): T => {
+const policyValueFromOption = <T extends string | boolean>(
+  values: readonly T[],
+  nextValue: string,
+): T => {
   const selectedValue = values.find((value) => String(value) === nextValue);
   if (selectedValue === undefined) {
     throw new Error(`Unknown Codex policy value: ${nextValue}`);
@@ -200,17 +210,17 @@ function PolicyValueDropdown<T extends string | boolean>({
   onChange,
 }: {
   value: T;
-  values: T[];
+  values: readonly T[];
   disabled: boolean;
   labelId: string;
   onChange: (value: T) => void;
 }): ReactElement {
   const options = values.map((option) => {
-    const key = valueKey(option);
+    const display = policyValueDisplay(option);
     return {
       value: String(option),
-      label: VALUE_LABELS[key],
-      description: VALUE_HELP[key],
+      label: display.label,
+      description: display.description,
     };
   });
 
@@ -341,8 +351,7 @@ function CodexSettings({
       if (value === undefined) {
         delete draftRoleOverride[field];
       } else {
-        // SAFETY: field and value share Field, but indexed assignment loses that generic link.
-        draftRoleOverride[field] = value as never;
+        Object.assign(draftRoleOverride, { [field]: value });
       }
       const nextRoleOverride = removeUndefinedFields(draftRoleOverride);
       const nextRoleOverrides = { ...current.roleOverrides };
@@ -474,7 +483,6 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
   const defaultLabelId = `codex-${field}-default-label`;
   const roleOverrideSwitchId = `codex-${field}-role-overrides`;
 
-  // SAFETY: The surrounding boundary constructs or validates every member required by `CodexPolicyFields[Field]`.
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
       <div className="flex flex-col gap-1">
@@ -500,7 +508,7 @@ function CodexFeatureGroup<Field extends CodexPolicyField>({
           values={defaultValuesForField(field)}
           disabled={disabled}
           labelId={defaultLabelId}
-          onChange={(value) => onDefaultChange(field, value as CodexPolicyFields[Field])}
+          onChange={(value) => onDefaultChange(field, value)}
         />
       </div>
 
@@ -549,11 +557,11 @@ function PolicyInfoPanel<Field extends CodexPolicyField>({
       <p className="max-w-3xl text-sm leading-6 text-pretty">{FEATURE_HELP[field]}</p>
       <dl className="grid gap-1.5 border-info-border/70 border-t pt-2 text-sm">
         {values.map((option) => {
-          const key = valueKey(option);
+          const display = policyValueDisplay(option);
           return (
             <div key={String(option)} className="grid gap-1 sm:grid-cols-[10rem_minmax(0,1fr)]">
-              <dt className="font-semibold">{VALUE_LABELS[key]}</dt>
-              <dd className="leading-relaxed text-foreground/80">{VALUE_HELP[key]}</dd>
+              <dt className="font-semibold">{display.label}</dt>
+              <dd className="leading-relaxed text-foreground/80">{display.description}</dd>
             </div>
           );
         })}
@@ -581,10 +589,9 @@ function RoleOverrideRows<Field extends CodexPolicyField>({
     <div className="divide-y divide-border rounded-md border border-border">
       {AGENT_ROLE_ORDER.map((role) => {
         const roleLabelId = `codex-${field}-${role}-override-label`;
-        // SAFETY: The surrounding boundary constructs or validates every member required by `| CodexPolicyFields[Field] | undefined`.
-        const overrideValue = config.roleOverrides[role]?.[field] as
-          | CodexPolicyFields[Field]
-          | undefined;
+        const roleOverride: CodexRoleOverride | undefined = config.roleOverrides[role];
+        // SAFETY: CodexRoleOverride maps each Field to CodexPolicyFields[Field]; TypeScript widens optional generic indexed access to the union of all field values.
+        const overrideValue = roleOverride?.[field] as CodexPolicyFields[Field] | undefined;
 
         return (
           <div
@@ -616,7 +623,7 @@ function RoleOverrideDropdown<T extends string | boolean>({
   onChange,
 }: {
   value: T | undefined;
-  values: T[];
+  values: readonly T[];
   disabled: boolean;
   labelId: string;
   onChange: (value: T | undefined) => void;
@@ -628,11 +635,11 @@ function RoleOverrideDropdown<T extends string | boolean>({
       description: "Use the default value for this role.",
     },
     ...values.map((option) => {
-      const key = valueKey(option);
+      const display = policyValueDisplay(option);
       return {
         value: String(option),
-        label: VALUE_LABELS[key],
-        description: VALUE_HELP[key],
+        label: display.label,
+        description: display.description,
       };
     }),
   ];
@@ -661,10 +668,10 @@ function RoleOverrideDropdown<T extends string | boolean>({
 function valuesForRole<Field extends CodexPolicyField>(
   field: Field,
   role: AgentRole,
-): CodexPolicyFields[Field][] {
+): readonly CodexPolicyFields[Field][] {
   const values = defaultValuesForField(field);
   if (field === "sandboxMode") {
-    if (role === "build") return values.filter((v) => v !== "read-only");
+    if (role === "build") return values.filter((value) => value !== "read-only");
   }
   return values;
 }
@@ -687,7 +694,7 @@ function EffectivePolicyNotes({
 
       if (field === "sandboxMode" && effective.adjustmentReason) {
         notes.push(
-          `Effective for ${AGENT_ROLE_LABELS[role]}: ${VALUE_LABELS[valueKey(effectiveValue)]}. ${effective.adjustmentReason}`,
+          `Effective for ${AGENT_ROLE_LABELS[role]}: ${policyValueDisplay(effectiveValue).label}. ${effective.adjustmentReason}`,
         );
       }
       if (field === "approvalsReviewer" && !effective.approvalsReviewerApplies) {
@@ -823,8 +830,7 @@ export function AgentRuntimesSection({
           <aside className="border-border bg-muted/50 p-3 md:border-r">
             <div className="space-y-1" role="tablist">
               {sortedRuntimeDefinitions.map((definition) => {
-                // SAFETY: The surrounding boundary constructs or validates every member required by `RuntimeKind`.
-                const runtimeKind = definition.kind as RuntimeKind;
+                const runtimeKind = definition.kind;
                 const enabled = agentRuntimes[runtimeKind]?.enabled === true;
                 const tabId = `agent-runtime-tab-${definition.kind}`;
                 const panelId = `agent-runtime-panel-${definition.kind}`;
@@ -876,17 +882,6 @@ export function AgentRuntimesSection({
           </aside>
 
           {(() => {
-            // SAFETY: The surrounding boundary constructs or validates every member required by `RuntimeKind`.
-            const runtimeKind = selectedDefinition.kind as RuntimeKind;
-            const updateRuntime = (
-              updater: (config: AgentRuntimes[RuntimeKind]) => AgentRuntimes[RuntimeKind],
-            ) =>
-              onUpdateAgentRuntimes((current) => ({
-                ...current,
-                [runtimeKind]: updater(current[runtimeKind]),
-              }));
-
-            // SAFETY: The surrounding boundary constructs or validates every member required by `CodexRuntimeConfig`.
             return (
               <div
                 id={`agent-runtime-panel-${selectedDefinition.kind}`}
@@ -920,9 +915,10 @@ export function AgentRuntimesSection({
                     isDangerAcknowledged={isCodexDangerAcknowledged}
                     onDangerAcknowledgedChange={onCodexDangerAcknowledgedChange}
                     onUpdate={(updater) =>
-                      updateRuntime((current) =>
-                        updater(codexConfigWithDefaults(current as CodexRuntimeConfig)),
-                      )
+                      onUpdateAgentRuntimes((current) => ({
+                        ...current,
+                        codex: updater(codexConfigWithDefaults(current.codex)),
+                      }))
                     }
                   />
                 ) : null}

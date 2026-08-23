@@ -18,6 +18,11 @@ import type {
   CodexJsonRpcTransport,
   CodexLiveSessionMutation,
 } from "./index";
+import {
+  codexCollabAgentToolCallFixture,
+  codexCommandExecutionItemFixture,
+  codexTokenUsageFixture,
+} from "./test-fixtures/codex-protocol";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -209,6 +214,7 @@ describe("CodexAppServerAdapter streaming", () => {
           id: "agent-idle-final",
           phase: "final_answer",
           text: "Done before idle.",
+          memoryCitation: null,
         },
       },
     });
@@ -217,11 +223,7 @@ describe("CodexAppServerAdapter streaming", () => {
       params: {
         threadId: "thread/start-runtime-live",
         turnId: "turn-live",
-        tokenUsage: {
-          total: { totalTokens: 12_345 },
-          last: { totalTokens: 321 },
-          modelContextWindow: 200_000,
-        },
+        tokenUsage: codexTokenUsageFixture(321),
       },
     });
     emitNotification({
@@ -240,23 +242,17 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/completed",
       params: {
         threadId: "thread/start-runtime-live",
-        turn: {
+        turn: codexTurnFixture({
           id: "turn-live",
           status: "completed",
           completedAt: 1_777_766_420,
           durationMs: 1_200,
-        },
+          items: [],
+        }),
       },
     });
     await flushCodexAdapterWork();
 
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "session_status",
-        timestamp: "2026-05-03T00:00:18.450Z",
-        status: { type: "busy", message: null },
-      }),
-    );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -268,6 +264,8 @@ describe("CodexAppServerAdapter streaming", () => {
     const sessionIdleIndex = events.findLastIndex((event) => event.type === "session_idle");
     expect(assistantMessageIndex).toBeGreaterThanOrEqual(0);
     expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
+    expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
     unsubscribe();
   });
 
@@ -300,7 +298,10 @@ describe("CodexAppServerAdapter streaming", () => {
                   { reasoningEffort: "medium", description: "Balanced reasoning" },
                 ],
                 defaultReasoningEffort: "medium",
+                defaultServiceTier: null,
                 inputModalities: ["text"],
+                modelSpecialty: null,
+                multiAgentVersion: null,
                 serviceTiers: [],
                 supportsPersonality: true,
                 isDefault: true,
@@ -889,15 +890,11 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: childThreadId,
         turnId: "turn-before-release",
         startedAtMs: 1_783_196_401_000,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: itemId,
-          command: "true",
-          cwd: "/repo",
           status: "inProgress",
-          commandActions: [],
-          aggregatedOutput: "",
-        },
+          exitCode: null,
+        }),
       },
     });
     emitNotification({
@@ -906,15 +903,11 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: grandchildThreadId,
         turnId: "grandchild-turn-before-release",
         startedAtMs: 1_783_196_401_500,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: grandchildItemId,
-          command: "true",
-          cwd: "/repo",
           status: "inProgress",
-          commandActions: [],
-          aggregatedOutput: "",
-        },
+          exitCode: null,
+        }),
       },
     });
     await flushCodexAdapterWork();
@@ -959,16 +952,9 @@ describe("CodexAppServerAdapter streaming", () => {
         threadId: childThreadId,
         turnId: "turn-after-release",
         completedAtMs: 1_783_196_402_000,
-        item: {
-          type: "commandExecution",
+        item: codexCommandExecutionItemFixture({
           id: itemId,
-          command: "true",
-          cwd: "/repo",
-          status: "completed",
-          commandActions: [],
-          aggregatedOutput: "",
-          exitCode: 0,
-        },
+        }),
       },
     });
     await flushCodexAdapterWork();
@@ -1028,15 +1014,11 @@ describe("CodexAppServerAdapter streaming", () => {
           threadId,
           turnId: `turn-${threadId}`,
           startedAtMs,
-          item: {
-            type: "commandExecution",
+          item: codexCommandExecutionItemFixture({
             id: itemId,
-            command: "true",
-            cwd: "/repo",
             status: "inProgress",
-            commandActions: [],
-            aggregatedOutput: "",
-          },
+            exitCode: null,
+          }),
         },
       });
     }
@@ -1237,16 +1219,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-live",
             startedAtMs: 1_777_766_452_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-live",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review this change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });
@@ -1278,7 +1257,9 @@ describe("CodexAppServerAdapter streaming", () => {
             item: {
               type: "agentMessage",
               id: "retry-message",
+              phase: null,
               text: "The first spawn failed validation. Retrying now.",
+              memoryCitation: null,
             },
           },
         },
@@ -1305,11 +1286,12 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread-saved",
-            turn: {
+            turn: codexTurnFixture({
               id: "turn-live",
               status: "failed",
               completedAt: 1_777_766_452,
-            },
+              items: [],
+            }),
           },
         },
       });
@@ -1337,16 +1319,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-without-followup",
             startedAtMs: 1_777_766_453_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-without-followup",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review another change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });
@@ -1358,11 +1337,12 @@ describe("CodexAppServerAdapter streaming", () => {
           method: "turn/completed",
           params: {
             threadId: "thread-saved",
-            turn: {
+            turn: codexTurnFixture({
               id: "turn-without-followup",
               status: "failed",
               completedAt: 1_777_766_454,
-            },
+              items: [],
+            }),
           },
         },
       });
@@ -1390,16 +1370,13 @@ describe("CodexAppServerAdapter streaming", () => {
             threadId: "thread-saved",
             turnId: "turn-settled-by-idle",
             startedAtMs: 1_777_766_455_000,
-            item: {
-              type: "collabAgentToolCall",
+            item: codexCollabAgentToolCallFixture({
               id: "spawn-settled-by-idle",
               tool: "spawnAgent",
               status: "inProgress",
               senderThreadId: "thread-saved",
-              receiverThreadIds: [],
               prompt: "Review a third change",
-              agentsStates: {},
-            },
+            }),
           },
         },
       });

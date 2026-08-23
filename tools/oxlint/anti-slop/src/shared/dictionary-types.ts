@@ -194,7 +194,7 @@ function unsafeDirectValue(
 	resolvingAliases: ReadonlySet<string>,
 ): UnsafeDictionary["unsafeValue"] | null {
 	const unwrapped = unwrapTransparentType(type);
-	if (unwrapped.type === "TSUnknownKeyword") return "unknown";
+	if (unwrapped.type === "TSUnknownKeyword") return null;
 	if (unwrapped.type === "TSAnyKeyword") return "any";
 	if (unwrapped.type === "TSObjectKeyword") return "object";
 	if (unwrapped.type === "TSTypeLiteral" && isEffectivelyEmptyTypeLiteral(unwrapped))
@@ -360,6 +360,36 @@ export function classifyWideningTarget(
 		return wrapped === undefined ? null : classifyWideningTarget(wrapped, environment);
 	}
 	if (name === "Record" && isBuiltIn(name, environment)) return { kind: "open dictionary" };
+	const interfaceDeclarations = environment.interfaces.get(name);
+	if (interfaceDeclarations?.length === 1) {
+		const [declaration] = interfaceDeclarations;
+		const heritage = declaration?.extends[0];
+		if (
+			declaration !== undefined &&
+			declaration.body.body.length === 0 &&
+			declaration.extends.length === 1 &&
+			heritage !== undefined &&
+			heritage.expression.type === "Identifier"
+		) {
+			const heritageName = heritage.expression.name;
+			if (heritageName === "Record" && isBuiltIn(heritageName, environment)) {
+				return { kind: "open dictionary" };
+			}
+			if (TRANSPARENT_WRAPPERS.has(heritageName) && isBuiltIn(heritageName, environment)) {
+				const wrapped = heritage.typeArguments?.params[0];
+				return wrapped === undefined ? null : classifyWideningTarget(wrapped, environment);
+			}
+			const heritageAlias = environment.aliases.get(heritageName);
+			if (heritageAlias !== undefined && (heritageAlias.typeParameters?.params.length ?? 0) === 0) {
+				return classifyAliasBroadTarget(
+					heritageAlias.typeAnnotation,
+					environment,
+					new Map(),
+					new Set([heritageName]),
+				);
+			}
+		}
+	}
 	const alias = environment.aliases.get(name);
 	if (alias === undefined) return null;
 	if ((alias.typeParameters?.params.length ?? 0) > 0) {

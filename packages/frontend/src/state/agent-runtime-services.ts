@@ -37,7 +37,6 @@ const toAcceptedAgentUserMessage = (
   event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
 ): AcceptedAgentUserMessage => {
   const { model, sessionRef, ...message } = event;
-  // SAFETY: The surrounding boundary constructs or validates every member required by `AcceptedAgentUserMessage`.
   return {
     ...message,
     ...(sessionRef ? { sessionRef } : undefined),
@@ -52,7 +51,7 @@ const toAcceptedAgentUserMessage = (
           },
         }
       : undefined),
-  } as AcceptedAgentUserMessage;
+  };
 };
 
 export const createAgentRuntimeServices = (): AgentRuntimeServices => {

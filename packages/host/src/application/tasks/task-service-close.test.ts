@@ -14,6 +14,14 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import {
+  createDevServerServiceTestDouble,
+  createGitPortTestDouble,
+  createSettingsConfigTestDouble,
+  createWorkspaceSettingsServiceTestDouble,
+  createWorktreeFilePortTestDouble,
+} from "../../test-support/service-test-doubles";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { DevServerService } from "../dev-servers/dev-server-service";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
@@ -103,7 +111,7 @@ const createTaskStore = (
   calls: string[] = [],
   sessionsByTaskId: Record<string, AgentSessionRecord[]> = {},
 ): TaskStorePort =>
-  createFocusedTestService<TaskStorePort>({
+  createTaskStoreTestDouble({
     listTasks: () => Effect.succeed(tasks),
     getTaskMetadata: (input: { taskId: string }) =>
       Effect.succeed(createMetadata(sessionsByTaskId[input.taskId] ?? [])),
@@ -120,7 +128,7 @@ const createTaskStore = (
   });
 
 const createSettingsConfig = (existingPaths = new Set<string>()): SettingsConfigPort =>
-  createFocusedTestService<SettingsConfigPort>({
+  createSettingsConfigTestDouble({
     defaultWorktreeBasePath: () => "/worktrees/repo",
     defaultRepoWorktreeBasePath: () => "/worktrees/repo",
     resolveConfiguredPath: (path: string) => path,
@@ -130,7 +138,7 @@ const createSettingsConfig = (existingPaths = new Set<string>()): SettingsConfig
   });
 
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
-  createFocusedTestService<WorkspaceSettingsService>({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
   });
 
@@ -139,7 +147,7 @@ const createTaskWorktreeService = (workingDirectory: string | null): TaskWorktre
 });
 
 const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
-  createFocusedTestService<WorktreeFilePort>({
+  createWorktreeFilePortTestDouble({
     resolveWorktreePath: (_repoPath: string, worktreePath: string) => worktreePath,
     resolvePathWithinRoot: (root: string, candidate: string) =>
       Effect.succeed({
@@ -160,7 +168,7 @@ const createWorktreeFiles = (calls: string[] = []): WorktreeFilePort =>
   });
 
 const createDevServerService = (calls: string[] = []): DevServerService =>
-  createFocusedTestService<DevServerService>({
+  createDevServerServiceTestDouble({
     stop: (input) => {
       const { repoPath, taskId } = input;
       calls.push(`stop-dev:${taskId}`);
@@ -181,7 +189,7 @@ const createGitPort = (input: {
   deleteBranchFails?: boolean;
   registered?: boolean;
 }): GitPort =>
-  createFocusedTestService<GitPort>({
+  createGitPortTestDouble({
     canonicalizePath: (path: string) => Effect.succeed(path),
     isGitRepository: () => Effect.succeed(true),
     shareGitCommonDirectory: () => Effect.succeed(true),
@@ -641,7 +649,7 @@ describe("TaskService.closeTask", () => {
       releaseMetadataRead = resolve;
     });
     const baseTaskStore = createTaskStore([task()]);
-    const taskStore = createFocusedTestService<TaskStorePort>({
+    const taskStore = createFocusedTestService<TaskStorePort>()({
       ...baseTaskStore,
       getTaskMetadata: () =>
         Effect.promise(async () => {

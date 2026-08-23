@@ -1,9 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  JsonValue,
-  TaskEventStreamFrame,
-  TaskEventStreamSubscribe,
-} from "@openducktor/contracts";
+import type { TaskEventStreamFrame, TaskEventStreamSubscribe } from "@openducktor/contracts";
 import {
   ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL,
   ELECTRON_TASK_STREAM_FRAME_CHANNEL,
@@ -11,7 +7,13 @@ import {
   ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL,
   ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL,
 } from "../shared/electron-bridge-contract";
-import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
+import {
+  type ElectronTaskStreamEvent,
+  type ElectronTaskStreamIpcHandler,
+  type ElectronTaskStreamIpcRequest,
+  type ElectronTaskStreamIpcOptions,
+  registerElectronTaskStreamIpc,
+} from "./electron-task-stream-ipc";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const subscriptionId = "22222222-2222-4222-8222-222222222222";
@@ -22,16 +24,7 @@ const frame: TaskEventStreamFrame = {
   reason: "buffer_gap",
 };
 
-type ElectronTaskStreamEvent = {
-  frameId: number;
-  processId: number;
-  sender: ReturnType<typeof createSender>["sender"];
-  senderFrame: ReturnType<typeof createFrame> | null;
-};
-type Handler = (
-  event: ElectronTaskStreamEvent,
-  value: JsonValue | undefined,
-) => JsonValue | void | Promise<JsonValue | undefined>;
+type Handler = ElectronTaskStreamIpcHandler;
 type NavigationDetails = { isMainFrame: boolean; isSameDocument: boolean };
 type LifecycleListener = () => void;
 type NavigationListener = (details: NavigationDetails) => void;
@@ -103,27 +96,30 @@ const createHarness = (subscriptionIds = [subscriptionId]) => {
   const unsubscribe = mock(() => {});
   const acknowledge = mock(() => {});
   const sinks: Array<(received: TaskEventStreamFrame) => void> = [];
-  const stream = {
+  const stream: ElectronTaskStreamIpcOptions["taskEventStream"] = {
     acknowledge,
     publish: mock(() => {}),
     subscribe: mock(
       (_input: TaskEventStreamSubscribe, sink: (received: TaskEventStreamFrame) => void) => {
         const index = sinks.push(sink) - 1;
-        return { subscriptionId: subscriptionIds[index], unsubscribe };
+        const currentSubscriptionId = subscriptionIds[index];
+        if (!currentSubscriptionId) {
+          throw new Error(`Missing subscription ID for stream ${index}.`);
+        }
+        return { subscriptionId: currentSubscriptionId, unsubscribe };
       },
     ),
   };
   const reportDeliveryFailure = mock(() => {});
-  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
   registerElectronTaskStreamIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) },
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     reportDeliveryFailure,
-    taskEventStream: stream as never,
+    taskEventStream: stream,
   });
   const invoke = (
     channel: string,
     event: ElectronTaskStreamEvent,
-    value: JsonValue | undefined,
+    value: ElectronTaskStreamIpcRequest,
   ) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`No handler registered for ${channel}.`);

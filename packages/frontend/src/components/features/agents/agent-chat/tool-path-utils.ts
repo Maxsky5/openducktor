@@ -1,6 +1,5 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, isJsonObject, type JsonValue } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
-import type { JsonValue } from "@openducktor/contracts";
 
 const DISPLAY_PATH_KEYS = new Set([
   "filePath",
@@ -36,21 +35,11 @@ export const relativizeSearchSummary = (
   return `${prefix}${relativizeDisplayPath(path, workingDirectory)}`;
 };
 
-export function relativizeDisplayPathsInValue(
+export const relativizeDisplayPathsInValue = (
   value: JsonValue,
   workingDirectory?: string | null,
   key?: string,
-): JsonValue;
-export function relativizeDisplayPathsInValue(
-  value: undefined,
-  workingDirectory?: string | null,
-  key?: string,
-): undefined;
-export function relativizeDisplayPathsInValue(
-  value: JsonValue | undefined,
-  workingDirectory?: string | null,
-  key?: string,
-): JsonValue | undefined {
+): JsonValue => {
   if (hasRuntimeType(value, "string")) {
     return key && DISPLAY_PATH_KEYS.has(key)
       ? relativizeDisplayPath(value, workingDirectory)
@@ -59,7 +48,7 @@ export function relativizeDisplayPathsInValue(
   if (Array.isArray(value)) {
     return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
   }
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (!isJsonObject(value)) {
     return value;
   }
 
@@ -69,4 +58,4 @@ export function relativizeDisplayPathsInValue(
       relativizeDisplayPathsInValue(entryValue, workingDirectory, entryKey),
     ]),
   );
-}
+};

@@ -32,10 +32,10 @@ export const useSettingsModalRepoScriptValidation = ({
 
   const repoScriptValidationSummary = useMemo(() => {
     if (!snapshotDraft) {
-      // SAFETY: This scope populates or freezes the value as the asserted shape before it can escape.
+      const repoScriptValidationErrorCountByWorkspaceId: Record<string, number> = {};
       return {
-        invalidRepoPathsWithDevServerErrors: [] as string[],
-        repoScriptValidationErrorCountByWorkspaceId: {} as Record<string, number>,
+        invalidRepoPathsWithDevServerErrors: new Array<string>(),
+        repoScriptValidationErrorCountByWorkspaceId,
         repoScriptValidationErrorCount: 0,
       };
     }

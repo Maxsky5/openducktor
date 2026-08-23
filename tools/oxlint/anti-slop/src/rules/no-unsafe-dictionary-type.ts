@@ -84,17 +84,17 @@ function shouldReportType(node: ESTree.TSType, environment: TypeEnvironment): bo
 	return true;
 }
 
-/** Disallow object-dictionary contracts whose direct value type is an unsafe escape hatch. */
+/** Disallow object-dictionary contracts whose direct value type permits unchecked property use. */
 export const noUnsafeDictionaryTypeRule = defineRule({
 	meta: {
 		type: "problem",
 		docs: {
 			description:
-				"Disallow object-dictionary contracts whose direct value type is unknown, any, object, {}, or a union/alias containing one of those escape hatches.",
+				"Disallow object-dictionary contracts whose direct value type is any, object, {}, or a union/alias containing one of those escape hatches. Unknown remains safe because callers must narrow every read.",
 		},
 		messages: {
 			unsafeDictionary:
-				"This dictionary's {{value}} value type gives callers no concrete value contract. Use an owner/schema-derived value type; parse external payloads before insertion.",
+				"This dictionary's {{value}} value type permits unchecked property use. Use unknown for untrusted values or an owner/schema-derived value type for known values.",
 		},
 	},
 	createOnce(context) {

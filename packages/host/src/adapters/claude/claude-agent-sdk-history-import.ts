@@ -61,8 +61,10 @@ export type ClaudeHistoryQueueOperationMessage = SessionStoreEntry & {
   content: unknown;
 };
 
+export type ClaudeHistoryConversationMessage = SessionMessage & SessionStoreEntry;
+
 export type ClaudeHistoryMessage =
-  | SessionMessage
+  | ClaudeHistoryConversationMessage
   | ClaudeHistoryResultMessage
   | ClaudeHistoryRetractionMessage
   | ClaudeHistorySubagentSystemMessage

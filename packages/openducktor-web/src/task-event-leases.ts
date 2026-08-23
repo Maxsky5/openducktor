@@ -49,20 +49,22 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame => {
   if (frame.type === "snapshot_required") {
     return Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
   }
-  const event =
-    frame.event.kind === "tasks_updated"
-      ? Object.freeze({
-          ...frame.event,
-          removedTaskIds: Object.freeze([...frame.event.removedTaskIds]),
-          taskIds: Object.freeze([...frame.event.taskIds]),
-        })
-      : Object.freeze({ ...frame.event });
-  // SAFETY: The surrounding boundary constructs or validates every member required by `TaskEventStreamFrame`.
-  return Object.freeze({
+  const event = (() => {
+    if (frame.event.kind !== "tasks_updated") {
+      return Object.freeze({ ...frame.event });
+    }
+    const taskIds = [...frame.event.taskIds];
+    const removedTaskIds = [...frame.event.removedTaskIds];
+    Object.freeze(taskIds);
+    Object.freeze(removedTaskIds);
+    return Object.freeze({ ...frame.event, removedTaskIds, taskIds });
+  })();
+  const frozenFrame: TaskEventStreamFrame = Object.freeze({
     ...frame,
     cursor: freezeCursor(frame.cursor),
     event,
-  }) as TaskEventStreamFrame;
+  });
+  return frozenFrame;
 };
 
 const cursorIsAcknowledged = (frame: TaskEventStreamFrame, cursor: TaskEventCursor): boolean =>

@@ -3,8 +3,6 @@ import type { ComponentType, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface STATEVISUALSContract extends Record<TaskExecutionCiPanelStateKind, StateVisual> {}
-
 export type TaskExecutionCiPanelStateKind = "empty" | "error" | "loading" | "unavailable";
 
 export type TaskExecutionCiPanelStateProps = {
@@ -24,7 +22,7 @@ type StateVisual = {
   iconShellClassName?: string;
 };
 
-const STATE_VISUALS: STATEVISUALSContract = {
+const STATE_VISUALS = {
   empty: {
     icon: GitPullRequest,
   },
@@ -39,7 +37,7 @@ const STATE_VISUALS: STATEVISUALSContract = {
   unavailable: {
     icon: WifiOff,
   },
-};
+} satisfies Record<TaskExecutionCiPanelStateKind, StateVisual>;
 
 export function TaskExecutionCiPanelState({
   actionLabel,
@@ -53,6 +51,8 @@ export function TaskExecutionCiPanelState({
 }: TaskExecutionCiPanelStateProps): ReactElement {
   const visual = STATE_VISUALS[kind];
   const Icon = visual.icon;
+  const iconShellClassName = "iconShellClassName" in visual ? visual.iconShellClassName : undefined;
+  const iconClassName = "iconClassName" in visual ? visual.iconClassName : undefined;
   const canAct = actionLabel !== undefined && onAction !== undefined;
   const visibleActionLabel =
     isActionPending && actionPendingLabel !== undefined ? actionPendingLabel : actionLabel;
@@ -63,10 +63,10 @@ export function TaskExecutionCiPanelState({
         <div
           className={cn(
             "flex size-10 items-center justify-center rounded-md bg-muted text-muted-foreground",
-            visual.iconShellClassName,
+            iconShellClassName,
           )}
         >
-          <Icon className={cn("size-5", visual.iconClassName)} />
+          <Icon className={cn("size-5", iconClassName)} />
         </div>
         <h3 className="mt-3 text-sm font-semibold text-foreground">{title}</h3>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">{message}</p>

@@ -6,7 +6,23 @@ import { errorMessage } from "@/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 
-export function TaskDescriptionImageNode({ node, selected, updateAttributes }: ReactNodeViewProps) {
+type TaskDescriptionImageNodeProps = {
+  node: {
+    attrs: {
+      src?: unknown;
+      alt?: unknown;
+      title?: unknown;
+    };
+  };
+  selected: boolean;
+  updateAttributes: ReactNodeViewProps["updateAttributes"];
+};
+
+export function TaskDescriptionImageNode({
+  node,
+  selected,
+  updateAttributes,
+}: TaskDescriptionImageNodeProps) {
   const { previews, renderContext } = useContext(TaskDescriptionImageContext);
   const source = hasRuntimeType(node.attrs.src, "string") ? node.attrs.src : "";
   const assetId = parseTaskAssetUri(source);

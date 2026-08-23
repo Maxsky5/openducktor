@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR, hasRuntimeType } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, hasRuntimeType, type JsonObject } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   normalizePathForComparison,
@@ -18,7 +18,7 @@ import {
   isClaudeAskUserQuestionTool,
   requestClaudeAskUserQuestion,
 } from "./claude-agent-sdk-questions";
-import { parseClaudeJsonRecord } from "./claude-agent-sdk-ingress-schemas";
+import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import {
   canonicalOdtToolName,
@@ -28,7 +28,6 @@ import {
   permissionRequestTypeForTool,
   readStringProp,
 } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 type CreateClaudeCanUseToolInput = {
   session: ClaudeSessionContext;
@@ -42,7 +41,7 @@ export type ClaudeToolUseAuthorization =
   | {
       behavior: "allow";
       approval: "automatic" | "interactive" | "workflow_role";
-      toolInput: Record<string, JsonValue>;
+      toolInput: JsonObject;
     }
   | {
       behavior: "deny";
@@ -51,16 +50,13 @@ export type ClaudeToolUseAuthorization =
 
 type AuthorizeClaudeToolUseInput = {
   session: ClaudeSessionContext;
-  toolInput: Record<string, JsonValue>;
+  toolInput: JsonObject;
   toolName: string;
   blockedPath?: string;
   canonicalizePath?: (path: string) => Promise<string>;
 };
 
-const withAllowedToolInput = (
-  result: PermissionResult,
-  toolInput: Record<string, JsonValue>,
-): PermissionResult =>
+const withAllowedToolInput = (result: PermissionResult, toolInput: JsonObject): PermissionResult =>
   result.behavior === "allow"
     ? {
         ...result,
@@ -102,8 +98,8 @@ const rewriteSessionPath = (session: ClaudeSessionContext, value: string): strin
 const normalizeToolInputForSession = (
   session: ClaudeSessionContext,
   _toolName: string,
-  toolInput: Record<string, JsonValue>,
-): Record<string, JsonValue> => {
+  toolInput: JsonObject,
+): JsonObject => {
   const nextInput = { ...toolInput };
   let changed = false;
 
@@ -124,7 +120,7 @@ const normalizeToolInputForSession = (
 
 const readOnlyToolPathValues = (
   session: ClaudeSessionContext,
-  toolInput: Record<string, JsonValue>,
+  toolInput: JsonObject,
   blockedPath: string | undefined,
 ): string[] => {
   const paths: string[] = [];
@@ -175,7 +171,7 @@ const canonicalReadPathViolation = async (
 
 const findReadOnlyPathPolicyViolation = async (
   session: ClaudeSessionContext,
-  toolInput: Record<string, JsonValue>,
+  toolInput: JsonObject,
   blockedPath: string | undefined,
   canonicalizePath: (path: string) => Promise<string>,
 ): Promise<string | null> => {
@@ -189,7 +185,6 @@ const findReadOnlyPathPolicyViolation = async (
   return null;
 };
 
-// SAFETY: The runtime adapter builds this value from the contract fields required by `readonly string[]`.
 export const authorizeClaudeToolUse = ({
   blockedPath,
   canonicalizePath = realpath,
@@ -207,7 +202,7 @@ export const authorizeClaudeToolUse = ({
   const role = claudeWorkflowRole(session.input);
   const odtToolName = canonicalOdtToolName(toolName);
   if (odtToolName && role) {
-    if (!(AGENT_ROLE_TOOL_POLICY[role] as readonly string[]).includes(odtToolName)) {
+    if (!AGENT_ROLE_TOOL_POLICY[role].some((allowedToolName) => allowedToolName === odtToolName)) {
       return {
         behavior: "deny",
         message: `Tool ${odtToolName} is not allowed for ${role} sessions.`,
@@ -332,6 +327,10 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
 
       const requestId = randomId();
       const command = readStringProp(effectiveToolInput, "command");
+      const canonicalToolInput = parseClaudeCanonicalJsonObject(
+        effectiveToolInput,
+        "claudePermissionToolInput",
+      );
       const blockedPath = options.blockedPath
         ? rewriteSessionPath(session, options.blockedPath)
         : undefined;
@@ -356,7 +355,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         tool: {
           name: toolName,
           ...(options.displayName ? { title: options.displayName } : undefined),
-          input: effectiveToolInput,
+          input: canonicalToolInput,
         },
         mutation,
         supportedReplyOutcomes: ["approve_once", "reject"],
@@ -422,7 +421,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
     const authorization = authorizeClaudeToolUse({
       session,
       toolName,
-      toolInput: parseClaudeJsonRecord(toolInput, "claudeToolInput"),
+      toolInput: parseClaudeCanonicalJsonObject(toolInput, "claudeToolInput"),
       ...(options.blockedPath ? { blockedPath: options.blockedPath } : undefined),
       canonicalizePath,
     });

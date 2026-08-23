@@ -1,6 +1,7 @@
 import { createFocusedTestService } from "../../test-support/focused-service";
 import { Effect } from "effect";
 import type { TaskService } from "../../application/tasks/task-service";
+import { createTaskServiceTestDouble } from "../../test-support/task-service-test-double";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
 import type { HostCommandHandlerError } from "../router/host-command-router";
@@ -17,7 +18,7 @@ const runHandler = <T>(
 describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
-    const service: Partial<TaskService> = createFocusedTestService<TaskService>({
+    const service = createFocusedTestService<TaskService>()({
       agentSessionDelete(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
@@ -551,7 +552,7 @@ describe("createTaskCommandHandlers", () => {
         });
       },
     });
-    const handlers = createTaskCommandHandlers(createFocusedTestService<TaskService>(service));
+    const handlers = createTaskCommandHandlers(createTaskServiceTestDouble(service));
     await expect(
       runHandler(
         handlers.tasks_list?.(

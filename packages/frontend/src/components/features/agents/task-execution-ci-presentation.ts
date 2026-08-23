@@ -5,22 +5,17 @@ import type {
   PullRequestReviewOutcome,
 } from "@openducktor/contracts";
 
-interface REVIEWOUTCOMEPRESENTATIONContract extends Record<
-  PullRequestReviewOutcome,
-  ReviewOutcomePresentation
-> {}
-
 type ReviewOutcomePresentation = {
   label: string;
   variant: "success" | "danger" | "secondary" | "outline";
 };
 
-export const REVIEW_OUTCOME_PRESENTATION: REVIEWOUTCOMEPRESENTATIONContract = {
+export const REVIEW_OUTCOME_PRESENTATION = {
   approved: { label: "Approved", variant: "success" },
   changes_requested: { label: "Changes requested", variant: "danger" },
   commented: { label: "Commented", variant: "secondary" },
   dismissed: { label: "Review dismissed", variant: "outline" },
-};
+} satisfies Record<PullRequestReviewOutcome, ReviewOutcomePresentation>;
 
 export const aggregateLabel = (status: PullRequestReviewAggregateStatus): string => {
   if (status === "success") {

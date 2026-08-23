@@ -1,8 +1,5 @@
 import { z } from "zod";
-
-interface REQUIREDPLACEHOLDERSBYTEMPLATEContract extends Partial<
-  Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>
-> {}
+import { hasOwnKey } from "./runtime-type";
 
 export const agentPromptTemplateIdValues = [
   "system.shared.workflow_guards",
@@ -47,10 +44,10 @@ export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues)
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
 const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValues);
 
-const REQUIRED_PLACEHOLDERS_BY_TEMPLATE: REQUIREDPLACEHOLDERSBYTEMPLATEContract = {
+const REQUIRED_PLACEHOLDERS_BY_TEMPLATE = {
   "kickoff.build_after_human_request_changes": ["humanFeedback"],
   "kickoff.build_pull_request_generation": ["git.targetBranch"],
-};
+} satisfies Partial<Record<AgentPromptTemplateId, AgentPromptPlaceholder[]>>;
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
@@ -78,9 +75,10 @@ export const validatePromptTemplatePlaceholders = (
   const unsupportedPlaceholders = placeholders.filter(
     (placeholder) => !AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder),
   );
-  const requiredPlaceholders = templateId
-    ? (REQUIRED_PLACEHOLDERS_BY_TEMPLATE[templateId] ?? [])
-    : [];
+  const requiredPlaceholders =
+    templateId && hasOwnKey(REQUIRED_PLACEHOLDERS_BY_TEMPLATE, templateId)
+      ? REQUIRED_PLACEHOLDERS_BY_TEMPLATE[templateId]
+      : [];
   const missingRequiredPlaceholders = requiredPlaceholders.filter(
     (placeholder) => !placeholders.includes(placeholder),
   );

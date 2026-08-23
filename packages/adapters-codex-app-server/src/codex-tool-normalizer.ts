@@ -1,4 +1,3 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import type { FileDiff } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import {
@@ -7,14 +6,14 @@ import {
   extractStringField,
   isCodexApplyPatchTool,
   isCodexExecCommandTool,
+  isPlainObject,
   isCodexRequestUserInputTool,
   isCodexWriteStdinTool,
-  isPlainObject,
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import { codexToolTimingFields } from "./codex-tool-timing";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { AgentPendingQuestionRequest } from "@openducktor/core";
 
 /**
  * Canonical boundary for raw Codex tool invocations.
@@ -36,9 +35,8 @@ export type CodexToolInvocationMetadata = {
   codexServerRequest?: boolean;
   codexTodoUpdate?: boolean;
   requestId?: string;
-  questions?: JsonValue[];
+  questions?: AgentPendingQuestionRequest["questions"];
   answers?: Record<string, { answers: string[] }>;
-  codexItem?: Record<string, JsonValue>;
   server?: string;
 };
 
@@ -48,11 +46,11 @@ export type NormalizedCodexToolInvocation = {
   callId: string;
   rawToolName: string;
   namespace?: string;
-  status?: JsonValue;
+  status?: string;
   title?: string;
   displayLabel?: string;
   preview?: string;
-  input?: Record<string, JsonValue>;
+  input?: Record<string, CodexAppServerJsonValue>;
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
@@ -61,8 +59,8 @@ export type NormalizedCodexToolInvocation = {
   endedAtMs?: number;
 };
 
-export const statusFromCodexStatus = (status: JsonValue | undefined): AgentToolStatus => {
-  const normalized = hasRuntimeType(status, "string")
+export const statusFromCodexStatus = (status: string | undefined): AgentToolStatus => {
+  const normalized = status
     ? status
         .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
         .toLowerCase()
@@ -138,7 +136,7 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 };
 const codexToolType = (
   rawToolName: string,
-  input?: Record<string, JsonValue>,
+  input?: Record<string, CodexAppServerJsonValue>,
 ): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
@@ -206,7 +204,9 @@ const canonicalCodexToolName = (rawToolName: string): string | null => {
     : rawToolName;
 };
 
-const questionPromptFromInput = (input: Record<string, JsonValue>): string | undefined => {
+const questionPromptFromInput = (
+  input: Record<string, CodexAppServerJsonValue>,
+): string | undefined => {
   const questions = arrayFromUnknown(input.questions).filter(isPlainObject);
   for (const question of questions) {
     const prompt = extractStringField(question, ["question", "prompt", "header", "title"]);
@@ -219,7 +219,7 @@ const questionPromptFromInput = (input: Record<string, JsonValue>): string | und
 
 const toolPreviewFromInput = (
   toolType: AgentToolType,
-  input?: Record<string, JsonValue>,
+  input?: Record<string, CodexAppServerJsonValue>,
 ): string | undefined => {
   if (!input) {
     return undefined;
@@ -249,9 +249,9 @@ const toolPreviewFromInput = (
 };
 
 const codexExecCommandInput = (
-  input: Record<string, JsonValue>,
+  input: Record<string, CodexAppServerJsonValue>,
   tool: string,
-): Record<string, JsonValue> | undefined => {
+): Record<string, CodexAppServerJsonValue> | undefined => {
   const command = extractStringField(input, ["cmd", "command"]);
   const cwd = extractStringField(input, ["workdir", "cwd"]);
   if (!command) {
@@ -279,8 +279,8 @@ const codexExecCommandInput = (
 const normalizerInput = (
   toolType: AgentToolType,
   rawToolName: string,
-  input?: Record<string, JsonValue>,
-): Record<string, JsonValue> | undefined => {
+  input?: Record<string, CodexAppServerJsonValue>,
+): Record<string, CodexAppServerJsonValue> | undefined => {
   if (isCodexExecCommandTool(rawToolName)) {
     return codexExecCommandInput(input ?? {}, toolType);
   }
@@ -315,11 +315,8 @@ export const normalizeCodexToolInvocation = ({
   const resolvedError = error && error.trim().length > 0 ? error : null;
   const resolvedOutput = output && output.trim().length > 0 ? output : null;
   const resolvedPreview = preview ?? toolPreviewFromInput(toolType, resolvedInput);
-  const item = isPlainObject(metadata?.codexItem) ? metadata.codexItem : {};
-  const metadataTiming = codexToolTimingFields(item);
   return {
     kind: "tool",
-    ...metadataTiming,
     ...ids,
     tool,
     toolType,

@@ -15,7 +15,6 @@ import {
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
   type useAgentStudioBuildToolsWorktreeSnapshot,
@@ -60,11 +59,27 @@ const useAgentStudioDiffDataMock = mock((args: Parameters<UseDiffData>[0]): Diff
   refresh: refreshDiffMock,
   setDiffScope: setDiffScopeMock,
 }));
-const useAgentStudioDevServerPanelMock = mock((args: Parameters<UseDevServerPanel>[0]) =>
-  createFocusedFixture<ReturnType<UseDevServerPanel>>({
+const useAgentStudioDevServerPanelMock = mock(
+  (args: Parameters<UseDevServerPanel>[0]): ReturnType<UseDevServerPanel> => ({
     mode: "empty",
+    isExpanded: false,
+    isLoading: false,
+    disabledReason: null,
     repoPath: args.repoPath,
     taskId: args.taskId,
+    worktreePath: null,
+    scripts: [],
+    selectedScriptId: null,
+    selectedScript: null,
+    selectedScriptTerminalBuffer: null,
+    error: null,
+    isStartPending: false,
+    isStopPending: false,
+    isRestartPending: false,
+    onSelectScript: () => {},
+    onStart: () => {},
+    onStop: () => {},
+    onRestart: () => {},
   }),
 );
 const taskWorktreeGetMock = mock(

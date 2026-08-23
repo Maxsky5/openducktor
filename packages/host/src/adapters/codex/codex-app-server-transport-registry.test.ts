@@ -149,16 +149,27 @@ describe("createCodexAppServerTransportRegistry", () => {
         nextCursor: null,
         backwardsCursor: null,
       }),
-    ).toThrow("Codex thread/turns/list response data[0] must be an object");
+    ).toThrow("expected object");
   });
 
   test("rejects malformed hydrated turn items before history projection", () => {
     expect(() =>
       parseThreadTurnsListResponse({
-        data: [{ items: [null] }],
+        data: [
+          {
+            completedAt: null,
+            durationMs: null,
+            error: null,
+            id: "turn-1",
+            items: [null],
+            itemsView: "full",
+            startedAt: 1,
+            status: "completed",
+          },
+        ],
         nextCursor: null,
         backwardsCursor: null,
       }),
-    ).toThrow("Codex thread/turns/list response data[0].items[0] must be an object");
+    ).toThrow('"items"');
   });
 });

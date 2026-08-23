@@ -15,7 +15,6 @@ import type {
   ClaudeSessionContext,
   ClaudeSessionInput,
 } from "./claude-agent-sdk-types";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const INIT_TIMEOUT_MS = 60_000;
 export const FILE_SEARCH_LIMIT = 30;
@@ -72,13 +71,13 @@ export const withTimeout = async <A>(
   }
 };
 
-export const readText = (value: JsonValue | undefined): string | undefined =>
+export const readText = (value: unknown): string | undefined =>
   hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
 
-export const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const readStringProp = (value: JsonValue | undefined, key: string): string | undefined =>
+export const readStringProp = (value: unknown, key: string): string | undefined =>
   isRecord(value) ? readText(value[key]) : undefined;
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;
@@ -121,7 +120,7 @@ export const permissionRequestTypeForTool = (
 
 export const mutationForTool = (
   toolName: string,
-  _input?: Record<string, JsonValue>,
+  _input?: Record<string, unknown>,
 ): NonNullable<AgentPendingApprovalRequest["mutation"]> => {
   if (/bash|shell/iu.test(toolName)) {
     return "unknown";
@@ -139,7 +138,7 @@ export const mutationForTool = (
   return "unknown";
 };
 
-export const previewInput = (input: Record<string, JsonValue>): string | undefined => {
+export const previewInput = (input: Record<string, unknown>): string | undefined => {
   const command = readStringProp(input, "command");
   if (command) {
     return command;
@@ -227,7 +226,7 @@ export const toolPartPresentation = (
   };
 };
 
-export const textFromContentBlocks = (content: JsonValue | undefined): string => {
+export const textFromContentBlocks = (content: unknown): string => {
   if (hasRuntimeType(content, "string")) {
     return content;
   }
@@ -249,7 +248,7 @@ export const textFromContentBlocks = (content: JsonValue | undefined): string =>
     .join("\n");
 };
 
-export const historyMessageText = (message: JsonValue | undefined): string => {
+export const historyMessageText = (message: unknown): string => {
   if (!isRecord(message)) {
     return "";
   }

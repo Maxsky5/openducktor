@@ -14,9 +14,7 @@ import {
   isClaudeToolUseRetracted,
   retractClaudeTranscriptCorrelations,
 } from "./claude-agent-sdk-transcript-correlation";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type ClaudeTodoState = Map<string, AgentSessionTodoItem>;
 
@@ -41,31 +39,31 @@ export const claudeTodoToolPresentation = (todos: readonly AgentSessionTodoItem[
       })),
     },
     text: "Plan updated",
-  }) satisfies { input: Record<string, JsonValue>; text: "Plan updated" };
+  }) satisfies { input: Record<string, unknown>; text: "Plan updated" };
 
 type ClaudeTaskToolResultInput = {
-  input: Record<string, JsonValue> | undefined;
+  input: Record<string, unknown> | undefined;
   isError: boolean;
-  raw: Record<string, JsonValue>;
+  raw: Record<string, unknown>;
   state: ClaudeTodoState;
   tool: string;
 };
 
-const readTaskOutput = (raw: Record<string, JsonValue>): Record<string, JsonValue> => {
+const readTaskOutput = (raw: Record<string, unknown>): Record<string, unknown> => {
   if (isRecord(raw.toolUseResult)) {
     return raw.toolUseResult;
   }
   return isRecord(raw.structuredContent) ? raw.structuredContent : raw;
 };
 
-const readTaskStatus = (value: JsonValue | undefined): AgentSessionTodoItem["status"] | null => {
+const readTaskStatus = (value: unknown): AgentSessionTodoItem["status"] | null => {
   if (value === "pending" || value === "in_progress" || value === "completed") {
     return value;
   }
   return null;
 };
 
-const readTaskItem = (value: JsonValue | undefined): AgentSessionTodoItem | null => {
+const readTaskItem = (value: unknown): AgentSessionTodoItem | null => {
   if (!isRecord(value)) {
     return null;
   }
@@ -78,7 +76,7 @@ const readTaskItem = (value: JsonValue | undefined): AgentSessionTodoItem | null
   return { id, content, status, priority: "medium" };
 };
 
-const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
+const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
   if (!isRecord(output.task)) {
     return false;
   }
@@ -93,8 +91,8 @@ const applyTaskCreate = (state: ClaudeTodoState, output: Record<string, JsonValu
 
 const applyTaskUpdate = (
   state: ClaudeTodoState,
-  input: Record<string, JsonValue> | undefined,
-  output: Record<string, JsonValue>,
+  input: Record<string, unknown> | undefined,
+  output: Record<string, unknown>,
 ): boolean => {
   if (output.success !== true) {
     return false;
@@ -119,7 +117,7 @@ const applyTaskUpdate = (
   return true;
 };
 
-const applyTaskGet = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
+const applyTaskGet = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
   if (output.task === null) {
     return false;
   }
@@ -131,7 +129,7 @@ const applyTaskGet = (state: ClaudeTodoState, output: Record<string, JsonValue>)
   return true;
 };
 
-const applyTaskList = (state: ClaudeTodoState, output: Record<string, JsonValue>): boolean => {
+const applyTaskList = (state: ClaudeTodoState, output: Record<string, unknown>): boolean => {
   if (!Array.isArray(output.tasks)) {
     return false;
   }
@@ -235,7 +233,7 @@ export const toClaudeTodos = (
   options: { includeNestedEntries?: boolean } = {},
 ): AgentSessionTodoItem[] => {
   const projectionState: ClaudeTodoProjectionState = { todosById: new Map() };
-  const toolInputsByCallId = new Map<string, Record<string, JsonValue>>();
+  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
   const correlationState = {
@@ -248,7 +246,7 @@ export const toClaudeTodos = (
   };
 
   for (const entry of messages) {
-    const value = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+    const value = entry;
     const retracted = retractClaudeTranscriptCorrelations(
       correlationState,
       retractedHistoryMessageIds(value),

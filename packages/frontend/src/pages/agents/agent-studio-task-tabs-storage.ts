@@ -1,4 +1,4 @@
-import { jsonValueSchema, type JsonValue, type TaskCard } from "@openducktor/contracts";
+import { jsonValueSchema, type TaskCard } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
 import { z } from "zod";
@@ -23,7 +23,7 @@ const persistedTaskTabsObjectSchema = z.object({
   activeTaskId: z.string().nullable().optional(),
 });
 
-const normalizeTaskTabs = (entries: readonly JsonValue[]): string[] => {
+const normalizeTaskTabs = (entries: readonly unknown[]): string[] => {
   return Array.from(
     new Set(
       entries.filter(

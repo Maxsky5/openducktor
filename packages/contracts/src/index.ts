@@ -1,6 +1,7 @@
 export * from "./agent-engine-schemas";
 export * from "./agent-runtime-schemas";
 export * from "./agent-session-control-schemas";
+export * from "./exact-optional";
 export * from "./agent-session-event-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./agent-session-schemas";

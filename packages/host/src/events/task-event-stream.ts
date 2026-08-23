@@ -1,4 +1,3 @@
-import type { JsonValue } from "@openducktor/contracts";
 import {
   type ExternalTaskSyncEvent,
   externalTaskSyncEventSchema,
@@ -88,7 +87,7 @@ const validationError = (message: string, field: string, details: HostErrorDetai
 
 const jsonIssues = (
   issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
-): JsonValue[] =>
+): Array<{ code: string; message: string; path: string[] }> =>
   issues.map((issue) => ({
     code: issue.code,
     message: issue.message,

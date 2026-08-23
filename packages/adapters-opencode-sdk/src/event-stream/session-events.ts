@@ -1,6 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
 import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
 import { normalizeTodoList } from "../todo-normalizers";
@@ -15,10 +14,10 @@ import {
   parseSessionControlEvent,
   readEventProperties,
   readSessionErrorMessage,
-  readTodoPayload,
 } from "./schemas";
 import type { EventStreamRuntime, PendingSubagentSessionBinding } from "./shared";
 import { isStreamTurnIdle } from "../session-activity";
+import type { UnknownRecord } from "../guards";
 import {
   bindSubagentExternalSession,
   flushPendingSubagentInputEventsForSession,
@@ -217,7 +216,7 @@ const resolveLocalSubagentInputLink = (
 
 const resolveSubagentInputRouting = (
   event: Event,
-  properties: JsonValue | undefined,
+  properties: UnknownRecord | undefined,
   runtime: EventStreamRuntime,
 ): SubagentInputRouting => {
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
@@ -230,7 +229,6 @@ const resolveSubagentInputRouting = (
       childExternalSessionId,
       isEventScopedToRuntimeWorkingDirectory,
     );
-  // SAFETY: opencode SDK event properties are JSON-serialized wire data.
   const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
@@ -416,7 +414,7 @@ const handleTodoUpdatedEvent = (event: Event, runtime: EventStreamRuntime): bool
   }
 
   const properties = readEventProperties(event);
-  const todos = normalizeTodoList(readTodoPayload(properties));
+  const todos = normalizeTodoList(properties?.todos);
   runtime.emit(runtime.externalSessionId, {
     type: "session_todos_updated",
     externalSessionId: runtime.externalSessionId,
@@ -447,12 +445,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
   }
 
   const normalizedChildExternalSessionId = childExternalSessionId.trim();
-  // SAFETY: The preceding runtime guard establishes `{ time?: { created?: unknown } }` before this assertion.
-  const createdAtValue =
-    info && hasRuntimeType(info, "object") && info !== null
-      ? (info as { time?: { created?: unknown } }).time?.created
-      : undefined;
-  const createdAtMs = hasRuntimeType(createdAtValue, "number") ? createdAtValue : undefined;
+  const createdAtMs = info.time.created;
   const existingSessionBinding = runtime.session.pendingSubagentSessionsByExternalSessionId.get(
     normalizedChildExternalSessionId,
   );

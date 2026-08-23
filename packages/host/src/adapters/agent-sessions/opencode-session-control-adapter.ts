@@ -2,7 +2,6 @@ import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-ope
 import {
   type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
-  agentSessionControlSummarySchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -64,7 +63,7 @@ export const createOpenCodeSessionControlAdapter = ({
 
   const runControlSummary = (
     operation: string,
-    run: () => Promise<Parameters<typeof agentSessionControlSummarySchema.parse>[0]>,
+    run: () => Promise<AgentSessionControlSummary>,
     parentExternalSessionId?: string,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(

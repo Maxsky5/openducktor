@@ -1,5 +1,4 @@
 import {
-  type JsonValue,
   type WorkspaceTextFileReadResult,
   type WorkspaceTextFileWriteFailure,
   type WorkspaceTextFileWriteFailureCode,
@@ -43,7 +42,7 @@ export type WorkspaceTextFileService = {
     relativePath: string;
   }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
   writeTextFile(
-    input: JsonValue | undefined,
+    input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
@@ -107,10 +106,7 @@ const writeFailure = (
     cause,
   });
 
-const invalidWriteInput = (
-  input: JsonValue | undefined,
-  cause: unknown,
-): WorkspaceTextFileWriteError => {
+const invalidWriteInput = (input: unknown, cause: unknown): WorkspaceTextFileWriteError => {
   const record = hasRuntimeType(input, "object") && input !== null ? input : {};
   const rootPath =
     "rootPath" in record && hasRuntimeType(record.rootPath, "string") ? record.rootPath : ".";
@@ -168,7 +164,7 @@ const unsupportedWrite = (
 
 export const createWorkspaceTextFileService = (
   filesystem: FilesystemPort,
-  gitPort: GitPort,
+  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
 ): WorkspaceTextFileService => ({
   readTextFile(input) {
     return Effect.gen(function* () {

@@ -1,8 +1,10 @@
 import { Cause, Chunk, Data, Option } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type ElectronErrorDetailValue =
-  | JsonValue
+  | string
+  | number
+  | boolean
+  | null
   | Error
   | undefined
   | ReadonlyArray<ElectronErrorDetailValue>
@@ -12,7 +14,7 @@ export type ElectronErrorDetails = Readonly<Record<string, ElectronErrorDetailVa
 
 export const jsonIssues = (
   issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
-): JsonValue[] =>
+): Array<{ code: string; message: string; path: string[] }> =>
   issues.map((issue) => ({
     code: issue.code,
     message: issue.message,

@@ -1,6 +1,7 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionPanelModel,
@@ -13,11 +14,6 @@ import type { AgentStudioGitPanelModel } from "@/components/features/agents/agen
 import type { TaskExecutionCiChecksPanelModel } from "@/components/features/agents/task-execution-ci-checks-panel";
 import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import { toRightPanelStorageKey } from "../agents-page-selection";
-import type { JsonValue } from "@openducktor/contracts";
-
-interface DEFAULTOPENBYROLEContract extends Record<AgentRole, boolean> {}
-
-interface DEFAULTACTIVETABBYROLEContract extends Record<AgentRole, TaskExecutionPanelTabId> {}
 
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
@@ -35,27 +31,33 @@ type UseAgentStudioRightPanelState = {
   rightPanelToggleModel: TaskExecutionPanelToggleModel | null;
 };
 
-const DEFAULT_OPEN_BY_ROLE: DEFAULTOPENBYROLEContract = {
+const DEFAULT_OPEN_BY_ROLE = {
   spec: true,
   planner: true,
   build: true,
   qa: true,
-};
+} satisfies Record<AgentRole, boolean>;
+
+const openByRoleSchema = z.object({
+  spec: z.boolean(),
+  planner: z.boolean(),
+  build: z.boolean(),
+  qa: z.boolean(),
+});
+const persistedRightPanelPayloadSchema = z.record(z.string(), jsonValueSchema);
 
 const RIGHT_PANEL_ROLES: AgentRole[] = ["spec", "planner", "build", "qa"];
-const DEFAULT_ACTIVE_TAB_BY_ROLE: DEFAULTACTIVETABBYROLEContract = {
+const DEFAULT_ACTIVE_TAB_BY_ROLE = {
   spec: "document",
   planner: "document",
   build: "git",
   qa: "document",
-};
+} satisfies Record<AgentRole, TaskExecutionPanelTabId>;
 
-const cloneDefaultOpenByRole = () =>
-  ({
-    ...DEFAULT_OPEN_BY_ROLE,
-  }) satisfies Record<AgentRole, boolean>;
+const cloneDefaultOpenByRole = (): Record<AgentRole, boolean> =>
+  openByRoleSchema.parse(DEFAULT_OPEN_BY_ROLE);
 
-const readPersistedRightPanelPayload = (): Record<string, JsonValue> | null => {
+const readPersistedRightPanelPayload = (): Record<string, unknown> | null => {
   if (hasRuntimeType(globalThis.localStorage, "undefined")) {
     return null;
   }
@@ -65,13 +67,8 @@ const readPersistedRightPanelPayload = (): Record<string, JsonValue> | null => {
     return null;
   }
 
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || !hasRuntimeType(parsed, "object")) {
-    return null;
-  }
-
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  return parsed as Record<string, JsonValue>;
+  const parsed = persistedRightPanelPayloadSchema.safeParse(JSON.parse(raw));
+  return parsed.success ? parsed.data : null;
 };
 
 const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {

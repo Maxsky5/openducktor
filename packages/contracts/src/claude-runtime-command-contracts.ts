@@ -15,7 +15,6 @@ import {
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
 import {
-  type AgentTranscriptModelSelection,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
   agentSessionWorkflowScopeSchema,
@@ -24,26 +23,22 @@ import {
 import { skillCatalogSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentCatalogSchema } from "./subagent-schemas";
+import { exactOptionalSchema } from "./exact-optional";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const claudeRuntimeKindSchema = z.literal("claude");
-const optionalFromNullable = <T extends z.ZodTypeAny>(schema: T) =>
-  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
-
-export type ClaudeAgentModelSelection = Omit<AgentTranscriptModelSelection, "runtimeKind"> & {
-  runtimeKind?: "claude";
-};
-
-const inferredClaudeAgentModelSelectionSchema = z.object({
-  runtimeKind: claudeRuntimeKindSchema.optional(),
-  providerId: nonEmptyStringSchema,
-  modelId: nonEmptyStringSchema,
-  variant: optionalFromNullable(nonEmptyStringSchema),
-  profileId: optionalFromNullable(nonEmptyStringSchema),
-});
-// SAFETY: The runtime adapter builds this value from the contract fields required by `z.ZodType<ClaudeAgentModelSelection>`.
-export const claudeAgentModelSelectionSchema =
-  inferredClaudeAgentModelSelectionSchema as z.ZodType<ClaudeAgentModelSelection>;
+export const claudeAgentModelSelectionSchema = exactOptionalSchema(
+  z
+    .object({
+      runtimeKind: claudeRuntimeKindSchema.optional(),
+      providerId: nonEmptyStringSchema,
+      modelId: nonEmptyStringSchema,
+      variant: nonEmptyStringSchema.optional(),
+      profileId: nonEmptyStringSchema.optional(),
+    })
+    .strict(),
+);
+export type ClaudeAgentModelSelection = z.infer<typeof claudeAgentModelSelectionSchema>;
 
 export const claudeRepoRuntimeRefSchema = repoRuntimeRefSchema.extend({
   runtimeKind: claudeRuntimeKindSchema,
@@ -100,20 +95,24 @@ export const claudeSearchAgentFilesInputSchema = claudeRuntimeWorkingDirectoryRe
 });
 export type ClaudeSearchAgentFilesInput = z.infer<typeof claudeSearchAgentFilesInputSchema>;
 
-export const claudeLoadAgentSessionHistoryInputSchema = claudePolicyBoundSessionRefSchema.extend({
-  systemPromptContext: z
-    .object({
-      systemPrompt: z.string(),
-      startedAt: nonEmptyStringSchema,
-    })
-    .optional(),
-  limit: z.number().int().positive().optional(),
-});
+export const claudeLoadAgentSessionHistoryInputSchema = exactOptionalSchema(
+  claudePolicyBoundSessionRefSchema.extend({
+    systemPromptContext: z
+      .object({
+        systemPrompt: z.string(),
+        startedAt: nonEmptyStringSchema,
+      })
+      .optional(),
+    limit: z.number().int().positive().optional(),
+  }),
+);
 export type ClaudeLoadAgentSessionHistoryInput = z.infer<
   typeof claudeLoadAgentSessionHistoryInputSchema
 >;
 
-export const claudeLoadAgentSessionTodosInputSchema = claudePolicyBoundSessionRefSchema;
+export const claudeLoadAgentSessionTodosInputSchema = exactOptionalSchema(
+  claudePolicyBoundSessionRefSchema,
+);
 export type ClaudeLoadAgentSessionTodosInput = z.infer<
   typeof claudeLoadAgentSessionTodosInputSchema
 >;

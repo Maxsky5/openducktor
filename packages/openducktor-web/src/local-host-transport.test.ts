@@ -5,8 +5,6 @@ import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "./effect/web-errors";
 import { createFetchFixture, createTimerFixture } from "./test-support";
 
-type FakeEventSourceListener = (event: MessageEvent<string>) => void;
-
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
   static readonly CONNECTING = 0;
@@ -17,7 +15,7 @@ class FakeEventSource {
   readonly options: EventSourceInit | undefined;
   closed = false;
   readyState = FakeEventSource.CONNECTING;
-  private readonly listeners = new Map<string, Set<FakeEventSourceListener>>();
+  private readonly listeners = new Map<string, Set<EventListener>>();
 
   constructor(url: string, options?: EventSourceInit) {
     this.url = url;
@@ -26,10 +24,8 @@ class FakeEventSource {
   }
 
   addEventListener(type: string, listener: EventListener): void {
-    // SAFETY: This test controls the fixture and supplies `FakeEventSourceListener` used by this case.
-    const typedListener = listener as FakeEventSourceListener;
-    const current = this.listeners.get(type) ?? new Set<FakeEventSourceListener>();
-    current.add(typedListener);
+    const current = this.listeners.get(type) ?? new Set<EventListener>();
+    current.add(listener);
     this.listeners.set(type, current);
   }
 
@@ -38,8 +34,7 @@ class FakeEventSource {
     if (!current) {
       return;
     }
-    // SAFETY: This test controls the fixture and supplies `FakeEventSourceListener` used by this case.
-    current.delete(listener as FakeEventSourceListener);
+    current.delete(listener);
     if (current.size === 0) {
       this.listeners.delete(type);
     }
@@ -58,8 +53,10 @@ class FakeEventSource {
     if (!current) {
       return;
     }
-    // SAFETY: This test controls the fixture and supplies `MessageEvent<string>` used by this case.
-    const event = { data } as MessageEvent<string>;
+    const event =
+      type === "open" || type === "error"
+        ? new Event(type)
+        : new MessageEvent<string>(type, { data });
     for (const listener of current) {
       listener(event);
     }
@@ -409,7 +406,7 @@ describe("local host SSE subscriptions", () => {
     const { unsubscribe: unsubscribeDevServer } = await devServerSubscription;
     const stopObservingLiveSessions = await liveSessionObservation;
 
-    const emitHostEvent = (channel: string, payload: JsonValue | undefined): void => {
+    const emitHostEvent = (channel: string, payload: JsonValue): void => {
       FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
     };
     emitHostEvent("openducktor://run-event", { type: "run" });

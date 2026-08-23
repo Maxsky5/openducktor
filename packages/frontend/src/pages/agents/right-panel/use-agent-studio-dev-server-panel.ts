@@ -1,5 +1,4 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
-import { devServerEventSchema } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import {
@@ -454,23 +453,7 @@ export function useAgentStudioDevServerPanel({
         return;
       }
 
-      const parsed = devServerEventSchema.safeParse(payload);
-      if (!parsed.success) {
-        console.error(
-          "[agent-studio-dev-server-panel] Received invalid dev server event payload.",
-          {
-            payload,
-            error: parsed.error,
-          },
-        );
-        dispatchLocalState({
-          type: "subscriptionFailed",
-          error: `Received invalid dev server event payload: ${errorMessage(parsed.error)}`,
-        });
-        return;
-      }
-
-      const event = parsed.data;
+      const event = payload;
       if (event.type !== "snapshot" && (event.repoPath !== repoPath || event.taskId !== taskId)) {
         return;
       }

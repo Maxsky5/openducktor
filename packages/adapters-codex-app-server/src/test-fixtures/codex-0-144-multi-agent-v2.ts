@@ -1,3 +1,5 @@
+import { codexCollabAgentToolCallFixture, codexTurnFixture } from "./codex-protocol";
+
 export const codex0144MultiAgentV2Replay = [
   {
     kind: "notification",
@@ -23,12 +25,12 @@ export const codex0144MultiAgentV2Replay = [
       method: "turn/started",
       params: {
         threadId: "child-thread",
-        turn: {
+        turn: codexTurnFixture({
           id: "child-turn",
           status: "inProgress",
           startedAt: 1_783_683_602,
           items: [],
-        },
+        }),
       },
     },
   },
@@ -50,15 +52,12 @@ export const codex0144MultiAgentV2Replay = [
         threadId: "parent-thread",
         turnId: "parent-turn",
         startedAtMs: 1_783_683_603_000,
-        item: {
-          type: "collabAgentToolCall",
+        item: codexCollabAgentToolCallFixture({
           id: "wait-call",
           tool: "wait",
           status: "inProgress",
           senderThreadId: "parent-thread",
-          receiverThreadIds: [],
-          agentsStates: {},
-        },
+        }),
       },
     },
   },
@@ -68,12 +67,14 @@ export const codex0144MultiAgentV2Replay = [
       method: "turn/completed",
       params: {
         threadId: "child-thread",
-        turn: {
+        turn: codexTurnFixture({
           id: "child-turn",
           status: "completed",
+          startedAt: 1_783_683_602,
           completedAt: 1_783_683_604,
+          durationMs: 2_000,
           items: [],
-        },
+        }),
       },
     },
   },
@@ -95,15 +96,12 @@ export const codex0144MultiAgentV2Replay = [
         threadId: "parent-thread",
         turnId: "parent-turn",
         completedAtMs: 1_783_683_605_000,
-        item: {
-          type: "collabAgentToolCall",
+        item: codexCollabAgentToolCallFixture({
           id: "wait-call",
           tool: "wait",
           status: "completed",
           senderThreadId: "parent-thread",
-          receiverThreadIds: [],
-          agentsStates: {},
-        },
+        }),
       },
     },
   },

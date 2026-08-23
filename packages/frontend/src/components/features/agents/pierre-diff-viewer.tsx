@@ -92,12 +92,12 @@ type PierreHighlightTarget =
   | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
-// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
-const DIFF_WRAPPER_STYLE = {
+type DiffCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
+const DIFF_WRAPPER_STYLE: DiffCssProperties = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "1.5",
   "--diffs-tab-size": 2,
-} as CSSProperties;
+};
 const RAW_DIFF_FALLBACK_BASE_CLASS_NAME =
   "px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";

@@ -1,8 +1,8 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
+import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import { previewInput, toolPartPresentation } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeTextPart = Extract<AgentStreamPart, { kind: "text" }>;
 type ClaudeReasoningPart = Extract<AgentStreamPart, { kind: "reasoning" }>;
@@ -70,17 +70,23 @@ export const createClaudeCompletedToolPart = ({
 }: {
   callId: string;
   endedAtMs: number;
-  input?: Record<string, JsonValue>;
+  input?: Record<string, unknown>;
   isError: boolean;
   messageId: string;
-  metadata?: Record<string, JsonValue>;
+  metadata?: Record<string, unknown>;
   preview?: string;
-  raw?: Record<string, JsonValue>;
+  raw?: Record<string, unknown>;
   startedAtMs?: number;
   text: string;
   tool: string;
 }): ClaudeToolPart => {
   const resolvedPreview = preview ?? (input ? previewInput(input) : undefined);
+  const canonicalInput = input
+    ? parseClaudeCanonicalJsonObject(input, "claudeToolInput")
+    : undefined;
+  const canonicalMetadata = metadata
+    ? parseClaudeCanonicalJsonObject(metadata, "claudeToolMetadata")
+    : undefined;
   const part: ClaudeToolPart = {
     kind: "tool",
     messageId,
@@ -89,9 +95,9 @@ export const createClaudeCompletedToolPart = ({
     tool,
     ...toolPartPresentation(tool),
     status: isError ? "error" : "completed",
-    ...(input ? { input } : undefined),
+    ...(canonicalInput ? { input: canonicalInput } : undefined),
     ...(resolvedPreview ? { preview: resolvedPreview } : undefined),
-    ...(metadata ? { metadata } : undefined),
+    ...(canonicalMetadata ? { metadata: canonicalMetadata } : undefined),
     ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
     endedAtMs,
     ...(isError ? { error: text } : { output: text }),

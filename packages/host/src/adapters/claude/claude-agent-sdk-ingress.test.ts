@@ -20,7 +20,7 @@ describe("Claude SDK ingress", () => {
 
     expect(error).toMatchObject({
       _tag: "HostValidationError",
-      field: "claudeSessionHistoryEntry",
+      field: "claudeHistoryAssistantMessage",
     });
   });
 
@@ -65,7 +65,7 @@ describe("Claude SDK ingress", () => {
       hook(malformedInput, "tool-1", { signal: new AbortController().signal }),
     ).rejects.toMatchObject({
       _tag: "HostValidationError",
-      field: "claudePostToolUse",
+      field: "claudeFileEditToolResponse",
     });
   });
 

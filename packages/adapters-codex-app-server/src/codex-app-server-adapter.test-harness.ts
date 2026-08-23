@@ -10,7 +10,7 @@ import {
   type RuntimeInstanceSummary,
   hasRuntimeType,
 } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 import type {
   PolicyBoundSessionRef,
   SendAgentUserMessageInput,
@@ -164,12 +164,14 @@ const recordingTransportHistoryTurns = () => [
     id: "turn-1",
     startedAt: 1_778_112_001,
     completedAt: 1_778_112_031,
+    durationMs: 30_000,
     status: "completed",
     items: [
       {
         id: "user-history-1",
         type: "userMessage",
-        content: [{ type: "text", text: "Hello Codex" }],
+        clientId: null,
+        content: [{ type: "text", text: "Hello Codex", text_elements: [] }],
       },
       {
         id: "reason-1",
@@ -180,10 +182,12 @@ const recordingTransportHistoryTurns = () => [
       {
         id: "cmd-read-1",
         type: "commandExecution",
+        pluginId: null,
+        scriptPath: null,
         command: "cat src/app.ts",
         cwd: "/repo",
         processId: "pty-1",
-        source: "model",
+        source: "agent",
         status: "completed",
         commandActions: [
           {
@@ -199,14 +203,16 @@ const recordingTransportHistoryTurns = () => [
       },
       {
         id: "cmd-bash-1",
-        type: "command_execution",
+        type: "commandExecution",
+        pluginId: null,
+        scriptPath: null,
         command: "bun test",
         cwd: "/repo",
         processId: "pty-2",
-        source: "model",
+        source: "agent",
         status: "completed",
-        command_actions: [{ type: "unknown", command: "bun test" }],
-        aggregated_output: "1 pass",
+        commandActions: [{ type: "unknown", command: "bun test" }],
+        aggregatedOutput: "1 pass",
         exitCode: 0,
         durationMs: 34,
       },
@@ -217,7 +223,7 @@ const recordingTransportHistoryTurns = () => [
         changes: [
           {
             path: "/repo/src/app.ts",
-            kind: "update",
+            kind: { type: "update", move_path: null },
             diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
           },
         ],
@@ -226,11 +232,10 @@ const recordingTransportHistoryTurns = () => [
         id: "file-change-failed-1",
         type: "fileChange",
         status: "failed",
-        error: "patch failed",
         changes: [
           {
             path: "/repo/src/broken.ts",
-            kind: "update",
+            kind: { type: "update", move_path: null },
             diff: "--- a/src/broken.ts\n+++ b/src/broken.ts\n@@\n-old\n+broken",
           },
         ],
@@ -250,8 +255,8 @@ const recordingTransportHistoryTurns = () => [
         id: "web-search-1",
         type: "webSearch",
         query: "OpenDucktor Codex runtime",
-        output: "search results",
         action: null,
+        results: ["search results"],
       },
       {
         id: "tool-1",
@@ -260,28 +265,44 @@ const recordingTransportHistoryTurns = () => [
         tool: "odt_read_task",
         status: "completed",
         arguments: { taskId: "task-1" },
-        result: { content: [{ type: "text", text: "ok" }] },
+        appContext: null,
+        pluginId: null,
+        readOnlyHint: null,
+        result: {
+          content: [{ type: "text", text: "ok" }],
+          structuredContent: null,
+          _meta: null,
+        },
+        error: null,
+        durationMs: null,
       },
       {
         id: "tool-failed-1",
         type: "mcpToolCall",
         server: "openducktor",
         tool: "odt_read_task",
-        status: "completed",
+        status: "failed",
         arguments: { taskId: "missing" },
-        result: { isError: true, message: "task missing" },
+        appContext: null,
+        pluginId: null,
+        readOnlyHint: null,
+        result: null,
+        error: { message: "task missing" },
+        durationMs: null,
       },
       {
         id: "msg-1",
         type: "agentMessage",
         phase: "final_answer",
         text: "Hello from history",
+        memoryCitation: null,
       },
       {
         id: "msg-commentary-1",
         type: "agentMessage",
         phase: "commentary",
         text: "Later commentary",
+        memoryCitation: null,
       },
     ],
   }),
@@ -320,14 +341,20 @@ export const codexThreadFixture = (
   ...input,
 });
 
-export const codexThreadStartResultFixture = (threadId: string) => ({
+export const codexThreadStartResultFixture = (
+  threadId: string,
+  method: "thread/start" | "thread/resume" | "thread/fork" = "thread/start",
+) => ({
   approvalPolicy: "on-request",
   approvalsReviewer: "user",
+  activePermissionProfile: null,
   cwd: "/repo",
   instructionSources: [],
   model: "gpt-5",
   modelProvider: "openai",
+  multiAgentMode: "explicitRequestOnly",
   reasoningEffort: "medium",
+  runtimeWorkspaceRoots: ["/repo"],
   sandbox: {
     type: "workspaceWrite",
     excludeSlashTmp: false,
@@ -337,9 +364,16 @@ export const codexThreadStartResultFixture = (threadId: string) => ({
   },
   serviceTier: null,
   thread: codexThreadFixture({ id: threadId, status: { type: "active", activeFlags: [] } }),
+  ...(method === "thread/resume"
+    ? {
+        initialTurnsPage: null,
+        turnsBackwardsCursor: null,
+        itemsBackwardsCursor: null,
+      }
+    : undefined),
 });
 
-const requestThreadId = (params: JsonValue | undefined): string => {
+const requestThreadId = (params: CodexAppServerJsonValue | undefined): string => {
   if (!isPlainObject(params) || !hasRuntimeType(params.threadId, "string")) {
     throw new Error("Expected request params.threadId.");
   }
@@ -360,7 +394,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
     }
   }
 
-  async request({ method, params }: CodexJsonRpcRequest): Promise<JsonValue> {
+  async request({ method, params }: CodexJsonRpcRequest): Promise<CodexAppServerJsonValue> {
     this.calls.push({ method, params });
     switch (method) {
       case "initialize":
@@ -386,7 +420,10 @@ export class RecordingTransport implements CodexJsonRpcTransport {
                 { reasoningEffort: "high", description: "Deep reasoning" },
               ],
               defaultReasoningEffort: "medium",
+              defaultServiceTier: null,
               inputModalities: ["text"],
+              modelSpecialty: null,
+              multiAgentVersion: null,
               serviceTiers: [],
               supportsPersonality: true,
               isDefault: true,
@@ -401,7 +438,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "thread/fork": {
         const threadId =
           method === "thread/resume" ? requestThreadId(params) : `${method}-${this.runtimeId}`;
-        const result = codexThreadStartResultFixture(threadId);
+        const result = codexThreadStartResultFixture(threadId, method);
         return threadId === "thread-idle"
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;

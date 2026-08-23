@@ -4,11 +4,15 @@ import {
   type HostErrorResponse,
   type HostEventChannel,
   type HostEventEnvelope,
+  hasRuntimeType,
   parseHostEventEnvelope,
-  type JsonValue,
   type TaskEventCursor,
 } from "@openducktor/contracts";
-import type { DevServerEventSubscription } from "@openducktor/frontend";
+import type {
+  DevServerEventListener,
+  DevServerEventSubscription,
+  RunEventListener,
+} from "@openducktor/frontend";
 import {
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
@@ -64,10 +68,10 @@ type BrowserSseChannel = {
   listeners: Map<number, BrowserSseListenerRegistration>;
   ready: Promise<void>;
   readTransportEpoch: () => string | null;
-  handleMessage: (event: MessageEvent<string>) => void;
-  handleOpen: () => void;
-  handleError: (event: Event) => void;
-  handleStreamWarning: (event: MessageEvent<string>) => void;
+  handleMessage: EventListener;
+  handleOpen: EventListener;
+  handleError: EventListener;
+  handleStreamWarning: EventListener;
 };
 
 type BrowserSseSubscription = {
@@ -83,11 +87,6 @@ type LocalHostRequestErrorInput = {
 
 const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseControlEvent =>
   "__openducktorBrowserLive" in event;
-
-const asEventListener = (listener: (...args: never[]) => void): EventListener => {
-  // SAFETY: Each listener is registered only for the EventSource event shape it accepts.
-  return listener as EventListener;
-};
 
 let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
@@ -184,7 +183,7 @@ export const ensureLocalHostSessionDedupedEffect = (): Effect.Effect<void, WebEr
 
 const invokeLocalHostEffect = <T>(
   command: string,
-  args?: Record<string, JsonValue>,
+  args?: Record<string, unknown>,
 ): Effect.Effect<T, WebError | HostInvokeError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
@@ -230,7 +229,7 @@ const invokeLocalHostEffect = <T>(
 
 const createHttpInvoke =
   () =>
-  async <T>(command: string, args?: Record<string, JsonValue>): Promise<T> =>
+  async <T>(command: string, args?: Record<string, unknown>): Promise<T> =>
     runWebBoundary(invokeLocalHostEffect<T>(command, args));
 
 export const createLocalHostClient = (): HostClient => createHostClient(createHttpInvoke());
@@ -264,13 +263,10 @@ const closeSseChannelIfUnused = (channel: BrowserSseChannel): void => {
   if (channel.listeners.size > 0) {
     return;
   }
-  channel.eventSource.removeEventListener("message", asEventListener(channel.handleMessage));
-  channel.eventSource.removeEventListener("open", asEventListener(channel.handleOpen));
-  channel.eventSource.removeEventListener("error", asEventListener(channel.handleError));
-  channel.eventSource.removeEventListener(
-    "stream-warning",
-    asEventListener(channel.handleStreamWarning),
-  );
+  channel.eventSource.removeEventListener("message", channel.handleMessage);
+  channel.eventSource.removeEventListener("open", channel.handleOpen);
+  channel.eventSource.removeEventListener("error", channel.handleError);
+  channel.eventSource.removeEventListener("stream-warning", channel.handleStreamWarning);
   channel.eventSource.close();
   if (sseChannel === channel) {
     sseChannel = null;
@@ -308,7 +304,10 @@ const subscribeSseChannelEffect = (
       const ready = new Promise<void>((resolve) => {
         resolveReady = resolve;
       });
-      const handleMessage = (event: MessageEvent<string>): void => {
+      const handleMessage: EventListener = (event) => {
+        if (!("data" in event) || !hasRuntimeType(event.data, "string")) {
+          throw new Error("EventSource message events must contain string data.");
+        }
         const hostEvent = parseHostEvent(event.data);
         for (const registration of listeners.values()) {
           if (registration.channel === hostEvent.channel) {
@@ -316,7 +315,7 @@ const subscribeSseChannelEffect = (
           }
         }
       };
-      const handleOpen = (): void => {
+      const handleOpen: EventListener = () => {
         transportEpoch = `${HOST_EVENT_STREAM_PATH}:${nextSseTransportEpoch}`;
         nextSseTransportEpoch += 1;
         if (!hasOpened) {
@@ -334,7 +333,7 @@ const subscribeSseChannelEffect = (
           }
         }
       };
-      const handleError = (): void => {
+      const handleError: EventListener = () => {
         if (hasReportedConnectionError) {
           return;
         }
@@ -366,7 +365,10 @@ const subscribeSseChannelEffect = (
         );
         hasReportedConnectionError = true;
       };
-      const handleStreamWarning = (event: MessageEvent<string>): void => {
+      const handleStreamWarning: EventListener = (event) => {
+        if (!("data" in event) || !hasRuntimeType(event.data, "string")) {
+          throw new Error("EventSource stream-warning events must contain string data.");
+        }
         const warningPayload = browserLiveControlEvent(
           BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
           event.data,
@@ -382,10 +384,10 @@ const subscribeSseChannelEffect = (
         dispatchBrowserSseListeners([...replayGapListeners, ...controlListeners], event.data);
       };
 
-      eventSource.addEventListener("message", asEventListener(handleMessage));
-      eventSource.addEventListener("open", asEventListener(handleOpen));
-      eventSource.addEventListener("error", asEventListener(handleError));
-      eventSource.addEventListener("stream-warning", asEventListener(handleStreamWarning));
+      eventSource.addEventListener("message", handleMessage);
+      eventSource.addEventListener("open", handleOpen);
+      eventSource.addEventListener("error", handleError);
+      eventSource.addEventListener("stream-warning", handleStreamWarning);
       channel = {
         eventSource,
         listeners,
@@ -439,7 +441,7 @@ const subscribeSseChannelEffect = (
   });
 
 export const subscribeLocalHostRunEvents = async (
-  listener: (payload: JsonValue | undefined) => void,
+  listener: RunEventListener,
 ): Promise<() => void> => {
   return runWebBoundary(
     Effect.gen(function* () {
@@ -513,7 +515,7 @@ const subscribeReadyLocalHostEventsEffect = (
   });
 
 export const subscribeLocalHostDevServerEvents = async (
-  listener: (payload: JsonValue | undefined) => void,
+  listener: DevServerEventListener,
 ): Promise<DevServerEventSubscription> => {
   return runWebBoundary(
     subscribeReadyLocalHostEventsEffect(DEV_SERVER_EVENT_CHANNEL, (event) => {

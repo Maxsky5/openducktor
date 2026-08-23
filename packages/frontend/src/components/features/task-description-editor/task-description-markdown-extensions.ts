@@ -207,8 +207,11 @@ const findTrailingTokens = (
 
   let suffix = "";
   for (let index = tokens.length - 1; index >= 0; index -= 1) {
-    // SAFETY: The surrounding boundary constructs or validates every member required by `MarkdownToken`.
-    suffix = `${tokenSource(tokens[index] as MarkdownToken)}${suffix}`;
+    const token = tokens[index];
+    if (!token) {
+      continue;
+    }
+    suffix = `${tokenSource(token)}${suffix}`;
     if (suffix.trim() === trailingSource) {
       const trailingTokens = tokens.slice(index);
       const first = trailingTokens[0];
@@ -356,8 +359,8 @@ const listItemPrefix = (context: RenderContext): string => {
     return "- ";
   }
   const start = Number(context.meta?.parentAttrs?.start ?? 1);
-  // SAFETY: The surrounding boundary constructs or validates every member required by `string | undefined`.
-  const type = context.meta?.parentAttrs?.type as string | undefined;
+  const rawType = context.meta?.parentAttrs?.type;
+  const type = hasRuntimeType(rawType, "string") ? rawType : undefined;
   return getListMarker(type, start - 1 + context.index, ". ");
 };
 

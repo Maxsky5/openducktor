@@ -1,3 +1,4 @@
+import { taskAssetRenderContextSchema } from "@openducktor/contracts";
 import type { TaskAssetReadService } from "@openducktor/host";
 import { Effect } from "effect";
 import { WebHostRequestError } from "./effect/web-errors";
@@ -33,7 +34,16 @@ export const routeTaskAssetHttpRequest = ({
 
     yield* validateAppSessionCookie(request, appToken);
     const [, workspaceId = "", taskId = "", scope = "", assetId = ""] = taskAssetMatch;
-    const asset = yield* taskAssetReadService.read({ workspaceId, taskId, scope, assetId }).pipe(
+    const parsedContext = taskAssetRenderContextSchema.safeParse({
+      workspaceId,
+      taskId,
+      scope,
+      assetId,
+    });
+    if (!parsedContext.success) {
+      return yield* reject("Task asset was not found.", 404);
+    }
+    const asset = yield* taskAssetReadService.read(parsedContext.data).pipe(
       Effect.mapError(
         (error) =>
           new WebHostRequestError({
@@ -47,11 +57,7 @@ export const routeTaskAssetHttpRequest = ({
       return yield* reject("Task asset was not found.", 404);
     }
 
-    // SAFETY: The surrounding boundary constructs or validates every member required by `ArrayBuffer`.
-    const body = asset.bytes.buffer.slice(
-      asset.bytes.byteOffset,
-      asset.bytes.byteOffset + asset.bytes.byteLength,
-    ) as ArrayBuffer;
+    const body = Uint8Array.from(asset.bytes);
     return new Response(body, {
       headers: { ...corsHeaders, ...asset.headers },
     });

@@ -2,8 +2,6 @@ import { hasRuntimeType } from "@openducktor/contracts";
 import { create } from "zustand";
 import type { DiffScope } from "@/features/agent-studio-git";
 
-interface DIFFSCOPELABELSContract extends Record<DiffScope, string> {}
-
 export type InlineCommentSide = "old" | "new";
 export type InlineCommentStatus = "pending" | "submitting";
 
@@ -124,10 +122,10 @@ const mapCommentSideToChange = (side: InlineCommentSide): "added" | "removed" =>
   return side === "old" ? "removed" : "added";
 };
 
-const DIFF_SCOPE_LABELS: DIFFSCOPELABELSContract = {
+const DIFF_SCOPE_LABELS = {
   uncommitted: "uncommitted changes",
   target: "branch changes",
-};
+} satisfies Record<DiffScope, string>;
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
   drafts: [],

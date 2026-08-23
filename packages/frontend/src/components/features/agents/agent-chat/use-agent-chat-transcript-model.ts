@@ -63,11 +63,10 @@ const EMPTY_TRANSCRIPT_MODEL_REVISION: TranscriptModelRevision = Object.freeze({
   count: null,
 });
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `AgentChatTurnAnchor[]`.
 const EMPTY_TRANSCRIPT_MODEL_STATE: TranscriptModelState = Object.freeze({
   revision: EMPTY_TRANSCRIPT_MODEL_REVISION,
   rows: EMPTY_ROWS,
-  turnAnchors: [] as AgentChatTurnAnchor[],
+  turnAnchors: new Array<AgentChatTurnAnchor>(),
   hasAttachmentMessages: false,
   lastUserMessageKey: null,
   activeStreamingAssistantMessageId: null,

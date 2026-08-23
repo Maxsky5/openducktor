@@ -1,29 +1,54 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import {
+  parseCodexAppServerRequestResult,
+  type CodexAppServerThreadStatus,
+  type JsonValue,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-port";
 import { probeCodexSessionStatus } from "./codex-session-status-probe";
 
-// SAFETY: This test controls the fixture and supplies `CodexAppServerRequestResult` used by this case.
-const codexResult = (value: JsonValue | undefined) =>
-  Effect.succeed(value as CodexAppServerRequestResult);
+const codexThread = (status: CodexAppServerThreadStatus, cwd = "/repo/worktree") =>
+  ({
+    id: "thread-1",
+    extra: null,
+    sessionId: "thread-1",
+    forkedFromId: null,
+    parentThreadId: null,
+    preview: "Test thread",
+    ephemeral: false,
+    section: null,
+    sectionEnteredAt: null,
+    projectId: null,
+    historyMode: "paginated",
+    modelProvider: "openai",
+    createdAt: 1,
+    updatedAt: 1,
+    recencyAt: 1,
+    status,
+    path: null,
+    cwd,
+    cliVersion: "0.149.0-test",
+    source: "appServer",
+    canAcceptDirectInput: true,
+    threadSource: null,
+    agentNickname: null,
+    agentRole: null,
+    gitInfo: null,
+    name: null,
+    turns: [],
+  }) satisfies JsonValue;
 
-const probeThreadStatus = (input: {
-  status: { type: "active"; activeFlags: [] } | { type: "idle" | "notLoaded" | "systemError" };
-  cwd?: string;
-}) =>
+const probeThreadStatus = (input: { status: CodexAppServerThreadStatus; cwd?: string }) =>
   Effect.runPromise(
     probeCodexSessionStatus({
       codexAppServer: {
         request() {
-          return codexResult({
-            thread: {
-              id: "thread-1",
-              cwd: input.cwd ?? "/repo/worktree",
-              status: input.status,
-            },
-          });
+          return Effect.succeed(
+            parseCodexAppServerRequestResult("thread/read", {
+              thread: codexThread(input.status, input.cwd),
+            }),
+          );
         },
       },
       runtimeId: "runtime-1",
@@ -92,10 +117,11 @@ describe("probeCodexSessionStatus", () => {
     });
   });
 
-  test("fails fast when Codex returns an unsupported thread status", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    await expect(probeThreadStatus({ status: { type: "paused" } as never })).rejects.toThrow(
-      "Codex thread/read response thread has unsupported Codex thread status: paused",
-    );
+  test("rejects an unsupported thread status at the protocol boundary", () => {
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/read", {
+        thread: { ...codexThread({ type: "idle" }), status: { type: "paused" } },
+      }),
+    ).toThrow("Invalid discriminator value");
   });
 });

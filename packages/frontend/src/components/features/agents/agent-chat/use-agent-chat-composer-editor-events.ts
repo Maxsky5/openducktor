@@ -7,9 +7,7 @@ import type {
 } from "@openducktor/core";
 import {
   type MutableRefObject,
-  type ClipboardEvent as ReactClipboardEvent,
   type FocusEvent as ReactFocusEvent,
-  type FormEvent as ReactFormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -40,6 +38,20 @@ import {
 } from "./use-agent-chat-composer-editor-selection";
 
 type ApplyEditResult = (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
+
+type ComposerBeforeInputEvent = {
+  currentTarget: HTMLDivElement;
+  target: EventTarget;
+  nativeEvent: Event;
+  preventDefault(): void;
+};
+
+type ComposerPasteEvent = {
+  clipboardData: DataTransfer;
+  currentTarget: HTMLDivElement;
+  target: EventTarget;
+  preventDefault(): void;
+};
 
 const isPastedImageFile = (file: File, mime?: string): boolean => {
   return classifyAttachment({ name: file.name, mime: mime || file.type }) === "image";
@@ -235,7 +247,7 @@ export const useAgentChatComposerEditorEvents = ({
   );
 
   const handleEditorPaste = useCallback(
-    (event: ReactClipboardEvent<HTMLDivElement>) => {
+    (event: ComposerPasteEvent) => {
       if (disabled) {
         return;
       }
@@ -309,19 +321,21 @@ export const useAgentChatComposerEditorEvents = ({
   );
 
   const handleEditorBeforeInput = useCallback(
-    (event: ReactFormEvent<HTMLDivElement>) => {
+    (event: ComposerBeforeInputEvent) => {
       const sourceDraft = latestDraftRef.current;
       const activeSelection = selection.resolveActiveTextSelection(
         event.currentTarget,
         sourceDraft,
         event.target,
       );
-      // SAFETY: The surrounding boundary constructs or validates every member required by `{ inputType?: unknown; data?: unknown }`.
-      const nativeEvent = event.nativeEvent as { inputType?: unknown; data?: unknown };
-      const inputType = hasRuntimeType(nativeEvent.inputType, "string")
-        ? nativeEvent.inputType
-        : null;
-      const data = hasRuntimeType(nativeEvent.data, "string") ? nativeEvent.data : null;
+      const inputType =
+        "inputType" in event.nativeEvent && hasRuntimeType(event.nativeEvent.inputType, "string")
+          ? event.nativeEvent.inputType
+          : null;
+      const data =
+        "data" in event.nativeEvent && hasRuntimeType(event.nativeEvent.data, "string")
+          ? event.nativeEvent.data
+          : null;
       const selectionTarget = resolveSelectionTargetFromActiveSelection(
         sourceDraft,
         activeSelection,

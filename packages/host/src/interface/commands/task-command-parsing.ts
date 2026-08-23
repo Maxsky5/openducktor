@@ -8,6 +8,8 @@ import {
   planSubtaskInputSchema,
   pullRequestSchema,
   type TaskCreateInput,
+  type TaskDirectMergeInput,
+  type TaskStatus,
   type TaskUpdatePatch,
   taskAssetDescriptionMutationSchema,
   taskCreateInputSchema,
@@ -19,7 +21,6 @@ import {
 import { z } from "zod";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostValidationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -27,19 +28,21 @@ const invalidInput = (message: string, field?: string): HostValidationError =>
     field,
   });
 
-export const requireRecord = (
-  value: JsonValue | undefined,
-  label: string,
-): Record<string, JsonValue> => {
+type PullRequestContent = {
+  title: string;
+  body: string;
+};
+
+export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
     throw invalidInput(`${label} must be an object.`, label);
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  return value as Record<string, JsonValue>;
+  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
+  return value as Record<string, unknown>;
 };
 
-export const requireString = (value: JsonValue | undefined, label: string): string => {
+export const requireString = (value: unknown, label: string): string => {
   if (!hasRuntimeType(value, "string") || value.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
   }
@@ -47,10 +50,7 @@ export const requireString = (value: JsonValue | undefined, label: string): stri
   return value.trim();
 };
 
-export const optionalNonNegativeInteger = (
-  value: JsonValue | undefined,
-  label: string,
-): number | undefined => {
+export const optionalNonNegativeInteger = (value: unknown, label: string): number | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -62,7 +62,7 @@ export const optionalNonNegativeInteger = (
   return value;
 };
 
-export const parseCreateInput = (value: JsonValue | undefined): TaskCreateInput => {
+export const parseCreateInput = (value: unknown): TaskCreateInput => {
   const parsed = taskCreateInputSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -71,7 +71,7 @@ export const parseCreateInput = (value: JsonValue | undefined): TaskCreateInput 
   throw invalidInput(`task_create input.input is invalid: ${parsed.error.message}`, "input.input");
 };
 
-export const parseUpdatePatch = (value: JsonValue | undefined): TaskUpdatePatch => {
+export const parseUpdatePatch = (value: unknown): TaskUpdatePatch => {
   const parsed = taskUpdatePatchSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -80,7 +80,7 @@ export const parseUpdatePatch = (value: JsonValue | undefined): TaskUpdatePatch 
   throw invalidInput(`task_update input.patch is invalid: ${parsed.error.message}`, "input.patch");
 };
 
-export const parseDescriptionAssets = (value: JsonValue | undefined) => {
+export const parseDescriptionAssets = (value: unknown) => {
   if (value === undefined) {
     return undefined;
   }
@@ -91,7 +91,7 @@ export const parseDescriptionAssets = (value: JsonValue | undefined) => {
   throw invalidInput(`descriptionAssets is invalid: ${parsed.error.message}`, "descriptionAssets");
 };
 
-export const parseTransitionStatus = (value: JsonValue | undefined) => {
+export const parseTransitionStatus = (value: unknown): TaskStatus => {
   const parsed = taskStatusSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -103,10 +103,7 @@ export const parseTransitionStatus = (value: JsonValue | undefined) => {
   );
 };
 
-export const optionalBoolean = (
-  value: JsonValue | undefined,
-  label: string,
-): boolean | undefined => {
+export const optionalBoolean = (value: unknown, label: string): boolean | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -117,7 +114,7 @@ export const optionalBoolean = (
   return value;
 };
 
-export const parseRequiredMarkdown = (value: JsonValue | undefined, label: string): string => {
+export const parseRequiredMarkdown = (value: unknown, label: string): string => {
   if (!hasRuntimeType(value, "string")) {
     throw invalidInput(`${label} markdown cannot be empty.`, label);
   }
@@ -130,10 +127,7 @@ export const parseRequiredMarkdown = (value: JsonValue | undefined, label: strin
   return trimmed;
 };
 
-export const parseOptionalNote = (
-  value: JsonValue | undefined,
-  label: string,
-): string | undefined => {
+export const parseOptionalNote = (value: unknown, label: string): string | undefined => {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -145,7 +139,7 @@ export const parseOptionalNote = (
   return trimmed ? trimmed : undefined;
 };
 
-export const parsePlanSubtasks = (value: JsonValue | undefined): PlanSubtaskInput[] => {
+export const parsePlanSubtasks = (value: unknown): PlanSubtaskInput[] => {
   if (value === undefined) {
     return [];
   }
@@ -192,7 +186,7 @@ const normalizedAgentSessionRecordSchema = normalizedAgentSessionInputSchema.tra
   },
 );
 
-export const parseAgentSessionRecord = (value: JsonValue | undefined): AgentSessionRecord => {
+export const parseAgentSessionRecord = (value: unknown): AgentSessionRecord => {
   const parsed = normalizedAgentSessionRecordSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -220,7 +214,7 @@ const normalizedAgentSessionIdentitySchema = normalizedAgentSessionInputSchema.t
   },
 );
 
-export const parseAgentSessionIdentity = (value: JsonValue | undefined): AgentSessionIdentity => {
+export const parseAgentSessionIdentity = (value: unknown): AgentSessionIdentity => {
   const parsed = normalizedAgentSessionIdentitySchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -232,7 +226,7 @@ export const parseAgentSessionIdentity = (value: JsonValue | undefined): AgentSe
   );
 };
 
-export const parsePullRequest = (value: JsonValue | undefined): PullRequest => {
+export const parsePullRequest = (value: unknown): PullRequest => {
   const parsed = pullRequestSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
@@ -244,17 +238,17 @@ export const parsePullRequest = (value: JsonValue | undefined): PullRequest => {
   );
 };
 
-export const parsePullRequestContent = (value: JsonValue | undefined) => {
+export const parsePullRequestContent = (value: unknown): PullRequestContent => {
   const record = requireRecord(value, "task_pull_request_upsert input.input");
   const title = requireString(record.title, "input.title");
   if (!hasRuntimeType(record.body, "string")) {
     throw invalidInput("input.body is required.", "input.body");
   }
 
-  return { title, body: record.body } satisfies { title: string; body: string };
+  return { title, body: record.body };
 };
 
-export const parseTaskDirectMergeInput = (value: JsonValue | undefined) => {
+export const parseTaskDirectMergeInput = (value: unknown): TaskDirectMergeInput => {
   const parsed = taskDirectMergeInputSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;

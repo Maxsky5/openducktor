@@ -239,7 +239,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
-        abort: async (input: JsonValue | undefined) => {
+        abort: async (input: Parameters<OpencodeClient["session"]["abort"]>[0]) => {
           mock.session.abortCalls.push(input);
           throw abortError;
         },

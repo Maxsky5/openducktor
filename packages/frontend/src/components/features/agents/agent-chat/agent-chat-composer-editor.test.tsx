@@ -3,7 +3,6 @@ import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer, useRef } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -1230,40 +1229,12 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("selects the full composer content with the select-all shortcut", () => {
-    let activeRange: Range | null = null;
     const originalGetSelection = globalThis.getSelection;
-    const selection = createFocusedFixture<Selection>({
-      removeAllRanges: () => {
-        activeRange = null;
-      },
-      addRange: (range: Range) => {
-        activeRange = range;
-      },
-      get rangeCount() {
-        return activeRange ? 1 : 0;
-      },
-      get isCollapsed() {
-        return activeRange?.collapsed ?? true;
-      },
-      get anchorNode() {
-        return activeRange?.startContainer ?? null;
-      },
-      get anchorOffset() {
-        return activeRange?.startOffset ?? 0;
-      },
-      get focusNode() {
-        return activeRange?.endContainer ?? null;
-      },
-      get focusOffset() {
-        return activeRange?.endOffset ?? 0;
-      },
-      getRangeAt: () => {
-        if (!activeRange) {
-          throw new Error("Expected active selection range");
-        }
-        return activeRange;
-      },
-    });
+    const selection = document.getSelection();
+    if (!selection) {
+      throw new Error("Expected the test document to provide a Selection.");
+    }
+    selection.removeAllRanges();
     globalThis.getSelection = () => selection;
 
     try {
@@ -1274,12 +1245,11 @@ describe("AgentChatComposerEditor", () => {
         metaKey: true,
       });
 
-      // SAFETY: This test controls the fixture and supplies `Range | null` used by this case.
-      const selectedRange = activeRange as Range | null;
-      expect(selectedRange).toBeTruthy();
-      if (!selectedRange) {
+      expect(selection.rangeCount).toBe(1);
+      if (selection.rangeCount === 0) {
         throw new Error("Expected active selection range");
       }
+      const selectedRange = selection.getRangeAt(0);
       expect(selectedRange.toString()).toContain("hello");
     } finally {
       globalThis.getSelection = originalGetSelection;

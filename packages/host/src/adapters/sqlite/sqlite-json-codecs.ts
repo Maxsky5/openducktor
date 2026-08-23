@@ -2,10 +2,10 @@ import {
   type AgentSessionRecord,
   agentSessionRecordSchema,
   type JsonValue,
-  hasRuntimeType,
   jsonValueSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { z } from "zod";
 import { errorMessage } from "../../effect/host-errors";
 import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
 import type { TaskRow } from "./sqlite-task-store-schema";
@@ -18,6 +18,8 @@ type SafeParser<A> = {
   readonly safeParse: (value: JsonValue | A) => SafeParseResult<A>;
 };
 
+const labelsSchema = z.array(z.string());
+
 export const normalizeLabels = (labels: string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
@@ -27,7 +29,7 @@ export const decodeWithSchema = <A>(
   parser: SafeParser<A>,
   value: JsonValue | A,
   field: string,
-  details?: Readonly<Record<string, JsonValue>>,
+  details?: Readonly<Record<string, unknown>>,
 ): Effect.Effect<A, SqliteTaskStoreDataError> => {
   const parsed = parser.safeParse(value);
   if (parsed.success) {
@@ -80,7 +82,8 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
     row.labelsJson,
     [],
     (value) => {
-      if (!Array.isArray(value) || value.some((entry) => !hasRuntimeType(entry, "string"))) {
+      const parsed = labelsSchema.safeParse(value);
+      if (!parsed.success) {
         return Effect.fail(
           new SqliteTaskStoreDataError({
             message: "SQLite labels_json must be an array of strings.",
@@ -89,8 +92,7 @@ export const labelsFromRow = (row: TaskRow): Effect.Effect<string[], SqliteTaskS
           }),
         );
       }
-      // SAFETY: the check above guarantees every array entry is a string.
-      return Effect.succeed(normalizeLabels(value as string[]));
+      return Effect.succeed(normalizeLabels(parsed.data));
     },
     "labels_json",
     row.id,

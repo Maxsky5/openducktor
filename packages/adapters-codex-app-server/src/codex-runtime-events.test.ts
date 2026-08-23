@@ -8,7 +8,7 @@ import type { CodexAppServerStreamEvent } from "./types";
 const receivedAt = "2026-08-20T12:00:00.000Z";
 
 describe("CodexRuntimeEventSubscriptions", () => {
-  test("routes malformed server-request and notification envelopes as faults", async () => {
+  test("routes malformed known envelopes as faults and ignores future notifications", async () => {
     let listener: ((event: CodexAppServerStreamEvent) => void) | undefined;
     const events: Array<Parameters<typeof threadIdFromRuntimeStreamEvent>[0]> = [];
     const subscriptions = new CodexRuntimeEventSubscriptions((_runtimeId, next) => {
@@ -50,7 +50,7 @@ describe("CodexRuntimeEventSubscriptions", () => {
       message: { method: "future/unknown", params: { threadId: "thread-1" } },
     });
 
-    expect(events).toHaveLength(4);
+    expect(events).toHaveLength(3);
     expect(events[0]).toMatchObject({
       kind: "fault",
       sourceKind: "server_request",
@@ -68,12 +68,6 @@ describe("CodexRuntimeEventSubscriptions", () => {
       sourceKind: "notification",
       threadId: "thread-1",
       message: expect.stringContaining("turn"),
-    });
-    expect(events[3]).toMatchObject({
-      kind: "fault",
-      sourceKind: "notification",
-      threadId: "thread-1",
-      message: expect.stringContaining("method"),
     });
   });
 

@@ -13,7 +13,6 @@ import {
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
-import type { JsonValue } from "@openducktor/contracts";
 
 type UseAgentStudioDocumentsArgs = {
   workspaceRepoPath: string | null;
@@ -231,10 +230,10 @@ export function useAgentStudioDocuments({
 
       const completionInfo =
         extractCompletionTimestamp(meta.output) ?? extractCompletionTimestamp(message.content);
-      // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
+      // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
       const toolInput =
         hasRuntimeType(meta.input, "object") && meta.input !== null
-          ? (meta.input as Record<string, JsonValue>)
+          ? (meta.input as Record<string, unknown>)
           : null;
       const inputMarkdown = toolInput?.[target.inputKey];
       const hasInputMarkdown =

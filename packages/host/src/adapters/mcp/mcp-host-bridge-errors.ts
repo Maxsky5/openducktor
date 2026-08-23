@@ -1,11 +1,12 @@
 import {
+  isJsonObject,
   jsonValueSchema,
-  type JsonValue,
+  type JsonObject,
   type OdtToolErrorPayload,
   odtToolErrorCodeSchema,
 } from "@openducktor/contracts";
 
-type BridgeErrorPayload = OdtToolErrorPayload & Record<string, JsonValue>;
+type BridgeErrorPayload = OdtToolErrorPayload & Record<string, unknown>;
 
 type BridgeErrorSource = {
   code?: unknown;
@@ -15,17 +16,14 @@ type BridgeErrorSource = {
 const isRecord = (cause: unknown): cause is BridgeErrorSource =>
   typeof cause === "object" && cause !== null && !Array.isArray(cause);
 
-const isJsonRecord = (value: JsonValue): value is Record<string, JsonValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const parseDetails = (cause: unknown): Record<string, JsonValue> | undefined => {
+const parseDetails = (cause: unknown): JsonObject | undefined => {
   if (!isRecord(cause)) {
     return undefined;
   }
 
   try {
     const parsed = jsonValueSchema.safeParse(cause.details);
-    return parsed.success && isJsonRecord(parsed.data) ? parsed.data : undefined;
+    return parsed.success && isJsonObject(parsed.data) ? parsed.data : undefined;
   } catch {
     return undefined;
   }

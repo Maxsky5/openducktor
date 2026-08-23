@@ -1,18 +1,17 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasOwnKey, hasRuntimeType } from "@openducktor/contracts";
 import { basename } from "node:path";
-import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentFileReference,
   AgentModelSelection,
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
+import type {
+  ClaudeHistoryConversationMessage,
+  ClaudeHistoryMessage,
+} from "./claude-agent-sdk-history-import";
 import { decodeClaudeToolResultValue } from "./claude-agent-sdk-tool-shapes";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import { detectFileKind, isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
-
-interface MIMEEXTENSIONSContract extends Record<string, string> {}
 
 export type ClaudeLiveUserMessage = {
   isManualCompaction?: true;
@@ -52,16 +51,16 @@ type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role
 
 const CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX = "claude-history://attachment/";
 
-const MIME_EXTENSIONS: MIMEEXTENSIONSContract = {
+const MIME_EXTENSIONS = {
   "application/pdf": ".pdf",
   "image/gif": ".gif",
   "image/jpeg": ".jpg",
   "image/png": ".png",
   "image/webp": ".webp",
-};
+} satisfies Record<string, string>;
 
 const extensionForMime = (mime: string | undefined): string =>
-  mime ? (MIME_EXTENSIONS[mime] ?? "") : "";
+  mime && hasOwnKey(MIME_EXTENSIONS, mime) ? MIME_EXTENSIONS[mime] : "";
 
 const claudeHistoryAttachmentPath = (messageId: string, index: number): string =>
   `${CLAUDE_HISTORY_ATTACHMENT_PATH_PREFIX}${encodeURIComponent(messageId)}/${index}`;
@@ -147,7 +146,7 @@ const readClaudeHistoryTextDisplayParts = (text: string): AgentUserMessageDispla
 
 export const readClaudeHistoryDisplayParts = (
   messageId: string,
-  message: JsonValue | undefined,
+  message: unknown,
 ): AgentUserMessageDisplayPart[] => {
   if (!isRecord(message)) {
     return [];
@@ -262,13 +261,13 @@ export const createLiveUserMessageResolver = (
   };
 };
 
-export const readHistoryToolResults = (message: SessionMessage) => {
-  const messageRecord = parseClaudeJsonValue(message, "claudeHistoryMessage");
+export const readHistoryToolResults = (message: ClaudeHistoryConversationMessage) => {
+  const messageRecord = message;
   if (!isRecord(messageRecord)) {
     return [];
   }
   type ClaudeDecodedToolResult = NonNullable<ReturnType<typeof decodeClaudeToolResultValue>>;
-  const readTopLevelToolUseResult = (): Record<string, JsonValue> | null => {
+  const readTopLevelToolUseResult = (): Record<string, unknown> | null => {
     const camelCaseToolUseResult = messageRecord.toolUseResult;
     if (isRecord(camelCaseToolUseResult)) {
       return camelCaseToolUseResult;
@@ -319,7 +318,7 @@ export const readHistoryToolResults = (message: SessionMessage) => {
   return camelCaseResult ? [camelCaseResult] : [];
 };
 
-const readStringArrayProp = (value: JsonValue | undefined, key: string): string[] => {
+const readStringArrayProp = (value: unknown, key: string): string[] => {
   if (!isRecord(value)) {
     return [];
   }
@@ -330,7 +329,7 @@ const readStringArrayProp = (value: JsonValue | undefined, key: string): string[
   return candidate.filter((item): item is string => typeof item === "string" && item.length > 0);
 };
 
-export const retractedHistoryMessageIds = (entry: JsonValue | undefined): string[] => [
+export const retractedHistoryMessageIds = (entry: ClaudeHistoryMessage): string[] => [
   ...readStringArrayProp(entry, "supersedes"),
   ...readStringArrayProp(entry, "retracted_message_uuids"),
 ];

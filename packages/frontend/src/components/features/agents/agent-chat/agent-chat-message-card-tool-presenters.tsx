@@ -9,6 +9,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { jsonValueSchema } from "@openducktor/contracts";
 import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import {
@@ -26,7 +27,6 @@ import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
   const value = meta.toolType;
@@ -94,10 +94,14 @@ const ToolJsonDetails = ({
 };
 
 const formatToolInput = (
-  input: Record<string, JsonValue>,
+  input: Record<string, unknown>,
   workingDirectory?: string | null,
 ): string => {
-  return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
+  return JSON.stringify(
+    relativizeDisplayPathsInValue(jsonValueSchema.parse(input), workingDirectory),
+    null,
+    2,
+  );
 };
 
 const workflowToolForegroundClassName = ({

@@ -1,9 +1,9 @@
 import {
-  type JsonValue,
   type WorkspaceFileGitStatus,
   type WorkspaceFileTree,
   type WorkspaceFileTreeEntry,
   type WorkspaceTextFileReadResult,
+  type WorkspaceTextFileWriteInput,
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
 } from "@openducktor/contracts";
@@ -22,8 +22,6 @@ import {
   type WorkspaceTextFileWriteError,
 } from "./workspace-text-file-service";
 
-interface GITSTATUSPRIORITYContract extends Record<WorkspaceFileGitStatus, number> {}
-
 export type WorkspaceFilesService = {
   listTree(input: {
     rootPath: string;
@@ -34,7 +32,7 @@ export type WorkspaceFilesService = {
     relativePath: string;
   }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationError>;
   writeTextFile(
-    input: JsonValue | undefined,
+    input: WorkspaceTextFileWriteInput,
   ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
 
@@ -77,14 +75,14 @@ const normalizeGitStatus = (
     }),
   );
 };
-const GIT_STATUS_PRIORITY: GITSTATUSPRIORITYContract = {
+const GIT_STATUS_PRIORITY = {
   ignored: 0,
   modified: 1,
   untracked: 2,
   added: 3,
   renamed: 4,
   deleted: 5,
-};
+} satisfies Record<WorkspaceFileGitStatus, number>;
 
 const mergeGitStatus = (
   current: WorkspaceFileGitStatus | null | undefined,
@@ -150,7 +148,10 @@ const statFile = (
 
 export const createWorkspaceFilesService = (
   filesystem: FilesystemPort,
-  gitPort: GitPort,
+  gitPort: Pick<
+    GitPort,
+    "getRepositoryRoot" | "getStatus" | "isGitRepository" | "listChangedFiles" | "listFiles"
+  >,
 ): WorkspaceFilesService => {
   const textFiles = createWorkspaceTextFileService(filesystem, gitPort);
   return {

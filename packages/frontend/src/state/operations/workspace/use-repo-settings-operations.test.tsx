@@ -864,9 +864,9 @@ describe("use-repo-settings-operations", () => {
       }
       // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       const parsedForwarded = forwardedSnapshot as {
-        globalPromptOverrides: Record<string, JsonValue>;
+        globalPromptOverrides: Record<string, unknown>;
         agentRuntimes: JsonValue;
-        workspaces: Record<string, { promptOverrides: Record<string, JsonValue> }>;
+        workspaces: Record<string, { promptOverrides: Record<string, unknown> }>;
       };
       expect(Object.keys(parsedForwarded.globalPromptOverrides).sort()).toEqual(
         agentPromptTemplateIdValues.toSorted(),

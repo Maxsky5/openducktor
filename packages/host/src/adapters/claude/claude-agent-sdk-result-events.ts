@@ -21,8 +21,6 @@ import {
   readClaudeTurnOriginKind,
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
-import type { JsonValue } from "@openducktor/contracts";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   acceptedUserMessages?: readonly unknown[];
@@ -38,7 +36,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   lastAssistantTextTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
-  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
+  toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolStartedAtMsByCallId: Map<string, number>;
@@ -56,9 +54,9 @@ type PermissionDeniedToolPartInput = {
   permission: {
     toolName: string;
     toolUseId: string;
-    input?: Record<string, JsonValue>;
+    input?: Record<string, unknown>;
     message: string;
-    metadata?: Record<string, JsonValue>;
+    metadata?: Record<string, unknown>;
   };
   session: ClaudeResultEventSession;
   timestamp: string;
@@ -71,7 +69,7 @@ export const handleClaudeResultMessage = ({
   timestamp,
 }: ClaudeResultEventInput): void => {
   const completedUserTurnIndex = nextCompletedUserTurnIndex(session);
-  const messageValue = parseClaudeJsonValue(message, "claudeResultMessage");
+  const messageValue = message;
   const originKind = readClaudeTurnOriginKind(messageValue) ?? session.assistantTurnOriginKind;
   const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);

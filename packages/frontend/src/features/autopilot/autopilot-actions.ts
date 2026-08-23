@@ -68,8 +68,7 @@ type SkippedAutopilotStart = {
 
 type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `Record<AgentRole, string>`.
-const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
+const ROLE_LABELS = AGENT_ROLE_LABELS;
 
 const findLatestSessionRecordByRole = (
   sessions: AgentSessionRecord[],

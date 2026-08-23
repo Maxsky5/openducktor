@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { ExternalTaskSyncEvent, JsonValue, TaskEventCursor } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveEnvelope,
+  ExternalTaskSyncEvent,
+  TaskEventCursor,
+} from "@openducktor/contracts";
 import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
@@ -296,7 +300,7 @@ describe("electron shell bridge", () => {
     // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
-    )?.[1] as ((payload: JsonValue | undefined) => void) | undefined;
+    )?.[1] as ((payload: AgentSessionLiveEnvelope) => void) | undefined;
     if (!subscription) {
       throw new Error("Expected live-session subscription.");
     }

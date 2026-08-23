@@ -1,8 +1,4 @@
-import type {
-  AutopilotActionId,
-  AutopilotEventId,
-  AutopilotSettings,
-} from "@openducktor/contracts";
+import type { AutopilotEventId, AutopilotSettings } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
 
 export const prepareAutopilotSettingsForSave = (
@@ -16,10 +12,9 @@ export const prepareAutopilotSettingsForSave = (
   return {
     rules: AUTOPILOT_EVENT_IDS.map((eventId) => {
       const explicitRule = rulesByEvent.get(eventId);
-      // SAFETY: The surrounding boundary constructs or validates every member required by `AutopilotActionId[]`.
       const actionIds = (explicitRule?.actionIds ?? []).filter(
         (actionId, index, list) => list.indexOf(actionId) === index,
-      ) as AutopilotActionId[];
+      );
 
       return {
         eventId,

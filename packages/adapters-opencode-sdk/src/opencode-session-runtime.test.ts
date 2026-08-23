@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, type JsonObject } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
@@ -7,6 +7,12 @@ import {
   permissionRepliedEvent,
   sessionStatusEvent,
 } from "./event-stream.test-support";
+import { asUnknownRecord } from "./guards";
+import {
+  createOpencodeEventFixtures,
+  createOpencodeMessageInfoFixture,
+  createOpencodeSessionFixture,
+} from "./opencode-protocol-test-fixtures";
 
 type LiveClientHarness = {
   client: OpencodeClient;
@@ -17,15 +23,20 @@ type LiveClientHarness = {
   questionReplyCalls: unknown[];
   setPermissionReplyError: (error: unknown | null) => void;
   setPendingApproval: (pending: boolean) => void;
-  emit: (event: Event) => void;
-  emitAndWait: (event: Event) => Promise<void>;
+  emit: (event: Event | JsonObject) => void;
+  emitAndWait: (event: Event | JsonObject) => Promise<void>;
   completeStream: () => Promise<void>;
   failStream: (error: Error) => Promise<void>;
   streamSignal: () => AbortSignal | null;
 };
 
+type SessionMessagesRequest = Parameters<OpencodeClient["session"]["messages"]>[0];
+type SessionPromptRequest = Parameters<OpencodeClient["session"]["promptAsync"]>[0];
+type PermissionReplyRequest = Parameters<OpencodeClient["permission"]["reply"]>[0];
+type QuestionReplyRequest = Parameters<OpencodeClient["question"]["reply"]>[0];
+
 type QueuedStreamEntry =
-  | { type: "event"; event: Event; consumed?: () => void }
+  | { type: "event"; event: Event | JsonObject; consumed?: () => void }
   | { type: "complete"; consumed: () => void }
   | { type: "failure"; error: Error; consumed: () => void };
 
@@ -93,12 +104,17 @@ const createLiveClientHarness = (
           throw input.listError;
         }
         return {
-          data: externalSessionIds.map((sessionId) => ({
-            id: sessionId,
-            directory: "/repo",
-            title: "Live session",
-            time: { created: Date.parse("2026-07-16T10:00:00.000Z") },
-          })),
+          data: externalSessionIds.map((sessionId) =>
+            createOpencodeSessionFixture({
+              id: sessionId,
+              directory: "/repo",
+              title: "Live session",
+              time: {
+                created: Date.parse("2026-07-16T10:00:00.000Z"),
+                updated: Date.parse("2026-07-16T10:00:00.000Z"),
+              },
+            }),
+          ),
           error: undefined,
         };
       },
@@ -108,7 +124,7 @@ const createLiveClientHarness = (
         ),
         error: undefined,
       }),
-      messages: async (request: JsonValue | undefined) => {
+      messages: async (request: SessionMessagesRequest) => {
         messageCalls.push(request);
         input.onMessages?.();
         await input.messagesBarrier;
@@ -116,14 +132,15 @@ const createLiveClientHarness = (
           data: hasRuntimeType(input.totalTokens, "number")
             ? [
                 {
-                  info: {
+                  info: createOpencodeMessageInfoFixture({
                     id: "assistant-latest",
                     role: "assistant",
+                    sessionID: externalSessionId,
                     providerID: "openai",
                     modelID: "gpt-5",
                     tokens: { input: input.totalTokens - 100, output: 100 },
                     time: { created: Date.parse("2026-07-16T10:01:00.000Z") },
-                  },
+                  }),
                   parts: [],
                 },
               ]
@@ -131,7 +148,7 @@ const createLiveClientHarness = (
           error: undefined,
         };
       },
-      promptAsync: async (request: JsonValue | undefined) => {
+      promptAsync: async (request: SessionPromptRequest) => {
         promptCalls.push(request);
         return { data: {}, error: undefined };
       },
@@ -158,7 +175,7 @@ const createLiveClientHarness = (
         input.onPermissionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: JsonValue | undefined) => {
+      reply: async (request: PermissionReplyRequest) => {
         permissionReplyCalls.push(request);
         if (permissionReplyError) {
           return { data: undefined, error: permissionReplyError };
@@ -193,7 +210,7 @@ const createLiveClientHarness = (
         input.onQuestionListSettled?.();
         return { data, error: undefined };
       },
-      reply: async (request: JsonValue | undefined) => {
+      reply: async (request: QuestionReplyRequest) => {
         questionReplyCalls.push(request);
         pendingQuestion = false;
         return { data: true, error: undefined };
@@ -203,7 +220,8 @@ const createLiveClientHarness = (
       event: async (options?: { signal?: AbortSignal }) => {
         callOrder.push("subscribe");
         signal = options?.signal ?? null;
-        async function* events(): AsyncGenerator<{ directory: string; payload: Event }> {
+        async function* events() {
+          let eventIndex = 0;
           try {
             while (!options?.signal?.aborted) {
               if (queuedEvents.length === 0) {
@@ -227,7 +245,14 @@ const createLiveClientHarness = (
               if (entry.event.type === "server.connected") {
                 callOrder.push("connected");
               }
-              yield { directory: "/repo", payload: entry.event };
+              const eventRecord = asUnknownRecord(entry.event);
+              if (!eventRecord) {
+                throw new Error("Expected an OpenCode event fixture object.");
+              }
+              for (const payload of createOpencodeEventFixtures(eventRecord, eventIndex)) {
+                yield { directory: "/repo", payload };
+              }
+              eventIndex += 1;
               entry.consumed?.();
             }
           } finally {
@@ -808,6 +833,7 @@ describe("OpenCode session runtime connection", () => {
       model: {
         providerId: "openai",
         modelId: "gpt-5",
+        profileId: "build",
       },
     });
     expect(retainedHarness.messageCalls).toEqual([]);
@@ -827,6 +853,7 @@ describe("OpenCode session runtime connection", () => {
       model: {
         providerId: "openai",
         modelId: "gpt-5",
+        profileId: "build",
       },
     });
     expect(missingHarness.messageCalls).toEqual([

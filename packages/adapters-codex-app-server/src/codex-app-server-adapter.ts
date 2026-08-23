@@ -865,11 +865,13 @@ export class CodexAppServerAdapter
         );
       }
       const answers = Object.fromEntries(
-        pending.questionIds.map((questionId, index) => [
-          questionId,
-          // SAFETY: the length equality check above guarantees an answer set for every question id.
-          { answers: input.answers[index] as string[] },
-        ]),
+        pending.questionIds.map((questionId, index) => {
+          const answerSet = input.answers[index];
+          if (answerSet === undefined) {
+            throw new Error(`Codex question '${questionId}' is missing its answer set.`);
+          }
+          return [questionId, { answers: answerSet }] as const;
+        }),
       );
       const output = JSON.stringify({ answers });
       completedQuestionEvent = {

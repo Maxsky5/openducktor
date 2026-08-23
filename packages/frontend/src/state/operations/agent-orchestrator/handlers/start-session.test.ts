@@ -28,6 +28,7 @@ import {
   sessionIdentity,
   taskFixture,
 } from "./start-session.test-helpers";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 const waitForSessionCount = async (
   getCount: () => number,
@@ -68,7 +69,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("starts through a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalStartSession = adapter.startSession;
     let startInput: unknown;
     adapter.startSession = async (input) => {

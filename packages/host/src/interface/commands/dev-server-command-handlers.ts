@@ -4,10 +4,9 @@ import type {
 } from "../../application/dev-servers/dev-server-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
-import type { JsonValue } from "@openducktor/contracts";
 
 const parseDevServerTaskInput = (
-  args: Record<string, JsonValue> | undefined,
+  args: Record<string, unknown> | undefined,
   label: string,
 ): DevServerTaskInput => {
   const record = requireRecord(args, label);

@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import type { CodexAppServerThreadStatus, CodexAppServerTurn } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -7,7 +7,6 @@ import type {
   AgentStreamPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 import {
   codexTurnKey,
@@ -16,9 +15,6 @@ import {
 } from "./codex-app-server-requests";
 import {
   type ActiveCodexTurn,
-  extractNumberField,
-  extractStringField,
-  isPlainObject,
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
 } from "./codex-app-server-shared";
 import {
@@ -27,7 +23,6 @@ import {
 } from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
-  codexItemId,
   codexItemTypeMatches,
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
@@ -41,6 +36,7 @@ import {
   projectCodexCanonicalEvents,
 } from "./codex-canonical-projector";
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
+import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
@@ -49,13 +45,15 @@ import {
 import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
+type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
+
 const CODEX_SAFETY_BUFFERING_MESSAGE =
   "Our systems are thinking a bit more about this request before responding.";
 const CODEX_UNLINKED_SPAWN_ERROR = "Codex ended this subagent spawn without creating a session.";
 
 export type CompletedAgentMessage = {
   session: CodexSessionState;
-  item: Record<string, JsonValue>;
+  item: CodexAgentMessageItem;
   timestamp: string;
   model?: AgentModelSelection;
 };
@@ -181,49 +179,35 @@ const consumeSyntheticUserMessage = (
 const normalizeSyntheticUserMessageText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
-const withLifecycleTimestamp = (
-  item: Record<string, JsonValue>,
-  key: "startedAtMs" | "completedAtMs",
-  timestamp: string,
-): Record<string, JsonValue> => {
-  const timestampMs = Date.parse(timestamp);
-  return Number.isFinite(timestampMs) ? { ...item, [key]: timestampMs } : item;
-};
-
 const recordStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, JsonValue>,
-  timestamp: string,
+  item: CodexTimedThreadItem,
 ): void => {
-  const itemId = extractStringField(item, ["id"]);
-  if (!itemId) {
-    return;
-  }
-  const startedAtMs = Date.parse(timestamp);
-  if (Number.isFinite(startedAtMs)) {
-    context.recordStartedItemTimestamp(session.runtimeId, session.threadId, itemId, startedAtMs);
+  if (item.startedAtMs !== undefined) {
+    context.recordStartedItemTimestamp(
+      session.runtimeId,
+      session.threadId,
+      item.id,
+      item.startedAtMs,
+    );
   }
 };
 
 const withRecordedStartedItemTimestamp = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, JsonValue>,
-) => {
-  const itemId = extractStringField(item, ["id"]);
-  if (!itemId) {
-    return item satisfies Record<string, JsonValue>;
+  item: CodexTimedThreadItem,
+): CodexTimedThreadItem => {
+  const startedAtMs = context.takeStartedItemTimestamp(
+    session.runtimeId,
+    session.threadId,
+    item.id,
+  );
+  if (startedAtMs === undefined || item.startedAtMs !== undefined) {
+    return item;
   }
-  const startedAtMs = context.takeStartedItemTimestamp(session.runtimeId, session.threadId, itemId);
-  if (
-    !hasRuntimeType(startedAtMs, "number") ||
-    Object.hasOwn(item, "startedAtMs") ||
-    Object.hasOwn(item, "started_at_ms")
-  ) {
-    return item satisfies Record<string, JsonValue>;
-  }
-  return { ...item, startedAtMs } satisfies Record<string, JsonValue>;
+  return { ...item, startedAtMs };
 };
 
 let lastAcceptedUserMessageTimestamp = 0;
@@ -242,13 +226,13 @@ const createCodexAcceptedUserMessageId = (timestamp = Date.now()): string => {
 const emitFinalAgentMessage = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, JsonValue>,
+  item: CodexAgentMessageItem,
   timestamp: string,
   tokenUsage?: CodexTokenUsageTotals,
   model?: AgentModelSelection,
 ): void => {
-  const itemId = codexItemId(item, `codex-item-${Date.now()}`);
-  const text = extractStringField(item, ["text"]);
+  const itemId = item.id;
+  const text = item.text;
   if (text) {
     emitCodexSessionEvent(context, session.threadId, {
       type: "assistant_message",
@@ -256,10 +240,10 @@ const emitFinalAgentMessage = (
       timestamp,
       messageId: itemId,
       message: text,
-      ...(hasRuntimeType(tokenUsage?.totalTokens, "number")
+      ...(tokenUsage?.totalTokens !== undefined
         ? { totalTokens: tokenUsage.totalTokens }
         : undefined),
-      ...(hasRuntimeType(tokenUsage?.contextWindow, "number")
+      ...(tokenUsage?.contextWindow !== undefined
         ? { contextWindow: tokenUsage.contextWindow }
         : undefined),
       ...(model ? { model } : undefined),
@@ -306,7 +290,7 @@ export const emitCodexUserMessage = (
 const emitStartedItem = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, JsonValue>,
+  item: CodexTimedThreadItem,
   timestamp: string,
 ): void => {
   if (
@@ -317,8 +301,8 @@ const emitStartedItem = (
   ) {
     return;
   }
-  const startedItem = withLifecycleTimestamp(item, "startedAtMs", timestamp);
-  recordStartedItemTimestamp(context, session, startedItem, timestamp);
+  const startedItem = item;
+  recordStartedItemTimestamp(context, session, startedItem);
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_started", item: startedItem },
     { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
@@ -347,11 +331,11 @@ const emitStartedItem = (
 const emitCompletedItem = (
   context: CodexStreamingContext,
   session: CodexSessionState,
-  item: Record<string, JsonValue>,
+  item: CodexTimedThreadItem,
   timestamp: string,
   turnId: string | null,
 ): void => {
-  const itemId = extractStringField(item, ["id"]) ?? `codex-item-${Date.now()}`;
+  const itemId = item.id;
   if (codexItemTypeMatches(item, "userMessage")) {
     const input = codexUserInputsFromItem(item);
     const message = codexUserInputListToText(input);
@@ -379,7 +363,7 @@ const emitCompletedItem = (
   }
 
   if (codexItemTypeMatches(item, "agentMessage")) {
-    const text = extractStringField(item, ["text"]);
+    const text = item.text;
     if (text) {
       emitCodexSessionEvent(context, session.threadId, {
         type: "assistant_part",
@@ -410,11 +394,7 @@ const emitCompletedItem = (
     return;
   }
 
-  const completedItem = withLifecycleTimestamp(
-    withRecordedStartedItemTimestamp(context, session, item),
-    "completedAtMs",
-    timestamp,
-  );
+  const completedItem = withRecordedStartedItemTimestamp(context, session, item);
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_completed", item: completedItem },
     {
@@ -450,11 +430,11 @@ const isThreadScopedCodexNotificationMethod = (method: string): boolean =>
 const timestampFromCompletedTurnNotification = (
   notification: CodexNotificationRecord,
 ): string | null => {
-  if (notification.method !== "turn/completed" || !isPlainObject(notification.params)) {
+  if (notification.method !== "turn/completed") {
     return null;
   }
 
-  return timestampFromCodexTurn(notification.params.turn, ["completedAt", "completed_at"]);
+  return timestampFromCodexTurn(notification.params.turn, "completedAt");
 };
 
 const timestampFromCodexNotification = (notification: CodexNotificationRecord): string => {
@@ -477,14 +457,8 @@ const timestampFromCodexNotification = (notification: CodexNotificationRecord): 
   return notification.receivedAt;
 };
 
-const isCodexIdleThreadStatus = (status: JsonValue | undefined): boolean => {
-  const type = isPlainObject(status)
-    ? extractStringField(status, ["type"])
-    : hasRuntimeType(status, "string")
-      ? status
-      : null;
-  return type?.toLowerCase() === "idle";
-};
+const isCodexIdleThreadStatus = (status: CodexAppServerThreadStatus): boolean =>
+  status.type === "idle";
 
 const receivedAtMsFromCodexNotification = (receivedAt: string): number => {
   const receivedAtMs = Date.parse(receivedAt);
@@ -537,9 +511,9 @@ const emitCodexCompletedTurnTiming = (
   context: CodexStreamingContext,
   session: CodexSessionState,
   completedAgentMessage: CompletedAgentMessage,
-  turn: Record<string, JsonValue>,
+  turn: CodexAppServerTurn,
 ): void => {
-  const durationMs = extractNumberField(turn, ["durationMs", "duration_ms"]);
+  const durationMs = turn.durationMs;
   if (durationMs === null) {
     throw new Error("Completed Codex turn with a final assistant message is missing durationMs.");
   }
@@ -604,8 +578,7 @@ export const handleCodexPendingNotifications = async (
       context.setSessionLiveStatus(session, {
         classification: "running",
       });
-      const turn = isPlainObject(notification.params) ? notification.params.turn : null;
-      const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
+      const turnId = notification.params.turn.id;
       if (
         turnId &&
         activeTurn &&
@@ -621,7 +594,7 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "thread/status/changed") {
-      if (isPlainObject(notification.params)) {
+      {
         const isIdleStatus = isCodexIdleThreadStatus(notification.params.status);
         if (
           activeTurn &&
@@ -655,19 +628,18 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "model/safetyBuffering/updated") {
-      const params = isPlainObject(notification.params) ? notification.params : null;
       const isActiveTurn =
         Boolean(notificationTurnId) &&
         !activeTurn?.isTurnSettled() &&
         activeTurn?.turnId === notificationTurnId;
-      if (isActiveTurn && hasRuntimeType(params?.showBufferingUi, "boolean")) {
+      if (isActiveTurn) {
         emitCodexSessionEvent(context, session.threadId, {
           type: "session_status",
           externalSessionId: session.threadId,
           timestamp,
           status: {
             type: "busy",
-            message: params.showBufferingUi ? CODEX_SAFETY_BUFFERING_MESSAGE : null,
+            message: notification.params.showBufferingUi ? CODEX_SAFETY_BUFFERING_MESSAGE : null,
           },
         });
       }
@@ -697,7 +669,7 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "turn/plan/updated") {
-      if (isPlainObject(notification.params)) {
+      {
         const todoTurnId = notificationTurnId ?? activeTurn?.turnId ?? session.threadId;
         emitCanonicalEvents(
           context,
@@ -738,9 +710,9 @@ export const handleCodexPendingNotifications = async (
 
     if (notification.method === "turn/completed") {
       emitUnlinkedSpawnFailures(context, session, timestamp);
-      const turn = isPlainObject(notification.params) ? notification.params.turn : null;
-      const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
-      if (turnId && isPlainObject(turn) && turn.status === "completed") {
+      const turn = notification.params.turn;
+      const turnId = turn.id;
+      if (turn.status === "completed") {
         const completedAgentMessage = context.completedAgentMessagesByTurnKey.get(
           codexTurnKey(session.threadId, turnId),
         );
@@ -749,7 +721,7 @@ export const handleCodexPendingNotifications = async (
         }
         flushBufferedFinalAgentMessage(context, session, turnId);
         clearTurnScopedStreamingState(context, session.threadId, turnId);
-      } else if (turnId) {
+      } else {
         clearTurnScopedStreamingState(context, session.threadId, turnId);
       }
       const shouldSettleActiveTurn = activeTurn && (!turnId || activeTurn.turnId === turnId);
@@ -778,55 +750,54 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "item/agentMessage/delta") {
-      const delta = extractStringField(notification.params, ["delta"]);
-      if (delta) {
-        const messageId = extractStringField(notification.params, ["itemId", "item_id"]);
+      if (notification.params.delta) {
         emitCodexSessionEvent(context, session.threadId, {
           type: "assistant_delta",
           externalSessionId: session.threadId,
           timestamp,
           channel: "text",
-          ...(messageId ? { messageId } : undefined),
-          delta,
+          messageId: notification.params.itemId,
+          delta: notification.params.delta,
         });
       }
       continue;
     }
 
     if (
-      notification.method === "item/reasoningText/delta" ||
-      notification.method === "item/reasoningSummaryText/delta" ||
       notification.method === "item/reasoning/textDelta" ||
       notification.method === "item/reasoning/summaryTextDelta"
     ) {
-      const delta = extractStringField(notification.params, ["delta"]);
-      if (delta) {
-        const messageId = extractStringField(notification.params, ["itemId", "item_id"]);
+      if (notification.params.delta) {
         emitCodexSessionEvent(context, session.threadId, {
           type: "assistant_delta",
           externalSessionId: session.threadId,
           timestamp,
           channel: "reasoning",
-          ...(messageId ? { messageId } : undefined),
-          delta,
+          messageId: notification.params.itemId,
+          delta: notification.params.delta,
         });
       }
       continue;
     }
 
     if (notification.method === "item/started") {
-      const item = isPlainObject(notification.params) ? notification.params.item : null;
-      if (isPlainObject(item)) {
-        emitStartedItem(context, session, item, timestamp);
-      }
+      emitStartedItem(
+        context,
+        session,
+        { ...notification.params.item, startedAtMs: notification.params.startedAtMs },
+        timestamp,
+      );
       continue;
     }
 
     if (notification.method === "item/completed") {
-      const item = isPlainObject(notification.params) ? notification.params.item : null;
-      if (isPlainObject(item)) {
-        emitCompletedItem(context, session, item, timestamp, notificationTurnId);
-      }
+      emitCompletedItem(
+        context,
+        session,
+        { ...notification.params.item, completedAtMs: notification.params.completedAtMs },
+        timestamp,
+        notificationTurnId,
+      );
     }
   }
 };

@@ -6,13 +6,6 @@ import type {
 } from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
-interface SESSIONVIEWACTIONBYROLEContract extends Record<AgentRole, SessionRoleViewAction> {}
-
-interface ACTIONPRIORITYBYISSUETYPEContract extends Record<
-  TaskCard["issueType"],
-  TaskWorkflowAction[]
-> {}
-
 export type { TaskWorkflowAction } from "@/features/task-workflow/task-workflow-actions";
 
 type SessionRoleViewAction = "open_spec" | "open_planner" | "open_builder" | "open_qa";
@@ -38,12 +31,12 @@ const SESSION_CREATING_ACTIONS: readonly TaskWorkflowAction[] = [
   "qa_start",
 ];
 
-const SESSION_VIEW_ACTION_BY_ROLE: SESSIONVIEWACTIONBYROLEContract = {
+const SESSION_VIEW_ACTION_BY_ROLE = {
   spec: "open_spec",
   planner: "open_planner",
   build: "open_builder",
   qa: "open_qa",
-};
+} satisfies Record<AgentRole, SessionRoleViewAction>;
 
 const SESSION_VIEW_ACTIONS = new Set<SessionRoleViewAction>(
   Object.values(SESSION_VIEW_ACTION_BY_ROLE),
@@ -174,7 +167,7 @@ const filterEnabledActions = (
   return enabled;
 };
 
-const ACTION_PRIORITY_BY_ISSUE_TYPE: ACTIONPRIORITYBYISSUETYPEContract = {
+const ACTION_PRIORITY_BY_ISSUE_TYPE = {
   epic: [
     "set_spec",
     "set_plan",
@@ -235,7 +228,7 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: ACTIONPRIORITYBYISSUETYPEContract = {
     "reset_task",
     "close_task",
   ],
-};
+} satisfies Record<TaskCard["issueType"], TaskWorkflowAction[]>;
 
 const isWorkflowAction = (action: TaskAction): action is BaseTaskWorkflowAction =>
   action !== "view_details";

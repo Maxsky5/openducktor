@@ -19,7 +19,6 @@ import {
 } from "./claude-agent-sdk-history-import";
 import { toClaudeTaskNotificationMessage } from "./claude-agent-sdk-history-notifications";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import {
   appendUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
@@ -53,7 +52,6 @@ import {
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
@@ -74,7 +72,7 @@ export const toClaudeHistoryMessages = (
   const assistantMessagesByToolCallId = new Map<string, MutableAssistantHistoryMessage>();
   const toolMessageIdsByCallId = new Map<string, string>();
   const toolNamesByCallId = new Map<string, string>();
-  const toolInputsByCallId = new Map<string, Record<string, JsonValue>>();
+  const toolInputsByCallId = new Map<string, Record<string, unknown>>();
   const hiddenSubagentTaskIds = new Set<string>();
   const subagentMessageIdsByTaskId = new Map<string, string>();
   const subagentAgentIdsByToolUseId = new Map(options.subagentAgentIdsByToolUseId);
@@ -195,7 +193,7 @@ export const toClaudeHistoryMessages = (
     if (!entry) {
       continue;
     }
-    const entryValue = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+    const entryValue = entry;
     removeRetractedMessages(retractedHistoryMessageIds(entryValue));
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;

@@ -1,24 +1,34 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
+import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import {
   isRecord,
   previewInput,
   readStringProp,
   toolPartPresentation,
 } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
+
+type ClaudeToolUseMetadata =
+  | {
+      blockType: ClaudeToolUseBlockType;
+      serverName?: string;
+    }
+  | {
+      durationMs: number;
+      elapsedTimeSeconds: number;
+    };
 
 export type ClaudeDecodedToolUse = {
   blockType: string;
   callId: string;
-  input?: Record<string, JsonValue>;
-  metadata?: Record<string, JsonValue>;
+  input?: Record<string, unknown>;
+  metadata?: ClaudeToolUseMetadata;
   toolName: string;
 };
 
 export type ClaudeDecodedToolResult = {
   isError: boolean;
-  raw: Record<string, JsonValue>;
+  raw: Record<string, unknown>;
   text: string;
   toolName?: string;
   toolUseId: string;
@@ -36,7 +46,7 @@ export const decodeClaudeToolUseBlock = ({
   fallbackMessageId,
   index,
 }: {
-  block: Record<string, JsonValue>;
+  block: Record<string, unknown>;
   fallbackMessageId: string;
   index: number;
 }): ClaudeDecodedToolUse | null => {
@@ -96,7 +106,7 @@ export const createClaudeRunningToolPart = ({
     ...(toolUse.metadata ? { metadata: toolUse.metadata } : undefined),
   };
   if (toolUse.input) {
-    part.input = toolUse.input;
+    part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
     const preview = previewInput(toolUse.input);
     if (preview) {
       part.preview = preview;
@@ -127,7 +137,7 @@ export const timestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringifyToolResultContent = (value: JsonValue): string => {
+const stringifyToolResultContent = (value: unknown): string => {
   if (value === undefined || value === null) {
     return "";
   }
@@ -135,13 +145,13 @@ const stringifyToolResultContent = (value: JsonValue): string => {
     return String(value);
   }
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(value, null, 2) ?? String(value);
   } catch {
     return String(value);
   }
 };
 
-const toolResultBlockText = (block: JsonValue): string => {
+const toolResultBlockText = (block: unknown): string => {
   if (hasRuntimeType(block, "string")) {
     return block;
   }
@@ -155,7 +165,7 @@ const toolResultBlockText = (block: JsonValue): string => {
   );
 };
 
-const claudeToolResultContentText = (value: Record<string, JsonValue>): string => {
+const claudeToolResultContentText = (value: Record<string, unknown>): string => {
   const text =
     readStringProp(value, "content") ??
     readStringProp(value, "text") ??
@@ -178,7 +188,7 @@ const claudeToolResultContentText = (value: Record<string, JsonValue>): string =
 };
 
 export const decodeClaudeToolResultValue = (
-  value: JsonValue | undefined,
+  value: unknown,
   fallbackToolUseId: string | null,
   options: { allowNonToolResultType?: boolean } = {},
 ): ClaudeDecodedToolResult | null => {

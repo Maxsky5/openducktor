@@ -1,16 +1,17 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
+  JsonObject,
+  JsonValue,
   OdtToolErrorCode,
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { readTaskAssetsResultSchema, hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, isJsonObject, readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z } from "zod";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type ToolResult = CallToolResult;
 
-export type OdtToolErrorDetails = Record<string, JsonValue>;
+export type OdtToolErrorDetails = NonNullable<OdtToolErrorPayload["error"]["details"]>;
 
 export type OdtToolErrorInput = {
   readonly code: OdtToolErrorCode;
@@ -48,11 +49,8 @@ export const toErrorMessage = (cause: unknown): string => {
   return "Unknown error";
 };
 
-const isStructuredToolPayload = (
-  payload: JsonValue | undefined,
-): payload is Record<string, JsonValue> => {
-  return payload !== null && typeof payload === "object" && !Array.isArray(payload);
-};
+const isStructuredToolPayload = (payload: JsonValue): payload is JsonObject =>
+  isJsonObject(payload);
 
 const summarizeIssue = (issue: {
   path: readonly PropertyKey[];
@@ -92,7 +90,7 @@ const readOdtToolErrorIssues = (cause: unknown): ZodIssueSummary[] | undefined =
   return normalizeOdtToolErrorIssues(cause.issues);
 };
 
-export const toToolResult = (payload: JsonValue | undefined): ToolResult => {
+export const toToolResult = (payload: JsonValue): ToolResult => {
   return {
     content: [
       {
@@ -104,7 +102,7 @@ export const toToolResult = (payload: JsonValue | undefined): ToolResult => {
   };
 };
 
-export const toTaskAssetsToolResult = (payload: JsonValue | undefined): ToolResult => {
+export const toTaskAssetsToolResult = (payload: unknown): ToolResult => {
   const parsed = readTaskAssetsResultSchema.parse(payload);
   return {
     content: parsed.assets.flatMap((asset) => [

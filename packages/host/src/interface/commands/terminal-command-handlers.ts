@@ -10,7 +10,7 @@ import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord } from "./command-inputs";
 
 export const createTerminalCommandHandlers = (
-  terminalService: TerminalService,
+  terminalService: Pick<TerminalService, "close" | "create" | "list" | "preparePathInput">,
 ): HostCommandHandlers => ({
   terminal_create: (args) =>
     terminalService.create(

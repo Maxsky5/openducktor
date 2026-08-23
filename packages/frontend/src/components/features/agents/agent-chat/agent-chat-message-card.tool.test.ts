@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { JsonValue } from "@openducktor/contracts";
 import {
   createDefaultTestChatSettings,
   createMessageCardElement,
@@ -297,7 +296,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     tool: string;
     content: string;
     timestamp: string;
-    input: Record<string, JsonValue>;
+    input: Record<string, unknown>;
     output: string;
   };
   const toolRows: ToolRow[] = [

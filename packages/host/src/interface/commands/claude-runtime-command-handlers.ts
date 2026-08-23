@@ -40,10 +40,23 @@ const toClaudeCommandValidationError = (command: string, cause: unknown): HostVa
   });
 };
 
+type ClaudeRuntimeCommandService = Pick<
+  ClaudeAgentSdkService,
+  | "listAvailableModels"
+  | "listAvailableSkills"
+  | "listAvailableSlashCommands"
+  | "listAvailableSubagents"
+  | "loadFileStatus"
+  | "loadSessionDiff"
+  | "loadSessionHistory"
+  | "loadSessionTodos"
+  | "searchFiles"
+>;
+
 const createClaudeCommandHandler = <Input, Response extends UnvalidatedHostCommandResult>(
-  service: ClaudeAgentSdkService,
+  service: ClaudeRuntimeCommandService,
   contract: ClaudeRuntimeCommandContract<Input, Response>,
-  invoke: (service: ClaudeAgentSdkService, input: Input) => Effect.Effect<unknown, HostError>,
+  invoke: (service: ClaudeRuntimeCommandService, input: Input) => Effect.Effect<unknown, HostError>,
 ): HostCommandHandler => {
   const command = contract.command;
   return (args) =>
@@ -70,7 +83,7 @@ const createClaudeCommandHandler = <Input, Response extends UnvalidatedHostComma
 };
 
 export const createClaudeRuntimeCommandHandlers = (
-  service: ClaudeAgentSdkService,
+  service: ClaudeRuntimeCommandService,
   runtimeRegistry: RuntimeRegistryPort,
   dependencies: ClaudeWorkspaceWorkingDirectoryDependencies,
 ): HostCommandHandlers => ({

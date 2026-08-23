@@ -3,8 +3,8 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDataTransferItemFixture,
   createDataTransferItemListFixture,
+  createDataTransferFixture,
   createFileListFixture,
-  createFocusedFixture,
 } from "@/test-utils/focused-fixture";
 import { type AgentChatComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
@@ -49,23 +49,23 @@ const createBeforeInputEvent = (
   inputType: string,
   data: string | null = null,
 ) => {
-  return createFocusedFixture<React.FormEvent<HTMLDivElement>>({
+  const nativeEvent = new InputEvent("beforeinput", { inputType, data });
+  Object.defineProperty(nativeEvent, "data", { value: data });
+
+  return {
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    nativeEvent: createFocusedFixture<InputEvent>({
-      inputType,
-      data,
-    }),
-  });
+    nativeEvent,
+  };
 };
 
 const createPasteEvent = (root: HTMLDivElement, file: File) => {
-  return createFocusedFixture<React.ClipboardEvent<HTMLDivElement>>({
+  return {
     currentTarget: root,
     target: root,
     preventDefault: mock(() => {}),
-    clipboardData: createFocusedFixture<DataTransfer>({
+    clipboardData: createDataTransferFixture({
       items: createDataTransferItemListFixture([
         createDataTransferItemFixture({
           kind: "file",
@@ -75,9 +75,8 @@ const createPasteEvent = (root: HTMLDivElement, file: File) => {
       ]),
       files: createFileListFixture([file]),
       types: ["Files"],
-      getData: mock(() => ""),
     }),
-  });
+  };
 };
 
 const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {

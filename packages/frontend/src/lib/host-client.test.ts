@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
+import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import {
   configureShellBridge,
   createDisabledAppUpdateBridge,
@@ -25,7 +25,7 @@ const createRuntimeInstanceSummary = (runtimeId: string): RuntimeInstanceSummary
 });
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  client: createFocusedFixture<HostClient>({}),
+  client: createHostClientFixture({}),
   subscribeRunEvents: async () => () => {},
   subscribeDevServerEvents: async () => ({
     transportEpoch: "test:0",
@@ -108,7 +108,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: createFocusedFixture<HostClient>({ runtimeEnsure: firstRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeEnsure: firstRuntimeEnsure }),
       }),
     );
 
@@ -120,7 +120,7 @@ describe("host-client", () => {
 
     configureShellBridge(
       createTestShellBridge({
-        client: createFocusedFixture<HostClient>({ runtimeEnsure: secondRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeEnsure: secondRuntimeEnsure }),
       }),
     );
 
@@ -138,7 +138,7 @@ describe("host-client", () => {
     );
     configureShellBridge(
       createTestShellBridge({
-        client: createFocusedFixture<HostClient>({ runtimeEnsure: shellRuntimeEnsure }),
+        client: createHostClientFixture({ runtimeEnsure: shellRuntimeEnsure }),
       }),
     );
 

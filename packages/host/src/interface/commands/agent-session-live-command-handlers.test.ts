@@ -4,7 +4,6 @@ import type {
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
-  JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
@@ -15,10 +14,10 @@ import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-l
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
 
-const asCommandPayload = <T>(value: T): Record<string, JsonValue> =>
+const asCommandPayload = <T>(value: T): Record<string, unknown> =>
   // SAFETY: command payloads cross the JSON transport boundary in production; tests pass
   // equivalent structured fixtures, so this cast only re-states the transport contract.
-  value as Record<string, JsonValue>;
+  value as Record<string, unknown>;
 
 const startInput: AgentSessionControlStartInput = {
   repoPath: "/repo",

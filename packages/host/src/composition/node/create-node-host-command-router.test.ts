@@ -9,7 +9,7 @@ import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime
 import { HostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import {
@@ -17,7 +17,6 @@ import {
   createNodeEffectHostCommandRouter,
 } from "./create-node-host-command-router";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
-import type { JsonValue } from "@openducktor/contracts";
 
 const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
@@ -32,7 +31,7 @@ const createRuntimeRegistry = (
   }) as RuntimeRegistryPort;
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
-  createFocusedTestService<McpHostBridgeServer>({
+  createFocusedTestService<McpHostBridgeServer>()({
     ensureConnection: () =>
       Effect.succeed({
         workspaceId: "workspace-1",
@@ -84,7 +83,7 @@ const createRouter = (input: {
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution,
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
-    taskStore: createFocusedTestService<TaskStorePort>({}),
+    taskStore: createTaskStoreTestDouble({}),
     terminalPty,
   });
 
@@ -104,14 +103,14 @@ describe("createNodeEffectHostCommandRouter", () => {
       runtimeDistribution,
       runtimeRegistry: createRuntimeRegistry(),
       taskEventPublicationReporter: { report: () => Effect.void },
-      taskStore: createFocusedTestService<TaskStorePort>({}),
+      taskStore: createTaskStoreTestDouble({}),
       terminalPty,
     });
 
     try {
       await Effect.runPromise(router.initialize());
 
-      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       const payload = JSON.parse(
         await readFile(
           path.join(
@@ -123,7 +122,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           ),
           "utf8",
         ),
-      ) as Record<string, JsonValue>;
+      ) as Record<string, unknown>;
       expect(payload).toEqual({
         hostToken: expect.any(String),
         hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),

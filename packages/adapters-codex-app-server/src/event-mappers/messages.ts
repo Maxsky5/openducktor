@@ -1,8 +1,4 @@
-import {
-  extractStringField,
-  extractText,
-  isCodexContextualUserMessage,
-} from "../codex-app-server-shared";
+import { isCodexContextualUserMessage } from "../codex-app-server-shared";
 import {
   codexItemId,
   codexItemTypeMatches,
@@ -28,15 +24,14 @@ export const userMessageMapper: CodexEventMapper = {
     return this.fromThreadItem({ item: input.item, index: 0 }, ctx, undefined);
   },
   fromThreadItem(input, ctx): CodexMappingResult {
-    if (!codexItemTypeMatches(input.item, "userMessage") && input.item.role !== "user") {
+    if (!codexItemTypeMatches(input.item, "userMessage")) {
       return emptyCodexMappingResult();
     }
     if (isCodexContextualUserMessage(input.item)) {
       return { handled: true, events: [] };
     }
     const parts = codexUserInputsFromItem(input.item);
-    const message =
-      parts.length > 0 ? codexUserInputListToText(parts) : (extractText(input.item) ?? "");
+    const message = codexUserInputListToText(parts);
     if (message.trim().length === 0) {
       return emptyCodexMappingResult();
     }
@@ -51,13 +46,9 @@ export const userMessageMapper: CodexEventMapper = {
           mapper: "user_message",
           threadId: ctx.threadId,
           ...(timestamp ? { timestamp } : undefined),
-          raw: input.item,
           messageId,
           message,
-          displayParts:
-            parts.length > 0
-              ? codexUserInputsToDisplayParts(parts, messageId)
-              : [{ kind: "text", text: message }],
+          displayParts: codexUserInputsToDisplayParts(parts, messageId),
           state: "read",
         },
       ],
@@ -75,10 +66,10 @@ export const assistantMessageMapper: CodexEventMapper = {
     return this.fromThreadItem({ item: input.item, index: 0 }, ctx, undefined);
   },
   fromThreadItem(input, ctx): CodexMappingResult {
-    if (!codexItemTypeMatches(input.item, "agentMessage") && input.item.role !== "assistant") {
+    if (!codexItemTypeMatches(input.item, "agentMessage")) {
       return emptyCodexMappingResult();
     }
-    const message = extractStringField(input.item, ["text"]) ?? "";
+    const message = input.item.text;
     if (message.trim().length === 0) {
       return emptyCodexMappingResult();
     }
@@ -93,7 +84,6 @@ export const assistantMessageMapper: CodexEventMapper = {
           mapper: "assistant_message",
           threadId: ctx.threadId,
           ...(timestamp ? { timestamp } : undefined),
-          raw: input.item,
           messageId,
           message,
         },
@@ -105,7 +95,6 @@ export const assistantMessageMapper: CodexEventMapper = {
                 mapper: "assistant_message",
                 threadId: ctx.threadId,
                 ...(timestamp ? { timestamp } : undefined),
-                raw: input.item,
                 part: terminalHistoryPart(messageId),
               },
             ]

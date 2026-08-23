@@ -1,9 +1,11 @@
 import {
   type FileContent,
   type FileDiff,
-  type JsonValue,
-  odtToolErrorPayloadSchema,
   hasRuntimeType,
+  isJsonObject,
+  type JsonObject,
+  jsonValueSchema,
+  odtToolErrorPayloadSchema,
 } from "@openducktor/contracts";
 import {
   type AgentStreamPart,
@@ -14,7 +16,6 @@ import {
   asUnknownRecord,
   readBooleanProp,
   readNumberProp,
-  readRecordProp,
   readStringProp,
   readUnknownProp,
 } from "./guards";
@@ -23,7 +24,7 @@ import { deriveToolPreview, deriveToolType } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import { opencodePartPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 
-const toDisplayText = (value: JsonValue | undefined): string | undefined => {
+const toDisplayText = (value: unknown): string | undefined => {
   if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -48,10 +49,8 @@ const toDisplayText = (value: JsonValue | undefined): string | undefined => {
   }
 };
 
-const parseStructuredTextObject = (
-  value: JsonValue | undefined,
-): Record<string, JsonValue> | undefined => {
-  if (!hasRuntimeType(value, "string")) {
+const parseStructuredTextObject = (value: string | undefined): JsonObject | undefined => {
+  if (value === undefined) {
     return undefined;
   }
 
@@ -61,15 +60,15 @@ const parseStructuredTextObject = (
   }
 
   try {
-    const parsed = JSON.parse(trimmed);
-    return asUnknownRecord(parsed);
+    const parsed = jsonValueSchema.safeParse(JSON.parse(trimmed));
+    return parsed.success && isJsonObject(parsed.data) ? parsed.data : undefined;
   } catch {
     return undefined;
   }
 };
 
-const outputTextFromMcpPayload = (value: JsonValue | undefined): string | undefined => {
-  const content = readUnknownProp(value, "content");
+const outputTextFromMcpPayload = (value: JsonObject | undefined): string | undefined => {
+  const content = value?.content;
   if (!Array.isArray(content)) {
     return undefined;
   }
@@ -90,13 +89,11 @@ const outputTextFromMcpPayload = (value: JsonValue | undefined): string | undefi
   return textChunks.join("\n");
 };
 
-const readToolOutputText = (value: JsonValue | undefined): string | undefined => {
-  return outputTextFromMcpPayload(value) ?? toDisplayText(value);
-};
+const readToolOutputText = (value: string | undefined): string | undefined => toDisplayText(value);
 
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
-const readErrorValueMessage = (value: JsonValue | undefined): string | undefined => {
+const readErrorValueMessage = (value: unknown): string | undefined => {
   if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -110,8 +107,8 @@ const readErrorValueMessage = (value: JsonValue | undefined): string | undefined
   return readTrimmedString(record, ["message"]);
 };
 
-const readEnvelopeErrorMessage = (value: JsonValue | undefined): string | undefined => {
-  const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
+const readEnvelopeErrorMessage = (value: string | JsonObject | undefined): string | undefined => {
+  const record = hasRuntimeType(value, "string") ? parseStructuredTextObject(value) : value;
   if (!record) {
     return undefined;
   }
@@ -129,8 +126,8 @@ const readEnvelopeErrorMessage = (value: JsonValue | undefined): string | undefi
   return readErrorValueMessage(readUnknownProp(record, "error")) ?? "Tool failed";
 };
 
-const readMcpTransportError = (value: JsonValue | undefined): string | undefined => {
-  if (!hasRuntimeType(value, "string")) {
+const readMcpTransportError = (value: string | undefined): string | undefined => {
+  if (value === undefined) {
     return undefined;
   }
 
@@ -138,7 +135,7 @@ const readMcpTransportError = (value: JsonValue | undefined): string | undefined
   return MCP_TRANSPORT_ERROR_PREFIX.test(trimmed) ? trimmed : undefined;
 };
 
-const readMcpContentTextError = (value: JsonValue | undefined): string | undefined => {
+const readMcpContentTextError = (value: JsonObject | undefined): string | undefined => {
   const text = outputTextFromMcpPayload(value);
   if (!text) {
     return undefined;
@@ -147,10 +144,10 @@ const readMcpContentTextError = (value: JsonValue | undefined): string | undefin
   return readEnvelopeErrorMessage(text) ?? readMcpTransportError(text);
 };
 
-const readStructuredToolError = (value: JsonValue | undefined): string | undefined => {
-  const record = asUnknownRecord(value) ?? parseStructuredTextObject(value);
-  const contentTextError = readMcpContentTextError(record ?? value);
-  const transportError = readMcpTransportError(value);
+const readStructuredToolError = (value: string | JsonObject | undefined): string | undefined => {
+  const record = hasRuntimeType(value, "string") ? parseStructuredTextObject(value) : value;
+  const contentTextError = readMcpContentTextError(record);
+  const transportError = readMcpTransportError(hasRuntimeType(value, "string") ? value : undefined);
   if (!record) {
     return contentTextError ?? transportError;
   }
@@ -158,7 +155,12 @@ const readStructuredToolError = (value: JsonValue | undefined): string | undefin
   const isError = readUnknownProp(record, "isError");
   const directError = readUnknownProp(record, "error");
   const directErrorMessage = readErrorValueMessage(directError);
-  const structuredContent = readUnknownProp(record, "structuredContent");
+  const structuredContentValue = readUnknownProp(record, "structuredContent");
+  const parsedStructuredContent = jsonValueSchema.safeParse(structuredContentValue);
+  const structuredContent =
+    parsedStructuredContent.success && isJsonObject(parsedStructuredContent.data)
+      ? parsedStructuredContent.data
+      : undefined;
   const structuredError = readUnknownProp(structuredContent, "error");
   const structuredErrorMessage = readErrorValueMessage(structuredError);
   const structuredOk = readUnknownProp(structuredContent, "ok");
@@ -178,7 +180,7 @@ const readStructuredToolError = (value: JsonValue | undefined): string | undefin
     return (
       directErrorMessage ??
       structuredErrorMessage ??
-      outputTextFromMcpPayload(value) ??
+      outputTextFromMcpPayload(record) ??
       toDisplayText(value) ??
       "Tool failed"
     );
@@ -187,15 +189,20 @@ const readStructuredToolError = (value: JsonValue | undefined): string | undefin
   return undefined;
 };
 
-const normalizeMetadata = (value: JsonValue | undefined): Record<string, JsonValue> | undefined => {
-  const normalized = asUnknownRecord(value);
-  if (!normalized) {
+const normalizeJsonObject = (value: unknown): JsonObject | undefined => {
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success || !isJsonObject(parsed.data)) {
     return undefined;
   }
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  return parsed.data;
 };
 
-const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] => {
+const normalizeMetadata = (value: Record<string, unknown> | undefined): JsonObject | undefined => {
+  const normalized = normalizeJsonObject(value);
+  return normalized && Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
   if (!hasRuntimeType(value, "string")) {
     return "modified";
   }
@@ -209,7 +216,7 @@ const normalizeFileDiffType = (value: JsonValue | undefined): FileDiff["type"] =
   return "modified";
 };
 
-const readFileDiffPatch = (value: Record<string, JsonValue>): string | null => {
+const readFileDiffPatch = (value: Record<string, unknown>): string | null => {
   const patch = readStringProp(value, ["patch"]);
   if (patch !== undefined) {
     return patch;
@@ -252,7 +259,7 @@ const normalizeToolMetadataFileDiff = (input: {
   };
 };
 
-const fileDiffFromToolFileMetadata = (value: JsonValue | undefined): FileDiff | null => {
+const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -268,10 +275,7 @@ const fileDiffFromToolFileMetadata = (value: JsonValue | undefined): FileDiff | 
   });
 };
 
-const fileDiffFromToolFileDiffMetadata = (
-  value: JsonValue | undefined,
-  input: JsonValue | undefined,
-): FileDiff | null => {
+const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileDiff | null => {
   const record = asUnknownRecord(value);
   if (!record) {
     return null;
@@ -293,10 +297,7 @@ const fileDiffFromToolFileDiffMetadata = (
   });
 };
 
-const fileDiffFromWriteMetadata = (
-  metadata: Record<string, JsonValue>,
-  input: JsonValue | undefined,
-): FileDiff | null => {
+const fileDiffFromWriteMetadata = (metadata: JsonObject, input: unknown): FileDiff | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
   const file =
@@ -328,10 +329,7 @@ const fileDiffFromWriteMetadata = (
   });
 };
 
-const fileContentFromWriteMetadata = (
-  metadata: Record<string, JsonValue>,
-  input: JsonValue | undefined,
-): FileContent | null => {
+const fileContentFromWriteMetadata = (metadata: JsonObject, input: unknown): FileContent | null => {
   const inputRecord = asUnknownRecord(input);
   const exists = readBooleanProp(metadata, ["exists"]);
   if (!inputRecord || exists !== true || readStringProp(metadata, ["diff"]) !== undefined) {
@@ -357,10 +355,11 @@ type FileEditPayloadFields = {
   fileDiffs?: FileDiff[];
   fileContent?: FileContent[];
 };
+type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 
 const readToolMetadataFileEditPayload = (
-  metadata: Record<string, JsonValue> | undefined,
-  toolState: Record<string, JsonValue>,
+  metadata: JsonObject | undefined,
+  toolState: ToolPart["state"],
   tool: string,
 ): FileEditPayloadFields => {
   if (!metadata) {
@@ -405,17 +404,10 @@ const readToolMetadataFileEditPayload = (
   return fileContent ? { fileContent: [fileContent] } : {};
 };
 
-const extractPartTiming = (part: ParsedOpencodePart, toolState: Record<string, JsonValue>) => {
-  const directTime = readRecordProp(part, "time");
-  const fromDirectStart = readNumberProp(directTime, ["start"]);
-  const fromDirectEnd = readNumberProp(directTime, ["end"]);
-
-  const stateTime = readRecordProp(toolState, "time");
-  const fromStateStart = readNumberProp(stateTime, ["start"]);
-  const fromStateEnd = readNumberProp(stateTime, ["end"]);
-
-  const startedAtMs = fromDirectStart ?? fromStateStart;
-  const endedAtMs = fromDirectEnd ?? fromStateEnd;
+const extractPartTiming = (toolState: ToolPart["state"]) => {
+  const stateTime = "time" in toolState ? toolState.time : undefined;
+  const startedAtMs = stateTime?.start;
+  const endedAtMs = stateTime && "end" in stateTime ? stateTime.end : undefined;
 
   return {
     ...(hasRuntimeType(startedAtMs, "number") ? { startedAtMs } : undefined),
@@ -426,12 +418,13 @@ const extractPartTiming = (part: ParsedOpencodePart, toolState: Record<string, J
   };
 };
 
-type ToolPart = Extract<ParsedOpencodePart, { type: "tool" }>;
 type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
-type ToolStatus = ToolStreamPart["status"];
 
-const readTrimmedString = (source: JsonValue | undefined, keys: string[]): string | undefined => {
+const readTrimmedString = (
+  source: Record<string, unknown> | undefined,
+  keys: string[],
+): string | undefined => {
   const value = readStringProp(source, keys);
   if (!value) {
     return undefined;
@@ -440,13 +433,7 @@ const readTrimmedString = (source: JsonValue | undefined, keys: string[]): strin
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const isCancelledStatus = (value: string): boolean => {
-  return value === "cancelled" || value === "canceled";
-};
-
-const normalizeSubagentExecutionMode = (
-  value: JsonValue | undefined,
-): SubagentStreamPart["executionMode"] => {
+const normalizeSubagentExecutionMode = (value: unknown): SubagentStreamPart["executionMode"] => {
   if (hasRuntimeType(value, "string")) {
     const normalized = value.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
@@ -462,7 +449,7 @@ const normalizeSubagentExecutionMode = (
 };
 
 const resolveSubagentExecutionMode = (
-  ...sources: (JsonValue | undefined)[]
+  ...sources: unknown[]
 ): SubagentStreamPart["executionMode"] => {
   for (const source of sources) {
     const direct = normalizeSubagentExecutionMode(source);
@@ -493,13 +480,10 @@ const resolveSubagentExecutionMode = (
   return undefined;
 };
 
-const resolveBackgroundJobId = (
-  metadata: Record<string, JsonValue> | undefined,
-): string | undefined => readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
+const resolveBackgroundJobId = (metadata: JsonObject | undefined): string | undefined =>
+  readTrimmedString(metadata, ["jobId", "jobID", "job_id"]);
 
-const isRunningBackgroundSubagentResult = (
-  metadata: Record<string, JsonValue> | undefined,
-): boolean => {
+const isRunningBackgroundSubagentResult = (metadata: JsonObject | undefined): boolean => {
   // OpenCode keeps the parent tool part carrying background job metadata; the synthetic task result is the terminal child update.
   return (
     resolveSubagentExecutionMode(metadata) === "background" &&
@@ -512,8 +496,10 @@ const omitEndedTiming = (
 ): ReturnType<typeof extractPartTiming> =>
   hasRuntimeType(timing.startedAtMs, "number") ? { startedAtMs: timing.startedAtMs } : {};
 
+type OptionalUnknownRecord = Record<string, unknown> | undefined;
+
 const resolveSubagentExternalSessionId = (
-  ...sources: (JsonValue | undefined)[]
+  ...sources: OptionalUnknownRecord[]
 ): string | undefined => {
   for (const source of sources) {
     const externalSessionId = readTrimmedString(source, [
@@ -561,7 +547,7 @@ const buildSubagentStreamPart = (input: {
   error?: string;
   externalSessionId?: string;
   executionMode?: SubagentStreamPart["executionMode"];
-  metadata?: Record<string, JsonValue>;
+  metadata?: JsonObject;
   startedAtMs?: number;
   endedAtMs?: number;
 }): SubagentStreamPart => {
@@ -593,7 +579,7 @@ const buildSubagentStreamPart = (input: {
   };
 };
 
-const resolveSubagentAgent = (...sources: (JsonValue | undefined)[]): string | undefined => {
+const resolveSubagentAgent = (...sources: OptionalUnknownRecord[]): string | undefined => {
   for (const source of sources) {
     const agent = readTrimmedString(source, ["agent", "name", "subagent_type", "subagentType"]);
     if (agent) {
@@ -604,7 +590,7 @@ const resolveSubagentAgent = (...sources: (JsonValue | undefined)[]): string | u
   return undefined;
 };
 
-const resolveSubagentPrompt = (...sources: (JsonValue | undefined)[]): string | undefined => {
+const resolveSubagentPrompt = (...sources: OptionalUnknownRecord[]): string | undefined => {
   for (const source of sources) {
     const prompt = readTrimmedString(source, ["prompt", "message"]);
     if (prompt) {
@@ -615,7 +601,7 @@ const resolveSubagentPrompt = (...sources: (JsonValue | undefined)[]): string | 
   return undefined;
 };
 
-const resolveSubagentDescription = (...sources: (JsonValue | undefined)[]): string | undefined => {
+const resolveSubagentDescription = (...sources: OptionalUnknownRecord[]): string | undefined => {
   for (const source of sources) {
     const description = readTrimmedString(source, ["description", "result", "message"]);
     if (description) {
@@ -628,21 +614,21 @@ const resolveSubagentDescription = (...sources: (JsonValue | undefined)[]): stri
 
 const buildSubagentFromToolPart = (
   part: ToolPart,
-  toolState: Record<string, JsonValue>,
+  toolState: ToolPart["state"],
   normalizedStatus: SubagentStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: Record<string, JsonValue> | undefined,
+  metadata: JsonObject | undefined,
   structuredError: string | undefined,
 ): SubagentStreamPart => {
-  const rawInput = readUnknownProp(toolState, "input");
-  const rawOutput = readUnknownProp(toolState, "output");
-  const input = asUnknownRecord(rawInput);
-  const output = asUnknownRecord(rawOutput) ?? parseStructuredTextObject(rawOutput);
+  const rawInput = toolState.input;
+  const rawOutput = toolState.status === "completed" ? toolState.output : undefined;
+  const input = rawInput;
+  const output = parseStructuredTextObject(rawOutput);
   const outputIdentity = asUnknownRecord(readUnknownProp(output, "metadata")) ?? output;
   const externalSessionId = resolveSubagentExternalSessionId(metadata, input, outputIdentity);
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
-  const directError = toDisplayText(readUnknownProp(toolState, "error"));
+  const directError = toolState.status === "error" ? toDisplayText(toolState.error) : undefined;
   const error = structuredError ?? directError;
   const isBackgroundResultStillRunning = isRunningBackgroundSubagentResult(metadata);
   let status = normalizedStatus;
@@ -658,7 +644,6 @@ const buildSubagentFromToolPart = (
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput,
-    rawOutput,
     ...(metadata ? { metadata } : undefined),
   });
   const description =
@@ -679,68 +664,21 @@ const buildSubagentFromToolPart = (
   });
 };
 
-const normalizeToolStatus = (rawStatus: string, hasEndedTiming: boolean): ToolStatus => {
-  const normalized = rawStatus.trim().toLowerCase();
-  if (normalized === "completed") {
-    return "completed";
-  }
-  if (isCancelledStatus(normalized)) {
-    return "error";
-  }
-  if (normalized === "error" || normalized === "failed") {
-    return "error";
-  }
-  if (normalized === "pending") {
-    return hasEndedTiming ? "completed" : "pending";
-  }
-  if (normalized === "running" || normalized === "started") {
-    return hasEndedTiming ? "completed" : "running";
-  }
-  return hasEndedTiming ? "completed" : "running";
-};
-
-const normalizeSubagentStatus = (
-  rawStatus: string,
-  hasEndedTiming: boolean,
-  hasStructuredError: boolean,
-): SubagentStreamPart["status"] => {
-  const normalized = rawStatus.trim().toLowerCase();
-  if (hasStructuredError) {
-    return "error";
-  }
-  if (normalized === "completed") {
-    return "completed";
-  }
-  if (isCancelledStatus(normalized)) {
-    return "cancelled";
-  }
-  if (normalized === "error" || normalized === "failed") {
-    return "error";
-  }
-  if (normalized === "pending") {
-    return hasEndedTiming ? "completed" : "pending";
-  }
-  if (normalized === "running" || normalized === "started") {
-    return hasEndedTiming ? "completed" : "running";
-  }
-  return hasEndedTiming ? "completed" : "running";
-};
-
 const buildToolStreamPart = (
   part: ToolPart,
-  toolState: Record<string, JsonValue>,
-  normalizedStatus: ToolStatus,
+  toolState: ToolPart["state"],
+  status: ToolStreamPart["status"],
   timing: ReturnType<typeof extractPartTiming>,
-  metadata: Record<string, JsonValue> | undefined,
+  metadata: JsonObject | undefined,
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
-  const input = asUnknownRecord(readUnknownProp(toolState, "input"));
+  const input = normalizeJsonObject(toolState.input);
+  const rawOutput = toolState.status === "completed" ? toolState.output : undefined;
   const fileEditPayload =
     toolType === "file_edit" ? readToolMetadataFileEditPayload(metadata, toolState, part.tool) : {};
   const preview = deriveToolPreview({
     tool: part.tool,
-    rawInput: readUnknownProp(toolState, "input"),
-    rawOutput: readUnknownProp(toolState, "output"),
+    rawInput: toolState.input,
     ...(metadata ? { metadata } : undefined),
   });
   const base: ToolStreamPart = {
@@ -750,7 +688,7 @@ const buildToolStreamPart = (
     callId: part.callID,
     tool: part.tool,
     toolType,
-    status: normalizedStatus,
+    status,
     ...(input ? { input } : undefined),
     ...(preview ? { preview } : undefined),
     ...(metadata ? { metadata } : undefined),
@@ -758,21 +696,21 @@ const buildToolStreamPart = (
     ...timing,
   };
 
-  if (normalizedStatus === "pending") {
+  if (status === "pending") {
     return base;
   }
-  if (normalizedStatus === "running") {
-    const title = toDisplayText(readUnknownProp(toolState, "title"));
+  if (status === "running") {
+    const title = "title" in toolState ? toDisplayText(toolState.title) : undefined;
     return {
       ...base,
       ...(title ? { title } : undefined),
     };
   }
 
-  const error = toDisplayText(readUnknownProp(toolState, "error"));
-  const outputValue = readUnknownProp(toolState, "output");
+  const error = toolState.status === "error" ? toDisplayText(toolState.error) : undefined;
+  const outputValue = rawOutput;
   const structuredError = readStructuredToolError(outputValue) ?? readStructuredToolError(metadata);
-  if (normalizedStatus === "error") {
+  if (status === "error") {
     const resolvedError = structuredError ?? error;
     return resolvedError
       ? {
@@ -791,7 +729,7 @@ const buildToolStreamPart = (
     };
   }
 
-  const title = toDisplayText(readUnknownProp(toolState, "title"));
+  const title = "title" in toolState ? toDisplayText(toolState.title) : undefined;
   const titleField = title ? { title } : {};
   return {
     ...base,
@@ -800,7 +738,7 @@ const buildToolStreamPart = (
   };
 };
 
-export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | null => {
+export const mapPartToAgentStreamPart = (payload: unknown): AgentStreamPart | null => {
   const part = opencodePartPayloadSchema.parse(payload);
 
   switch (part.type) {
@@ -823,32 +761,24 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
       };
     case "tool": {
       const toolState = part.state;
-      const timing = extractPartTiming(part, toolState);
-      const metadata = normalizeMetadata(readUnknownProp(toolState, "metadata"));
+      const timing = extractPartTiming(toolState);
+      const metadata = "metadata" in toolState ? normalizeMetadata(toolState.metadata) : undefined;
       if (resolveOpencodeToolStrategy(part.tool).streamPartKind === "subagent") {
-        const rawOutput = readUnknownProp(toolState, "output");
+        const rawOutput = toolState.status === "completed" ? toolState.output : undefined;
         const structuredError =
           readStructuredToolError(rawOutput) ?? readStructuredToolError(metadata);
+        const status = structuredError === undefined ? toolState.status : "error";
         return buildSubagentFromToolPart(
           part,
           toolState,
-          normalizeSubagentStatus(
-            readStringProp(toolState, ["status"]) ?? "",
-            hasRuntimeType(timing.endedAtMs, "number"),
-            structuredError !== undefined,
-          ),
+          status,
           timing,
           metadata,
           structuredError,
         );
       }
 
-      const normalizedStatus = normalizeToolStatus(
-        readStringProp(toolState, ["status"]) ?? "",
-        hasRuntimeType(timing.endedAtMs, "number"),
-      );
-
-      return buildToolStreamPart(part, toolState, normalizedStatus, timing, metadata);
+      return buildToolStreamPart(part, toolState, toolState.status, timing, metadata);
     }
     case "step-start":
       return {
@@ -858,7 +788,7 @@ export const mapPartToAgentStreamPart = (payload: JsonValue): AgentStreamPart | 
         phase: "start",
       };
     case "step-finish": {
-      const totalTokens = toTokenTotal(readUnknownProp(part, "tokens"));
+      const totalTokens = toTokenTotal(part.tokens);
       return {
         kind: "step",
         messageId: part.messageID,

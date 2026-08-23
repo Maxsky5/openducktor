@@ -1,12 +1,10 @@
 import type { AgentSessionStartMode } from "@openducktor/core";
 
-interface STARTMODEDISPLAYORDERContract extends Record<AgentSessionStartMode, number> {}
-
-const START_MODE_DISPLAY_ORDER: STARTMODEDISPLAYORDERContract = {
+const START_MODE_DISPLAY_ORDER = {
   fresh: 0,
   reuse: 1,
   fork: 2,
-};
+} satisfies Record<AgentSessionStartMode, number>;
 
 export const orderStartModesForDisplay = (
   startModes: readonly AgentSessionStartMode[],

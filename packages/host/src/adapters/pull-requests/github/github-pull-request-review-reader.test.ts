@@ -4,7 +4,6 @@ import type { GithubCommandDependencies } from "../../../application/tasks/suppo
 import { HostOperationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
-import type { JsonValue } from "@openducktor/contracts";
 
 type SerializableTestValue = object | string | number | boolean | null | undefined;
 
@@ -81,8 +80,8 @@ const createDependencies = ({
       }
       if (command.includes("api graphql")) {
         if (command.includes("PullRequestReviewOverview")) {
-          // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
-          const view = pullRequestViewResponse as Record<string, JsonValue>;
+          // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
+          const view = pullRequestViewResponse as Record<string, unknown>;
           // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
           return succeed({
             data: {
@@ -1171,9 +1170,9 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewReader();
-    // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+    // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
     const malformedView = {
-      ...(defaultPullRequestViewResponse() as Record<string, JsonValue>),
+      ...(defaultPullRequestViewResponse() as Record<string, unknown>),
       url: "not-a-url",
     };
 

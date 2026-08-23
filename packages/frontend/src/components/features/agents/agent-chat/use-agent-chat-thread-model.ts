@@ -9,10 +9,8 @@ import type {
   AgentChatTranscriptPresentation,
 } from "./agent-chat.types";
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, number>`.
-const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
-// SAFETY: The surrounding boundary constructs or validates every member required by `Record<string, number>`.
-const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
+const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze<Record<string, number>>({});
+const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze<Record<string, number>>({});
 
 export type AgentChatPendingQuestionActions = {
   canSubmit: boolean;

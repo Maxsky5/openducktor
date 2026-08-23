@@ -16,7 +16,6 @@ import {
 import { createClaudeAssistantReasoningPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 export const emitClaudePendingToolPart = ({
   emit,
@@ -56,7 +55,7 @@ export const handleClaudeStreamEvent = ({
   session: ClaudeEventSession;
   timestamp: string;
 }): void => {
-  const event = parseClaudeJsonValue(message.event, "claudeStreamEvent");
+  const event = message.event;
   if (!isRecord(event)) {
     return;
   }

@@ -1,4 +1,4 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -18,7 +18,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
     const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
-    const service = createFocusedTestService<WorkspaceSettingsService>({
+    const service = createWorkspaceSettingsServiceTestDouble({
       listWorkspaces() {
         return Effect.tryPromise({
           try: async () => {
@@ -406,7 +406,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ]);
   });
   test("rejects malformed settings command arguments", async () => {
-    const service = createFocusedTestService<WorkspaceSettingsService>({
+    const service = createWorkspaceSettingsServiceTestDouble({
       listWorkspaces() {
         return Effect.tryPromise({
           try: async () => {

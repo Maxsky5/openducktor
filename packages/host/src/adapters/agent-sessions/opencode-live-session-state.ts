@@ -52,19 +52,16 @@ const classifyActivity = (input: {
   return input.runtimeActivity;
 };
 
-const parseSnapshot = (
-  value: Parameters<typeof agentSessionLiveSnapshotSchema.parse>[0],
-  operation: string,
-): AgentSessionLiveSnapshot => {
-  try {
-    return agentSessionLiveSnapshotSchema.parse(value);
-  } catch (cause) {
-    throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
-      cause,
-      details: { operation },
-    });
+const parseSnapshot = (value: unknown, operation: string): AgentSessionLiveSnapshot => {
+  const parsed = agentSessionLiveSnapshotSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
   }
+  throw new HostValidationError({
+    message: parsed.error.message,
+    cause: parsed.error,
+    details: { operation },
+  });
 };
 
 export const createOpenCodeLiveSessionState = ({

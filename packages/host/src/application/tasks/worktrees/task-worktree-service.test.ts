@@ -1,4 +1,5 @@
 import { createFocusedTestService } from "../../../test-support/focused-service";
+import { createWorkspaceSettingsServiceTestDouble } from "../../../test-support/service-test-doubles";
 import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -24,7 +25,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
-  createFocusedTestService<WorkspaceSettingsService>({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath(repoPath: string) {
       if (repoPath !== "/repo") {
         return Effect.fail(
@@ -45,7 +46,7 @@ const createSettingsConfig = ({
   existingPaths?: Set<string>;
   canonicalPaths?: Record<string, string>;
 } = {}): SettingsConfigPort =>
-  createFocusedTestService<SettingsConfigPort>({
+  createFocusedTestService<SettingsConfigPort>()({
     defaultWorktreeBasePath(workspaceId) {
       return `/home/dev/.openducktor/worktrees/${workspaceId}`;
     },

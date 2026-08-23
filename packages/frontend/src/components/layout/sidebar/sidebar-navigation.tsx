@@ -1,10 +1,9 @@
 import { Bot, Columns3 } from "lucide-react";
+import { hasOwnKey } from "@openducktor/contracts";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { preloadAgentsPage } from "@/pages";
 import { sidebarNavLinkClassName } from "./sidebar-navigation-styles";
-
-interface ROUTEPRELOADERSContract extends Partial<Record<NavigationRoute, () => void>> {}
 
 const NAV_ITEMS = [
   { to: "/kanban", icon: Columns3, label: "Kanban", requiresRepo: false },
@@ -23,9 +22,9 @@ type SidebarNavigationState = {
   committedLocationKey: string;
 };
 
-const ROUTE_PRELOADERS: ROUTEPRELOADERSContract = {
+const ROUTE_PRELOADERS = {
   "/agents": preloadAgentsPage,
-};
+} satisfies Partial<Record<NavigationRoute, () => void>>;
 
 type SidebarNavigationProps = {
   hasActiveWorkspace: boolean;
@@ -108,7 +107,10 @@ export function SidebarNavigation({
         const Icon = item.icon;
         const isDisabled = item.requiresRepo && !hasActiveWorkspace;
         const linkTarget: NavigationRoute = isDisabled ? "/kanban" : item.to;
-        const preloadRoute = isDisabled ? undefined : ROUTE_PRELOADERS[item.to];
+        const preloadRoute =
+          !isDisabled && hasOwnKey(ROUTE_PRELOADERS, item.to)
+            ? ROUTE_PRELOADERS[item.to]
+            : undefined;
         const isActivated =
           activatedNavigation?.route === linkTarget &&
           activatedNavigation.sourceLocationKey === currentLocationKey;

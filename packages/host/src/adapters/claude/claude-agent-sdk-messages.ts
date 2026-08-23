@@ -1,14 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
+import { hasOwnKey, LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
-
-interface MIMEBYEXTENSIONContract extends Record<
-  string,
-  ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME
-> {}
 
 type ClaudeMessageContent = Exclude<SDKUserMessage["message"]["content"], string>;
 type ClaudeMessageContentBlock = ClaudeMessageContent[number];
@@ -27,23 +22,23 @@ const toClaudeMessage = (text: string): SDKUserMessage => ({
   parent_tool_use_id: null,
 });
 
-const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set([
+const SUPPORTED_CLAUDE_IMAGE_MIMES = new Set<string>([
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
-] as const);
+]);
 const SUPPORTED_CLAUDE_PDF_MIME = "application/pdf";
 type ClaudeSupportedImageMime = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-const MIME_BY_EXTENSION: MIMEBYEXTENSIONContract = {
+const MIME_BY_EXTENSION = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
   ".pdf": SUPPORTED_CLAUDE_PDF_MIME,
   ".png": "image/png",
   ".webp": "image/webp",
-};
+} satisfies Record<string, ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME>;
 
 const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
@@ -52,9 +47,15 @@ const readExtension = (pathOrName: string): string => {
   return lastDot >= 0 ? pathOrName.slice(lastDot).toLowerCase() : "";
 };
 
-// SAFETY: The preceding runtime guard establishes `ClaudeSupportedImageMime` before this assertion.
 const isClaudeSupportedImageMime = (mime: string): mime is ClaudeSupportedImageMime =>
-  SUPPORTED_CLAUDE_IMAGE_MIMES.has(mime as ClaudeSupportedImageMime);
+  SUPPORTED_CLAUDE_IMAGE_MIMES.has(mime);
+
+const attachmentMimeForPath = (
+  path: string,
+): ClaudeSupportedImageMime | typeof SUPPORTED_CLAUDE_PDF_MIME | undefined => {
+  const extension = readExtension(path);
+  return hasOwnKey(MIME_BY_EXTENSION, extension) ? MIME_BY_EXTENSION[extension] : undefined;
+};
 
 const inferClaudeAttachmentMime = (
   attachment: Extract<AgentUserMessagePart, { kind: "attachment" }>["attachment"],
@@ -65,8 +66,7 @@ const inferClaudeAttachmentMime = (
       return mime;
     }
     const inferred =
-      MIME_BY_EXTENSION[readExtension(attachment.name)] ??
-      MIME_BY_EXTENSION[readExtension(attachment.path)];
+      attachmentMimeForPath(attachment.name) ?? attachmentMimeForPath(attachment.path);
     return inferred && isClaudeSupportedImageMime(inferred) ? inferred : null;
   }
 
@@ -75,8 +75,7 @@ const inferClaudeAttachmentMime = (
       return SUPPORTED_CLAUDE_PDF_MIME;
     }
     const inferred =
-      MIME_BY_EXTENSION[readExtension(attachment.name)] ??
-      MIME_BY_EXTENSION[readExtension(attachment.path)];
+      attachmentMimeForPath(attachment.name) ?? attachmentMimeForPath(attachment.path);
     return inferred === SUPPORTED_CLAUDE_PDF_MIME ? inferred : null;
   }
 

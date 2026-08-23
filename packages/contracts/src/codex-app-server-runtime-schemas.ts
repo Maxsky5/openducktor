@@ -1,17 +1,20 @@
 import { z } from "zod";
-import { CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS } from "./codex-app-server-protocol";
 import {
   codexAppServerCommandExecutionRequestApprovalParamsSchema,
   codexAppServerCurrentTimeReadParamsSchema,
   codexAppServerExecCommandApprovalParamsSchema,
   codexAppServerMcpServerElicitationRequestParamsSchema,
   codexAppServerPermissionsRequestApprovalParamsSchema,
+  codexAppServerThreadItemSchema,
   codexAppServerThreadStatusSchema,
+  codexAppServerTurnSchema,
 } from "./codex-app-server-protocol-schemas";
 import { jsonValueSchema, type JsonValue } from "./json-types";
 
 const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
-const requestIdSchema = z.union([z.string(), z.number()]);
+const signedIntegerSchema = z.number().int();
+const unsignedIntegerSchema = signedIntegerSchema.nonnegative();
+const requestIdSchema = z.union([z.string(), signedIntegerSchema]);
 const receivedAtSchema = z.string().refine((value) => Number.isFinite(Date.parse(value)), {
   error: "Expected a parseable timestamp",
 });
@@ -29,7 +32,42 @@ const serverRequest = <Method extends string, Params extends z.ZodType>(
     params: params.and(jsonObjectSchema),
   });
 
-const threadTurnParamsSchema = z.object({ threadId: z.string(), turn: jsonObjectSchema });
+const threadTurnParamsSchema = z.object({ threadId: z.string(), turn: codexAppServerTurnSchema });
+const tokenUsageBreakdownSchema = z.object({
+  totalTokens: signedIntegerSchema,
+  inputTokens: signedIntegerSchema,
+  cachedInputTokens: signedIntegerSchema,
+  cacheWriteInputTokens: signedIntegerSchema,
+  outputTokens: signedIntegerSchema,
+  reasoningOutputTokens: signedIntegerSchema,
+});
+const threadTokenUsageSchema = z.object({
+  total: tokenUsageBreakdownSchema,
+  last: tokenUsageBreakdownSchema,
+  modelContextWindow: signedIntegerSchema.nullable(),
+});
+const turnPlanStepSchema = z.object({
+  step: z.string(),
+  status: z.enum(["pending", "inProgress", "completed"]),
+});
+const fileUpdateChangeSchema = z.object({
+  path: z.string(),
+  kind: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("add") }),
+    z.object({ type: z.literal("delete") }),
+    z.object({ type: z.literal("update"), move_path: z.string().nullable() }),
+  ]),
+  diff: z.string(),
+});
+const legacyFileChangeSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("add"), content: z.string() }),
+  z.object({ type: z.literal("delete"), content: z.string() }),
+  z.object({
+    type: z.literal("update"),
+    unified_diff: z.string(),
+    move_path: z.string().nullable(),
+  }),
+]);
 const itemDeltaParamsSchema = z.object({
   delta: z.string(),
   itemId: z.string(),
@@ -37,23 +75,35 @@ const itemDeltaParamsSchema = z.object({
   turnId: z.string(),
 });
 const reasoningTextDeltaParamsSchema = itemDeltaParamsSchema.extend({
-  contentIndex: z.number(),
+  contentIndex: signedIntegerSchema,
 });
 const reasoningSummaryDeltaParamsSchema = itemDeltaParamsSchema.extend({
-  summaryIndex: z.number(),
+  summaryIndex: signedIntegerSchema,
 });
 const itemLifecycleParamsSchema = z.object({
-  item: jsonObjectSchema,
+  item: codexAppServerThreadItemSchema,
   threadId: z.string(),
   turnId: z.string(),
-  startedAtMs: z.number().optional(),
+  startedAtMs: signedIntegerSchema,
 });
 
+const toolRequestUserInputOptionSchema = z.object({
+  description: z.string(),
+  label: z.string(),
+});
+const toolRequestUserInputQuestionSchema = z.object({
+  header: z.string(),
+  id: z.string(),
+  isOther: z.boolean(),
+  isSecret: z.boolean(),
+  options: z.array(toolRequestUserInputOptionSchema).nullable(),
+  question: z.string(),
+});
 const toolRequestUserInputParamsSchema = z.object({
-  autoResolutionMs: z.number().nullable(),
+  autoResolutionMs: unsignedIntegerSchema.nullable(),
   isBlocking: z.boolean(),
   itemId: z.string(),
-  questions: z.array(jsonObjectSchema),
+  questions: z.array(toolRequestUserInputQuestionSchema),
   threadId: z.string(),
   turnId: z.string(),
 });
@@ -65,7 +115,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
   ),
   notification(
     "thread/tokenUsage/updated",
-    z.object({ threadId: z.string(), tokenUsage: jsonObjectSchema, turnId: z.string() }),
+    z.object({ threadId: z.string(), tokenUsage: threadTokenUsageSchema, turnId: z.string() }),
   ),
   notification("turn/started", threadTurnParamsSchema),
   notification("turn/completed", threadTurnParamsSchema),
@@ -89,7 +139,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
     "turn/plan/updated",
     z.object({
       explanation: z.string().nullable(),
-      plan: z.array(jsonObjectSchema),
+      plan: z.array(turnPlanStepSchema),
       threadId: z.string(),
       turnId: z.string(),
     }),
@@ -100,20 +150,18 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
   ),
   notification("item/agentMessage/delta", itemDeltaParamsSchema),
   notification("item/reasoning/textDelta", reasoningTextDeltaParamsSchema),
-  notification("item/reasoningText/delta", reasoningTextDeltaParamsSchema),
   notification("item/reasoning/summaryTextDelta", reasoningSummaryDeltaParamsSchema),
-  notification("item/reasoningSummaryText/delta", reasoningSummaryDeltaParamsSchema),
   notification("item/started", itemLifecycleParamsSchema),
   notification(
     "item/completed",
     itemLifecycleParamsSchema
       .omit({ startedAtMs: true })
-      .extend({ completedAtMs: z.number().optional() }),
+      .extend({ completedAtMs: signedIntegerSchema }),
   ),
   notification(
     "item/fileChange/patchUpdated",
     z.object({
-      changes: z.array(jsonObjectSchema),
+      changes: z.array(fileUpdateChangeSchema),
       itemId: z.string(),
       threadId: z.string(),
       turnId: z.string(),
@@ -121,25 +169,31 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
   ),
 ]);
 
+const consumedRuntimeNotificationMethods = new Set([
+  "skills/changed",
+  "serverRequest/resolved",
+  "thread/tokenUsage/updated",
+  "turn/started",
+  "turn/completed",
+  "thread/status/changed",
+  "model/safetyBuffering/updated",
+  "turn/plan/updated",
+  "turn/diff/updated",
+  "item/agentMessage/delta",
+  "item/reasoning/textDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/started",
+  "item/completed",
+  "item/fileChange/patchUpdated",
+]);
+
 const codexAppServerUnconsumedNotificationMethodSchema = z
-  .enum(CODEX_APP_SERVER_SERVER_NOTIFICATION_METHODS)
-  .exclude([
-    "skills/changed",
-    "serverRequest/resolved",
-    "thread/tokenUsage/updated",
-    "turn/started",
-    "turn/completed",
-    "thread/status/changed",
-    "model/safetyBuffering/updated",
-    "turn/plan/updated",
-    "turn/diff/updated",
-    "item/agentMessage/delta",
-    "item/reasoning/textDelta",
-    "item/reasoning/summaryTextDelta",
-    "item/started",
-    "item/completed",
-    "item/fileChange/patchUpdated",
-  ]);
+  .string()
+  .trim()
+  .min(1)
+  .refine((method) => !consumedRuntimeNotificationMethods.has(method), {
+    error: "Consumed runtime notifications must match their declared parameter schema",
+  });
 
 export const codexAppServerUnconsumedRuntimeNotificationSchema = z.object({
   method: codexAppServerUnconsumedNotificationMethodSchema,
@@ -158,7 +212,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
     z.object({
       callId: z.string(),
       conversationId: z.string(),
-      fileChanges: jsonObjectSchema,
+      fileChanges: z.record(z.string(), legacyFileChangeSchema),
       grantRoot: z.string().nullable(),
       reason: z.string().nullable(),
     }),
@@ -173,7 +227,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
       grantRoot: z.string().nullable().optional(),
       itemId: z.string(),
       reason: z.string().nullable().optional(),
-      startedAtMs: z.number(),
+      startedAtMs: signedIntegerSchema,
       threadId: z.string(),
       turnId: z.string(),
     }),
@@ -209,20 +263,7 @@ export const codexAppServerServerRequestSchema = z.discriminatedUnion("method", 
   serverRequest("currentTime/read", codexAppServerCurrentTimeReadParamsSchema),
 ]);
 
-const codexAppServerLegacyApprovalRequestSchema = serverRequest(
-  "approval/request",
-  z.object({
-    threadId: z.string().optional(),
-    turnId: z.string().optional(),
-    tool: z.string().optional(),
-    url: z.string().optional(),
-  }),
-);
-
-export const codexAppServerRuntimeServerRequestSchema = z.union([
-  codexAppServerServerRequestSchema,
-  codexAppServerLegacyApprovalRequestSchema,
-]);
+export const codexAppServerRuntimeServerRequestSchema = codexAppServerServerRequestSchema;
 
 export const codexAppServerServerNotificationSchema = z.object({
   method: z.string().trim().min(1),
@@ -234,7 +275,7 @@ export const codexAppServerRuntimeStreamEventSchema = z.discriminatedUnion("kind
     runtimeId: z.string(),
     kind: z.literal("notification"),
     receivedAt: receivedAtSchema,
-    message: codexAppServerRuntimeNotificationSchema,
+    message: codexAppServerServerNotificationSchema,
   }),
   z.object({
     runtimeId: z.string(),

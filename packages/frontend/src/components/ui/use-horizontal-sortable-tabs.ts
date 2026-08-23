@@ -25,8 +25,7 @@ export const horizontalTabSortTransition = {
 };
 
 const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };
-// SAFETY: The surrounding boundary constructs or validates every member required by `[typeof restrictToHorizontalAxis]`.
-const horizontalTabModifiers = [restrictToHorizontalAxis] as [typeof restrictToHorizontalAxis];
+const horizontalTabModifiers: [typeof restrictToHorizontalAxis] = [restrictToHorizontalAxis];
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   if (frameRef.current === null) return;

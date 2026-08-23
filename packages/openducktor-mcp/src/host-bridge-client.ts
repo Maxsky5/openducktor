@@ -75,7 +75,7 @@ const toIssueDetails = (
 
 const parseHostResponse = <Schema extends z.ZodType>(
   schema: Schema,
-  payload: JsonValue | undefined,
+  payload: unknown,
   command: string,
 ): z.infer<Schema> => {
   const parsed = schema.safeParse(payload);
@@ -185,7 +185,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
       ...input,
       workspaceId,
     });
-    // SAFETY: The surrounding boundary constructs or validates every member required by `ToolOutput<Name>`.
+    // SAFETY: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS maps each Name to the schema whose inferred output is ToolOutput<Name>; generic indexed access erases that correlation.
     return parseHostResponse(
       ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName],
       payload,
@@ -193,10 +193,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     ) as ToolOutput<Name>;
   }
 
-  private async invokeJson(
-    command: string,
-    input: Record<string, JsonValue | undefined>,
-  ): Promise<JsonValue | undefined> {
+  private async invokeJson(command: string, input: Record<string, unknown>): Promise<JsonValue> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
     const response = await this.fetchBridge(

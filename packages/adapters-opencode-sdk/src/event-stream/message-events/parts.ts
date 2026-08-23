@@ -1,8 +1,10 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { readNumberProp, readStringProp, readUnknownProp } from "../../guards";
-import type { JsonValue } from "@openducktor/contracts";
-import type { ParsedOpencodeEvent as Event } from "../../opencode-ingress";
+import { readNumberProp, readStringProp, readUnknownProp, type UnknownRecord } from "../../guards";
+import {
+  opencodePartPayloadSchema,
+  type ParsedOpencodeEvent as Event,
+} from "../../opencode-ingress";
 import { readEventPart, readEventProperties } from "../schemas";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -29,7 +31,7 @@ const toIsoTimestamp = (timestampMs: number | undefined): string | undefined => 
   return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
 };
 
-const readIsoTimestampFromTime = (time: JsonValue | undefined): string | undefined => {
+const readIsoTimestampFromTime = (time: unknown): string | undefined => {
   if (hasRuntimeType(time, "number")) {
     return toIsoTimestamp(time);
   }
@@ -37,7 +39,7 @@ const readIsoTimestampFromTime = (time: JsonValue | undefined): string | undefin
 };
 
 const readPartUpdatedTimestamp = (
-  properties: JsonValue | undefined,
+  properties: UnknownRecord | undefined,
   part: Part,
 ): string | undefined => {
   const eventTimestamp = readIsoTimestampFromTime(readUnknownProp(properties, "time"));
@@ -158,8 +160,7 @@ export const handleMessagePartUpdatedEvent = (
     return true;
   }
 
-  // SAFETY: The preceding runtime guard establishes `Part` before this assertion.
-  const current = rawPartRecord as Part;
+  const current = opencodePartPayloadSchema.parse(rawPartRecord);
   const nextPart = applyPendingDeltas(runtime, partId, current);
   setMessagePart(runtime.session, nextPart);
   emitAssistantPart(runtime, nextPart);

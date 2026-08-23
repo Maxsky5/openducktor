@@ -63,8 +63,8 @@ const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
 const CODE_VIEW_NUMBER_COLUMN_PADDING = 1.25;
 const CODE_VIEW_CLASS_NAME = "h-full min-h-0 overflow-auto";
-// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
-const CODE_VIEW_ROOT_BASE_STYLE = {
+type CodeViewCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
+const CODE_VIEW_ROOT_BASE_STYLE: CodeViewCssProperties = {
   "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
   "--diffs-dark-bg": CODE_VIEW_THEME_BACKGROUND.dark,
   "--diffs-bg": CODE_VIEW_DIFFS_BACKGROUND,
@@ -73,7 +73,7 @@ const CODE_VIEW_ROOT_BASE_STYLE = {
   "--diffs-gap-block": `${CODE_VIEW_CONTENT_PADDING}px`,
   "--diffs-scrollbar-gutter-override": "0px",
   "--diffs-tab-size": 2,
-} as CSSProperties;
+};
 
 function EditorAttachmentLifecycle({
   children,

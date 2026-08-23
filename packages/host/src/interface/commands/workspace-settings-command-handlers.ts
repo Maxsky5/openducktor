@@ -9,15 +9,14 @@ import {
   workspaceRepoSettingsInputSchema,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoSettingsInput,
-  hasRuntimeType,
+  runtimeTypeName,
 } from "@openducktor/contracts";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
-import type { JsonValue } from "@openducktor/contracts";
 
-const requireNoArgs = (command: string, args: Record<string, JsonValue> | undefined): void => {
+const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,
@@ -27,11 +26,11 @@ const requireNoArgs = (command: string, args: Record<string, JsonValue> | undefi
   }
 };
 
-const requireObjectArg = (
+const requireObjectArgs = (
   command: string,
-  args: Record<string, JsonValue> | undefined,
+  args: Record<string, unknown> | undefined,
   key: string,
-): JsonValue | undefined => {
+): Record<string, unknown> => {
   if (!args || !(key in args)) {
     throw new HostValidationError({
       message: `${command} expects argument '${key}'.`,
@@ -40,36 +39,34 @@ const requireObjectArg = (
     });
   }
 
-  return args[key];
+  return args;
 };
 
-const requireStringArray = (value: JsonValue | undefined, label: string): string[] => {
-  if (!Array.isArray(value) || value.some((entry) => !hasRuntimeType(entry, "string"))) {
+const requireStringArray = (value: unknown, label: string): string[] => {
+  if (!Array.isArray(value)) {
     throw new HostValidationError({
       message: `${label} must be an array of strings.`,
       field: label,
-      details: { value: value ?? null },
+      details: { receivedType: runtimeTypeName(value) },
     });
   }
-
-  // SAFETY: The preceding runtime guard establishes `string[]` before this assertion.
-  return value as string[];
+  return value.map((entry, index) => requireString(entry, `${label}[${index}]`));
 };
 
-const optionalRuntimeKind = (record: Record<string, JsonValue>) => {
+const optionalRuntimeKind = (record: Record<string, unknown>) => {
   if (record.defaultRuntimeKind === undefined) return undefined;
   const parsed = runtimeKindSchema.safeParse(record.defaultRuntimeKind);
   if (!parsed.success) {
     throw new HostValidationError({
       message: "defaultRuntimeKind must be a supported runtime kind.",
       field: "defaultRuntimeKind",
-      details: { value: record.defaultRuntimeKind },
+      details: { receivedType: runtimeTypeName(record.defaultRuntimeKind) },
     });
   }
   return parsed.data;
 };
 
-const parseRepoConfigInput = (value: JsonValue | undefined): WorkspaceRepoConfigInput => {
+const parseRepoConfigInput = (value: unknown): WorkspaceRepoConfigInput => {
   const parsed = workspaceRepoConfigInputSchema.safeParse(value);
   if (parsed.success) return parsed.data;
   throw new HostValidationError({
@@ -79,7 +76,7 @@ const parseRepoConfigInput = (value: JsonValue | undefined): WorkspaceRepoConfig
   });
 };
 
-const parseRepoSettingsInput = (value: JsonValue | undefined): WorkspaceRepoSettingsInput => {
+const parseRepoSettingsInput = (value: unknown): WorkspaceRepoSettingsInput => {
   const parsed = workspaceRepoSettingsInputSchema.safeParse(value);
   if (parsed.success) return parsed.data;
   throw new HostValidationError({
@@ -90,7 +87,22 @@ const parseRepoSettingsInput = (value: JsonValue | undefined): WorkspaceRepoSett
 };
 
 export const createWorkspaceSettingsCommandHandlers = (
-  workspaceSettingsService: WorkspaceSettingsService,
+  workspaceSettingsService: Pick<
+    WorkspaceSettingsService,
+    | "addWorkspace"
+    | "getRepoConfig"
+    | "getSettingsSnapshot"
+    | "listWorkspaces"
+    | "reorderWorkspaces"
+    | "saveRepoSettings"
+    | "saveSettingsSnapshot"
+    | "selectWorkspace"
+    | "setTheme"
+    | "updateAgentModelFavorites"
+    | "updateGlobalGitConfig"
+    | "updateRepoConfig"
+    | "updateRepoHooks"
+  >,
 ): HostCommandHandlers => ({
   workspace_list: (args) => {
     requireNoArgs("workspace_list", args);
@@ -108,45 +120,52 @@ export const createWorkspaceSettingsCommandHandlers = (
   },
   workspace_select: (args) =>
     workspaceSettingsService.selectWorkspace(
-      requireString(requireObjectArg("workspace_select", args, "workspaceId"), "workspaceId"),
+      requireString(
+        requireObjectArgs("workspace_select", args, "workspaceId").workspaceId,
+        "workspaceId",
+      ),
     ),
   workspace_reorder: (args) =>
     workspaceSettingsService.reorderWorkspaces(
       requireStringArray(
-        requireObjectArg("workspace_reorder", args, "workspaceOrder"),
+        requireObjectArgs("workspace_reorder", args, "workspaceOrder").workspaceOrder,
         "workspaceOrder",
       ),
     ),
   workspace_get_repo_config: (args) =>
     workspaceSettingsService.getRepoConfig(
       requireString(
-        requireObjectArg("workspace_get_repo_config", args, "workspaceId"),
+        requireObjectArgs("workspace_get_repo_config", args, "workspaceId").workspaceId,
         "workspaceId",
       ),
     ),
   workspace_update_repo_config: (args) =>
     workspaceSettingsService.updateRepoConfig(
       requireString(
-        requireObjectArg("workspace_update_repo_config", args, "workspaceId"),
+        requireObjectArgs("workspace_update_repo_config", args, "workspaceId").workspaceId,
         "workspaceId",
       ),
-      parseRepoConfigInput(requireObjectArg("workspace_update_repo_config", args, "config")),
+      parseRepoConfigInput(
+        requireObjectArgs("workspace_update_repo_config", args, "config").config,
+      ),
     ),
   workspace_save_repo_settings: (args) =>
     workspaceSettingsService.saveRepoSettings(
       requireString(
-        requireObjectArg("workspace_save_repo_settings", args, "workspaceId"),
+        requireObjectArgs("workspace_save_repo_settings", args, "workspaceId").workspaceId,
         "workspaceId",
       ),
-      parseRepoSettingsInput(requireObjectArg("workspace_save_repo_settings", args, "settings")),
+      parseRepoSettingsInput(
+        requireObjectArgs("workspace_save_repo_settings", args, "settings").settings,
+      ),
     ),
   workspace_update_repo_hooks: (args) =>
     workspaceSettingsService.updateRepoHooks(
       requireString(
-        requireObjectArg("workspace_update_repo_hooks", args, "workspaceId"),
+        requireObjectArgs("workspace_update_repo_hooks", args, "workspaceId").workspaceId,
         "workspaceId",
       ),
-      repoHooksSchema.parse(requireObjectArg("workspace_update_repo_hooks", args, "hooks")),
+      repoHooksSchema.parse(requireObjectArgs("workspace_update_repo_hooks", args, "hooks").hooks),
     ),
   workspace_get_settings_snapshot: (args) => {
     requireNoArgs("workspace_get_settings_snapshot", args);
@@ -155,23 +174,23 @@ export const createWorkspaceSettingsCommandHandlers = (
   workspace_save_settings_snapshot: (args) =>
     workspaceSettingsService.saveSettingsSnapshot(
       settingsSnapshotSaveInputSchema.parse(
-        requireObjectArg("workspace_save_settings_snapshot", args, "snapshot"),
+        requireObjectArgs("workspace_save_settings_snapshot", args, "snapshot").snapshot,
       ),
     ),
   workspace_update_agent_model_favorites: (args) =>
     workspaceSettingsService.updateAgentModelFavorites(
       agentModelFavoritesSchema.parse(
-        requireObjectArg("workspace_update_agent_model_favorites", args, "favorites"),
+        requireObjectArgs("workspace_update_agent_model_favorites", args, "favorites").favorites,
       ),
     ),
   set_theme: (args) =>
     workspaceSettingsService.setTheme(
-      themeSchema.parse(requireObjectArg("set_theme", args, "theme")),
+      themeSchema.parse(requireObjectArgs("set_theme", args, "theme").theme),
     ),
   workspace_update_global_git_config: (args) =>
     workspaceSettingsService.updateGlobalGitConfig(
       globalGitConfigSchema.parse(
-        requireObjectArg("workspace_update_global_git_config", args, "git"),
+        requireObjectArgs("workspace_update_global_git_config", args, "git").git,
       ),
     ),
 });

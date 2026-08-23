@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskService } from "./task-service";
@@ -45,7 +44,7 @@ describe("createTaskService list and session reads", () => {
 
   test("loads agent sessions for task IDs with one task-store call", async () => {
     const session = createAgentSessionRecord();
-    const calls: unknown[] = [];
+    const calls: Array<Parameters<NonNullable<TaskStorePort["listAgentSessionsForTasks"]>>[0]> = [];
     const service = createTaskService({
       taskStore: {
         listAgentSessionsForTasks(input) {
@@ -64,7 +63,7 @@ describe("createTaskService list and session reads", () => {
   });
 
   test("loads tasks and enriches available actions and workflow state", async () => {
-    const calls: unknown[] = [];
+    const calls: Array<Parameters<NonNullable<TaskStorePort["listTasks"]>>[0]> = [];
     const taskStore: TaskStorePort = {
       createTask() {
         return Effect.tryPromise({
@@ -861,10 +860,10 @@ describe("createTaskService list and session reads", () => {
     ]);
   });
   test("deletes one exact durable agent session identity", async () => {
-    const calls: unknown[] = [];
+    const calls: Array<Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]> = [];
     // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const taskStore = {
-      deleteAgentSession(input: JsonValue | undefined) {
+      deleteAgentSession(input: Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]) {
         return Effect.sync(() => {
           calls.push(input);
           return true;

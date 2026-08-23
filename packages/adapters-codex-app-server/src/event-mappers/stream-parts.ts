@@ -1,19 +1,16 @@
-import { hasRuntimeType } from "@openducktor/contracts";
-import { arrayFromUnknown, extractStringField, isPlainObject } from "../codex-app-server-shared";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import { codexItemTypeMatches, toStreamPart } from "../codex-app-server-transcript";
 import type { CodexMappingContext, CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
-import { noCodexMapperState } from "../codex-event-mapper";
+import { noCodexMapperState, type CodexTimedThreadItem } from "../codex-event-mapper";
 import type { CodexToolTimingOptions } from "../codex-tool-timing";
 import { emptyMapper } from "./empty";
 
 const streamPartEvents = (
   name: string,
   ctx: CodexMappingContext,
-  raw: JsonValue | undefined,
-  item: Record<string, JsonValue>,
+  item: CodexTimedThreadItem,
   messageId: string,
   partId: string,
   timestamp?: string,
@@ -29,13 +26,15 @@ const streamPartEvents = (
       threadId: ctx.threadId,
       ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
       ...(eventTimestamp ? { timestamp: eventTimestamp } : undefined),
-      raw,
       part,
     };
   }),
 });
 
-const streamPartMapper = (name: string, itemType: string): CodexEventMapper => ({
+const streamPartMapper = (
+  name: string,
+  itemType: CodexAppServerThreadItem["type"],
+): CodexEventMapper => ({
   name,
   createState: noCodexMapperState,
   fromLive(input, ctx): CodexMappingResult {
@@ -45,10 +44,8 @@ const streamPartMapper = (name: string, itemType: string): CodexEventMapper => (
     if (!codexItemTypeMatches(input.item, itemType)) {
       return emptyCodexMappingResult();
     }
-    const itemId = hasRuntimeType(input.item.id, "string")
-      ? input.item.id
-      : `${ctx.threadId}-${name}-${Date.now()}`;
-    return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId, undefined, {
+    const itemId = input.item.id;
+    return streamPartEvents(name, ctx, input.item, itemId, itemId, undefined, {
       allowStartedAtOnly: input.kind === "item_started",
     });
   },
@@ -56,10 +53,8 @@ const streamPartMapper = (name: string, itemType: string): CodexEventMapper => (
     if (!codexItemTypeMatches(input.item, itemType)) {
       return emptyCodexMappingResult();
     }
-    const itemId = hasRuntimeType(input.item.id, "string")
-      ? input.item.id
-      : `${ctx.threadId}-${name}-${input.index}`;
-    return streamPartEvents(name, ctx, input.item, input.item, itemId, itemId, input.timestamp);
+    const itemId = input.item.id;
+    return streamPartEvents(name, ctx, input.item, itemId, itemId, input.timestamp);
   },
 });
 
@@ -74,17 +69,14 @@ export const fileChangeMapper: CodexEventMapper = {
       return emptyCodexMappingResult();
     }
 
-    const params = isPlainObject(input.notification.params) ? input.notification.params : null;
-    const itemId = extractStringField(params, ["itemId", "item_id"]);
-    const changes = arrayFromUnknown(params?.changes);
-    if (!itemId || changes.length === 0) {
+    const { changes, itemId } = input.notification.params;
+    if (changes.length === 0) {
       return emptyCodexMappingResult();
     }
 
     return streamPartEvents(
       this.name,
       ctx,
-      params,
       {
         type: "fileChange",
         id: itemId,
@@ -99,18 +91,8 @@ export const fileChangeMapper: CodexEventMapper = {
     if (!codexItemTypeMatches(input.item, "fileChange")) {
       return emptyCodexMappingResult();
     }
-    const itemId = hasRuntimeType(input.item.id, "string")
-      ? input.item.id
-      : `${ctx.threadId}-file_change-${input.index}`;
-    return streamPartEvents(
-      this.name,
-      ctx,
-      input.item,
-      input.item,
-      itemId,
-      itemId,
-      input.timestamp,
-    );
+    const itemId = input.item.id;
+    return streamPartEvents(this.name, ctx, input.item, itemId, itemId, input.timestamp);
   },
 };
 

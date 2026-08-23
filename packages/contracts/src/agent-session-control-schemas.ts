@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { agentRuntimeEventSchema } from "./agent-session-event-schemas";
+import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionAssociationSchema,
@@ -57,13 +57,13 @@ export const agentSessionUserMessagePartSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("skill_mention"),
-      skill: skillDescriptorSchema.strict(),
+      skill: skillDescriptorSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal("subagent_reference"),
-      subagent: subagentDescriptorSchema.strict(),
+      subagent: subagentDescriptorSchema,
     })
     .strict(),
   z
@@ -158,12 +158,5 @@ export const agentSessionControlSummarySchema = z
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;
 
-export type AcceptedAgentUserMessage = Extract<
-  z.infer<typeof agentRuntimeEventSchema>,
-  { type: "user_message" }
->;
-// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AcceptedAgentUserMessage>`.
-export const acceptedAgentUserMessageSchema: z.ZodType<AcceptedAgentUserMessage> =
-  agentRuntimeEventSchema.refine((event) => event.type === "user_message", {
-    message: "Accepted user message output must be a user_message event.",
-  }) as z.ZodType<AcceptedAgentUserMessage>;
+export const acceptedAgentUserMessageSchema = agentUserMessageEventSchema;
+export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;

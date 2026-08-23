@@ -1,5 +1,5 @@
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 
 export type ClaudeTaskNotification = {
   outputFile?: string;
@@ -56,7 +56,7 @@ const readXmlElements = (xml: string, name: string): string[] => {
 };
 
 export const readClaudeTaskNotifications = (
-  entry: JsonValue | undefined,
+  entry: ClaudeHistoryMessage,
 ): ClaudeTaskNotification[] => {
   if (!isRecord(entry) || readStringProp(entry, "type") !== "user" || !isRecord(entry.message)) {
     return [];
@@ -86,7 +86,7 @@ export const readClaudeTaskNotifications = (
 };
 
 export const readClaudeTaskNotification = (
-  entry: JsonValue | undefined,
+  entry: ClaudeHistoryMessage,
 ): ClaudeTaskNotification | null => readClaudeTaskNotifications(entry)[0] ?? null;
 
 export const readClaudeBackgroundAgentLaunch = (

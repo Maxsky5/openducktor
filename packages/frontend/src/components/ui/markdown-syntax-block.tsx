@@ -8,15 +8,13 @@ import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { createMarkdownSyntaxLanguageRegistry } from "./markdown-syntax-language-registry";
 
-interface LANGUAGEALIASESContract extends Record<string, string> {}
-
 type MarkdownSyntaxBlockProps = {
   language: string;
   code: string;
   className?: string;
 };
 
-const LANGUAGE_ALIASES: LANGUAGEALIASESContract = {
+const LANGUAGE_ALIASES = {
   cjs: "javascript",
   js: "javascript",
   jsx: "jsx",
@@ -26,7 +24,7 @@ const LANGUAGE_ALIASES: LANGUAGEALIASESContract = {
   ts: "typescript",
   tsx: "tsx",
   yml: "yaml",
-};
+} satisfies Record<string, string>;
 
 const markdownSyntaxLanguageRegistry = createMarkdownSyntaxLanguageRegistry({
   languageAliases: LANGUAGE_ALIASES,

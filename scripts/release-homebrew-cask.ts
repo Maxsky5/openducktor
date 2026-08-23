@@ -5,21 +5,19 @@ import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
-interface MacosVersionSymbolsContract extends Record<string, string> {}
-
 const electronBuilderConfigPath = "apps/electron/electron-builder.yml";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const desktopDescription = "Task-first agentic development environment";
 const armArchCandidates = ["aarch64", "arm64"] as const;
 const intelArchCandidates = ["x86_64", "x64", "amd64", "intel"] as const;
 
-const macosVersionSymbols: MacosVersionSymbolsContract = {
+const macosVersionSymbols = {
   "11": "big_sur",
   "12": "monterey",
   "13": "ventura",
   "14": "sonoma",
   "15": "sequoia",
-};
+} satisfies Record<string, string>;
 
 type ElectronBuilderConfig = {
   productName?: string;

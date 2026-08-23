@@ -9,10 +9,9 @@ import type {
 } from "../../application/system/open-in-tools-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
-import type { JsonValue } from "@openducktor/contracts";
 
 const parseOpenExternalUrlInput = (
-  args: Record<string, JsonValue> | undefined,
+  args: Record<string, unknown> | undefined,
 ): OpenExternalUrlInput => {
   const record = requireRecord(args, "open_external_url input");
   return { url: requireString(record.url, "url") };

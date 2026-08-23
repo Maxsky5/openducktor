@@ -5,7 +5,6 @@ import {
   type SDKControlInitializeResponse,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { JsonValue } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
@@ -23,7 +22,7 @@ type ClaudeQueryFactory = (input: {
 }) => ClaudeProbeQuery;
 
 const isClaudeInitializationResponse = (
-  response: JsonValue | undefined,
+  response: unknown,
 ): response is SDKControlInitializeResponse =>
   typeof response === "object" &&
   response !== null &&

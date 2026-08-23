@@ -1,7 +1,5 @@
 import type { SystemOpenInToolId } from "@openducktor/contracts";
 
-interface OPENINTOOLMETADATAContract extends Record<SystemOpenInToolId, OpenInToolUiMetadata> {}
-
 export type OpenInToolFallbackKind = "finder" | "terminal" | "generic";
 
 type OpenInToolUiMetadata = {
@@ -9,7 +7,7 @@ type OpenInToolUiMetadata = {
   fallbackKind: OpenInToolFallbackKind;
 };
 
-const OPEN_IN_TOOL_METADATA: OPENINTOOLMETADATAContract = {
+const OPEN_IN_TOOL_METADATA = {
   finder: { label: "Finder", fallbackKind: "finder" },
   explorer: { label: "File Explorer", fallbackKind: "finder" },
   "xdg-open": { label: "Files", fallbackKind: "finder" },
@@ -26,7 +24,7 @@ const OPEN_IN_TOOL_METADATA: OPENINTOOLMETADATAContract = {
   rider: { label: "Rider", fallbackKind: "generic" },
   rustrover: { label: "RustRover", fallbackKind: "generic" },
   "android-studio": { label: "Android Studio", fallbackKind: "generic" },
-};
+} satisfies Record<SystemOpenInToolId, OpenInToolUiMetadata>;
 
 export function getOpenInToolLabel(toolId: SystemOpenInToolId): string {
   return OPEN_IN_TOOL_METADATA[toolId].label;

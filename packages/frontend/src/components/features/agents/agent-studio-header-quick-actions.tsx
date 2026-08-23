@@ -21,10 +21,6 @@ import {
   isGitConflictResolutionQuickAction,
 } from "./agent-studio-header-quick-actions-availability";
 
-interface QUICKACTIONROLELABELSContract extends Record<AgentRole, string> {}
-
-interface EntriesByRoleContract extends Record<AgentRole, QuickActionMenuEntry[]> {}
-
 type QuickActionsMenuProps = {
   canOpenActionsMenu: boolean;
   isOpen: boolean;
@@ -56,12 +52,12 @@ type QuickActionMenuGroup = {
 
 const QUICK_ACTION_ROLE_ORDER: AgentRole[] = ["spec", "planner", "build", "qa"];
 
-const QUICK_ACTION_ROLE_LABELS: QUICKACTIONROLELABELSContract = {
+const QUICK_ACTION_ROLE_LABELS = {
   spec: "Spec",
   planner: "Planner",
   build: "Builder",
   qa: "QA",
-};
+} satisfies Record<AgentRole, string>;
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
@@ -107,12 +103,12 @@ const buildQuickActionMenuEntries = (
 ];
 
 const buildQuickActionMenuGroups = (entries: QuickActionMenuEntry[]): QuickActionMenuGroup[] => {
-  const entriesByRole: EntriesByRoleContract = {
-    spec: [],
-    planner: [],
-    build: [],
-    qa: [],
-  };
+  const entriesByRole = {
+    spec: new Array<QuickActionMenuEntry>(),
+    planner: new Array<QuickActionMenuEntry>(),
+    build: new Array<QuickActionMenuEntry>(),
+    qa: new Array<QuickActionMenuEntry>(),
+  } satisfies Record<AgentRole, QuickActionMenuEntry[]>;
   const groups: QuickActionMenuGroup[] = [];
 
   for (const entry of entries) {

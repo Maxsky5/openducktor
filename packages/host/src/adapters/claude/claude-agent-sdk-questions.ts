@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, isJsonObject, type JsonObject } from "@openducktor/contracts";
 import type { OnUserDialog, UserDialogResult } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -7,9 +7,8 @@ import {
   claudeSubagentPendingInputRoute,
   emitClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
-import { parseClaudeJsonRecord } from "./claude-agent-sdk-ingress-schemas";
+import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
-import type { JsonValue } from "@openducktor/contracts";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS = [
@@ -50,26 +49,24 @@ const isClaudeAskUserQuestionDialogKind = (dialogKind: string): boolean =>
     (candidate) => candidate.toLowerCase() === dialogKind.trim().toLowerCase(),
   );
 
-const readString = (value: JsonValue | undefined): string | null =>
+const readString = (value: unknown): string | null =>
   hasRuntimeType(value, "string") && value.trim().length > 0 ? value.trim() : null;
 
-const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[] | null => {
+const readOptions = (value: unknown): ClaudeAskUserQuestionOption[] | null => {
   if (!Array.isArray(value)) {
     return null;
   }
   const options: ClaudeAskUserQuestionOption[] = [];
   for (const option of value) {
-    if (!option || !hasRuntimeType(option, "object")) {
+    if (!isJsonObject(option)) {
       return null;
     }
-    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-    const record = option as Record<string, JsonValue>;
-    const label = readString(record.label);
-    const description = readString(record.description);
+    const label = readString(option.label);
+    const description = readString(option.description);
     if (!label || !description) {
       return null;
     }
-    const preview = hasRuntimeType(record.preview, "string") ? record.preview : undefined;
+    const preview = hasRuntimeType(option.preview, "string") ? option.preview : undefined;
     options.push({
       label,
       description,
@@ -80,7 +77,7 @@ const readOptions = (value: JsonValue | undefined): ClaudeAskUserQuestionOption[
 };
 
 const parseClaudeAskUserQuestionInput = (
-  toolInput: Record<string, JsonValue>,
+  toolInput: JsonObject,
 ): ClaudeAskUserQuestionPayload | null => {
   const rawQuestions = toolInput.questions;
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -91,19 +88,17 @@ const parseClaudeAskUserQuestionInput = (
   const eventQuestions: Question[] = [];
   const questionTexts = new Set<string>();
   for (const rawQuestion of rawQuestions) {
-    if (!rawQuestion || !hasRuntimeType(rawQuestion, "object")) {
+    if (!isJsonObject(rawQuestion)) {
       return null;
     }
-    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-    const record = rawQuestion as Record<string, JsonValue>;
-    const question = readString(record.question);
-    const header = readString(record.header);
-    const options = readOptions(record.options);
+    const question = readString(rawQuestion.question);
+    const header = readString(rawQuestion.header);
+    const options = readOptions(rawQuestion.options);
     if (!question || !header || !options || questionTexts.has(question)) {
       return null;
     }
     questionTexts.add(question);
-    const multiSelect = Boolean(record.multiSelect);
+    const multiSelect = Boolean(rawQuestion.multiSelect);
     sdkQuestions.push({
       question,
       header,
@@ -167,7 +162,7 @@ export const requestClaudeAskUserQuestion = async ({
   randomId: () => string;
   session: ClaudeSessionContext;
   signal: AbortSignal;
-  toolInput: Record<string, JsonValue>;
+  toolInput: JsonObject;
   toolUseID?: string | undefined;
   agentID?: string | undefined;
 }): Promise<ReturnType<typeof buildClaudeAskUserQuestionResult> | null> => {
@@ -278,7 +273,7 @@ export const createClaudeUserDialogHandler = ({
       randomId,
       session,
       signal: options.signal,
-      toolInput: parseClaudeJsonRecord(request.payload, "claudeUserDialogPayload"),
+      toolInput: parseClaudeCanonicalJsonObject(request.payload, "claudeUserDialogPayload"),
       toolUseID: request.toolUseID,
     });
     if (!result) {

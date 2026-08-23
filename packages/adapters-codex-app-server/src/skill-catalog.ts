@@ -21,8 +21,6 @@ const requireString = (value: string | null | undefined, fieldName: string): str
   return trimmed;
 };
 
-const isEnabled = (value: boolean | null | undefined): boolean => value ?? true;
-
 const compareSkillsByName = (
   left: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
   right: Pick<AgentSkillCatalog["skills"][number], "displayName" | "name" | "title">,
@@ -35,25 +33,32 @@ const compareSkillsByName = (
 const toAgentSkillCatalogEntry = (
   record: CodexAppServerSkillRecord,
 ): AgentSkillCatalog["skills"][number] | null => {
-  if (!isEnabled(record.enabled)) {
+  if (!record.enabled) {
     return null;
   }
 
   const name = requireString(record.name, "name");
   const path = requireString(record.path, "path");
+  const displayName = readOptionalString(record.interface?.displayName);
+  const description = readOptionalString(record.description);
   return {
     id: path,
     name,
     path,
-    title: readOptionalString(record.title),
-    displayName: readOptionalString(record.displayName),
-    description: readOptionalString(record.description),
+    ...(displayName ? { displayName } : undefined),
+    ...(description ? { description } : undefined),
   };
 };
 
 export const toCodexSkillCatalog = (
   response: CodexAppServerSkillsListResponse,
 ): AgentSkillCatalog => {
+  const errors = response.data.flatMap((catalog) => catalog.errors);
+  if (errors.length > 0) {
+    const details = errors.map((error) => `${error.path}: ${error.message}`).join("; ");
+    throw new Error(`Codex skills/list reported invalid skills: ${details}`);
+  }
+
   const skills = response.data.flatMap((catalog) =>
     catalog.skills.flatMap((record) => {
       const skill = toAgentSkillCatalogEntry(record);

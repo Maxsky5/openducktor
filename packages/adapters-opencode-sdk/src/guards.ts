@@ -1,21 +1,22 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 
-export type UnknownRecord = Record<string, JsonValue>;
+export type UnknownRecord = Record<string, unknown>;
 
-const isJsonRecord = (value: JsonValue | undefined): value is UnknownRecord =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const unknownRecordSchema = z.record(z.string(), z.unknown());
 
-export const asUnknownRecord = (value: JsonValue | undefined): UnknownRecord | undefined => {
-  return isJsonRecord(value) ? value : undefined;
+export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
+  const parsed = unknownRecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
-const safeProp = <T extends JsonValue>(
-  source: JsonValue | undefined,
+const safeProp = <T>(
+  source: unknown,
   key: string,
-  guard: (value: JsonValue) => value is T,
+  guard: (value: unknown) => value is T,
 ): T | undefined => {
-  const record = asUnknownRecord(source);
+  const parsed = unknownRecordSchema.safeParse(source);
+  const record = parsed.success ? parsed.data : undefined;
   if (!record) {
     return undefined;
   }
@@ -27,32 +28,32 @@ const safeProp = <T extends JsonValue>(
 };
 
 export const readUnknownProp = (
-  source: JsonValue | undefined,
+  source: unknown,
   key: string,
-): JsonValue | undefined => {
-  const record = asUnknownRecord(source);
-  return record?.[key];
+): UnknownRecord[string] | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  return parsed.success ? parsed.data[key] : undefined;
 };
 
-export const readRecordProp = (
-  source: JsonValue | undefined,
-  key: string,
-): UnknownRecord | undefined => {
-  return safeProp(source, key, isJsonRecord);
+export const readRecordProp = (source: unknown, key: string): UnknownRecord | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  return parsed.success
+    ? safeProp(
+        parsed.data,
+        key,
+        (value): value is UnknownRecord => unknownRecordSchema.safeParse(value).success,
+      )
+    : undefined;
 };
 
-export const readArrayProp = (
-  source: JsonValue | undefined,
-  key: string,
-): JsonValue[] | undefined => {
-  return safeProp(source, key, Array.isArray);
+export const readArrayProp = (source: unknown, key: string): unknown[] | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  return parsed.success ? safeProp(parsed.data, key, Array.isArray) : undefined;
 };
 
-export const readStringProp = (
-  source: JsonValue | undefined,
-  keys: readonly string[],
-): string | undefined => {
-  const record = asUnknownRecord(source);
+export const readStringProp = (source: unknown, keys: readonly string[]): string | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  const record = parsed.success ? parsed.data : undefined;
   if (!record) {
     return undefined;
   }
@@ -66,11 +67,9 @@ export const readStringProp = (
   return undefined;
 };
 
-export const readNumberProp = (
-  source: JsonValue | undefined,
-  keys: string[],
-): number | undefined => {
-  const record = asUnknownRecord(source);
+export const readNumberProp = (source: unknown, keys: string[]): number | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  const record = parsed.success ? parsed.data : undefined;
   if (!record) {
     return undefined;
   }
@@ -84,11 +83,9 @@ export const readNumberProp = (
   return undefined;
 };
 
-export const readBooleanProp = (
-  source: JsonValue | undefined,
-  keys: string[],
-): boolean | undefined => {
-  const record = asUnknownRecord(source);
+export const readBooleanProp = (source: unknown, keys: string[]): boolean | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  const record = parsed.success ? parsed.data : undefined;
   if (!record) {
     return undefined;
   }
@@ -102,11 +99,9 @@ export const readBooleanProp = (
   return undefined;
 };
 
-export const readStringArrayProp = (
-  source: JsonValue | undefined,
-  key: string,
-): string[] | undefined => {
-  const values = readArrayProp(source, key);
+export const readStringArrayProp = (source: unknown, key: string): string[] | undefined => {
+  const parsed = unknownRecordSchema.safeParse(source);
+  const values = parsed.success ? readArrayProp(parsed.data, key) : undefined;
   if (!values) {
     return undefined;
   }

@@ -60,16 +60,15 @@ const assertToolDiscoveryId = (value: string, field: string): ToolDiscoveryId =>
   return toolId;
 };
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `SourceRuntimeDistribution`.
+// SAFETY: This is the sole SourceRuntimeDistribution constructor, and assertNonEmpty validates its only data field before applying the private brand.
 export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRuntimeDistribution =>
   ({
     mode: "source",
     workspaceRoot: assertNonEmpty(workspaceRoot, "workspaceRoot"),
   }) as SourceRuntimeDistribution;
 
-const unsupportedArtifactMcpLauncher = (launcher: never): never => {
-  // SAFETY: The surrounding boundary constructs or validates every member required by `{ kind?: unknown }`.
-  const kind = (launcher as { kind?: unknown }).kind;
+const unsupportedArtifactMcpLauncher = (launcher: { kind?: unknown }): never => {
+  const kind = launcher.kind;
   throw new HostValidationError({
     field: "mcpLauncher.kind",
     message: `Unsupported MCP launcher kind: ${String(kind)}`,
@@ -120,7 +119,7 @@ export const createArtifactRuntimeDistribution = ({
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
   const normalizedBundledToolBinDirs = createBundledToolBinDirs(bundledToolBinDirs);
-  // SAFETY: The surrounding boundary constructs or validates every member required by `ArtifactRuntimeDistribution`.
+  // SAFETY: This is the sole ArtifactRuntimeDistribution constructor; the launcher and every optional tool directory are validated before applying the private brand.
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),

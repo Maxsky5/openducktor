@@ -1,9 +1,10 @@
 import {
+  hasRuntimeType,
+  type JsonValue,
+  jsonValueSchema,
   type TaskEventCursor,
   taskEventCursorSchema,
   taskEventStreamFrameSchema,
-  hasRuntimeType,
-  jsonValueSchema,
 } from "@openducktor/contracts";
 import type {
   TaskStreamFrame,
@@ -20,7 +21,7 @@ import {
   type WebError,
   type WebHostRequestError,
 } from "./effect/web-errors";
-import type { JsonValue } from "@openducktor/contracts";
+import { z } from "zod";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const TASK_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
@@ -39,23 +40,20 @@ type LocalTaskEventTransportContext = {
   ) => ReturnType<typeof setTimeout>;
 };
 
-const parseTaskEventSubscription = (value: JsonValue | undefined) => {
-  if (!value || !hasRuntimeType(value, "object") || Array.isArray(value)) {
-    throw new Error("Task event stream subscription response must be an object.");
-  }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const { streamToken, subscriptionId } = value as Record<string, JsonValue>;
-  if (
-    !hasRuntimeType(streamToken, "string") ||
-    streamToken.length === 0 ||
-    !hasRuntimeType(subscriptionId, "string") ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      subscriptionId,
-    )
-  ) {
+const taskEventSubscriptionSchema = z
+  .object({
+    streamToken: z.string().min(1),
+    subscriptionId: z.string().uuid(),
+  })
+  .strict();
+type TaskEventSubscriptionResponse = z.infer<typeof taskEventSubscriptionSchema>;
+
+const parseTaskEventSubscription = (value: unknown): TaskEventSubscriptionResponse => {
+  const parsed = taskEventSubscriptionSchema.safeParse(value);
+  if (!parsed.success) {
     throw new Error("Task event stream subscription response is invalid.");
   }
-  return { streamToken, subscriptionId } satisfies { subscriptionId: string; streamToken: string };
+  return parsed.data;
 };
 
 export const subscribeLocalTaskEventStreamEffect = (
@@ -170,7 +168,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       hasInitialReadiness = true;
       resolveInitialReadiness();
     };
-    const handleOpen = (): void => {
+    const handleOpen: EventListener = () => {
       markInitialReadiness();
     };
     const reportTerminalFailure = (cause: unknown): void => {
@@ -191,7 +189,7 @@ export const subscribeLocalTaskEventStreamEffect = (
       setupFailure = failure;
       rejectInitialReadiness(failure);
     };
-    const handleError = (): void => {
+    const handleError: EventListener = () => {
       if (eventSource.readyState !== EventSource.CLOSED) {
         return;
       }
@@ -241,12 +239,22 @@ export const subscribeLocalTaskEventStreamEffect = (
       }
       markInitialReadiness();
     };
-    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-    eventSource.addEventListener("task-frame", handleFrame as EventListener);
-    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-    eventSource.addEventListener("open", handleOpen as EventListener);
-    // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-    eventSource.addEventListener("error", handleError as EventListener);
+    const handleFrameEvent: EventListener = (event) => {
+      if (!(event instanceof MessageEvent) || !hasRuntimeType(event.data, "string")) {
+        failSetupOrReportTerminalFailure(
+          new WebDependencyError({
+            dependency: "task-event-stream",
+            operation: "parse-frame",
+            message: "OpenDucktor task event stream received a non-text frame.",
+          }),
+        );
+        return;
+      }
+      handleFrame(event);
+    };
+    eventSource.addEventListener("task-frame", handleFrameEvent);
+    eventSource.addEventListener("open", handleOpen);
+    eventSource.addEventListener("error", handleError);
     const initialReadyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
@@ -289,24 +297,18 @@ export const subscribeLocalTaskEventStreamEffect = (
     const setupFailureBeforeReturn = setupFailure;
     if (setupFailureBeforeReturn) {
       closed = true;
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("task-frame", handleFrame as EventListener);
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("open", handleOpen as EventListener);
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("error", handleError as EventListener);
+      eventSource.removeEventListener("task-frame", handleFrameEvent);
+      eventSource.removeEventListener("open", handleOpen);
+      eventSource.removeEventListener("error", handleError);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);
       return yield* Effect.fail(setupFailureBeforeReturn);
     }
     if (initialReadyExit._tag === "Failure") {
       closed = true;
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("task-frame", handleFrame as EventListener);
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("open", handleOpen as EventListener);
-      // SAFETY: The surrounding boundary constructs or validates every member required by `EventListener`.
-      eventSource.removeEventListener("error", handleError as EventListener);
+      eventSource.removeEventListener("task-frame", handleFrameEvent);
+      eventSource.removeEventListener("open", handleOpen);
+      eventSource.removeEventListener("error", handleError);
       eventSource.close();
       yield* Effect.promise(deleteLeaseBestEffort);
       return yield* causeToWebBoundaryError(initialReadyExit.cause);

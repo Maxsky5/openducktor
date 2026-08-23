@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { ensurePromiseRejectionEventPolyfill } from "@/test-utils/promise-rejection-event-polyfill";
 import { buildFatalErrorReport, logFatalError } from "./fatal-error-report";
-import type { JsonValue } from "@openducktor/contracts";
 
 ensurePromiseRejectionEventPolyfill();
 
@@ -143,7 +142,7 @@ describe("buildFatalErrorReport", () => {
     });
 
     test("handles circular references gracefully", () => {
-      const circular: Record<string, JsonValue> = {};
+      const circular: Record<string, unknown> = {};
       circular.self = circular;
 
       const report = buildFatalErrorReport(circular, "error");

@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { type RuntimeKind, repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
+import { repoRuntimeRefSchema, runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { exactOptionalSchema } from "./exact-optional";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -54,24 +55,16 @@ export const agentSessionAssociationSchema = z.discriminatedUnion("kind", [
 ]);
 export type AgentSessionAssociation = z.infer<typeof agentSessionAssociationSchema>;
 
-export type AgentTranscriptModelSelection = {
-  runtimeKind?: RuntimeKind;
-  providerId: string;
-  modelId: string;
-  variant?: string;
-  profileId?: string;
-};
+export const agentModelSelectionSchema = exactOptionalSchema(
+  z
+    .object({
+      runtimeKind: runtimeKindSchema.optional(),
+      providerId: z.string(),
+      modelId: z.string(),
+      variant: z.string().optional(),
+      profileId: z.string().optional(),
+    })
+    .strict(),
+);
 
-const inferredAgentModelSelectionSchema = z
-  .object({
-    runtimeKind: runtimeKindSchema.optional(),
-    providerId: z.string(),
-    modelId: z.string(),
-    variant: z.string().optional(),
-    profileId: z.string().optional(),
-  })
-  .strict();
-
-// SAFETY: The surrounding boundary constructs or validates every member required by `z.ZodType<AgentTranscriptModelSelection>`.
-export const agentModelSelectionSchema =
-  inferredAgentModelSelectionSchema as z.ZodType<AgentTranscriptModelSelection>;
+export type AgentTranscriptModelSelection = z.infer<typeof agentModelSelectionSchema>;

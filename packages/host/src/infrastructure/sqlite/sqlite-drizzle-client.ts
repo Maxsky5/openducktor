@@ -9,7 +9,11 @@ import {
 import type { SQLiteProxyTransaction } from "drizzle-orm/sqlite-proxy/session";
 import type { DrizzleConfig } from "drizzle-orm/utils";
 import { type Cause, Deferred, Effect, Exit, Scope } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  type HostErrorDetails,
+  HostOperationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import {
   currentSqliteDriverRuntime,
   openSqliteDatabase,
@@ -17,7 +21,6 @@ import {
   type SqliteDriverRuntime,
   type SqliteValue,
 } from "./sqlite-driver";
-import type { JsonValue } from "@openducktor/contracts";
 
 type SqliteRemoteMethod = Parameters<AsyncRemoteCallback>[2];
 type SqliteRemoteRows = { rows: unknown[] };
@@ -33,7 +36,7 @@ export type SqliteDrizzleSession<TSchema extends Record<string, AnySQLiteTable>>
   readonly execute: <A>(
     run: (database: SqliteDrizzleExecutor<TSchema>) => PromiseLike<A>,
     operation: string,
-    details?: Readonly<Record<string, JsonValue>>,
+    details?: HostErrorDetails,
   ) => Effect.Effect<A, HostOperationError>;
   readonly transaction: <A, E>(
     operation: string,
@@ -132,7 +135,7 @@ const configureDatabase = (
 const executeSqliteQuery = <A>(
   run: () => PromiseLike<A>,
   operation: string,
-  details?: Readonly<Record<string, JsonValue>>,
+  details?: HostErrorDetails,
 ): Effect.Effect<A, HostOperationError> =>
   Effect.tryPromise({
     try: () => Promise.resolve(run()),

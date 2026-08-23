@@ -1,6 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { extractStringField, extractText, isPlainObject } from "../codex-app-server-shared";
-import type { JsonValue } from "@openducktor/contracts";
 import {
   codexItemId,
   codexItemTypeMatches,
@@ -18,7 +17,6 @@ import { noCodexMapperState } from "../codex-event-mapper";
 
 const toSessionCompactedEvent = (
   ctx: CodexMappingContext,
-  raw: JsonValue | undefined,
   messageId?: string,
 ): CodexCanonicalSessionCompactedEvent => ({
   kind: "session_compacted",
@@ -27,14 +25,12 @@ const toSessionCompactedEvent = (
   threadId: ctx.threadId,
   ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
   ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-  raw,
   ...(messageId ? { messageId } : undefined),
   message: "Session compacted.",
 });
 
 const toSessionCompactionStartedEvent = (
   ctx: CodexMappingContext,
-  raw: JsonValue | undefined,
   messageId?: string,
 ): CodexCanonicalSessionCompactionStartedEvent => ({
   kind: "session_compaction_started",
@@ -43,7 +39,6 @@ const toSessionCompactionStartedEvent = (
   threadId: ctx.threadId,
   ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
   ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-  raw,
   ...(messageId ? { messageId } : undefined),
   message: "Session compaction started.",
 });
@@ -71,7 +66,6 @@ export const lifecycleMapper: CodexEventMapper = {
                 mapper: "lifecycle",
                 threadId: ctx.threadId,
                 ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-                raw: turn,
                 message:
                   (isPlainObject(turn.error) ? extractText(turn.error) : null) ??
                   "Codex turn failed.",
@@ -84,7 +78,6 @@ export const lifecycleMapper: CodexEventMapper = {
           mapper: "lifecycle",
           threadId: ctx.threadId,
           ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-          raw: turn,
         },
       ],
     };
@@ -102,7 +95,6 @@ export const compactionMapper: CodexEventMapper = {
         events: [
           toSessionCompactionStartedEvent(
             ctx,
-            input.item,
             codexItemId(input.item, `${ctx.threadId}-session-compaction`),
           ),
         ],
@@ -115,7 +107,6 @@ export const compactionMapper: CodexEventMapper = {
         events: [
           toSessionCompactedEvent(
             ctx,
-            input.item,
             codexItemId(input.item, `${ctx.threadId}-session-compaction`),
           ),
         ],
@@ -134,7 +125,6 @@ export const compactionMapper: CodexEventMapper = {
       events: [
         toSessionCompactedEvent(
           ctx,
-          input.item,
           codexItemId(input.item, `codex-history-${input.index}-session-compacted`),
         ),
       ],
@@ -167,7 +157,6 @@ export const tokenUsageMapper: CodexEventMapper = {
           threadId: ctx.threadId,
           ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
           ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-          raw: input.notification.params,
           part: {
             kind: "step",
             messageId,
@@ -193,12 +182,8 @@ export const deltaMapper: CodexEventMapper = {
     }
     const method = input.notification.method;
     const isText = method === "item/agentMessage/delta";
-    const isReasoning = [
-      "item/reasoningText/delta",
-      "item/reasoningSummaryText/delta",
-      "item/reasoning/textDelta",
-      "item/reasoning/summaryTextDelta",
-    ].includes(method);
+    const isReasoning =
+      method === "item/reasoning/textDelta" || method === "item/reasoning/summaryTextDelta";
     if (!isText && !isReasoning) {
       return emptyCodexMappingResult();
     }
@@ -219,7 +204,6 @@ export const deltaMapper: CodexEventMapper = {
           ...(messageId ? { messageId } : undefined),
           channel: isText ? "text" : "reasoning",
           delta,
-          raw: input.notification.params,
         },
       ],
     };

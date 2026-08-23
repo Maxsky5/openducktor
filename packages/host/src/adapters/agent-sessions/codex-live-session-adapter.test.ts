@@ -355,7 +355,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
                   error: null,
                   items: [],
                   itemsView: "summary",
-                  status: "running",
+                  status: "inProgress",
                 },
               ],
               nextCursor: null,

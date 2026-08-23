@@ -36,6 +36,11 @@ export const hasRuntimeType = <Value, Type extends RuntimeTypeName>(
   type: Type,
 ): value is Value & RuntimeTypeNarrow<Value, Type> => typeof value === type;
 
+export const hasOwnKey = <Value extends object>(
+  value: Value,
+  key: PropertyKey,
+): key is keyof Value => Object.hasOwn(value, key);
+
 export const runtimeTypeName = <Value>(value: Value): RuntimeTypeName => {
   if (hasRuntimeType(value, "bigint")) return "bigint";
   if (hasRuntimeType(value, "boolean")) return "boolean";

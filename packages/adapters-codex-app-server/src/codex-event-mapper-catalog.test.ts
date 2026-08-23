@@ -10,7 +10,6 @@ describe("Codex event mapper catalog", () => {
     expect(mappers.length).toBeGreaterThan(0);
     for (const mapper of mappers) {
       expect(mapper.name).toBeTruthy();
-      expect(mapper.createState).toBeFunction();
       expect(mapper.fromLive).toBeFunction();
       expect(mapper.fromThreadItem).toBeFunction();
     }

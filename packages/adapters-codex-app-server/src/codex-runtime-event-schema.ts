@@ -10,7 +10,7 @@ import {
   type CodexAppServerRuntimeServerRequestRecord,
   type CodexAppServerRuntimeStreamEvent,
   type CodexAppServerUnconsumedRuntimeNotification,
-  type JsonValue,
+  type CodexAppServerJsonValue,
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { isPlainObject } from "./codex-app-server-shared";
@@ -49,26 +49,31 @@ export type CodexParsedRuntimeStreamEvent =
 
 export const parseCodexRuntimeServerRequestRecord = parseCodexAppServerRuntimeServerRequestRecord;
 export const parseCodexRuntimeNotificationRecord = parseCodexAppServerRuntimeNotificationRecord;
-export const parseCodexRuntimeStreamEvent = (value: JsonValue): CodexParsedRuntimeStreamEvent => {
+export const parseCodexRuntimeStreamEvent = (
+  value: CodexAppServerJsonValue,
+): CodexParsedRuntimeStreamEvent => {
   const event = parseCodexAppServerRuntimeStreamEvent(value);
   if (event.kind === "server_request") {
     return event;
   }
-  const consumed = codexAppServerConsumedRuntimeNotificationSchema.safeParse(event.message);
-  if (consumed.success) {
-    return { ...event, message: consumed.data };
+  const unconsumed = codexAppServerUnconsumedRuntimeNotificationSchema.safeParse(event.message);
+  if (unconsumed.success) {
+    return {
+      runtimeId: event.runtimeId,
+      kind: "ignored_notification",
+      receivedAt: event.receivedAt,
+      message: unconsumed.data,
+    };
   }
   return {
-    runtimeId: event.runtimeId,
-    kind: "ignored_notification",
-    receivedAt: event.receivedAt,
-    message: codexAppServerUnconsumedRuntimeNotificationSchema.parse(event.message),
+    ...event,
+    message: codexAppServerConsumedRuntimeNotificationSchema.parse(event.message),
   };
 };
 
 const threadIdFromFaultMessage = (
   sourceKind: "notification" | "server_request",
-  message: JsonValue | undefined,
+  message: CodexAppServerJsonValue | undefined,
 ): string | null => {
   if (!isPlainObject(message) || !isPlainObject(message.params)) {
     return null;
@@ -88,7 +93,7 @@ export const codexRuntimeStreamFault = ({
   sourceKind,
 }: {
   cause: unknown;
-  message: JsonValue | undefined;
+  message: CodexAppServerJsonValue | undefined;
   receivedAt: string;
   runtimeId: string;
   sourceKind: "notification" | "server_request";

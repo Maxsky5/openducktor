@@ -2,9 +2,8 @@ import { Effect } from "effect";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
-import type { JsonValue } from "@openducktor/contracts";
 
-const requireNoArgs = (command: string, args: Record<string, JsonValue> | undefined): void => {
+const requireNoArgs = (command: string, args: Record<string, unknown> | undefined): void => {
   if (args !== undefined && Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,

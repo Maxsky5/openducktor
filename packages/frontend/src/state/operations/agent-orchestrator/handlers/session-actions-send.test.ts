@@ -22,6 +22,7 @@ import {
   createSessionTurnStateFixture,
   getSession,
 } from "./session-actions.test-helpers";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 const acceptedUserMessage = (
   input: SendAgentUserMessageInput,
@@ -39,12 +40,21 @@ const acceptedUserMessage = (
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = new OpencodeSdkAdapter();
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendInput: unknown;
     adapter.sendUserMessage = async (input) => {
       sendInput = input;
-      return acceptedUserMessage(input);
+      return {
+        type: "user_message",
+        externalSessionId: input.externalSessionId,
+        timestamp: "2026-02-22T08:00:01.000Z",
+        messageId: "accepted-user-message",
+        message: "hello",
+        parts: [],
+        state: "read",
+        ...(input.model ? { model: input.model } : undefined),
+      };
     };
     const sessionsRef = createSessionsRef([
       buildSession({

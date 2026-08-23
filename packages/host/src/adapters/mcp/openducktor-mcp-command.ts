@@ -150,14 +150,11 @@ const resolveRequiredFile = (path: string, field: string) =>
     return resolvedPath;
   });
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `{ kind?: unknown }`.
-const unsupportedArtifactMcpLauncher = (launcher: never) =>
+const unsupportedArtifactMcpLauncher = (launcher: { kind?: unknown }) =>
   Effect.fail(
     new HostValidationError({
       field: "runtimeDistribution.mcpLauncher.kind",
-      message: `Unsupported runtime artifact MCP launcher kind: ${String(
-        (launcher as { kind?: unknown }).kind,
-      )}`,
+      message: `Unsupported runtime artifact MCP launcher kind: ${String(launcher.kind)}`,
     }),
   );
 

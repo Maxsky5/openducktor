@@ -2,14 +2,13 @@ import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const eventTimestampMs = (timestamp: string): number => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const hasMeaningfulToolInputValue = (value: JsonValue | undefined): boolean => {
+const hasMeaningfulToolInputValue = (value: unknown): boolean => {
   if (hasRuntimeType(value, "string")) {
     return value.trim().length > 0;
   }
@@ -22,13 +21,13 @@ const hasMeaningfulToolInputValue = (value: JsonValue | undefined): boolean => {
   if (!value || !hasRuntimeType(value, "object")) {
     return false;
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  return Object.values(value as Record<string, JsonValue>).some((entry) =>
+  // SAFETY: The preceding runtime guard establishes `Record<string, unknown>` before this assertion.
+  return Object.values(value as Record<string, unknown>).some((entry) =>
     hasMeaningfulToolInputValue(entry),
   );
 };
 
-export const hasMeaningfulToolInput = (input: Record<string, JsonValue> | undefined): boolean => {
+export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefined): boolean => {
   return input ? Object.values(input).some((value) => hasMeaningfulToolInputValue(value)) : false;
 };
 

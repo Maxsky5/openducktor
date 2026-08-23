@@ -13,8 +13,6 @@ import type { ReactElement } from "react";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { TaskWorkflowAction } from "./kanban-task-workflow";
 
-interface TASKACTIONICONContract extends Record<TaskWorkflowAction, ReactElement> {}
-
 type TaskActionLabelOptions = {
   surface?: "kanban" | "agent_studio";
 };
@@ -70,7 +68,7 @@ export const taskActionLabel = (
   return exhaustive;
 };
 
-export const TASK_ACTION_ICON: TASKACTIONICONContract = {
+export const TASK_ACTION_ICON = {
   set_spec: <Sparkles className="size-3.5" />,
   set_plan: <ScrollText className="size-3.5" />,
   open_spec: <ArrowUpRightFromSquare className="size-3.5" />,
@@ -84,7 +82,7 @@ export const TASK_ACTION_ICON: TASKACTIONICONContract = {
   qa_start: <ShieldCheck className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
   human_request_changes: <Undo2 className="size-3.5" />,
-};
+} satisfies Record<TaskWorkflowAction, ReactElement>;
 
 export const taskPrimaryActionVariant = (
   action: TaskWorkflowAction,

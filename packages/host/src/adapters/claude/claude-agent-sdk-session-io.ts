@@ -15,7 +15,6 @@ import {
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 import {
   assertClaudeSessionModelUpdateSupported,
   assertSupportedClaudeLiveEffort,
@@ -273,9 +272,7 @@ export const sendClaudeUserMessage = async (input: {
   const timestamp = now();
   const messageId = randomId();
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
-  const message = textFromContentBlocks(
-    parseClaudeJsonValue(sdkMessage.message.content, "claudeUserMessage.content"),
-  );
+  const message = textFromContentBlocks(sdkMessage.message.content);
   assertClaudeSessionAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
   // SAFETY: The runtime adapter builds this value from the contract fields required by `NonNullable<SDKUserMessage["uuid"]>`.

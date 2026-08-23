@@ -19,11 +19,6 @@ import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
-interface WORKFLOWQUICKACTIONSContract extends Record<
-  AgentStudioWorkflowQuickAction,
-  WorkflowQuickActionDefinition
-> {}
-
 export type AgentStudioQuickActionOption = {
   id: string;
   role: AgentRole;
@@ -46,7 +41,7 @@ type WorkflowQuickActionDefinition = {
   requiresHumanFeedback?: true;
 };
 
-const WORKFLOW_QUICK_ACTIONS: WORKFLOWQUICKACTIONSContract = {
+const WORKFLOW_QUICK_ACTIONS = {
   set_spec: {
     role: "spec",
     resolveLaunchActionId: () => "spec_initial",
@@ -74,7 +69,7 @@ const WORKFLOW_QUICK_ACTIONS: WORKFLOWQUICKACTIONSContract = {
     description: "Collect human feedback, then open the Builder rework flow.",
     requiresHumanFeedback: true,
   },
-};
+} satisfies Record<AgentStudioWorkflowQuickAction, WorkflowQuickActionDefinition>;
 
 const WORKFLOW_QUICK_ACTION_KEYS = new Set<string>(Object.keys(WORKFLOW_QUICK_ACTIONS));
 
@@ -182,7 +177,9 @@ export const buildAgentStudioQuickActions = (params: {
       postStartAction: "kickoff",
       disabled: disabledReason !== null,
       ...(disabledReason ? { disabledReason } : undefined),
-      ...(definition.requiresHumanFeedback ? { requiresHumanFeedback: true } : undefined),
+      ...("requiresHumanFeedback" in definition && definition.requiresHumanFeedback
+        ? { requiresHumanFeedback: true }
+        : undefined),
     };
   };
   const createSpecialOption = (

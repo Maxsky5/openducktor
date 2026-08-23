@@ -10,7 +10,6 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 enableReactActEnvironment();
 
@@ -147,7 +146,7 @@ const createCompletedToolMessage = ({
   id?: string;
   tool?: string;
   toolType?: import("@openducktor/core").AgentToolType;
-  input?: Record<string, JsonValue>;
+  input?: Record<string, unknown>;
   output?: string;
   content?: string;
 } = {}): AgentMessage => ({

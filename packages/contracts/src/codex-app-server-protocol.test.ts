@@ -179,6 +179,49 @@ describe("Codex app-server protocol", () => {
         .success,
     ).toBe(true);
     expect(
+      codexAppServerMcpServerElicitationRequestParamsSchema.safeParse({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "openducktor",
+        mode: "form",
+        _meta: null,
+        message: "Select targets",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            scope: {
+              type: "string",
+              oneOf: [
+                { const: "repo", title: "Repository" },
+                { const: "workspace", title: "Workspace" },
+              ],
+            },
+            checks: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string", enum: ["lint", "test"] },
+              default: ["lint"],
+            },
+          },
+          required: ["scope"],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      codexAppServerMcpServerElicitationRequestParamsSchema.safeParse({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        serverName: "openducktor",
+        mode: "form",
+        _meta: null,
+        message: "Invalid form",
+        requestedSchema: {
+          type: "object",
+          properties: { scope: { arbitrary: true } },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
       codexAppServerCurrentTimeReadResponseSchema.safeParse({ currentTimeAt: 1_787_349_164.5 })
         .success,
     ).toBe(false);
@@ -265,6 +308,12 @@ describe("Codex app-server protocol", () => {
     expect(
       codexAppServerPermissionsRequestApprovalParamsSchema.safeParse(withoutReason).success,
     ).toBe(false);
+    expect(
+      codexAppServerPermissionsRequestApprovalParamsSchema.safeParse({
+        ...params,
+        startedAtMs: 1.5,
+      }).success,
+    ).toBe(false);
   });
 
   test("validates upstream command approval policy fields", () => {
@@ -300,22 +349,63 @@ describe("Codex app-server protocol", () => {
         proposedNetworkPolicyAmendments: [{ host: "example.com", action: "prompt" }],
       }).success,
     ).toBe(false);
+    expect(
+      codexAppServerCommandExecutionRequestApprovalParamsSchema.safeParse({
+        ...params,
+        startedAtMs: 1.5,
+      }).success,
+    ).toBe(false);
   });
 
-  test("keeps the legacy approval request alias at the adapter boundary only", () => {
-    const legacyRequest = {
-      id: 1,
-      method: "approval/request",
-      params: { threadId: "thread-1", turnId: "turn-1", tool: "network" },
-    };
-
-    expect(codexAppServerRuntimeServerRequestSchema.safeParse(legacyRequest).success).toBe(true);
-    expect(codexAppServerServerRequestSchema.safeParse(legacyRequest).success).toBe(false);
+  test("accepts only current Codex app-server request methods", () => {
+    expect(
+      codexAppServerRuntimeServerRequestSchema.safeParse({
+        id: 1,
+        method: "approval/request",
+        params: { threadId: "thread-1", turnId: "turn-1", tool: "network" },
+      }).success,
+    ).toBe(false);
     expect(
       codexAppServerRuntimeServerRequestSchema.safeParse({
         id: 2,
         method: "item/commandExecution/requestApproval",
         params: { itemId: "item-1", threadId: "thread-1", turnId: "turn-1" },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("matches Codex Rust integer wire fields", () => {
+    expect(
+      codexAppServerRuntimeServerRequestSchema.safeParse({
+        id: 1.5,
+        method: "attestation/generate",
+        params: {},
+      }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerRuntimeServerRequestSchema.safeParse({
+        id: 1,
+        method: "item/tool/requestUserInput",
+        params: {
+          autoResolutionMs: -1,
+          isBlocking: true,
+          itemId: "item-1",
+          questions: [],
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      codexAppServerRuntimeNotificationSchema.safeParse({
+        method: "item/reasoning/textDelta",
+        params: {
+          contentIndex: 0.5,
+          delta: "reasoning",
+          itemId: "item-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
       }).success,
     ).toBe(false);
   });
@@ -354,6 +444,91 @@ describe("Codex app-server protocol", () => {
       codexAppServerRuntimeNotificationSchema.safeParse({
         method: "future/unknown",
         params: { threadId: "thread-1" },
+      }).success,
+    ).toBe(true);
+  });
+
+  test("validates the exact legacy file-change approval payload", () => {
+    const request = {
+      id: 1,
+      method: "applyPatchApproval",
+      params: {
+        callId: "call-1",
+        conversationId: "thread-1",
+        fileChanges: {
+          "src/new.ts": { type: "add", content: "export const value = 1;" },
+          "src/old.ts": { type: "delete", content: "old" },
+          "src/moved.ts": {
+            type: "update",
+            unified_diff: "@@ -1 +1 @@",
+            move_path: "src/renamed.ts",
+          },
+        },
+        grantRoot: null,
+        reason: null,
+      },
+    };
+
+    expect(codexAppServerRuntimeServerRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      codexAppServerRuntimeServerRequestSchema.safeParse({
+        ...request,
+        params: {
+          ...request.params,
+          fileChanges: { "src/new.ts": { type: "add" } },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects incomplete Codex response and notification payloads", () => {
+    expect(() =>
+      parseCodexAppServerRequestResult("turn/start", {
+        turn: {
+          id: "turn-1",
+          items: [],
+          itemsView: "full",
+          status: {},
+          error: null,
+          startedAt: 1,
+          completedAt: null,
+          durationMs: null,
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseCodexAppServerRequestResult("model/list", {
+        data: [
+          {
+            id: "gpt-5",
+            model: "gpt-5",
+            displayName: "GPT-5",
+            description: "Model",
+            hidden: false,
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: "medium",
+            inputModalities: ["text"],
+            supportsPersonality: true,
+            additionalSpeedTiers: [],
+            serviceTiers: [],
+            isDefault: true,
+            upgrade: null,
+            upgradeInfo: null,
+            availabilityNux: null,
+          },
+        ],
+        nextCursor: null,
+      }),
+    ).toThrow();
+    expect(() =>
+      parseCodexAppServerRequestResult("skills/list", {
+        data: [{ cwd: "/repo", skills: [{ name: "review", path: "/skill" }] }],
+      }),
+    ).toThrow();
+    expect(
+      codexAppServerRuntimeNotificationSchema.safeParse({
+        method: "item/started",
+        params: { threadId: "thread-1", turnId: "turn-1", item: {} },
       }).success,
     ).toBe(false);
   });
@@ -446,20 +621,57 @@ describe("Codex app-server protocol", () => {
         },
       },
     });
+
+    const launchResult = {
+      approvalPolicy: "on-request",
+      approvalsReviewer: "user",
+      activePermissionProfile: { id: ":workspace", extends: null },
+      cwd: "/repo",
+      instructionSources: ["/repo/AGENTS.md"],
+      model: "gpt-5",
+      modelProvider: "openai",
+      multiAgentMode: "explicitRequestOnly",
+      reasoningEffort: "high",
+      runtimeWorkspaceRoots: ["/repo"],
+      sandbox: {
+        type: "workspaceWrite",
+        excludeSlashTmp: false,
+        excludeTmpdirEnvVar: false,
+        networkAccess: false,
+        writableRoots: ["/repo"],
+      },
+      serviceTier: null,
+      thread,
+    } as const;
+
+    expect(parseCodexAppServerRequestResult("thread/start", launchResult)).toEqual(launchResult);
+    const resumeResult = {
+      ...launchResult,
+      initialTurnsPage: { data: [], nextCursor: null, backwardsCursor: null },
+      turnsBackwardsCursor: null,
+      itemsBackwardsCursor: null,
+    };
+    expect(parseCodexAppServerRequestResult("thread/resume", resumeResult)).toEqual(resumeResult);
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/start", {
+        ...launchResult,
+        runtimeWorkspaceRoots: undefined,
+      }),
+    ).toThrow();
   });
 
   test("represents Codex collab and subagent activity thread items", () => {
     const collabItem = {
-      type: "collabToolCall",
+      type: "collabAgentToolCall",
       id: "collab-1",
       tool: "wait",
       status: "failed",
       senderThreadId: "parent-thread",
-      receiverThreadId: "child-failed",
+      receiverThreadIds: ["child-failed"],
       prompt: null,
       model: null,
       reasoningEffort: null,
-      agentStatus: "errored",
+      agentsStates: { "child-failed": { status: "errored", message: null } },
     } satisfies CodexAppServerCollabAgentToolCallThreadItem;
     const activityItem = {
       type: "subAgentActivity",
@@ -469,7 +681,7 @@ describe("Codex app-server protocol", () => {
       agentPath: "/root/worker",
     } satisfies CodexAppServerSubAgentActivityThreadItem;
 
-    expect(collabItem.agentStatus).toBe("errored");
+    expect(collabItem.agentsStates["child-failed"]?.status).toBe("errored");
     expect(activityItem.agentThreadId).toBe("child-failed");
   });
 });

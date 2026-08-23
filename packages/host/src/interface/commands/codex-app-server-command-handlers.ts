@@ -14,9 +14,8 @@ import type { CodexAppServerRequestResult } from "../../ports/codex-app-server-p
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { requireRecord, requireString } from "./command-inputs";
 import {
-  jsonValueSchema,
   parseCodexAppServerClientRequest,
-  type JsonValue,
+  jsonValueSchema,
   hasRuntimeType,
 } from "@openducktor/contracts";
 
@@ -36,22 +35,27 @@ const CODEX_POLICY_REQUEST_METHODS = new Set<CodexAppServerRequestMethod>([
   "turn/start",
 ]);
 
-const isRecordValue = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isRecordValue = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const recordFromValue = (
-  value: Parameters<typeof jsonValueSchema.safeParse>[0],
-): Record<string, JsonValue> => {
+const recordFromValue = (value: unknown, label: string): Record<string, unknown> => {
   const parsed = jsonValueSchema.safeParse(value);
-  return parsed.success && isRecordValue(parsed.data) ? parsed.data : {};
+  if (!parsed.success || !isRecordValue(parsed.data)) {
+    throw new HostValidationError({
+      message: `${label} must be an object.`,
+      field: label,
+      ...(!parsed.success ? { cause: parsed.error } : undefined),
+    });
+  }
+  return parsed.data;
 };
 
-const stringField = (record: Record<string, JsonValue>, field: string): string | undefined => {
+const stringField = (record: Record<string, unknown>, field: string): string | undefined => {
   const value = record[field];
   return hasRuntimeType(value, "string") && value.trim().length > 0 ? value : undefined;
 };
 
-const logValue = (value: JsonValue | undefined): string | undefined => {
+const logValue = (value: unknown): string | undefined => {
   if (hasRuntimeType(value, "string") && value.trim().length > 0) {
     return value;
   }
@@ -64,7 +68,7 @@ const logValue = (value: JsonValue | undefined): string | undefined => {
   return undefined;
 };
 
-const sandboxModeFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | undefined => {
+const sandboxModeFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
   if (!isRecordValue(sandboxPolicy)) {
     return undefined;
   }
@@ -82,9 +86,7 @@ const sandboxModeFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): str
   }
 };
 
-const networkAccessFromSandboxPolicy = (
-  sandboxPolicy: JsonValue | undefined,
-): string | undefined => {
+const networkAccessFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
   if (!isRecordValue(sandboxPolicy)) {
     return undefined;
   }
@@ -94,7 +96,7 @@ const networkAccessFromSandboxPolicy = (
   return logValue(sandboxPolicy.networkAccess);
 };
 
-const cwdFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | undefined => {
+const cwdFromSandboxPolicy = (sandboxPolicy: unknown): string | undefined => {
   if (!isRecordValue(sandboxPolicy) || !Array.isArray(sandboxPolicy.writableRoots)) {
     return undefined;
   }
@@ -104,10 +106,8 @@ const cwdFromSandboxPolicy = (sandboxPolicy: JsonValue | undefined): string | un
     : undefined;
 };
 
-const threadIdFromResult = (
-  result: Parameters<typeof jsonValueSchema.safeParse>[0],
-): string | undefined => {
-  const resultRecord = recordFromValue(result);
+const threadIdFromResult = (result: CodexAppServerRequestResult): string | undefined => {
+  const resultRecord = recordFromValue(result, "Codex app-server result");
   if (!isRecordValue(resultRecord.thread)) {
     return undefined;
   }
@@ -122,8 +122,8 @@ const logCodexPolicyRequest = (
   if (!logger || !CODEX_POLICY_REQUEST_METHODS.has(input.method)) {
     return Effect.void;
   }
-  const params = recordFromValue(input.params);
-  const resultRecord = recordFromValue(result);
+  const params = recordFromValue(input.params, `Codex app-server ${input.method} params`);
+  const resultRecord = recordFromValue(result, `Codex app-server ${input.method} result`);
   const resultSandbox = resultRecord.sandbox;
   const requestSandboxPolicy = params.sandboxPolicy;
   const sandboxPolicy = input.method === "turn/start" ? requestSandboxPolicy : resultSandbox;
@@ -163,7 +163,7 @@ const logCodexPolicyRequest = (
 const isCodexRequestMethod = (method: string): method is CodexAppServerRequestMethod =>
   CODEX_APP_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
-const requireCodexRequestMethod = (value: JsonValue | undefined): CodexAppServerRequestMethod => {
+const requireCodexRequestMethod = (value: unknown): CodexAppServerRequestMethod => {
   const method = requireString(value, "method");
   if (!isCodexRequestMethod(method)) {
     throw new HostValidationError({
@@ -176,7 +176,7 @@ const requireCodexRequestMethod = (value: JsonValue | undefined): CodexAppServer
 };
 
 const parseRequestInput = (
-  args: Record<string, JsonValue> | undefined,
+  args: Record<string, unknown> | undefined,
 ): CodexAppServerRequestInput => {
   const record = requireRecord(args, "codex_app_server_request input");
   const runtimeId = requireString(record.runtimeId, "runtimeId");
@@ -207,10 +207,7 @@ const parseRequestInput = (
   };
 };
 
-const optionalNullableString = (
-  value: JsonValue | undefined,
-  field: string,
-): string | null | undefined => {
+const optionalNullableString = (value: unknown, field: string): string | null | undefined => {
   if (value === undefined || value === null) {
     return value;
   }
@@ -218,7 +215,7 @@ const optionalNullableString = (
 };
 
 const optionalNullablePositiveInteger = (
-  value: JsonValue | undefined,
+  value: unknown,
   field: string,
 ): number | null | undefined => {
   if (value === undefined || value === null) {
@@ -234,7 +231,7 @@ const optionalNullablePositiveInteger = (
 };
 
 const optionalNullableLiteral = <Value extends string>(
-  value: JsonValue | undefined,
+  value: unknown,
   field: string,
   allowed: readonly Value[],
 ): Value | null | undefined => {
@@ -260,7 +257,7 @@ const requestCodexAppServer = (
     return service.request(input);
   }
 
-  const params = recordFromValue(input.params);
+  const params = recordFromValue(input.params, "Codex app-server thread/turns/list params");
   const cursor = optionalNullableString(params.cursor, "cursor");
   const limit = optionalNullablePositiveInteger(params.limit, "limit");
   const sortDirection = optionalNullableLiteral(params.sortDirection, "sortDirection", [

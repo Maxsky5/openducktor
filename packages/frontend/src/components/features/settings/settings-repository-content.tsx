@@ -10,8 +10,6 @@ import { RepositoryGitSection } from "./settings-repository-git-section";
 import { RepositoryScriptsSection } from "./settings-repository-scripts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
 
-interface MISSINGREPOSITORYMESSAGEBYSECTIONContract extends Record<RepositorySectionId, string> {}
-
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
   repoPromptRoleTab: PromptRoleTabId;
@@ -31,13 +29,13 @@ type RepositoryAvailabilityNotice = {
   role?: "alert";
 };
 
-const MISSING_REPOSITORY_MESSAGE_BY_SECTION: MISSINGREPOSITORYMESSAGEBYSECTIONContract = {
+const MISSING_REPOSITORY_MESSAGE_BY_SECTION = {
   configuration: "Select a repository to edit repository settings.",
   scripts: "Select a repository to edit repository scripts.",
   git: "Select a repository to edit Git provider settings.",
   agents: "Select a repository to edit agent defaults.",
   prompts: "Select a repository to configure repository-level prompts.",
-};
+} satisfies Record<RepositorySectionId, string>;
 
 const resolveRepositoryAvailabilityNotice = ({
   repositorySection,

@@ -19,10 +19,12 @@ import type {
   SessionStatus,
   SyncEventSessionCreated,
 } from "@opencode-ai/sdk/v2/client";
-import type { JsonObject, JsonValue } from "@openducktor/contracts";
+import type { JsonObject } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
+import { asUnknownRecord } from "./guards";
+import { createOpencodeEventFixtures } from "./opencode-protocol-test-fixtures";
 import type {
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
@@ -35,10 +37,9 @@ type RunEventStreamOptions = {
 };
 
 type GlobalEventPayload = GlobalEvent["payload"];
-type WithoutOuterSyncId<T> = T extends { type: "sync" } ? Omit<T, "id"> : never;
 type ParentAlias = "parentId" | "parent_id";
 type ParentAliasSessionInfo = Session & Partial<Record<ParentAlias, string>>;
-type ControlEventProperties = Record<string, JsonValue>;
+type ControlEventProperties = Record<string, unknown>;
 
 export type MalformedControlEvent = {
   id: string;
@@ -54,29 +55,21 @@ export type MalformedControlEvent = {
   properties: ControlEventProperties;
 };
 
-export type TestGlobalEventPayload =
-  | GlobalEventPayload
-  | WithoutOuterSyncId<GlobalEventPayload>
-  | MalformedControlEvent;
-export type RuntimeSourceSyncEventSessionCreated = Omit<SyncEventSessionCreated, "id">;
+export type TestGlobalEventPayload = GlobalEventPayload | MalformedControlEvent;
 export type UnsupportedParentAliasSessionCreatedEvent = Omit<EventSessionCreated, "properties"> & {
   properties: Omit<EventSessionCreated["properties"], "info"> & {
     info: ParentAliasSessionInfo;
   };
 };
 export type UnsupportedRuntimeSourceSyncSessionCreatedEvent = Omit<
-  RuntimeSourceSyncEventSessionCreated,
+  SyncEventSessionCreated,
   "syncEvent"
 > & {
-  syncEvent: Omit<RuntimeSourceSyncEventSessionCreated["syncEvent"], "data"> & {
-    data: Omit<RuntimeSourceSyncEventSessionCreated["syncEvent"]["data"], "info"> & {
+  syncEvent: Omit<SyncEventSessionCreated["syncEvent"], "data"> & {
+    data: Omit<SyncEventSessionCreated["syncEvent"]["data"], "info"> & {
       info: ParentAliasSessionInfo;
     };
   };
-};
-
-type TestGlobalEvent = Omit<GlobalEvent, "payload"> & {
-  payload: TestGlobalEventPayload;
 };
 
 export const childSessionInfo = (childSessionId: string, parentID?: string): Session => ({
@@ -147,9 +140,10 @@ export const syncChildSessionCreatedEvent = (
 export const runtimeSourceSyncChildSessionCreatedEvent = (
   childSessionId: string,
   parentID = "external-session-1",
-): RuntimeSourceSyncEventSessionCreated =>
+): SyncEventSessionCreated =>
   ({
     type: "sync",
+    id: `sync-runtime-source-${childSessionId}`,
     syncEvent: {
       type: "session.created.1",
       id: `sync-event-runtime-source-${childSessionId}`,
@@ -160,7 +154,7 @@ export const runtimeSourceSyncChildSessionCreatedEvent = (
         info: childSessionInfo(childSessionId, parentID),
       },
     },
-  }) satisfies RuntimeSourceSyncEventSessionCreated;
+  }) satisfies SyncEventSessionCreated;
 
 export const runtimeSourceSyncChildSessionCreatedEventWithParentAlias = (
   childSessionId: string,
@@ -173,6 +167,7 @@ export const runtimeSourceSyncChildSessionCreatedEventWithParentAlias = (
   };
   return {
     type: "sync",
+    id: `sync-runtime-source-${childSessionId}-${parentAlias}`,
     syncEvent: {
       type: "session.created.1",
       id: `sync-event-runtime-source-${childSessionId}-${parentAlias}`,
@@ -381,13 +376,19 @@ export const makeClientWithEvents = (events: TestGlobalEventPayload[]): Opencode
   return {
     global: {
       event: async () => {
-        async function* iterator(): AsyncGenerator<TestGlobalEvent> {
-          for (const event of events) {
+        async function* iterator() {
+          for (const [index, event] of events.entries()) {
             const properties = "properties" in event ? event.properties : undefined;
             const directoryValue =
               properties && "directory" in properties ? properties.directory : undefined;
             const directory = hasRuntimeType(directoryValue, "string") ? directoryValue : "/repo";
-            yield { directory, payload: event };
+            const eventRecord = asUnknownRecord(event);
+            if (!eventRecord) {
+              throw new Error("Expected an OpenCode event fixture object.");
+            }
+            for (const payload of createOpencodeEventFixtures(eventRecord, index)) {
+              yield { directory, payload };
+            }
           }
         }
         return { stream: iterator() };

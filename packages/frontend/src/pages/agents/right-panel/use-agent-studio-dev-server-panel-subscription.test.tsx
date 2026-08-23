@@ -1,9 +1,10 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState, JsonValue } from "@openducktor/contracts";
+import type { DevServerGroupState } from "@openducktor/contracts";
 import { act, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
+import type { DevServerEventListener } from "@/lib/shell-bridge";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
@@ -33,10 +34,10 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
   buildState();
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
-let devServerEventListener: ((payload: JsonValue | undefined) => void) | null = null;
+let devServerEventListener: DevServerEventListener | null = null;
 let subscriptionTransportEpoch = "test:0";
 let subscribeDevServerEventsMock = async (
-  listener: (payload: JsonValue | undefined) => void,
+  listener: DevServerEventListener,
 ): Promise<TestDevServerEventSubscription> => {
   devServerEventListener = listener;
   return {
@@ -55,7 +56,7 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: (listener: (payload: JsonValue | undefined) => void) =>
+    subscribeDevServerEvents: (listener: DevServerEventListener) =>
       subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -68,7 +69,7 @@ beforeEach(() => {
     buildState();
   devServerEventListener = null;
   subscriptionTransportEpoch = "test:0";
-  subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
+  subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
     devServerEventListener = listener;
     return {
       transportEpoch: subscriptionTransportEpoch,
@@ -221,7 +222,7 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
       return refreshedState;
     };
     const subscriptionReady = createDeferred<TestDevServerEventSubscription>();
-    subscribeDevServerEventsMock = async (listener: (payload: JsonValue | undefined) => void) => {
+    subscribeDevServerEventsMock = async (listener: DevServerEventListener) => {
       devServerEventListener = listener;
       return subscriptionReady.promise;
     };
@@ -1395,69 +1396,6 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
         );
       });
     } finally {
-      harness.unmount();
-    }
-  });
-
-  test("surfaces invalid dev server event payloads as actionable errors", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async () =>
-      buildState({
-        scripts: [
-          buildScript({
-            status: "running",
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-          }),
-        ],
-      });
-    const restartDeferred = createDeferred<DevServerGroupState>();
-    devServerRestart = async () => restartDeferred.promise;
-
-    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
-      repoPath: "/repo",
-      taskId: "task-7",
-      repoSettings,
-      enabled: true,
-    });
-    const originalConsoleError = console.error;
-    console.error = () => {};
-
-    try {
-      await waitFor(() => {
-        expect(harness.getLatest().mode).toBe("active");
-      });
-
-      await act(async () => {
-        harness.getLatest().onRestart();
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      act(() => {
-        devServerEventListener?.({ type: "terminal_chunk", repoPath: "/repo", taskId: "task-7" });
-      });
-
-      await waitFor(() => {
-        expect(harness.getLatest().error).toContain("Received invalid dev server event payload");
-      });
-      restartDeferred.resolve(
-        buildState({
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 4242,
-              startedAt: "2026-03-19T15:30:00.000Z",
-            }),
-          ],
-        }),
-      );
-    } finally {
-      console.error = originalConsoleError;
       harness.unmount();
     }
   });

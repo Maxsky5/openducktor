@@ -1,13 +1,18 @@
 import { z } from "zod";
+import { exactOptionalSchema } from "./exact-optional";
 
 const subagentTextSchema = z.string().trim().min(1);
 
-export const subagentDescriptorSchema = z.object({
-  id: subagentTextSchema,
-  name: subagentTextSchema,
-  label: subagentTextSchema.optional(),
-  description: subagentTextSchema.optional(),
-});
+export const subagentDescriptorSchema = exactOptionalSchema(
+  z
+    .object({
+      id: subagentTextSchema,
+      name: subagentTextSchema,
+      label: subagentTextSchema.optional(),
+      description: subagentTextSchema.optional(),
+    })
+    .strict(),
+);
 export type SubagentDescriptor = z.infer<typeof subagentDescriptorSchema>;
 
 export const subagentCatalogSchema = z

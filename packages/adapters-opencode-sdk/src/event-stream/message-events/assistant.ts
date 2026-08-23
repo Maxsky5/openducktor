@@ -1,5 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
 import {
   extractMessageTotalTokens,
   readMessageModelSelection,
@@ -203,7 +203,7 @@ export const maybeEmitCompletedAssistantMessage = (
   input: {
     messageId: string;
     timestamp?: string;
-    info?: JsonValue | undefined;
+    info?: unknown;
     hasStopSignal?: boolean;
   },
 ): boolean => {

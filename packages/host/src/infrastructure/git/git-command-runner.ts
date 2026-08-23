@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { hasRuntimeType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -226,15 +227,25 @@ export const createDefaultGitRunner = (
         return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr };
       }
       if (options?.allowFailure) {
-        // SAFETY: The surrounding boundary constructs or validates every member required by `{ stdout?: string; stderr?: string; }`.
-        const failed = exit.left as {
-          stdout?: string;
-          stderr?: string;
-        };
+        const failed = exit.left;
+        const stdout =
+          hasRuntimeType(failed, "object") &&
+          failed !== null &&
+          "stdout" in failed &&
+          hasRuntimeType(failed.stdout, "string")
+            ? failed.stdout
+            : "";
+        const stderr =
+          hasRuntimeType(failed, "object") &&
+          failed !== null &&
+          "stderr" in failed &&
+          hasRuntimeType(failed.stderr, "string")
+            ? failed.stderr
+            : String(failed);
         return {
           ok: false,
-          stdout: failed.stdout ?? "",
-          stderr: failed.stderr ?? String(exit.left),
+          stdout,
+          stderr,
         };
       }
       return yield* Effect.fail(

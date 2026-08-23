@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
 import {
@@ -165,7 +166,7 @@ describe("message-execution", () => {
     class SdkSessionClient {
       readonly summarizeCalls: unknown[] = [];
 
-      async summarize(input: JsonValue | undefined) {
+      async summarize(input: Parameters<OpencodeClient["session"]["summarize"]>[0]) {
         this.summarizeCalls.push(input);
         return { data: true, error: null };
       }

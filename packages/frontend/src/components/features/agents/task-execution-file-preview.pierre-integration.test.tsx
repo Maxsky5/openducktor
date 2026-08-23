@@ -5,9 +5,23 @@ import { CodeView, EditProvider } from "@pierre/diffs/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
+
+const createTextMetrics = (width: number): TextMetrics => ({
+  width,
+  actualBoundingBoxAscent: 0,
+  actualBoundingBoxDescent: 0,
+  actualBoundingBoxLeft: 0,
+  actualBoundingBoxRight: width,
+  fontBoundingBoxAscent: 0,
+  fontBoundingBoxDescent: 0,
+  emHeightAscent: 0,
+  emHeightDescent: 0,
+  hangingBaseline: 0,
+  alphabeticBaseline: 0,
+  ideographicBaseline: 0,
+});
 
 type PierreSaveContinuityHarnessProps = {
   onAttach: (editor: Editor<undefined>) => void;
@@ -62,14 +76,13 @@ function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessPr
 describe("Pierre CodeView editor continuity", () => {
   test("keeps the attached editor document, selection, and undo history across Save state", async () => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    const textMeasurementContext: Pick<CanvasRenderingContext2D, "font" | "measureText"> = {
+      font: "",
+      measureText: (text) => createTextMetrics(text.length * 8),
+    };
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
-      value: () =>
-        createFocusedFixture<CanvasRenderingContext2D>({
-          font: "",
-          measureText: (text: string) =>
-            createFocusedFixture<TextMetrics>({ width: text.length * 8 }),
-        }),
+      value: () => textMeasurementContext,
     });
     const attachedEditors: Editor<undefined>[] = [];
     let view: ReturnType<typeof render> | undefined;

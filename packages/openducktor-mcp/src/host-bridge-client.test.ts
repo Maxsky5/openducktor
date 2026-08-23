@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_TOOL_SCHEMAS, hasRuntimeType } from "@openducktor/contracts";
+import { ODT_TOOL_SCHEMAS, hasRuntimeType, type JsonValue } from "@openducktor/contracts";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { OdtToolError } from "./tool-results";
-import type { JsonValue } from "@openducktor/contracts";
 
-const jsonResponse = (payload: JsonValue | undefined, init: ResponseInit = {}): Response =>
+const jsonResponse = (payload: JsonValue, init: ResponseInit = {}): Response =>
   new Response(JSON.stringify(payload), {
     headers: { "Content-Type": "application/json" },
     status: 200,
@@ -329,13 +328,13 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("getWorkspaces forwards a workspace-free request and validates the response", async () => {
-    const requests: Array<{ url: string; body: Record<string, JsonValue> }> = [];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, JsonValue>,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
       return jsonResponse({
         workspaces: [
@@ -379,13 +378,13 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("call forwards workspace-scoped payloads and validates the response", async () => {
-    const requests: Array<{ url: string; body: Record<string, JsonValue> }> = [];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, JsonValue>,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
       return jsonResponse(summaryPayload);
     };
@@ -407,13 +406,13 @@ describe("OdtHostBridgeClient", () => {
 
   test("call validates the private task asset bridge payload before MCP formatting", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
-    const requests: Array<{ url: string; body: Record<string, JsonValue> }> = [];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, JsonValue>,
+        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
       return jsonResponse({
         assets: [
@@ -456,11 +455,11 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
-    const requests: Array<{ url: string; body: Record<string, JsonValue> }> = [];
+    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
-      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, JsonValue>;
+      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
       requests.push({ url, body });
 
       if (url.endsWith("/invoke/odt_create_task")) {

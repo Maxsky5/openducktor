@@ -1,6 +1,5 @@
-import { hasRuntimeType } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
-import type { Session } from "@opencode-ai/sdk/v2/client";
+import { exactOptionalSchema, hasRuntimeType, type ExactOptional } from "@openducktor/contracts";
+import type { Session, SessionStatus } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -10,6 +9,7 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
+import { parseOpencodeSessionListPayload } from "./opencode-ingress";
 import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import {
   clearAwaitingRuntimeTurnStart,
@@ -18,6 +18,7 @@ import {
 } from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, SessionRecord } from "./types";
+import { z } from "zod";
 
 export type ListOpencodeRuntimeSnapshotSourcesInput = {
   createClient: ClientFactory;
@@ -63,16 +64,47 @@ type OpencodeLiveSessionPendingInputBySessionId = Record<
   }
 >;
 
-const toOpencodeRuntimeActivity = (status: JsonValue | undefined): AgentSessionRuntimeActivity => {
+const opencodeSessionStatusSchema = exactOptionalSchema(
+  z.discriminatedUnion("type", [
+    z.object({ type: z.literal("idle") }),
+    z.object({
+      type: z.literal("retry"),
+      attempt: z.number(),
+      message: z.string(),
+      action: z
+        .object({
+          reason: z.string(),
+          provider: z.string(),
+          title: z.string(),
+          message: z.string(),
+          label: z.string(),
+          link: z.string().optional(),
+        })
+        .optional(),
+      next: z.number(),
+    }),
+    z.object({ type: z.literal("busy") }),
+  ]),
+) satisfies z.ZodType<ExactOptional<SessionStatus>>;
+
+const opencodeUnknownRecordSchema = z.record(z.string(), z.unknown());
+
+const toOpencodeRuntimeActivity = (status: unknown): AgentSessionRuntimeActivity => {
   if (status === undefined || status === null) {
     return "idle";
   }
-  if (!hasRuntimeType(status, "object") || !("type" in status)) {
+  const parsedStatus = opencodeSessionStatusSchema.safeParse(status);
+  if (!parsedStatus.success) {
+    const parsedDiscriminant = z.object({ type: z.unknown() }).safeParse(status);
+    if (parsedDiscriminant.success && hasRuntimeType(parsedDiscriminant.data.type, "string")) {
+      throw new Error(
+        `Unsupported Opencode live agent session status type: ${parsedDiscriminant.data.type}`,
+      );
+    }
     throw new Error("Malformed live agent session status payload from Opencode.");
   }
 
-  // SAFETY: The preceding runtime guard establishes `{ type?: JsonValue }` before this assertion.
-  const type = (status as { type?: JsonValue }).type;
+  const { type } = parsedStatus.data;
   if (type === "busy") {
     return "running";
   }
@@ -88,20 +120,19 @@ const toOpencodeRuntimeActivity = (status: JsonValue | undefined): AgentSessionR
 };
 
 const toOpencodeSessionStatusMap = (
-  payload: JsonValue | undefined,
+  payload: unknown,
   directory: string,
-): Record<string, JsonValue> => {
-  if (!hasRuntimeType(payload, "object") || payload === null || Array.isArray(payload)) {
+): Record<string, unknown> => {
+  const parsedPayload = opencodeUnknownRecordSchema.safeParse(payload);
+  if (!parsedPayload.success) {
     throw new Error(
       `Malformed Opencode session status response for directory '${directory}': expected an object map.`,
     );
   }
-  // SAFETY: session status payloads arrive over the SDK JSON-RPC transport, which serializes
-  // payloads to JSON-compatible values before they reach this layer.
-  return payload as Record<string, JsonValue>;
+  return parsedPayload.data;
 };
 
-const normalizeSessionDirectory = (directory: JsonValue | undefined): string | undefined => {
+const normalizeSessionDirectory = (directory: unknown): string | undefined => {
   if (!hasRuntimeType(directory, "string")) {
     return undefined;
   }
@@ -235,19 +266,12 @@ export const findOpencodeLocalRuntimeSnapshot = ({
   };
 };
 
-const requireSessionDirectory = (directory: JsonValue | undefined, sessionId: string): string => {
+const requireSessionDirectory = (directory: Session["directory"], sessionId: string): string => {
   const normalized = normalizeSessionDirectory(directory);
   if (normalized !== undefined) {
     return normalized;
   }
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
-};
-
-const requireSessionTitle = (title: JsonValue | undefined, sessionId: string): string => {
-  if (hasRuntimeType(title, "string")) {
-    return title;
-  }
-  throw new Error(`Malformed Opencode session payload for '${sessionId}': missing title.`);
 };
 
 const readParentExternalSessionId = (session: Session): string | undefined => {
@@ -281,7 +305,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
 }: ListOpencodeRuntimeSnapshotSourcesInput): Promise<OpencodeRuntimeSnapshotSource[]> => {
   const unscopedClient = createClient({ runtimeEndpoint });
   const sessionsPayload = await unscopedClient.session.list();
-  const sessions = unwrapData(sessionsPayload, "list sessions");
+  const sessions = parseOpencodeSessionListPayload(unwrapData(sessionsPayload, "list sessions"));
   const requestedDirectorySet =
     directories && directories.length > 0
       ? new Set(
@@ -330,7 +354,7 @@ export const listOpencodeRuntimeSnapshotSources = async ({
       externalSessionId: session.id,
       sessionAssociation: { kind: "unbound" },
       ...(parentExternalSessionId ? { parentExternalSessionId } : undefined),
-      title: requireSessionTitle(session.title, session.id),
+      title: session.title,
       workingDirectory: normalizedDirectory,
       startedAt: toIsoFromEpoch(session.time?.created, now),
       runtimeActivity: toOpencodeRuntimeActivity(directoryStatuses?.[session.id]),

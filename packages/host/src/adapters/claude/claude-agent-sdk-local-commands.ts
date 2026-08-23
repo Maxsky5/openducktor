@@ -4,15 +4,13 @@ import type {
   ClaudeHistoryMessage,
 } from "./claude-agent-sdk-history-import";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 const CLAUDE_SYNTHETIC_MODEL = "<synthetic>";
 const COMMAND_NAME_PATTERN = /<command-name>([\s\S]*?)<\/command-name>/;
 const COMMAND_ARGS_PATTERN = /<command-args>([\s\S]*?)<\/command-args>/;
 const LOCAL_COMMAND_STDOUT_PATTERN = /^<local-command-stdout>([\s\S]*)<\/local-command-stdout>$/;
 
-export const isClaudeSyntheticAssistantMessage = (message: JsonValue | undefined): boolean =>
+export const isClaudeSyntheticAssistantMessage = (message: unknown): boolean =>
   isRecord(message) && readStringProp(message.message, "model") === CLAUDE_SYNTHETIC_MODEL;
 
 export const readClaudeCommandEnvelope = (text: string): string | null => {
@@ -24,7 +22,7 @@ export const readClaudeCommandEnvelope = (text: string): string | null => {
   return commandArgs ? `${commandName} ${commandArgs}` : commandName;
 };
 
-export const readClaudeLocalCommandOutput = (content: JsonValue | undefined): string | null => {
+export const readClaudeLocalCommandOutput = (content: unknown): string | null => {
   if (!hasRuntimeType(content, "string")) {
     return null;
   }
@@ -36,7 +34,7 @@ export const readClaudeLocalCommandOutput = (content: JsonValue | undefined): st
 };
 
 export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | null => {
-  const value = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+  const value = entry;
   if (entry.type !== "queue-operation" || readStringProp(value, "operation") !== "enqueue") {
     return null;
   }
@@ -45,7 +43,7 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
 };
 
 export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
-  const value = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+  const value = entry;
   if (!isRecord(value)) {
     return false;
   }

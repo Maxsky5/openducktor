@@ -1,13 +1,12 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { isRecord } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeContextUsageFields = {
   usedTokens?: number;
   maxTokens?: number;
 };
 
-const positiveNumber = (value: JsonValue | undefined): number | undefined => {
+const positiveNumber = (value: unknown): number | undefined => {
   if (!hasRuntimeType(value, "number") || !Number.isFinite(value) || value <= 0) {
     return undefined;
   }
@@ -15,7 +14,7 @@ const positiveNumber = (value: JsonValue | undefined): number | undefined => {
 };
 
 export const contextUsageFromClaudeControlResponse = (
-  response: JsonValue | undefined,
+  response: unknown,
 ): ClaudeContextUsageFields => {
   if (!isRecord(response)) {
     return {};

@@ -1,14 +1,21 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerThreadItem, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
 export const unsupported = (surface: string): never => {
   throw new Error(`Codex App Server adapter does not support ${surface}.`);
 };
 
-export const isPlainObject = (value: JsonValue | undefined): value is Record<string, JsonValue> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export const isPlainObject = (value: unknown): value is Record<string, CodexAppServerJsonValue> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    jsonValueSchema.safeParse(value).success
+  );
 };
 
 export const CODEX_USER_INPUT_REQUEST_METHOD = "item/tool/requestUserInput";
@@ -44,7 +51,7 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
     map.delete(oldestKey);
   }
 };
-export const extractText = (value: JsonValue | undefined): string | null => {
+export const extractText = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (hasRuntimeType(value, "string")) {
     return value;
   }
@@ -76,7 +83,10 @@ export const isCodexThreadNotLoadedError = (cause: unknown): boolean => {
   return message.includes("thread not loaded:");
 };
 
-export const extractStringField = (value: JsonValue | undefined, keys: string[]): string | null => {
+export const extractStringField = (
+  value: CodexAppServerJsonValue | undefined,
+  keys: string[],
+): string | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -89,7 +99,10 @@ export const extractStringField = (value: JsonValue | undefined, keys: string[])
   return null;
 };
 
-export const extractNumberField = (value: JsonValue | undefined, keys: string[]): number | null => {
+export const extractNumberField = (
+  value: CodexAppServerJsonValue | undefined,
+  keys: string[],
+): number | null => {
   if (!isPlainObject(value)) {
     return null;
   }
@@ -102,40 +115,45 @@ export const extractNumberField = (value: JsonValue | undefined, keys: string[])
   return null;
 };
 
-export const arrayFromUnknown = (value: JsonValue | undefined): JsonValue[] => {
-  if (Array.isArray(value)) {
-    return value;
+export const arrayFromUnknown = (value: unknown): CodexAppServerJsonValue[] => {
+  const directArray = jsonValueSchema.safeParse(value);
+  if (directArray.success && Array.isArray(directArray.data)) {
+    return directArray.data;
   }
   if (!isPlainObject(value)) {
     return [];
   }
   for (const key of ["messages", "items", "turns", "data"]) {
     const candidate = value[key];
-    if (Array.isArray(candidate)) {
-      return candidate;
+    const parsedCandidate = jsonValueSchema.safeParse(candidate);
+    if (parsedCandidate.success && Array.isArray(parsedCandidate.data)) {
+      return parsedCandidate.data;
     }
   }
   return [];
 };
 
-export const stringifyJsonValue = (value: JsonValue | undefined): string | null => {
-  if (value === undefined || value === null) {
+export const stringifyJsonValue = (value: unknown): string | null => {
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success) {
+    if (value === undefined) {
+      return null;
+    }
+    throw new Error("Cannot stringify a non-JSON Codex value.");
+  }
+  if (parsed.data === null) {
     return null;
   }
-  if (hasRuntimeType(value, "string")) {
-    return value;
+  if (hasRuntimeType(parsed.data, "string")) {
+    return parsed.data;
   }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
+  return JSON.stringify(parsed.data, null, 2);
 };
 
 export const extractOptionalObject = (
-  value: JsonValue | undefined,
+  value: CodexAppServerJsonValue | undefined,
   key: string,
-): Record<string, JsonValue> | undefined => {
+): Record<string, CodexAppServerJsonValue> | undefined => {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -176,27 +194,18 @@ const isCodexContextualUserTextFragment = (text: string): boolean =>
     textMatchesCodexMarkedContextFragment(text, start, end),
   );
 
-const codexMessageContentItems = (
-  payload: Record<string, JsonValue>,
-): Record<string, JsonValue>[] => arrayFromUnknown(payload.content).filter(isPlainObject);
+type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
 
-export const isCodexContextualUserMessage = (payload: Record<string, JsonValue>): boolean => {
-  const role = extractStringField(payload, ["role"]);
-  if (role !== "user") {
-    return false;
-  }
-  const content = codexMessageContentItems(payload);
-  return content.some((entry) => {
-    const text = extractStringField(entry, ["text"]);
-    return Boolean(text && isCodexContextualUserTextFragment(text));
-  });
-};
+export const isCodexContextualUserMessage = (payload: CodexUserMessageItem): boolean =>
+  payload.content.some(
+    (entry) => entry.type === "text" && isCodexContextualUserTextFragment(entry.text),
+  );
 
 const stripShellQuotes = (value: string): string =>
   value.replace(/^[']|^["]/, "").replace(/[']$|["]$/, "");
 
 interface SearchCommandInput {
-  [key: string]: JsonValue;
+  [key: string]: CodexAppServerJsonValue;
 }
 
 export const readPathFromCommand = (command: string): string | null => {
@@ -210,7 +219,7 @@ export const searchInputFromCommand = (command: string) => {
   const input: SearchCommandInput = { command };
   const rgMatch = command.match(/\brg\s+(?:-[^\s]+\s+)*(?:['"]([^'"]+)['"]|(\S+))(?:\s+(.+))?$/);
   if (!rgMatch) {
-    return input satisfies Record<string, JsonValue>;
+    return input satisfies Record<string, CodexAppServerJsonValue>;
   }
   const query = rgMatch[1] ?? rgMatch[2];
   const path = rgMatch[3]?.trim();
@@ -220,7 +229,7 @@ export const searchInputFromCommand = (command: string) => {
   if (path) {
     input.path = stripShellQuotes(path);
   }
-  return input satisfies Record<string, JsonValue>;
+  return input satisfies Record<string, CodexAppServerJsonValue>;
 };
 
 export const codexNamespacedToolName = (namespace: string | null, tool: string): string => {

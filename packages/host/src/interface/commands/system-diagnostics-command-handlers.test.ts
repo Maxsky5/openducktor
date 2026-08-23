@@ -48,7 +48,7 @@ const createDiagnosticsService = () => {
   const runtimeCheck = mock((_forceRefresh?: boolean) => Effect.succeed(runtimeCheckResult));
   const taskStoreCheck = mock((_repoPath: string) => Effect.succeed(taskStoreCheckResult));
   const systemCheck = mock((_repoPath: string) => Effect.succeed(systemCheckResult));
-  const service = createFocusedTestService<SystemDiagnosticsService>({
+  const service = createFocusedTestService<SystemDiagnosticsService>()({
     runtimeCheck,
     taskStoreCheck,
     systemCheck,

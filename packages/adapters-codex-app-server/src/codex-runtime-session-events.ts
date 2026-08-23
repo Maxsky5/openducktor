@@ -1,4 +1,5 @@
 import {
+  agentSessionTranscriptEventSchema,
   type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
   type CodexAppServerRequestId,
@@ -1079,10 +1080,9 @@ export class CodexRuntimeSessionEvents {
     const normalizedEvent = withAgentSessionRef(sessionRef, event);
     this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
     if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
-      // SAFETY: The runtime adapter builds this value from the contract fields required by `AgentSessionTranscriptEvent`.
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
-        ?.transcriptEvents.push(normalizedEvent as AgentSessionTranscriptEvent);
+        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(normalizedEvent));
     }
   }
 

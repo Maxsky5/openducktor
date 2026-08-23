@@ -1,5 +1,4 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { JsonValue } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { asUnknownRecord } from "./guards";
@@ -18,7 +17,7 @@ const compactText = (value: string, maxLength = 160): string => {
 };
 
 const readTrimmedString = (
-  source: Record<string, JsonValue> | undefined,
+  source: Record<string, unknown> | undefined,
   keys: string[],
 ): string | null => {
   if (!source) {
@@ -33,7 +32,7 @@ const readTrimmedString = (
   return null;
 };
 
-const extractPathFromInput = (input: Record<string, JsonValue> | undefined): string | null => {
+const extractPathFromInput = (input: Record<string, unknown> | undefined): string | null => {
   return readTrimmedString(input, ["filePath", "file_path", "path", "file", "filename"]);
 };
 
@@ -44,7 +43,7 @@ const extractBaseName = (value: string): string => {
 
 const summarizeSearchInput = (
   tool: string,
-  input: Record<string, JsonValue> | undefined,
+  input: Record<string, unknown> | undefined,
 ): string | null => {
   if (!input) {
     return null;
@@ -76,7 +75,7 @@ const summarizeSearchInput = (
   return null;
 };
 
-const countCollectionItems = (value: JsonValue | undefined): number | null => {
+const countCollectionItems = (value: unknown): number | null => {
   if (Array.isArray(value)) {
     return value.length;
   }
@@ -99,11 +98,8 @@ const countCollectionItems = (value: JsonValue | undefined): number | null => {
   return null;
 };
 
-const summarizeTodoTool = (
-  input: Record<string, JsonValue> | undefined,
-  output: JsonValue | undefined,
-): string | null => {
-  const count = countCollectionItems(output) ?? countCollectionItems(input?.todos ?? input?.items);
+const summarizeTodoTool = (input: Record<string, unknown> | undefined): string | null => {
+  const count = countCollectionItems(input?.todos ?? input?.items);
   if (count === null) {
     return null;
   }
@@ -111,11 +107,10 @@ const summarizeTodoTool = (
 };
 
 const summarizeQuestionTool = (
-  input: Record<string, JsonValue> | undefined,
-  metadata: Record<string, JsonValue> | undefined,
-  output: JsonValue | undefined,
+  input: Record<string, unknown> | undefined,
+  metadata: Record<string, unknown> | undefined,
 ): string | null => {
-  const sources = [input, metadata, asUnknownRecord(output)];
+  const sources = [input, metadata];
   for (const source of sources) {
     const questions = source?.questions;
     if (!Array.isArray(questions) || questions.length === 0) {
@@ -132,9 +127,8 @@ const summarizeQuestionTool = (
 };
 
 const summarizeTaskTool = (
-  input: Record<string, JsonValue> | undefined,
-  metadata: Record<string, JsonValue> | undefined,
-  output: JsonValue | undefined,
+  input: Record<string, unknown> | undefined,
+  metadata: Record<string, unknown> | undefined,
 ): string | null => {
   const summaryCount = countCollectionItems(metadata?.summary);
   if (summaryCount !== null) {
@@ -146,35 +140,21 @@ const summarizeTaskTool = (
     return `Subagent session ${sessionId.slice(0, 8)}`;
   }
 
-  return (
-    readTrimmedString(input, ["agent", "description", "prompt"]) ??
-    readTrimmedString(asUnknownRecord(output), ["message", "result", "description"])
-  );
+  return readTrimmedString(input, ["agent", "description", "prompt"]);
 };
 
-const summarizeOdtReadTask = (
-  input: Record<string, JsonValue> | undefined,
-  output: JsonValue | undefined,
-): string | null => {
+const summarizeOdtReadTask = (input: Record<string, unknown> | undefined): string | null => {
   const taskId = readTrimmedString(input, ["taskId"]);
   if (taskId) {
     return taskId;
   }
 
-  const outputRecord = asUnknownRecord(output);
-  const taskRecord =
-    asUnknownRecord(outputRecord?.task) ??
-    asUnknownRecord(asUnknownRecord(outputRecord?.structuredContent)?.task);
-  const title = readTrimmedString(taskRecord, ["title", "name"]);
-  if (title) {
-    return title;
-  }
   return null;
 };
 
 const summarizeOdtMutation = (
   tool: string,
-  input: Record<string, JsonValue> | undefined,
+  input: Record<string, unknown> | undefined,
 ): string | null => {
   if (tool === "odt_build_blocked") {
     return readTrimmedString(input, ["reason", "taskId"]);
@@ -203,7 +183,7 @@ const summarizeOdtMutation = (
   return readTrimmedString(input, ["taskId"]);
 };
 
-const summarizeSkillTool = (input: Record<string, JsonValue> | undefined): string | null => {
+const summarizeSkillTool = (input: Record<string, unknown> | undefined): string | null => {
   const direct =
     readTrimmedString(input, ["name", "skillName", "skill", "id"]) ??
     readTrimmedString(asUnknownRecord(input?.skill), ["name", "id"]);
@@ -217,7 +197,7 @@ const summarizeSkillTool = (input: Record<string, JsonValue> | undefined): strin
 
 const summarizeWebTool = (
   tool: string,
-  input: Record<string, JsonValue> | undefined,
+  input: Record<string, unknown> | undefined,
 ): string | null => {
   if (tool === "webfetch") {
     return readTrimmedString(input, ["url", "href"]);
@@ -227,7 +207,7 @@ const summarizeWebTool = (
 
 const summarizeContextTool = (
   tool: string,
-  input: Record<string, JsonValue> | undefined,
+  input: Record<string, unknown> | undefined,
 ): string | null => {
   if (tool === "context7_resolve-library-id") {
     return readTrimmedString(input, ["libraryName", "query"]);
@@ -238,7 +218,7 @@ const summarizeContextTool = (
   return null;
 };
 
-const summarizeGithubSearchTool = (input: Record<string, JsonValue> | undefined): string | null => {
+const summarizeGithubSearchTool = (input: Record<string, unknown> | undefined): string | null => {
   const query = readTrimmedString(input, ["query"]);
   const repo = readTrimmedString(input, ["repo"]);
   if (query && repo) {
@@ -247,7 +227,7 @@ const summarizeGithubSearchTool = (input: Record<string, JsonValue> | undefined)
   return query ?? repo;
 };
 
-const summarizeLspTool = (input: Record<string, JsonValue> | undefined): string | null => {
+const summarizeLspTool = (input: Record<string, unknown> | undefined): string | null => {
   return (
     readTrimmedString(input, ["symbol", "name", "query"]) ??
     extractPathFromInput(input) ??
@@ -255,13 +235,13 @@ const summarizeLspTool = (input: Record<string, JsonValue> | undefined): string 
   );
 };
 
-const summarizeSessionTool = (input: Record<string, JsonValue> | undefined): string | null => {
+const summarizeSessionTool = (input: Record<string, unknown> | undefined): string | null => {
   return (
     readTrimmedString(input, ["sessionId", "query"]) ?? readTrimmedString(input, ["id", "name"])
   );
 };
 
-const summarizeGenericInput = (input: Record<string, JsonValue> | undefined): string | null => {
+const summarizeGenericInput = (input: Record<string, unknown> | undefined): string | null => {
   return (
     readTrimmedString(input, ["url", "query", "pattern", "symbol", "libraryId", "libraryName"]) ??
     extractPathFromInput(input) ??
@@ -271,13 +251,12 @@ const summarizeGenericInput = (input: Record<string, JsonValue> | undefined): st
 
 export const deriveToolPreview = (input: {
   tool: string;
-  rawInput: JsonValue | undefined;
-  rawOutput: JsonValue | undefined;
-  metadata?: Record<string, JsonValue>;
+  rawInput: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }): string | undefined => {
   const strategy = resolveOpencodeToolStrategy(input.tool);
   const tool = strategy.canonicalName;
-  const rawInput = asUnknownRecord(input.rawInput);
+  const rawInput = input.rawInput;
 
   let preview: string | null;
   switch (strategy.previewStrategy) {
@@ -297,18 +276,18 @@ export const deriveToolPreview = (input: {
       preview = summarizeSkillTool(rawInput);
       break;
     case "todo":
-      preview = summarizeTodoTool(rawInput, input.rawOutput);
+      preview = summarizeTodoTool(rawInput);
       break;
     case "question":
-      preview = summarizeQuestionTool(rawInput, input.metadata, input.rawOutput);
+      preview = summarizeQuestionTool(rawInput, input.metadata);
       break;
     case "task":
-      preview = summarizeTaskTool(rawInput, input.metadata, input.rawOutput);
+      preview = summarizeTaskTool(rawInput, input.metadata);
       break;
     case "workflow":
       preview =
         tool === "odt_read_task"
-          ? summarizeOdtReadTask(rawInput, input.rawOutput)
+          ? summarizeOdtReadTask(rawInput)
           : summarizeOdtMutation(tool, rawInput);
       break;
     case "web":

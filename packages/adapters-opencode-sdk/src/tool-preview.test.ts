@@ -36,7 +36,6 @@ describe("deriveToolPreview", () => {
         deriveToolPreview({
           tool: testCase.tool,
           rawInput: testCase.rawInput,
-          rawOutput: undefined,
         }),
       ).toBe(testCase.expectedPreview);
     }
@@ -50,7 +49,6 @@ describe("deriveToolPreview", () => {
           taskId: "task-42",
           subtasks: [{ id: "1" }, { id: "2" }],
         },
-        rawOutput: undefined,
       }),
     ).toBe("task-42 · 2 subtasks");
   });
@@ -63,7 +61,6 @@ describe("deriveToolPreview", () => {
           symbol: "AuthContext",
           path: "/repo/apps/web/src/contexts/AuthContext.tsx",
         },
-        rawOutput: undefined,
       }),
     ).toBe("AuthContext");
   });
@@ -76,7 +73,6 @@ describe("deriveToolPreview", () => {
           name: "parse-questions",
           questions: [{ question: "Which runtime should we use?" }],
         },
-        rawOutput: undefined,
       }),
     ).toBe("parse-questions");
   });
@@ -88,7 +84,6 @@ describe("deriveToolPreview", () => {
         rawInput: {
           path: "C:\\Users\\max\\.codex\\skills\\review-code.md",
         },
-        rawOutput: undefined,
       }),
     ).toBe("review-code");
   });

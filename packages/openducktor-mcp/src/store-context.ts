@@ -104,7 +104,7 @@ const validateHostConnection = async (
   }
 };
 
-const isRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): DiscoveredHostConnection => {

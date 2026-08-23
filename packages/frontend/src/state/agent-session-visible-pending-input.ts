@@ -18,11 +18,10 @@ export type AgentSessionVisiblePendingInput = {
   pendingQuestions: readonly AgentQuestionRequest[];
 };
 
-// SAFETY: This scope populates or freezes the value as the asserted shape before it can escape.
 export const EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT: AgentSessionVisiblePendingInput =
   Object.freeze({
-    pendingApprovals: Object.freeze([]) as readonly AgentApprovalRequest[],
-    pendingQuestions: Object.freeze([]) as readonly AgentQuestionRequest[],
+    pendingApprovals: Object.freeze(new Array<AgentApprovalRequest>()),
+    pendingQuestions: Object.freeze(new Array<AgentQuestionRequest>()),
   });
 
 type PendingInputRequest = AgentApprovalRequest | AgentQuestionRequest;

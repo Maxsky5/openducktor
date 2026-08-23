@@ -1,10 +1,6 @@
 import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
 import type { DiffScope, DiffScopeState } from "../contracts";
 
-interface NextByScopeContract extends Record<DiffScope, ScopeSnapshot> {}
-
-interface NextByScopeContract344 extends Record<DiffScope, ScopeSnapshot> {}
-
 export type DiffBatchState = {
   byScope: Record<DiffScope, ScopeSnapshot>;
   loadedByScope: Record<DiffScope, boolean>;
@@ -241,9 +237,9 @@ export const applySummarySnapshot = ({
   const previousSummarySnapshot = state.byScope[scope];
 
   let didChange = false;
-  const nextByScope: NextByScopeContract = {
+  const nextByScope = {
     ...state.byScope,
-  };
+  } satisfies Record<DiffScope, ScopeSnapshot>;
   const nextFetchedScopeSnapshot: ScopeSnapshot = {
     ...previousSummarySnapshot,
     ...summaryFields,
@@ -345,9 +341,9 @@ export const applyFullSnapshot = ({
   latestSharedSequence: number;
 }) => {
   let didChange = false;
-  const nextByScope: NextByScopeContract344 = {
+  const nextByScope = {
     ...state.byScope,
-  };
+  } satisfies Record<DiffScope, ScopeSnapshot>;
   const previousFetchedScopeSnapshot = state.byScope[scope];
 
   if (!scopeSnapshotEqual(previousFetchedScopeSnapshot, snapshot)) {

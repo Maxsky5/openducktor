@@ -18,15 +18,11 @@ import {
   type WorkspaceRepoHooksInput,
   type WorkspaceRepoSettingsInput,
   workspaceRecordSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
 import { HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import type { JsonValue } from "@openducktor/contracts";
-
-interface NextWorkspacesContract extends Record<string, RepoConfig> {}
 
 type RepoConfigDraft = Pick<
   RepoConfig,
@@ -77,12 +73,6 @@ export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-const requireString = (value: JsonValue | undefined, label: string): string => {
-  if (!hasRuntimeType(value, "string")) {
-    throw new HostValidationError({ message: `${label} must be a string.` });
-  }
-  return value;
-};
 const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
   if (value === undefined) {
     return undefined;
@@ -332,17 +322,9 @@ export const requireConfiguredWorkspace = (
 export const findRepoConfigByRepoPath = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
-  rawRepoPath: JsonValue | undefined,
+  repoPath: string,
 ) =>
   Effect.gen(function* () {
-    const repoPath = yield* Effect.try({
-      try: () => requireString(rawRepoPath, "repoPath"),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
     const canonicalRepoPath = yield* settingsConfig.canonicalizePath(repoPath);
     const repoConfig = Object.values(config.workspaces).find(
       (workspace) => workspace.repoPath === canonicalRepoPath,
@@ -389,7 +371,7 @@ export const normalizeSnapshotWorkspaces = (
   snapshotWorkspaces: Record<string, RepoConfig>,
 ) =>
   Effect.gen(function* () {
-    const nextWorkspaces: NextWorkspacesContract = { ...config.workspaces };
+    const nextWorkspaces = { ...config.workspaces } satisfies Record<string, RepoConfig>;
     for (const workspaceId of Object.keys(snapshotWorkspaces)) {
       if (!config.workspaces[workspaceId]) {
         return yield* Effect.fail(

@@ -95,7 +95,11 @@ export const codexApprovalResponseForRequest = ({
   switch (request.method) {
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL:
       if (!approved) {
-        return { decision: "denied" };
+        return {
+          decision: {
+            denied: { rejection: message ?? "Rejected by user." },
+          },
+        };
       }
       return {
         decision:

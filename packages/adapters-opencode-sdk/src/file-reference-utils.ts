@@ -1,10 +1,7 @@
+import { hasOwnKey } from "@openducktor/contracts";
 import { type AgentFileReference, detectAgentFileReferenceKind } from "@openducktor/core";
 
-interface IMAGEMIMEBYEXTENSIONContract extends Record<string, string> {}
-
-interface VIDEOMIMEBYEXTENSIONContract extends Record<string, string> {}
-
-const IMAGE_MIME_BY_EXTENSION: IMAGEMIMEBYEXTENSIONContract = {
+const IMAGE_MIME_BY_EXTENSION = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -14,16 +11,16 @@ const IMAGE_MIME_BY_EXTENSION: IMAGEMIMEBYEXTENSIONContract = {
   bmp: "image/bmp",
   ico: "image/x-icon",
   avif: "image/avif",
-};
+} satisfies Record<string, string>;
 
-const VIDEO_MIME_BY_EXTENSION: VIDEOMIMEBYEXTENSIONContract = {
+const VIDEO_MIME_BY_EXTENSION = {
   mp4: "video/mp4",
   mov: "video/quicktime",
   webm: "video/webm",
   mkv: "video/x-matroska",
   avi: "video/x-msvideo",
   m4v: "video/x-m4v",
-};
+} satisfies Record<string, string>;
 
 const readLowercaseExtension = (filePath: string): string | null => {
   const normalizedPath = filePath.trim().toLowerCase();
@@ -45,11 +42,15 @@ export const detectAgentFileReferenceMime = (
 
   const extension = readLowercaseExtension(file.path);
   if (file.kind === "image") {
-    return (extension && IMAGE_MIME_BY_EXTENSION[extension]) || "image/png";
+    return extension && hasOwnKey(IMAGE_MIME_BY_EXTENSION, extension)
+      ? IMAGE_MIME_BY_EXTENSION[extension]
+      : "image/png";
   }
 
   if (file.kind === "video") {
-    return (extension && VIDEO_MIME_BY_EXTENSION[extension]) || "video/mp4";
+    return extension && hasOwnKey(VIDEO_MIME_BY_EXTENSION, extension)
+      ? VIDEO_MIME_BY_EXTENSION[extension]
+      : "video/mp4";
   }
 
   return "text/plain";

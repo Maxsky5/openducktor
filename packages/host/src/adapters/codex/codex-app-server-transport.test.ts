@@ -6,7 +6,6 @@ import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { HostValidationError } from "../../effect/host-errors";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
-import type { JsonValue } from "@openducktor/contracts";
 
 const createChild = (
   stdin: Writable = new PassThrough(),
@@ -21,7 +20,7 @@ const createChild = (
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-const notificationEvent = (message: JsonValue | undefined) =>
+const notificationEvent = (message: CodexAppServerProtocolMessage) =>
   expect.objectContaining({
     runtimeId: "runtime-1",
     kind: "notification" as const,
@@ -29,7 +28,7 @@ const notificationEvent = (message: JsonValue | undefined) =>
     message,
   });
 
-const serverRequestEvent = (message: JsonValue | undefined) =>
+const serverRequestEvent = (message: CodexAppServerProtocolMessage) =>
   expect.objectContaining({
     runtimeId: "runtime-1",
     kind: "server_request" as const,
@@ -375,7 +374,12 @@ describe("createCodexAppServerTransport", () => {
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
     await waitForStreamEvents();
-    await Effect.runPromise(transport.respond({ requestId: 1, result: { decision: "denied" } }));
+    await Effect.runPromise(
+      transport.respond({
+        requestId: 1,
+        result: { decision: { denied: { rejection: "Rejected in test." } } },
+      }),
+    );
     expect(emitted).toEqual([serverRequestEvent(request), serverRequestEvent(request)]);
 
     await Effect.runPromise(transport.close());
@@ -498,7 +502,7 @@ describe("createCodexAppServerTransport", () => {
           fileSystem: null,
         },
       },
-    };
+    } satisfies CodexAppServerProtocolMessage;
 
     child.stdout.write(`${JSON.stringify(request)}\n`);
 
@@ -665,7 +669,7 @@ describe("createCodexAppServerTransport", () => {
     const child = createChild();
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
-    const circularParams: Record<string, JsonValue> = {};
+    const circularParams: Record<string, unknown> = {};
     circularParams.self = circularParams;
 
     try {

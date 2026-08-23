@@ -99,11 +99,11 @@ export const deriveElectronUpdateChannel = (version: string): string | null =>
 
 const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {
   clearInterval: (handle) => {
-    // SAFETY: The surrounding boundary constructs or validates every member required by `ReturnType<typeof setInterval>`.
+    // SAFETY: This default scheduler receives only handles returned by its setInterval method below; the public scheduler interface erases the implementation-specific Node handle type.
     clearInterval(handle as ReturnType<typeof setInterval>);
   },
   clearTimeout: (handle) => {
-    // SAFETY: The surrounding boundary constructs or validates every member required by `ReturnType<typeof setTimeout>`.
+    // SAFETY: This default scheduler receives only handles returned by its setTimeout method below; the public scheduler interface erases the implementation-specific Node handle type.
     clearTimeout(handle as ReturnType<typeof setTimeout>);
   },
   setInterval: (callback, intervalMs) => setInterval(callback, intervalMs),

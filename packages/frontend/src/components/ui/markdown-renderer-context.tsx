@@ -6,6 +6,7 @@ import {
 import {
   type ComponentProps,
   type ComponentType,
+  createElement,
   isValidElement,
   useEffect,
   useState,
@@ -126,16 +127,9 @@ export const createTaskDescriptionComponents = ({
     if (className === "language-mermaid") {
       return <MarkdownMermaid source={String(children).replace(/\n$/, "")} />;
     }
-    // SAFETY: The surrounding boundary constructs or validates every member required by `| ComponentType<ComponentProps<"code"> & ExtraProps> | undefined`.
-    const CodeComponent = components.code as
-      | ComponentType<ComponentProps<"code"> & ExtraProps>
-      | undefined;
+    const CodeComponent = components.code;
     if (CodeComponent) {
-      return (
-        <CodeComponent {...props} className={className}>
-          {children}
-        </CodeComponent>
-      );
+      return createElement(CodeComponent, { ...props, className }, children);
     }
     const { node: _node, ...codeProps } = props;
     return (

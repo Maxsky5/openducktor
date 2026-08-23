@@ -5,7 +5,7 @@ import type {
   AgentModelSelection,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import { extractTurnId, isTerminalTurnStatus } from "./codex-app-server-requests";
+import { isTerminalTurnStatus } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
 import {
   type CodexThreadStatusSnapshot,
@@ -259,7 +259,7 @@ export const startCodexTurnForSession = async (
         return result;
       }
       const turnStartedAtMs = Date.now();
-      const turnId = extractTurnId(result);
+      const turnId = result.turn.id;
       if (turnId) {
         context.bindActiveTurnId(activeTurnState, turnId, turnStartedAtMs);
       }

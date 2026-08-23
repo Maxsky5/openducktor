@@ -1,4 +1,4 @@
-import { hasRuntimeType, jsonValueSchema, runtimeTypeName } from "@openducktor/contracts";
+import { hasRuntimeType, runtimeTypeName } from "@openducktor/contracts";
 import { pathToFileURL } from "node:url";
 import { Cause, Chunk, Effect, Exit, Option } from "effect";
 import {
@@ -25,15 +25,11 @@ type ElectronPreviewNet = {
 
 type RegisterElectronLocalAttachmentPreviewProtocolInput = {
   net: ElectronPreviewNet;
-  resolveLocalAttachmentPath: (
-    filePath: string,
-  ) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>;
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>;
   session: ElectronPreviewSession;
 };
 
-export const readLocalAttachmentPreviewPath = (
-  filePath: Parameters<typeof jsonValueSchema.safeParse>[0],
-): string => {
+export const readLocalAttachmentPreviewPath = (filePath: string): string => {
   if (!hasRuntimeType(filePath, "string") || filePath.trim().length === 0) {
     throw new ElectronValidationError({
       operation: "electron.preview.read-path",
@@ -47,7 +43,7 @@ export const readLocalAttachmentPreviewPath = (
 };
 
 export const readLocalAttachmentPreviewPathEffect = (
-  filePath: Parameters<typeof jsonValueSchema.safeParse>[0],
+  filePath: string,
 ): Effect.Effect<string, ElectronValidationError> =>
   Effect.try({
     try: () => readLocalAttachmentPreviewPath(filePath),
@@ -143,9 +139,7 @@ const createLocalAttachmentPreviewErrorResponse = (cause: unknown, status: 400 |
   });
 
 const resolveLocalAttachmentPathEffect = (
-  resolveLocalAttachmentPath: (
-    filePath: string,
-  ) => Promise<Parameters<typeof jsonValueSchema.safeParse>[0]>,
+  resolveLocalAttachmentPath: (filePath: string) => Promise<string>,
   requestedPath: string,
 ): Effect.Effect<string, ElectronOperationError | ElectronValidationError> =>
   Effect.tryPromise({

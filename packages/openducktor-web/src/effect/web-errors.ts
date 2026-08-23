@@ -1,8 +1,10 @@
 import { Cause, Data, Effect, Exit } from "effect";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type WebErrorDetailValue =
-  | JsonValue
+  | string
+  | number
+  | boolean
+  | null
   | Error
   | undefined
   | ReadonlyArray<WebErrorDetailValue>

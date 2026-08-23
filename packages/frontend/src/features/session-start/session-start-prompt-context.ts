@@ -2,11 +2,6 @@ import type { GitTargetBranch } from "@openducktor/contracts";
 import type { AgentKickoffTemplateId, BuildAgentKickoffPromptInput } from "@openducktor/core";
 import { effectiveTaskTargetBranch } from "@/lib/target-branch";
 
-interface KICKOFFPROMPTCONTEXTRESOLVERSContract extends Record<
-  AgentKickoffTemplateId,
-  KickoffPromptContextResolver
-> {}
-
 export const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
 
 type SessionStartKickoffPromptContext = Pick<
@@ -52,7 +47,7 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
   };
 };
 
-const KICKOFF_PROMPT_CONTEXT_RESOLVERS: KICKOFFPROMPTCONTEXTRESOLVERSContract = {
+const KICKOFF_PROMPT_CONTEXT_RESOLVERS = {
   "kickoff.spec_initial": resolveContextFreePrompt,
   "kickoff.planner_initial": resolveContextFreePrompt,
   "kickoff.build_implementation_start": resolveContextFreePrompt,
@@ -60,7 +55,7 @@ const KICKOFF_PROMPT_CONTEXT_RESOLVERS: KICKOFFPROMPTCONTEXTRESOLVERSContract = 
   "kickoff.build_after_human_request_changes": resolveHumanFeedbackPrompt,
   "kickoff.build_pull_request_generation": resolvePullRequestPrompt,
   "kickoff.qa_review": resolveContextFreePrompt,
-};
+} satisfies Record<AgentKickoffTemplateId, KickoffPromptContextResolver>;
 
 export const resolveSessionStartKickoffPromptContext = async (
   input: ResolveSessionStartKickoffPromptContextInput,

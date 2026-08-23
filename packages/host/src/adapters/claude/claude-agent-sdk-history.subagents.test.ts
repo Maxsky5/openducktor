@@ -423,7 +423,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification-1",
+          uuid: "00000000-0000-4000-8000-000000000001",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:12.000Z",
           message: {
@@ -520,7 +520,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification-1",
+          uuid: "00000000-0000-4000-8000-000000000002",
           session_id: "session-1",
           timestamp: "2026-06-26T11:05:12.000Z",
           message: {
@@ -606,7 +606,7 @@ describe("claude-agent-sdk-history subagents", () => {
         }),
         toSessionMessage({
           type: "user",
-          uuid: "agent-notification",
+          uuid: "00000000-0000-4000-8000-000000000003",
           session_id: "session-1",
           timestamp: "2026-06-26T11:04:30.000Z",
           message: {

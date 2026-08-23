@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { getListedToolInputSchema } from "./listed-tool-schema";
-import type { JsonValue } from "@openducktor/contracts";
 
-const propertiesOf = (jsonSchema: Record<string, JsonValue>): Record<string, JsonValue> => {
-  // SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
-  return jsonSchema.properties as Record<string, JsonValue>;
+const propertiesOf = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
+  // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
+  return jsonSchema.properties as Record<string, unknown>;
 };
 
-const requiredOf = (jsonSchema: Record<string, JsonValue>): string[] => {
+const requiredOf = (jsonSchema: Record<string, unknown>): string[] => {
   // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
   return Array.isArray(jsonSchema.required) ? (jsonSchema.required as string[]) : [];
 };

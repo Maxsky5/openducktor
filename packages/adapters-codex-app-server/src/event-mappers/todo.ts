@@ -1,14 +1,17 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import {
+  jsonValueSchema,
+  type CodexAppServerJsonValue,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
   codexNamespacedToolName,
-  extractOptionalObject,
   extractStringField,
   isPlainObject,
 } from "../codex-app-server-shared";
-import { codexItemId, codexItemTypeMatches } from "../codex-app-server-transcript";
+import { codexItemTypeMatches } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalEvent,
   CodexMappingContext,
@@ -16,11 +19,21 @@ import type {
 } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexLiveInput, CodexThreadItemInput } from "../codex-event-mapper";
+import type { CodexTimedThreadItem } from "../codex-event-mapper";
 import { codexDynamicToolErrorFromItem } from "../codex-tool-error-extractor";
-import { statusFromCodexStatus } from "../codex-tool-normalizer";
 import { type CodexToolTimingFields, codexToolTimingFields } from "../codex-tool-timing";
+import type { CodexNotificationRecord, CodexThreadHistoryReadResponse } from "../types";
 
-const parseJsonObject = (value: JsonValue | undefined): Record<string, JsonValue> | null => {
+type CodexDynamicToolCallItem = Extract<CodexTimedThreadItem, { type: "dynamicToolCall" }>;
+type CodexPlanItem = Extract<CodexTimedThreadItem, { type: "plan" }>;
+type CodexPlanUpdatedPayload = Extract<
+  CodexNotificationRecord,
+  { method: "turn/plan/updated" }
+>["params"];
+
+const parseJsonObject = (
+  value: CodexAppServerJsonValue | undefined,
+): Record<string, CodexAppServerJsonValue> | null => {
   if (isPlainObject(value)) return value;
   if (!hasRuntimeType(value, "string")) return null;
   try {
@@ -58,8 +71,8 @@ const normalizePlanTextStatus = (value: string): AgentSessionTodoItem["status"] 
   return null;
 };
 
-const codexTodoItemsFromPlanText = (text: string): Record<string, JsonValue>[] => {
-  const todos: Record<string, JsonValue>[] = [];
+const codexTodoItemsFromPlanText = (text: string): Record<string, CodexAppServerJsonValue>[] => {
+  const todos: Record<string, CodexAppServerJsonValue>[] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const checkboxMatch = line.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)\[([ xX~-])\]\s+(.+?)\s*$/);
     if (checkboxMatch) {
@@ -86,7 +99,9 @@ const codexTodoItemsFromPlanText = (text: string): Record<string, JsonValue>[] =
   return todos;
 };
 
-const codexTodoItemsFromPayload = (payload: Record<string, JsonValue>): JsonValue[] => {
+const codexTodoItemsFromPayload = (
+  payload: Record<string, CodexAppServerJsonValue>,
+): CodexAppServerJsonValue[] => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
     return todo;
@@ -100,8 +115,8 @@ const codexTodoItemsFromPayload = (payload: Record<string, JsonValue>): JsonValu
 };
 
 const codexTodoToolInputFromPayload = (
-  payload: Record<string, JsonValue>,
-): Record<string, JsonValue> | null => {
+  payload: Record<string, CodexAppServerJsonValue>,
+): Record<string, CodexAppServerJsonValue> | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
   if (rawTodos.length === 0) {
     return null;
@@ -120,7 +135,9 @@ const codexTodoToolInputFromPayload = (
   };
 };
 
-const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTodoUpdate | null => {
+const codexTodoUpdateFromPayload = (
+  payload: Record<string, CodexAppServerJsonValue>,
+): CodexTodoUpdate | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
   if (rawTodos.length === 0) {
     return null;
@@ -145,7 +162,7 @@ const codexTodoUpdateFromPayload = (payload: Record<string, JsonValue>): CodexTo
 
 const codexTodoUpdateFromToolCall = (
   toolName: string,
-  input: Record<string, JsonValue> | null | undefined,
+  input: Record<string, CodexAppServerJsonValue> | null | undefined,
 ): CodexTodoUpdate | null => {
   const tool = toolName.split(/[./]/).filter(Boolean).at(-1) ?? toolName;
   if (tool !== "update_plan" && tool !== "todo_write") {
@@ -156,7 +173,7 @@ const codexTodoUpdateFromToolCall = (
 
 const todoToolCanonicalEvents = (
   update: CodexTodoUpdate,
-  input: Record<string, JsonValue>,
+  input: Record<string, CodexAppServerJsonValue>,
   ctx: CodexMappingContext,
   ids: {
     messageId: string;
@@ -164,7 +181,6 @@ const todoToolCanonicalEvents = (
     callId: string;
     rawToolName: string;
   } & CodexToolTimingFields,
-  raw: JsonValue | undefined,
 ): CodexCanonicalEvent[] => [
   {
     kind: "tool",
@@ -173,7 +189,6 @@ const todoToolCanonicalEvents = (
     threadId: ctx.threadId,
     ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
     ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-    raw,
     invocation: {
       ...ids,
       status: "completed",
@@ -190,93 +205,69 @@ const todoToolCanonicalEvents = (
     threadId: ctx.threadId,
     ...(ctx.turnId ? { turnId: ctx.turnId } : undefined),
     ...(ctx.timestamp ? { timestamp: ctx.timestamp } : undefined),
-    raw,
     todos: update.todos,
   },
 ];
 
 const completedDynamicToolCallEvents = (
-  item: Record<string, JsonValue>,
+  item: CodexDynamicToolCallItem,
   ctx: CodexMappingContext,
   fallbackId: string,
 ): CodexMappingResult => {
-  if (!codexItemTypeMatches(item, "dynamicToolCall")) {
-    return emptyCodexMappingResult();
-  }
   const error = codexDynamicToolErrorFromItem(item);
-  if (
-    item.success === false ||
-    error ||
-    (item.status !== undefined && statusFromCodexStatus(item.status) !== "completed")
-  ) {
+  if (item.success === false || error || item.status !== "completed") {
     return emptyCodexMappingResult();
   }
-  const namespace = extractStringField(item, ["namespace"]);
-  const rawToolName = codexNamespacedToolName(
-    namespace,
-    extractStringField(item, ["tool", "name"]) ?? "",
-  );
-  const input =
-    extractOptionalObject(item, "arguments") ??
-    parseJsonObject(item.arguments) ??
-    extractOptionalObject(item, "input") ??
-    parseJsonObject(item.input);
+  const rawToolName = codexNamespacedToolName(item.namespace, item.tool);
+  const input = parseJsonObject(item.arguments);
   const update = codexTodoUpdateFromToolCall(rawToolName, input);
   if (!update || !input) {
     return emptyCodexMappingResult();
   }
   const displayInput = codexTodoToolInputFromPayload(input) ?? input;
-  const partId = codexItemId(item, fallbackId);
+  const partId = item.id || fallbackId;
   const timing = codexToolTimingFields(item);
   return {
     handled: true,
-    events: todoToolCanonicalEvents(
-      update,
-      displayInput,
-      ctx,
-      { messageId: partId, partId, callId: partId, rawToolName, ...timing },
-      item,
-    ),
+    events: todoToolCanonicalEvents(update, displayInput, ctx, {
+      messageId: partId,
+      partId,
+      callId: partId,
+      rawToolName,
+      ...timing,
+    }),
   };
 };
 
-const planItemEvents = (
-  item: Record<string, JsonValue>,
-  ctx: CodexMappingContext,
-): CodexMappingResult => {
-  if (!codexItemTypeMatches(item, "plan")) {
-    return emptyCodexMappingResult();
-  }
-  const input = codexTodoToolInputFromPayload(item);
-  const update = codexTodoUpdateFromPayload(item);
+const planItemEvents = (item: CodexPlanItem, ctx: CodexMappingContext): CodexMappingResult => {
+  const payload = { text: item.text };
+  const input = codexTodoToolInputFromPayload(payload);
+  const update = codexTodoUpdateFromPayload(payload);
   if (!input || !update) {
     return emptyCodexMappingResult();
   }
-  const partId = codexItemId(item, `${ctx.threadId}-plan`);
+  const partId = item.id;
   const timing = codexToolTimingFields(item);
   return {
     handled: true,
-    events: todoToolCanonicalEvents(
-      update,
-      input,
-      ctx,
-      { messageId: partId, partId, callId: partId, rawToolName: "update_plan", ...timing },
-      item,
-    ),
+    events: todoToolCanonicalEvents(update, input, ctx, {
+      messageId: partId,
+      partId,
+      callId: partId,
+      rawToolName: "update_plan",
+      ...timing,
+    }),
   };
 };
 
 export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   fromLivePlanUpdated(
-    payload: Record<string, JsonValue>,
+    payload: CodexPlanUpdatedPayload,
     ctx: CodexMappingContext,
     state?: CodexTodoMapperState,
   ): CodexMappingResult;
-  fromCompletedItem(item: Record<string, JsonValue>, ctx: CodexMappingContext): CodexMappingResult;
-  fromThreadItemObject(
-    item: Record<string, JsonValue>,
-    ctx: CodexMappingContext,
-  ): CodexMappingResult;
+  fromCompletedItem(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult;
+  fromThreadItemObject(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult;
 } = {
   name: TODO_MAPPER_NAME,
 
@@ -287,11 +278,7 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
     ctx: CodexMappingContext,
     state: CodexTodoMapperState,
   ): CodexMappingResult {
-    if (
-      input.kind === "notification" &&
-      input.notification.method === "turn/plan/updated" &&
-      isPlainObject(input.notification.params)
-    ) {
+    if (input.kind === "notification" && input.notification.method === "turn/plan/updated") {
       return this.fromLivePlanUpdated(input.notification.params, ctx, state);
     }
     if (input.kind === "item_completed") {
@@ -309,7 +296,7 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   },
 
   fromLivePlanUpdated(
-    payload: Record<string, JsonValue>,
+    payload: CodexPlanUpdatedPayload,
     ctx: CodexMappingContext,
     state?: CodexTodoMapperState,
   ): CodexMappingResult {
@@ -327,50 +314,39 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
     const partId = `${turnId}-update-plan-${sequence}`;
     return {
       handled: true,
-      events: todoToolCanonicalEvents(
-        update,
-        input,
-        ctx,
-        {
-          messageId: turnId,
-          partId,
-          callId: partId,
-          rawToolName: "update_plan",
-        },
-        payload,
-      ),
+      events: todoToolCanonicalEvents(update, input, ctx, {
+        messageId: turnId,
+        partId,
+        callId: partId,
+        rawToolName: "update_plan",
+      }),
     };
   },
 
-  fromCompletedItem(item: Record<string, JsonValue>, ctx: CodexMappingContext): CodexMappingResult {
-    return completedDynamicToolCallEvents(item, ctx, `codex-item-${Date.now()}`);
+  fromCompletedItem(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult {
+    return codexItemTypeMatches(item, "dynamicToolCall")
+      ? completedDynamicToolCallEvents(item, ctx, item.id)
+      : emptyCodexMappingResult();
   },
 
-  fromThreadItemObject(
-    item: Record<string, JsonValue>,
-    ctx: CodexMappingContext,
-  ): CodexMappingResult {
-    const planResult = planItemEvents(item, ctx);
-    if (planResult.handled) {
-      return planResult;
+  fromThreadItemObject(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult {
+    if (codexItemTypeMatches(item, "plan")) {
+      return planItemEvents(item, ctx);
     }
-    return completedDynamicToolCallEvents(item, ctx, codexItemId(item, "codex-thread-item"));
+    return this.fromCompletedItem(item, ctx);
   },
 };
 
 export const codexTodosFromThreadRead = (
-  value: JsonValue | undefined,
+  value: CodexThreadHistoryReadResponse | undefined,
   threadId = "codex-thread",
 ): AgentSessionTodoItem[] => {
-  if (!isPlainObject(value) || !isPlainObject(value.thread) || !Array.isArray(value.thread.turns)) {
+  if (!value) {
     return [];
   }
   let latestTodos: AgentSessionTodoItem[] = [];
   for (const turn of value.thread.turns) {
-    if (!isPlainObject(turn)) {
-      continue;
-    }
-    for (const item of arrayFromUnknown(turn.items).filter(isPlainObject)) {
+    for (const item of turn.items) {
       const result = todoMapper.fromThreadItemObject(item, {
         source: "thread_read",
         threadId,

@@ -1,6 +1,10 @@
-import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import {
+  hasRuntimeType,
+  isJsonObject,
+  type JsonValue,
+  jsonValueSchema,
+} from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type QuestionToolDetail = {
   prompt: string;
@@ -23,18 +27,16 @@ const parseJsonIfPossible = (value: string | undefined): JsonValue | undefined =
 };
 
 const readQuestionPrompt = (value: JsonValue | undefined): string | null => {
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (value === undefined || !isJsonObject(value)) {
     return null;
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = value as Record<string, JsonValue>;
   const candidates = [
-    record.question,
-    record.prompt,
-    record.header,
-    record.title,
-    record.label,
-    record.name,
+    value.question,
+    value.prompt,
+    value.header,
+    value.title,
+    value.label,
+    value.name,
   ];
   for (const candidate of candidates) {
     if (hasRuntimeType(candidate, "string") && candidate.trim().length > 0) {
@@ -52,18 +54,11 @@ const normalizeAnswerValues = (value: JsonValue | undefined): string[] => {
   if (Array.isArray(value)) {
     return value.flatMap((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (value === undefined || !isJsonObject(value)) {
     return [];
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = value as Record<string, JsonValue>;
   return normalizeAnswerValues(
-    record.answers ??
-      record.answer ??
-      record.response ??
-      record.responses ??
-      record.value ??
-      record.text,
+    value.answers ?? value.answer ?? value.response ?? value.responses ?? value.value ?? value.text,
   );
 };
 
@@ -76,10 +71,11 @@ const collectQuestionDetails = (value: JsonValue | undefined): QuestionToolDetai
     if (!prompt) {
       return details;
     }
-    // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-    const record = entry as Record<string, JsonValue>;
+    if (!isJsonObject(entry)) {
+      return details;
+    }
     const answers = normalizeAnswerValues(
-      record.answers ?? record.answer ?? record.response ?? record.responses,
+      entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
     );
     details.push({
       prompt,
@@ -93,20 +89,18 @@ const normalizeAnswerGroups = (value: JsonValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
   }
-  if (!value || !hasRuntimeType(value, "object")) {
+  if (value === undefined || !isJsonObject(value)) {
     return [];
   }
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const record = value as Record<string, JsonValue>;
   const nested =
-    record.answers ??
-    record.answer ??
-    record.responses ??
-    record.response ??
-    record.result ??
-    record.value;
+    value.answers ??
+    value.answer ??
+    value.responses ??
+    value.response ??
+    value.result ??
+    value.value;
   if (nested === undefined) {
-    return Object.values(record).reduce<string[][]>((groups, entry) => {
+    return Object.values(value).reduce<string[][]>((groups, entry) => {
       const answers = normalizeAnswerValues(entry);
       if (answers.length > 0) {
         groups.push(answers);
@@ -138,14 +132,17 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const inputQuestions = collectQuestionDetails(meta.input?.questions);
-  const metadataQuestions = collectQuestionDetails(meta.metadata?.questions);
+  const parsedInput = jsonValueSchema.safeParse(meta.input);
+  const parsedMetadata = jsonValueSchema.safeParse(meta.metadata);
+  const inputRecord =
+    parsedInput.success && isJsonObject(parsedInput.data) ? parsedInput.data : undefined;
+  const metadataRecord =
+    parsedMetadata.success && isJsonObject(parsedMetadata.data) ? parsedMetadata.data : undefined;
+  const inputQuestions = collectQuestionDetails(inputRecord?.questions);
+  const metadataQuestions = collectQuestionDetails(metadataRecord?.questions);
   const parsedOutput = parseJsonIfPossible(meta.output);
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
   const outputQuestions = collectQuestionDetails(
-    parsedOutput && hasRuntimeType(parsedOutput, "object")
-      ? (parsedOutput as Record<string, JsonValue>).questions
-      : undefined,
+    parsedOutput && isJsonObject(parsedOutput) ? parsedOutput.questions : undefined,
   );
   const questions =
     inputQuestions.length > 0
@@ -158,11 +155,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  // SAFETY: The preceding runtime guard establishes `Record<string, JsonValue>` before this assertion.
-  const outputRecord =
-    parsedOutput && hasRuntimeType(parsedOutput, "object")
-      ? (parsedOutput as Record<string, JsonValue>)
-      : undefined;
+  const outputRecord = parsedOutput && isJsonObject(parsedOutput) ? parsedOutput : undefined;
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,
     outputRecord?.answers,
@@ -171,16 +164,16 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     outputRecord?.response,
     outputRecord?.result,
     outputRecord?.value,
-    meta.metadata,
-    meta.metadata?.answers,
-    meta.metadata?.answer,
-    meta.metadata?.responses,
-    meta.metadata?.response,
-    meta.input,
-    meta.input?.answers,
-    meta.input?.answer,
-    meta.input?.responses,
-    meta.input?.response,
+    metadataRecord,
+    metadataRecord?.answers,
+    metadataRecord?.answer,
+    metadataRecord?.responses,
+    metadataRecord?.response,
+    inputRecord,
+    inputRecord?.answers,
+    inputRecord?.answer,
+    inputRecord?.responses,
+    inputRecord?.response,
   ]);
 
   if (answerGroups.length === 0) {

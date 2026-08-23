@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import {
+  childSessionInfo,
   permissionAskedEvent,
   questionAskedEvent,
   runEventStreamWithSession,
@@ -85,10 +86,13 @@ const makeChildSessionCreatedEvent = (input: {
       sessionID: input.childSessionId,
       ...(parentPlacement === "properties" ? { parentID: parentExternalSessionId } : undefined),
       info: {
-        id: input.childSessionId,
-        ...(parentPlacement === "info" ? { parentID: parentExternalSessionId } : undefined),
+        ...childSessionInfo(
+          input.childSessionId,
+          parentPlacement === "info" ? parentExternalSessionId : undefined,
+        ),
         time: {
           created: input.createdAtMs ?? Date.parse("2026-02-22T12:00:10.000Z"),
+          updated: Date.parse("2026-02-22T12:00:10.000Z"),
         },
       },
     },
@@ -244,24 +248,24 @@ const makeBackgroundTaskResultUserMessageUpdatedEvent = (input: {
         time: {
           created: Date.parse("2026-02-22T12:00:45.000Z"),
         },
-        parts: [
-          {
-            id: input.partId,
-            sessionID: "external-session-1",
-            messageID: input.messageId,
-            type: "text",
-            synthetic: true,
-            text: [
-              `<task id="${input.childSessionId}" state="${input.state}">`,
-              `<summary>${input.summary}</summary>`,
-              `<${resultTag}>`,
-              input.text,
-              `</${resultTag}>`,
-              "</task>",
-            ].join("\n"),
-          },
-        ],
       },
+      parts: [
+        {
+          id: input.partId,
+          sessionID: "external-session-1",
+          messageID: input.messageId,
+          type: "text",
+          synthetic: true,
+          text: [
+            `<task id="${input.childSessionId}" state="${input.state}">`,
+            `<summary>${input.summary}</summary>`,
+            `<${resultTag}>`,
+            input.text,
+            `</${resultTag}>`,
+            "</task>",
+          ].join("\n"),
+        },
+      ],
     },
   });
 };
@@ -280,9 +284,9 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
   return createInvalidOpencodeEventFixture({
     type: "message.part.updated",
     properties: {
-      ...(input.eventTimestampMs !== undefined
+      ...(input.eventTimestampMs !== undefined || input.timestampMs !== undefined
         ? {
-            time: input.eventTimestampMs,
+            time: input.eventTimestampMs ?? input.timestampMs,
           }
         : undefined),
       part: {
@@ -294,6 +298,7 @@ const makeBackgroundTaskResultUserPartUpdatedEvent = (input: {
         ...(input.timestampMs !== undefined
           ? {
               time: {
+                start: input.timestampMs,
                 end: input.timestampMs,
               },
             }
@@ -814,6 +819,27 @@ describe("event-stream subagent correlation", () => {
       makeChildSessionCreatedEvent({
         childSessionId: "external-child-session",
         parentPlacement: "properties",
+      }),
+    ]);
+
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        type: "session_error",
+        message: expect.stringContaining("info.parentID"),
+      }),
+    );
+  });
+
+  test("reports child session creation when info.parentID is blank", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      createInvalidOpencodeEventFixture({
+        type: "session.created",
+        properties: {
+          info: {
+            ...childSessionInfo("external-child-session"),
+            parentID: " ",
+          },
+        },
       }),
     ]);
 

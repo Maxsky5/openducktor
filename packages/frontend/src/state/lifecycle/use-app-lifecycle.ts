@@ -78,7 +78,7 @@ export function useAppLifecycle({
       return;
     }
 
-    // SAFETY: The surrounding boundary constructs or validates every member required by `RuntimeKind[]`.
+    // SAFETY: runtimeKindsKey is built above only by joining RuntimeDescriptor.kind values.
     const runtimeKinds = runtimeKindsKey.split(",") as RuntimeKind[];
     return startRepositoryRuntimes({
       repoPath,

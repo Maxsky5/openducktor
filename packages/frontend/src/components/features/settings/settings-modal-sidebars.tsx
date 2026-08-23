@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import { hasOwnKey, type WorkspaceRecord } from "@openducktor/contracts";
 import { CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { RepositorySelector } from "@/components/features/repository/repository-selector";
@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constants";
-
-interface SectionErrorCountByIdContract extends Partial<Record<RepositorySectionId, number>> {}
 
 type SettingsSidebarProps = {
   section: SettingsSectionId;
@@ -93,10 +91,10 @@ export function RepositorySidebar({
       repoErrorCountByWorkspaceId[workspace.workspaceId] = errorCount;
     }
   }
-  const sectionErrorCountById: SectionErrorCountByIdContract = {
+  const sectionErrorCountById = {
     prompts: selectedRepoPromptValidationErrorCount,
     scripts: selectedRepoScriptValidationErrorCount,
-  };
+  } satisfies Partial<Record<RepositorySectionId, number>>;
 
   return (
     <aside className="space-y-3 border-r border-border bg-muted p-3">
@@ -115,7 +113,9 @@ export function RepositorySidebar({
 
       <div className="space-y-1">
         {REPOSITORY_SECTIONS.map((entry) => {
-          const sectionErrorCount = sectionErrorCountById[entry.id] ?? 0;
+          const sectionErrorCount = hasOwnKey(sectionErrorCountById, entry.id)
+            ? sectionErrorCountById[entry.id]
+            : 0;
           return (
             <Button
               key={entry.id}

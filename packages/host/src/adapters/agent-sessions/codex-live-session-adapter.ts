@@ -153,15 +153,17 @@ export const createCodexLiveSessionAdapterPreparer =
               requireRepoRuntime: async () => runtime,
             },
             transportFactory: (runtimeId) => ({
-              request: (request: CodexJsonRpcRequest) => {
+              request: async (request: CodexJsonRpcRequest) => {
                 const parsedRequest = parseCodexAppServerClientRequest(
                   jsonValueSchema.parse(request),
                 );
-                return Effect.runPromise(
-                  codexAppServer.request({
-                    runtimeId,
-                    ...parsedRequest,
-                  }),
+                return jsonValueSchema.parse(
+                  await Effect.runPromise(
+                    codexAppServer.request({
+                      runtimeId,
+                      ...parsedRequest,
+                    }),
+                  ),
                 );
               },
             }),
@@ -210,7 +212,7 @@ export const createCodexLiveSessionAdapterPreparer =
 
       const runControlSummary = (
         operation: string,
-        run: () => Promise<Parameters<typeof agentSessionControlSummarySchema.parse>[0]>,
+        run: () => Promise<AgentSessionControlSummary>,
       ): Effect.Effect<AgentSessionControlSummary, HostError> =>
         Effect.tryPromise({
           try: run,

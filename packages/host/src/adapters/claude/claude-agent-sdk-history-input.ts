@@ -1,5 +1,4 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
 import {
   type ClaudeLiveUserMessage,
@@ -16,7 +15,6 @@ import {
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 import { historyMessageText, isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import { parseClaudeJsonValue } from "./claude-agent-sdk-ingress-schemas";
 
 type ClaudeVisibleHistoryMessage = Extract<
   AgentSessionHistoryMessage,
@@ -43,7 +41,7 @@ export const createClaudeHistoryInputProjector = (options: {
 
   const createUserMessage = (input: {
     fallbackMessageId: string;
-    message: JsonValue | undefined;
+    message: unknown;
     text: string;
     timestamp: string;
   }): ClaudeVisibleHistoryMessage | undefined => {
@@ -71,7 +69,7 @@ export const createClaudeHistoryInputProjector = (options: {
   };
 
   return (entry: ClaudeHistoryMessage, timestamp: string): ClaudeHistoryInputProjection => {
-    const entryValue = parseClaudeJsonValue(entry, "claudeHistoryMessage");
+    const entryValue = entry;
     const queuedPrompt = readClaudeQueuedPrompt(entry);
     if (queuedPrompt) {
       pendingQueuedPrompt = { text: queuedPrompt, timestamp };

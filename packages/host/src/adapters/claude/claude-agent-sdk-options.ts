@@ -164,8 +164,21 @@ export const buildClaudeAgentSdkOptions = async ({
     options.model = model.modelId;
   }
   if (model?.variant) {
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `NonNullable<Options["effort"]>`.
-    options.effort = model.variant as NonNullable<Options["effort"]>;
+    switch (model.variant) {
+      case "low":
+      case "medium":
+      case "high":
+      case "xhigh":
+      case "max":
+        options.effort = model.variant;
+        break;
+      default:
+        throw new HostValidationError({
+          field: "model.variant",
+          message: `Claude Agent SDK does not support effort '${model.variant}'.`,
+          details: { model },
+        });
+    }
   }
   if (model?.profileId) {
     options.agent = model.profileId;

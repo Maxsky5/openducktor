@@ -13,9 +13,8 @@ export const TOOL_DISCOVERY_IDS = [
 
 export type ToolDiscoveryId = (typeof TOOL_DISCOVERY_IDS)[number];
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `readonly string[]`.
 export const isToolDiscoveryId = (value: string): value is ToolDiscoveryId =>
-  (TOOL_DISCOVERY_IDS as readonly string[]).includes(value);
+  TOOL_DISCOVERY_IDS.some((toolId) => toolId === value);
 
 export type ToolDiscoveryError = HostDependencyError | HostValidationError;
 

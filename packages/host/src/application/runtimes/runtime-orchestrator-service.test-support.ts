@@ -21,8 +21,8 @@ export const createGitPort = (
   canonicalizePath: (path: string) => string = (path) =>
     path === "/repo" ? "/canonical/repo" : path,
   isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
-): GitPort =>
-  createFocusedTestService<GitPort>({
+): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["gitPort"] =>
+  createFocusedTestService<GitPort>()({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
         try: async () => {
@@ -67,8 +67,8 @@ export const createTaskStore = (
     selectedModel: null;
   }> = {},
   extraAgentSessions: AgentSessionRecord[] = [],
-): TaskStorePort =>
-  createFocusedTestService<TaskStorePort>({
+): Parameters<typeof createEffectRuntimeOrchestratorService>[0]["taskReader"] =>
+  createFocusedTestService<TaskStorePort>()({
     getTaskMetadata() {
       return Effect.tryPromise({
         try: async () => {

@@ -11,8 +11,6 @@ import {
   type PromptValidationState,
 } from "./settings-modal-controller.types";
 
-interface SettingsSectionErrorCountByIdContract extends Record<SettingsSectionId, number> {}
-
 type UseSettingsModalPromptValidationArgs = {
   snapshotDraft: SettingsSnapshot | null;
   selectedWorkspaceId: string | null;
@@ -92,7 +90,7 @@ export const useSettingsModalPromptValidation = ({
     [selectedRepoPromptValidationErrors],
   );
 
-  const settingsSectionErrorCountById: SettingsSectionErrorCountByIdContract = {
+  const settingsSectionErrorCountById = {
     general: 0,
     git: 0,
     runtimes: 0,
@@ -103,7 +101,7 @@ export const useSettingsModalPromptValidation = ({
     chat: 0,
     kanban: 0,
     autopilot: 0,
-  };
+  } satisfies Record<SettingsSectionId, number>;
 
   return {
     promptValidationState,

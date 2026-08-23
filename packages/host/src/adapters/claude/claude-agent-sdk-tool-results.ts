@@ -19,7 +19,6 @@ import {
 import { decodeClaudeToolResultValue, timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { isClaudeToolUseRetracted } from "./claude-agent-sdk-transcript-correlation";
 import { HostValidationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudeToolResultSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -29,7 +28,7 @@ type ClaudeToolResultSession = {
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
+  toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;

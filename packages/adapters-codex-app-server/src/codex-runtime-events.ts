@@ -1,4 +1,4 @@
-import { jsonValueSchema, hasRuntimeType } from "@openducktor/contracts";
+import { jsonValueSchema } from "@openducktor/contracts";
 import {
   codexRuntimeStreamFault,
   parseCodexRuntimeStreamEvent,
@@ -9,7 +9,6 @@ import type { CodexAppServerAdapterOptions } from "./types";
 
 export { type CodexRuntimeStreamEvent } from "./codex-runtime-event-schema";
 
-// SAFETY: The schema parser validates every field required by `Promise<() => void>` before returning.
 export class CodexRuntimeEventSubscriptions {
   private readonly pumpsByRuntimeId = new Map<string, CodexLiveEventPump>();
 
@@ -62,28 +61,21 @@ export class CodexRuntimeEventSubscriptions {
       throw error;
     }
 
-    if (hasRuntimeType((unsubscribe as Promise<() => void>).then, "function")) {
-      pump.ready = (async () => {
-        try {
-          // SAFETY: The preceding runtime guard establishes `Promise<() => void>` before this assertion.
-          const resolved = await (unsubscribe as Promise<() => void>);
-          if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
-            resolved();
-            return;
-          }
-          pump.unsubscribe = resolved;
-        } catch (error) {
-          if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
-            this.pumpsByRuntimeId.delete(runtimeId);
-          }
-          throw error;
+    pump.ready = (async () => {
+      try {
+        const resolved = await unsubscribe;
+        if (this.pumpsByRuntimeId.get(runtimeId) !== pump) {
+          resolved();
+          return;
         }
-      })();
-      return pump.ready;
-    }
-
-    // SAFETY: The preceding runtime guard establishes `() => void` before this assertion.
-    pump.unsubscribe = unsubscribe as () => void;
+        pump.unsubscribe = resolved;
+      } catch (error) {
+        if (this.pumpsByRuntimeId.get(runtimeId) === pump) {
+          this.pumpsByRuntimeId.delete(runtimeId);
+        }
+        throw error;
+      }
+    })();
     return pump.ready;
   }
 

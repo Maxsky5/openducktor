@@ -2,10 +2,8 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   slashCommandCatalogSchema,
   subagentCatalogSchema,
-  hasRuntimeType,
 } from "@openducktor/contracts";
 import type {
-  AgentDescriptor,
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSlashCommandCatalog,
@@ -13,25 +11,22 @@ import type {
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
 import { basename, toProjectRelativePath } from "./path-utils";
 import {
   opencodeAgentListPayloadSchema,
   opencodeFileSearchPayloadSchema,
   opencodeSlashCommandListPayloadSchema,
+  type ParsedOpencodeAgent,
 } from "./opencode-ingress";
 import { mapProviderListToCatalog } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
-import type { JsonValue } from "@openducktor/contracts";
 import type { OpencodeRuntimeClientInput } from "./runtime-connection";
 import type { ClientFactory } from "./types";
 
-interface OPENCODEDEFAULTAGENTCOLORSContract extends Record<string, string> {}
-
-const OPENCODE_DEFAULT_AGENT_COLORS: OPENCODEDEFAULTAGENTCOLORSContract = {
-  build: "var(--icon-agent-build-base)",
-  plan: "var(--icon-agent-plan-base)",
-};
+const OPENCODE_DEFAULT_AGENT_COLORS = new Map([
+  ["build", "var(--icon-agent-build-base)"],
+  ["plan", "var(--icon-agent-plan-base)"],
+]);
 
 const FILE_SEARCH_LIMIT = 20;
 
@@ -39,73 +34,31 @@ type OpencodeFileSearchInput = OpencodeRuntimeClientInput & {
   query: string;
 };
 
-type FindFilesClient = {
-  find?: {
-    files?: (input: {
-      directory: string;
-      query: string;
-      dirs?: "true" | "false";
-      type?: "file" | "directory";
-      limit?: number;
-    }) => Promise<{
-      data?: unknown;
-      error?: { message?: string } | unknown;
-    }>;
-  };
-};
-
-type AgentsClient = {
-  app?: {
-    agents?: (input: { directory: string }) => Promise<{
-      data?: unknown;
-      error?: { message?: string } | unknown;
-    }>;
-  };
-};
-
-const isAgentMode = (value: string | undefined): value is AgentDescriptor["mode"] =>
-  value === "subagent" || value === "primary" || value === "all";
-
 const resolveAgentColor = (
-  agentName: JsonValue | undefined,
-  explicitColor: JsonValue | undefined,
-  isNative: JsonValue | undefined,
+  agentName: string,
+  explicitColor: string | undefined,
+  isNative: boolean | undefined,
 ): string | undefined => {
-  if (hasRuntimeType(explicitColor, "string") && explicitColor.trim().length > 0) {
+  if (explicitColor?.trim()) {
     return explicitColor;
   }
 
-  if (isNative !== true || !hasRuntimeType(agentName, "string")) {
+  if (isNative !== true) {
     return undefined;
   }
 
   const normalizedName = agentName.trim().toLowerCase();
-  return OPENCODE_DEFAULT_AGENT_COLORS[normalizedName];
+  return OPENCODE_DEFAULT_AGENT_COLORS.get(normalizedName);
 };
 
 const readAgentList = async (
-  client: AgentsClient,
+  client: ReturnType<ClientFactory>,
   workingDirectory: string,
-): Promise<JsonValue[]> => {
-  const app = client.app;
-  if (!app || !hasRuntimeType(app.agents, "function")) {
-    throw new Error("OpenCode runtime does not expose the agent listing API.");
-  }
-
-  const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
-  return opencodeAgentListPayloadSchema.parse(payload);
-};
-
-const readOptionalAgentList = async (
-  client: AgentsClient,
-  workingDirectory: string,
-): Promise<JsonValue[]> => {
-  const app = client.app;
-  if (!app || !hasRuntimeType(app.agents, "function")) {
-    return [];
-  }
-
-  const payload = unwrapData(await app.agents({ directory: workingDirectory }), "list agents");
+): Promise<ParsedOpencodeAgent[]> => {
+  const payload = unwrapData(
+    await client.app.agents({ directory: workingDirectory }),
+    "list agents",
+  );
   return opencodeAgentListPayloadSchema.parse(payload);
 };
 
@@ -133,7 +86,7 @@ const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFil
 };
 
 const toFileSearchResults = (
-  payload: Parameters<typeof opencodeFileSearchPayloadSchema.safeParse>[0],
+  payload: unknown,
   workingDirectory: string,
 ): AgentFileSearchResult[] => {
   const paths = opencodeFileSearchPayloadSchema.safeParse(payload);
@@ -156,38 +109,21 @@ export const listAvailableModels = async (
     directory: input.workingDirectory,
   });
   const providerData = unwrapData(response, "list configured providers");
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `AgentsClient`.
-  const agentsData = await readOptionalAgentList(client as AgentsClient, input.workingDirectory);
+  const agentsData = await readAgentList(client, input.workingDirectory);
   const baseCatalog = mapProviderListToCatalog(providerData);
   const rawAgents = agentsData
-    .map((rawEntry) => {
-      const entry = asUnknownRecord(rawEntry);
-      const name = entry ? readStringProp(entry, ["name"]) : undefined;
-      if (!entry || !name || name.trim().length === 0) {
-        return undefined;
-      }
-
-      const mode = readStringProp(entry, ["mode"]);
-      if (!isAgentMode(mode)) {
-        return undefined;
-      }
-
-      const description = readStringProp(entry, ["description"]);
-      const hidden = hasRuntimeType(entry.hidden, "boolean") ? entry.hidden : undefined;
-      const native = hasRuntimeType(entry.native, "boolean") ? entry.native : undefined;
-
-      const resolvedColor = resolveAgentColor(name, entry.color, native);
+    .map((agent) => {
+      const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
       return {
-        id: name,
-        label: name,
-        ...(description ? { description } : undefined),
-        mode,
-        ...(hidden !== undefined ? { hidden } : undefined),
-        ...(native !== undefined ? { native } : undefined),
+        id: agent.name,
+        label: agent.name,
+        ...(agent.description ? { description: agent.description } : undefined),
+        mode: agent.mode,
+        ...(agent.hidden !== undefined ? { hidden: agent.hidden } : undefined),
+        ...(agent.native !== undefined ? { native: agent.native } : undefined),
         ...(resolvedColor !== undefined ? { color: resolvedColor } : undefined),
       };
     })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
     .sort((a, b) => a.label.localeCompare(b.label));
 
   return {
@@ -205,29 +141,15 @@ export const listAvailableSubagents = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `AgentsClient`.
-    const agentsData = await readAgentList(client as AgentsClient, input.workingDirectory);
+    const agentsData = await readAgentList(client, input.workingDirectory);
     const subagents = agentsData
-      .map((rawEntry, index) => {
-        const entry = asUnknownRecord(rawEntry);
-        const name = entry ? readStringProp(entry, ["name"]) : undefined;
-        const trimmedName = name?.trim();
-        if (!entry || !trimmedName) {
-          throw new Error(`Invalid agent payload: expected agent ${index} to include a name.`);
-        }
-
-        const mode = readStringProp(entry, ["mode"]);
-        if (!isAgentMode(mode)) {
+      .map((agent) => {
+        const trimmedName = agent.name.trim();
+        if (agent.hidden === true || agent.mode === "primary") {
           return null;
         }
 
-        const hidden = hasRuntimeType(entry.hidden, "boolean") ? entry.hidden : undefined;
-        if (hidden === true || mode === "primary") {
-          return null;
-        }
-
-        const description = readStringProp(entry, ["description"]);
-        const trimmedDescription = description?.trim();
+        const trimmedDescription = agent.description?.trim();
         return {
           id: trimmedName,
           name: trimmedName,
@@ -253,24 +175,9 @@ export const listAvailableSlashCommands = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    // SAFETY: The runtime adapter builds this value from the contract fields required by the asserted shape.
-    const commandClient = (
-      client as {
-        command?: {
-          list?: (input: { directory: string }) => Promise<{
-            data?: unknown;
-            error?: { message?: string } | unknown;
-          }>;
-        };
-      }
-    ).command;
-    if (!commandClient || !hasRuntimeType(commandClient.list, "function")) {
-      throw new Error("OpenCode runtime does not expose the command listing API.");
-    }
-
     const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(
       unwrapData(
-        await commandClient.list({ directory: input.workingDirectory }),
+        await client.command.list({ directory: input.workingDirectory }),
         "list slash commands",
       ),
     );
@@ -280,30 +187,19 @@ export const listAvailableSlashCommands = async (
     const payload = parsedPayload.data;
 
     const commands = payload
-      .flatMap((rawEntry) => {
-        const entry = asUnknownRecord(rawEntry);
-        const name = entry ? readStringProp(entry, ["name"]) : undefined;
-        if (!entry || !name || name.trim().length === 0) {
-          return [];
-        }
-
-        const description = readStringProp(entry, ["description"]);
-        const source = readStringProp(entry, ["source"]);
-        const normalizedSource: AgentSlashCommandCatalog["commands"][number]["source"] =
-          source === "command" || source === "mcp" || source === "skill" ? source : undefined;
-        const hints = readStringArrayProp(entry, "hints") ?? [];
-
+      .map((command) => {
         return [
           {
-            id: name,
-            trigger: name,
-            title: name,
-            ...(description ? { description } : undefined),
-            ...(normalizedSource ? { source: normalizedSource } : undefined),
-            hints,
+            id: command.name,
+            trigger: command.name,
+            title: command.name,
+            ...(command.description ? { description: command.description } : undefined),
+            ...(command.source ? { source: command.source } : undefined),
+            hints: command.hints,
           },
         ];
       })
+      .flat()
       .sort((left, right) => left.trigger.localeCompare(right.trigger));
 
     return slashCommandCatalogSchema.parse({
@@ -326,13 +222,7 @@ export const searchFiles = async (
       runtimeEndpoint: input.runtimeEndpoint,
       workingDirectory: input.workingDirectory,
     });
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `FindFilesClient`.
-    const findClient = (client as FindFilesClient).find;
-    if (!findClient || !hasRuntimeType(findClient.files, "function")) {
-      throw new Error("OpenCode runtime does not expose the file search API.");
-    }
-
-    const payload = await findClient.files({
+    const payload = await client.find.files({
       directory: input.workingDirectory,
       query: input.query,
       limit: FILE_SEARCH_LIMIT,

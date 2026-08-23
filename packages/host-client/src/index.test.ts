@@ -2,11 +2,10 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, runtimeTypeName } from "@openducktor/contr
 import type {} from "./bun-test";
 import type { HostClient as HostClientType } from "./index";
 import { createHostClient } from "./index";
-import type { JsonValue } from "@openducktor/contracts";
 
 type InvokeCall = {
   command: string;
-  args?: Record<string, JsonValue>;
+  args?: Record<string, unknown>;
 };
 
 const makeTaskCardPayload = () => ({
@@ -56,7 +55,7 @@ const makeTaskMetadataPayload = (specMarkdown = "Spec Body") => ({
   ],
 });
 
-const makeRepoStoreHealthPayload = (overrides: Record<string, JsonValue> = {}) => ({
+const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => ({
   category: "healthy",
   status: "ready",
   isReady: true,
@@ -68,12 +67,12 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, JsonValue> = {}) =
 type TestHostResult = object | string | number | boolean | null | undefined;
 
 const createClient = (
-  resolver: (command: string, args?: Record<string, JsonValue>) => TestHostResult,
+  resolver: (command: string, args?: Record<string, unknown>) => TestHostResult,
 ) => {
   const calls: InvokeCall[] = [];
   const invoke = async (
     command: string,
-    args?: Record<string, JsonValue>,
+    args?: Record<string, unknown>,
   ): Promise<TestHostResult> => {
     calls.push({ command, args });
     return resolver(command, args);
@@ -1997,7 +1996,10 @@ describe("HostClient", () => {
     });
 
     await expect(
-      client.codexAppServerRequest("runtime-1", "model/list", { request: "catalog" }),
+      client.codexAppServerRequest("runtime-1", {
+        method: "model/list",
+        params: { cursor: null, limit: null, includeHidden: null },
+      }),
     ).resolves.toEqual(modelListResponse);
     expect(calls).toEqual([
       {
@@ -2005,7 +2007,7 @@ describe("HostClient", () => {
         args: {
           runtimeId: "runtime-1",
           method: "model/list",
-          params: { request: "catalog" },
+          params: { cursor: null, limit: null, includeHidden: null },
         },
       },
     ]);

@@ -1,12 +1,12 @@
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
+import type { Root, RootContent } from "mdast";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
+import { hasOwnKey } from "@openducktor/contracts";
 import { normalizeTaskListBlockMath } from "@/components/ui/markdown-task-list-math";
 import { splitTaskDescriptionFrontMatter } from "./task-description-front-matter";
-
-interface UNSUPPORTEDNODEREASONSContract extends Record<string, string> {}
 
 export type VisualMarkdownCompatibility =
   | { compatible: true }
@@ -36,7 +36,7 @@ const SUPPORTED_MDAST_NODE_TYPES = new Set([
   "break",
 ]);
 
-const UNSUPPORTED_NODE_REASONS: UNSUPPORTEDNODEREASONSContract = {
+const UNSUPPORTED_NODE_REASONS = {
   html: "Raw HTML is available only in Markdown mode because Visual mode would remove it.",
   definition:
     "Reference-style links and images are available only in Markdown mode. Change them to inline links to use Visual mode.",
@@ -44,7 +44,7 @@ const UNSUPPORTED_NODE_REASONS: UNSUPPORTEDNODEREASONSContract = {
     "Reference-style links are available only in Markdown mode. Change them to inline links to use Visual mode.",
   imageReference:
     "Reference-style images are available only in Markdown mode. Change them to inline images to use Visual mode.",
-};
+} satisfies Record<string, string>;
 
 const sourceForNode = (
   body: string,
@@ -90,14 +90,7 @@ export type MarkdownOrderedListSemantic = {
   items: Array<{ lists: MarkdownOrderedListSemantic[] }>;
 };
 
-type MarkdownTreeNode = {
-  type?: string;
-  ordered?: boolean;
-  start?: number | null;
-  children?: MarkdownTreeNode[];
-};
-
-const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedListSemantic[] => {
+const orderedListsInMarkdownTree = (node: Root | RootContent): MarkdownOrderedListSemantic[] => {
   if (node.type === "list" && node.ordered) {
     return [
       {
@@ -108,14 +101,13 @@ const orderedListsInMarkdownTree = (node: MarkdownTreeNode): MarkdownOrderedList
       },
     ];
   }
-  return (node.children ?? []).flatMap(orderedListsInMarkdownTree);
+  return "children" in node ? node.children.flatMap(orderedListsInMarkdownTree) : [];
 };
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `MarkdownTreeNode`.
 export const canonicalRendererOrderedListSemantics = (
   body: string,
 ): MarkdownOrderedListSemantic[] =>
-  orderedListsInMarkdownTree(parseCanonicalRendererMarkdown(body) as MarkdownTreeNode);
+  orderedListsInMarkdownTree(parseCanonicalRendererMarkdown(body));
 
 export const canonicalRendererMathSemantics = (body: string): MarkdownMathSemantic[] => {
   const semantics: MarkdownMathSemantic[] = [];
@@ -147,7 +139,9 @@ const findUnsupportedSyntax = (body: string): string | undefined => {
       return;
     }
 
-    reason = UNSUPPORTED_NODE_REASONS[node.type];
+    reason = hasOwnKey(UNSUPPORTED_NODE_REASONS, node.type)
+      ? UNSUPPORTED_NODE_REASONS[node.type]
+      : undefined;
     if (reason !== undefined) {
       return;
     }

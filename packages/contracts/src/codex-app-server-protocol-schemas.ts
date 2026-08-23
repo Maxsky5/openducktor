@@ -1,15 +1,20 @@
 import { z } from "zod";
 import type {
   CodexAppServerClientRequestMap,
-  CodexAppServerJsonValue,
   CodexAppServerModelListResponse,
   CodexAppServerReasoningEffortOption,
   CodexAppServerRequestMethod,
   CodexAppServerSkillRecord,
   CodexAppServerSkillsListResponse,
   CodexAppServerThread,
+  CodexAppServerThreadItem,
+  CodexAppServerTurnError,
 } from "./codex-app-server-protocol";
-import { codexAppServerReasoningEffortSchema } from "./codex-app-server-request-schemas";
+import {
+  codexAppServerMultiAgentModeSchema,
+  codexAppServerReasoningEffortSchema,
+  codexAppServerUserInputSchema,
+} from "./codex-app-server-request-schemas";
 import { jsonValueSchema } from "./json-types";
 
 export const codexAppServerCommandActionSchema = z.discriminatedUnion("type", [
@@ -118,11 +123,18 @@ export const codexAppServerCurrentTimeReadResponseSchema = z.object({
   currentTimeAt: z.number().int(),
 });
 
+const mcpElicitationSchemaDescription = {
+  title: z.string().optional(),
+  description: z.string().optional(),
+};
+const mcpElicitationConstOptionSchema = z.object({
+  const: z.string(),
+  title: z.string(),
+});
 const codexAppServerMcpElicitationPrimitiveSchema = z.union([
   z.object({
     type: z.literal("string"),
-    title: z.string().optional(),
-    description: z.string().optional(),
+    ...mcpElicitationSchemaDescription,
     minLength: z.number().int().nonnegative().optional(),
     maxLength: z.number().int().nonnegative().optional(),
     format: z.enum(["email", "uri", "date", "date-time"]).optional(),
@@ -130,17 +142,39 @@ const codexAppServerMcpElicitationPrimitiveSchema = z.union([
   }),
   z.object({
     type: z.enum(["number", "integer"]),
-    title: z.string().optional(),
-    description: z.string().optional(),
+    ...mcpElicitationSchemaDescription,
     minimum: z.number().optional(),
     maximum: z.number().optional(),
     default: z.number().optional(),
   }),
   z.object({
     type: z.literal("boolean"),
-    title: z.string().optional(),
-    description: z.string().optional(),
+    ...mcpElicitationSchemaDescription,
     default: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("string"),
+    ...mcpElicitationSchemaDescription,
+    enum: z.array(z.string()),
+    enumNames: z.array(z.string()).optional(),
+    default: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("string"),
+    ...mcpElicitationSchemaDescription,
+    oneOf: z.array(mcpElicitationConstOptionSchema),
+    default: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("array"),
+    ...mcpElicitationSchemaDescription,
+    minItems: z.number().int().nonnegative().optional(),
+    maxItems: z.number().int().nonnegative().optional(),
+    items: z.union([
+      z.object({ type: z.literal("string"), enum: z.array(z.string()) }),
+      z.object({ anyOf: z.array(mcpElicitationConstOptionSchema) }),
+    ]),
+    default: z.array(z.string()).optional(),
   }),
 ]);
 
@@ -194,7 +228,7 @@ export const codexAppServerExecCommandApprovalParamsSchema = z.object({
 
 export const codexAppServerCommandExecutionRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
-  startedAtMs: z.number().finite(),
+  startedAtMs: z.number().int(),
   threadId: z.string(),
   turnId: z.string(),
   environmentId: z.string().nullable(),
@@ -235,7 +269,7 @@ export const codexAppServerPermissionsRequestApprovalParamsSchema = z.object({
   turnId: z.string(),
   itemId: z.string(),
   environmentId: z.string().nullable(),
-  startedAtMs: z.number().finite(),
+  startedAtMs: z.number().int(),
   cwd: z.string(),
   reason: z.string().nullable(),
   permissions: codexAppServerRequestPermissionProfileSchema,
@@ -287,7 +321,7 @@ const codexAppServerSubAgentSourceSchema = z.union([
     thread_spawn: z.object({
       parent_thread_id: z.string(),
       depth: z.number(),
-      agent_path: jsonValueSchema.nullable(),
+      agent_path: z.string().nullable(),
       agent_nickname: z.string().nullable(),
       agent_role: z.string().nullable(),
     }),
@@ -317,15 +351,239 @@ const codexAppServerGitInfoSchema = z.object({
   originUrl: z.string().nullable(),
 });
 
-const codexAppServerTurnSchema = z.object({
+const codexAppServerMemoryCitationSchema = z.object({
+  entries: z.array(
+    z.object({
+      path: z.string(),
+      lineStart: z.number(),
+      lineEnd: z.number(),
+      note: z.string(),
+    }),
+  ),
+  threadIds: z.array(z.string()),
+});
+
+const codexAppServerFileUpdateChangeSchema = z.object({
+  path: z.string(),
+  kind: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("add") }),
+    z.object({ type: z.literal("delete") }),
+    z.object({ type: z.literal("update"), move_path: z.string().nullable() }),
+  ]),
+  diff: z.string(),
+});
+
+const codexAppServerDynamicToolCallOutputContentItemSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("inputText"), text: z.string() }),
+  z.object({ type: z.literal("inputImage"), imageUrl: z.string() }),
+  z.object({ type: z.literal("inputAudio"), audioUrl: z.string() }),
+]);
+
+const codexAppServerWebSearchActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("search"),
+    query: z.string().nullable(),
+    queries: z.array(z.string()).nullable(),
+  }),
+  z.object({ type: z.literal("openPage"), url: z.string().nullable() }),
+  z.object({
+    type: z.literal("findInPage"),
+    url: z.string().nullable(),
+    pattern: z.string().nullable(),
+  }),
+  z.object({ type: z.literal("other") }),
+]);
+
+const codexAppServerCollabAgentStateSchema = z.object({
+  status: z.enum([
+    "pendingInit",
+    "running",
+    "interrupted",
+    "completed",
+    "errored",
+    "shutdown",
+    "notFound",
+  ]),
+  message: z.string().nullable(),
+});
+
+export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("userMessage"),
+    id: z.string(),
+    clientId: z.string().nullable(),
+    content: z.array(codexAppServerUserInputSchema),
+  }),
+  z.object({
+    type: z.literal("hookPrompt"),
+    id: z.string(),
+    fragments: z.array(z.object({ text: z.string(), hookRunId: z.string() })),
+  }),
+  z.object({
+    type: z.literal("agentMessage"),
+    id: z.string(),
+    text: z.string(),
+    phase: z.enum(["commentary", "final_answer"]).nullable(),
+    memoryCitation: codexAppServerMemoryCitationSchema.nullable(),
+  }),
+  z.object({ type: z.literal("plan"), id: z.string(), text: z.string() }),
+  z.object({
+    type: z.literal("reasoning"),
+    id: z.string(),
+    summary: z.array(z.string()),
+    content: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal("commandExecution"),
+    id: z.string(),
+    pluginId: z.string().nullable(),
+    scriptPath: z.string().nullable(),
+    command: z.string(),
+    cwd: z.string(),
+    processId: z.string().nullable(),
+    source: z.enum(["agent", "userShell", "unifiedExecStartup", "unifiedExecInteraction"]),
+    status: z.enum(["inProgress", "completed", "failed", "declined"]),
+    commandActions: z.array(codexAppServerCommandActionSchema),
+    aggregatedOutput: z.string().nullable(),
+    exitCode: z.number().nullable(),
+    durationMs: z.number().nullable(),
+  }),
+  z.object({
+    type: z.literal("fileChange"),
+    id: z.string(),
+    changes: z.array(codexAppServerFileUpdateChangeSchema),
+    status: z.enum(["inProgress", "completed", "failed", "declined"]),
+  }),
+  z.object({
+    type: z.literal("mcpToolCall"),
+    id: z.string(),
+    server: z.string(),
+    tool: z.string(),
+    status: z.enum(["inProgress", "completed", "failed"]),
+    arguments: jsonValueSchema,
+    appContext: z
+      .object({
+        connectorId: z.string(),
+        linkId: z.string().nullable(),
+        resourceUri: z.string().nullable(),
+        appName: z.string().nullable(),
+        actionName: z.string().nullable(),
+      })
+      .nullable(),
+    mcpAppResourceUri: z.string().optional(),
+    pluginId: z.string().nullable(),
+    readOnlyHint: z.boolean().nullable(),
+    result: z
+      .object({
+        content: z.array(jsonValueSchema),
+        structuredContent: jsonValueSchema.nullable(),
+        _meta: jsonValueSchema.nullable(),
+      })
+      .nullable(),
+    error: z.object({ message: z.string() }).nullable(),
+    durationMs: z.number().nullable(),
+  }),
+  z.object({
+    type: z.literal("dynamicToolCall"),
+    id: z.string(),
+    namespace: z.string().nullable(),
+    tool: z.string(),
+    arguments: jsonValueSchema,
+    status: z.enum(["inProgress", "completed", "failed"]),
+    contentItems: z.array(codexAppServerDynamicToolCallOutputContentItemSchema).nullable(),
+    success: z.boolean().nullable(),
+    durationMs: z.number().nullable(),
+  }),
+  z.object({
+    type: z.literal("collabAgentToolCall"),
+    id: z.string(),
+    tool: z.enum(["spawnAgent", "sendInput", "resumeAgent", "wait", "closeAgent"]),
+    status: z.enum(["inProgress", "completed", "failed"]),
+    senderThreadId: z.string(),
+    receiverThreadIds: z.array(z.string()),
+    prompt: z.string().nullable(),
+    model: z.string().nullable(),
+    reasoningEffort: codexAppServerReasoningEffortSchema.nullable(),
+    agentsStates: z.record(z.string(), codexAppServerCollabAgentStateSchema),
+  }),
+  z.object({
+    type: z.literal("subAgentActivity"),
+    id: z.string(),
+    kind: z.enum(["started", "interacted", "interrupted"]),
+    agentThreadId: z.string(),
+    agentPath: z.string(),
+  }),
+  z.object({
+    type: z.literal("webSearch"),
+    id: z.string(),
+    query: z.string(),
+    action: codexAppServerWebSearchActionSchema.nullable(),
+    results: z.array(jsonValueSchema).nullable(),
+  }),
+  z.object({ type: z.literal("imageView"), id: z.string(), path: z.string() }),
+  z.object({
+    type: z.literal("sleep"),
+    id: z.string(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+  z.object({
+    type: z.literal("imageGeneration"),
+    id: z.string(),
+    status: z.string(),
+    revisedPrompt: z.string().nullable(),
+    result: z.string(),
+    transparentBackground: z.boolean().optional(),
+    failure: z
+      .object({
+        type: z.literal("usageLimitExceeded"),
+        limitId: z.string(),
+        resetsAt: z.number().nullable(),
+      })
+      .nullable(),
+    savedPath: z.string().optional(),
+  }),
+  z.object({ type: z.literal("enteredReviewMode"), id: z.string(), review: z.string() }),
+  z.object({ type: z.literal("exitedReviewMode"), id: z.string(), review: z.string() }),
+  z.object({ type: z.literal("contextCompaction"), id: z.string() }),
+]) satisfies z.ZodType<CodexAppServerThreadItem>;
+
+const codexAppServerCodexErrorInfoSchema = z.union([
+  z.enum([
+    "contextWindowExceeded",
+    "sessionBudgetExceeded",
+    "usageLimitExceeded",
+    "serverOverloaded",
+    "cyberPolicy",
+    "misalignmentPolicyViolation",
+    "internalServerError",
+    "unauthorized",
+    "badRequest",
+    "threadRollbackFailed",
+    "sandboxError",
+    "other",
+  ]),
+  z.object({ httpConnectionFailed: z.object({ httpStatusCode: z.number().nullable() }) }),
+  z.object({ responseStreamConnectionFailed: z.object({ httpStatusCode: z.number().nullable() }) }),
+  z.object({ responseStreamDisconnected: z.object({ httpStatusCode: z.number().nullable() }) }),
+  z.object({ responseTooManyFailedAttempts: z.object({ httpStatusCode: z.number().nullable() }) }),
+  z.object({ activeTurnNotSteerable: z.object({ turnKind: z.enum(["review", "compact"]) }) }),
+]);
+
+const codexAppServerTurnErrorSchema = z.object({
+  message: z.string(),
+  codexErrorInfo: codexAppServerCodexErrorInfoSchema.nullable(),
+  additionalDetails: z.string().nullable(),
+}) satisfies z.ZodType<CodexAppServerTurnError>;
+
+export const codexAppServerTurnSchema = z.object({
   completedAt: z.number().nullable(),
   durationMs: z.number().nullable(),
-  error: jsonValueSchema.nullable(),
+  error: codexAppServerTurnErrorSchema.nullable(),
   id: z.string(),
-  items: z.array(jsonValueSchema),
+  items: z.array(codexAppServerThreadItemSchema),
   itemsView: z.enum(["full", "notLoaded", "summary"]),
   startedAt: z.number().nullable(),
-  status: jsonValueSchema,
+  status: z.enum(["completed", "interrupted", "failed", "inProgress"]),
 });
 
 const codexAppServerThreadSchema = z.object({
@@ -358,100 +616,124 @@ const codexAppServerThreadSchema = z.object({
   turns: z.array(codexAppServerTurnSchema),
 }) satisfies z.ZodType<CodexAppServerThread>;
 
-const codexAppServerThreadStartResultSchema = z.object({
+const codexAppServerActivePermissionProfileSchema = z.object({
+  id: z.string(),
+  extends: z.string().nullable(),
+});
+
+const codexAppServerTurnsPageSchema = z.object({
+  data: z.array(codexAppServerTurnSchema),
+  nextCursor: z.string().nullable(),
+  backwardsCursor: z.string().nullable(),
+});
+
+const codexAppServerThreadLaunchResultSchema = z.object({
   approvalPolicy: codexAppServerAskForApprovalSchema,
   approvalsReviewer: z.enum(["auto_review", "guardian_subagent", "user"]),
+  activePermissionProfile: codexAppServerActivePermissionProfileSchema.nullable(),
   cwd: z.string(),
   instructionSources: z.array(z.string()),
   model: z.string(),
   modelProvider: z.string(),
+  multiAgentMode: codexAppServerMultiAgentModeSchema,
   reasoningEffort: codexAppServerReasoningEffortSchema.nullable(),
+  runtimeWorkspaceRoots: z.array(z.string()),
   sandbox: codexAppServerSandboxPolicySchema,
   serviceTier: z.string().nullable(),
   thread: codexAppServerThreadSchema,
 });
 
-const codexAppServerReasoningEffortOptionSchema = z
-  .object({
-    description: z.string().nullable().optional(),
-    reasoningEffort: codexAppServerReasoningEffortSchema,
-  })
-  .transform((value): CodexAppServerReasoningEffortOption => {
-    if (value.description === undefined) {
-      return { reasoningEffort: value.reasoningEffort };
-    }
-    return { reasoningEffort: value.reasoningEffort, description: value.description };
-  });
+const codexAppServerThreadResumeResultSchema = codexAppServerThreadLaunchResultSchema.extend({
+  initialTurnsPage: codexAppServerTurnsPageSchema.nullable(),
+  turnsBackwardsCursor: z.string().nullable(),
+  itemsBackwardsCursor: z.string().nullable(),
+});
+
+const codexAppServerReasoningEffortOptionSchema = z.object({
+  description: z.string(),
+  reasoningEffort: codexAppServerReasoningEffortSchema,
+}) satisfies z.ZodType<CodexAppServerReasoningEffortOption>;
 
 const codexAppServerModelListResponseSchema = z.object({
   data: z.array(
     z.object({
       additionalSpeedTiers: z.array(z.string()),
-      availabilityNux: jsonValueSchema.nullable(),
+      availabilityNux: z.object({ message: z.string() }).nullable(),
       defaultReasoningEffort: codexAppServerReasoningEffortSchema,
+      defaultServiceTier: z.string().nullable(),
       description: z.string(),
       displayName: z.string(),
       hidden: z.boolean(),
       id: z.string(),
-      inputModalities: z.array(z.string()),
+      inputModalities: z.array(z.enum(["text", "image", "audio"])),
       isDefault: z.boolean(),
       model: z.string(),
-      serviceTiers: z.array(jsonValueSchema),
+      modelSpecialty: z.string().nullable(),
+      multiAgentVersion: z.enum(["disabled", "v1", "v2"]).nullable(),
+      serviceTiers: z.array(
+        z.object({ id: z.string(), name: z.string(), description: z.string() }),
+      ),
       supportedReasoningEfforts: z.array(codexAppServerReasoningEffortOptionSchema),
       supportsPersonality: z.boolean(),
       upgrade: z.string().nullable(),
-      upgradeInfo: jsonValueSchema.nullable(),
+      upgradeInfo: z
+        .object({
+          model: z.string(),
+          upgradeCopy: z.string().nullable(),
+          modelLink: z.string().nullable(),
+          migrationMarkdown: z.string().nullable(),
+          retirementAt: z.number().nullable(),
+        })
+        .nullable(),
     }),
   ),
   nextCursor: z.string().nullable(),
 }) satisfies z.ZodType<CodexAppServerModelListResponse>;
 
-const codexAppServerSkillRecordSchema = z
-  .object({
-    name: z.string(),
-    path: z.string(),
-    scope: z.string().nullable().optional(),
-    title: z.string().nullable().optional(),
-    displayName: z.string().nullable().optional(),
-    description: z.string().nullable().optional(),
-    enabled: z.boolean().nullable().optional(),
-  })
-  .transform((value): CodexAppServerSkillRecord => {
-    const skill: CodexAppServerSkillRecord = { name: value.name, path: value.path };
-    if (value.scope !== undefined) {
-      skill.scope = value.scope;
-    }
-    if (value.title !== undefined) {
-      skill.title = value.title;
-    }
-    if (value.displayName !== undefined) {
-      skill.displayName = value.displayName;
-    }
-    if (value.description !== undefined) {
-      skill.description = value.description;
-    }
-    if (value.enabled !== undefined) {
-      skill.enabled = value.enabled;
-    }
-    return skill;
-  });
+const codexAppServerSkillRecordSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  scope: z.enum(["user", "repo", "system", "admin"]),
+  description: z.string(),
+  shortDescription: z.string().optional(),
+  interface: z
+    .object({
+      displayName: z.string().optional(),
+      shortDescription: z.string().optional(),
+      iconSmall: z.string().optional(),
+      iconLarge: z.string().optional(),
+      iconSmallUrl: z.string().nullable(),
+      iconLargeUrl: z.string().nullable(),
+      brandColor: z.string().optional(),
+      defaultPrompt: z.string().optional(),
+    })
+    .optional(),
+  dependencies: z
+    .object({
+      tools: z.array(
+        z.object({
+          type: z.string(),
+          value: z.string(),
+          description: z.string().optional(),
+          transport: z.string().optional(),
+          command: z.string().optional(),
+          url: z.string().optional(),
+        }),
+      ),
+    })
+    .optional(),
+  enabled: z.boolean(),
+}) satisfies z.ZodType<CodexAppServerSkillRecord>;
 
-const codexAppServerSkillsListResponseSchema = z
-  .object({
-    data: z.array(
-      z.object({
-        cwd: z.string(),
-        skills: z.array(codexAppServerSkillRecordSchema),
-      }),
-    ),
-    errors: z.array(jsonValueSchema).nullable().optional(),
-  })
-  .transform((value): CodexAppServerSkillsListResponse => {
-    if (value.errors === undefined) {
-      return { data: value.data };
-    }
-    return { data: value.data, errors: value.errors };
-  });
+const codexAppServerSkillsListResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      cwd: z.string(),
+      skills: z.array(codexAppServerSkillRecordSchema),
+      errors: z.array(z.object({ path: z.string(), message: z.string() })),
+    }),
+  ),
+}) satisfies z.ZodType<CodexAppServerSkillsListResponse>;
 
 type CodexAppServerRequestResultSchemaMap = {
   [Method in CodexAppServerRequestMethod]: z.ZodType<
@@ -467,7 +749,7 @@ const codexAppServerRequestResultSchemas = {
     userAgent: z.string(),
   }),
   "model/list": codexAppServerModelListResponseSchema,
-  "thread/fork": codexAppServerThreadStartResultSchema,
+  "thread/fork": codexAppServerThreadLaunchResultSchema,
   "thread/list": z.object({
     backwardsCursor: z.string().nullable(),
     data: z.array(codexAppServerThreadSchema),
@@ -478,8 +760,8 @@ const codexAppServerRequestResultSchemas = {
     nextCursor: z.string().nullable(),
   }),
   "thread/read": z.object({ thread: codexAppServerThreadSchema }),
-  "thread/resume": codexAppServerThreadStartResultSchema,
-  "thread/start": codexAppServerThreadStartResultSchema,
+  "thread/resume": codexAppServerThreadResumeResultSchema,
+  "thread/start": codexAppServerThreadLaunchResultSchema,
   "thread/name/set": z.object({}).strict(),
   "thread/compact/start": z.object({}).strict(),
   "thread/turns/list": z.object({
@@ -526,8 +808,11 @@ export const codexAppServerRequestResultSchema = z.union([
   codexAppServerRequestResultSchemas.fuzzyFileSearch,
 ]);
 
-export const parseCodexAppServerRequestResultValue = <Method extends CodexAppServerRequestMethod>(
+export const parseCodexAppServerRequestResultValue = <
+  Method extends CodexAppServerRequestMethod,
+  Input,
+>(
   method: Method,
-  value: CodexAppServerJsonValue,
+  value: Input,
 ): CodexAppServerClientRequestMap[Method]["result"] =>
   codexAppServerRequestResultSchemas[method].parse(value);

@@ -24,9 +24,6 @@ import {
 } from "./claude-agent-sdk-transcript-correlation";
 import { settleClaudeStreamedAssistantText } from "./claude-agent-sdk-transcript-retractions";
 import { isRecord, readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
-
-interface MetadataContract extends Record<string, JsonValue> {}
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -38,17 +35,31 @@ type ClaudeSubagentSession = {
   subagentMessageIdsByTaskId: Map<string, string>;
   subagentAgentIdsByToolUseId?: Map<string, string>;
   subagentTaskIdsByToolUseId: Map<string, string>;
-  toolInputsByCallId: Map<string, Record<string, JsonValue>>;
+  toolInputsByCallId: Map<string, Record<string, unknown>>;
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
 };
-type ClaudeSubagentSystemMessage = Extract<
+type ClaudeSdkSubagentSystemMessage = Extract<
   SDKMessage,
   {
     type: "system";
     subtype: "task_started" | "task_progress" | "task_updated" | "task_notification";
   }
 >;
+type ClaudeSdkTaskNotificationMessage = Extract<
+  ClaudeSdkSubagentSystemMessage,
+  { subtype: "task_notification" }
+>;
+export type ClaudeHistoryTaskNotificationMessage = Omit<
+  ClaudeSdkTaskNotificationMessage,
+  "output_file" | "summary"
+> & {
+  output_file?: string;
+  summary?: string;
+};
+type ClaudeSubagentSystemMessage =
+  | Exclude<ClaudeSdkSubagentSystemMessage, ClaudeSdkTaskNotificationMessage>
+  | ClaudeHistoryTaskNotificationMessage;
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,
   taskId: string,
@@ -146,9 +157,9 @@ export const emitClaudeAgentToolResultSubagentPart = ({
   toolUseId,
 }: {
   emit: (event: AgentEvent) => void;
-  input?: Record<string, JsonValue>;
+  input?: Record<string, unknown>;
   isError: boolean;
-  resultRaw: Record<string, JsonValue>;
+  resultRaw: Record<string, unknown>;
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -197,18 +208,23 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     : null;
   const startedAtMs =
     totalDurationMs === null ? undefined : Math.max(0, endedAtMs - totalDurationMs);
-  const metadata: MetadataContract = {
+  const resolvedModel = readStringProp(structuredResult, "resolvedModel");
+  const outputFile = readStringProp(structuredResult, "outputFile");
+  const sessionUrl = readStringProp(structuredResult, "sessionUrl");
+  const metadata = {
     agentId,
     sourceToolUseId: toolUseId,
+    ...(resolvedModel ? { resolvedModel } : undefined),
+    ...(totalDurationMs !== null ? { totalDurationMs } : undefined),
+    ...(hasRuntimeType(structuredResult.totalTokens, "number")
+      ? { totalTokens: structuredResult.totalTokens }
+      : undefined),
+    ...(outputFile ? { outputFile } : undefined),
+    ...(hasRuntimeType(structuredResult.canReadOutputFile, "boolean")
+      ? { canReadOutputFile: structuredResult.canReadOutputFile }
+      : undefined),
+    ...(sessionUrl ? { sessionUrl } : undefined),
   };
-  if (structuredResult.resolvedModel) metadata.resolvedModel = structuredResult.resolvedModel;
-  if (totalDurationMs !== null) metadata.totalDurationMs = totalDurationMs;
-  if (hasRuntimeType(structuredResult.totalTokens, "number"))
-    metadata.totalTokens = structuredResult.totalTokens;
-  if (structuredResult.outputFile) metadata.outputFile = structuredResult.outputFile;
-  if (hasRuntimeType(structuredResult.canReadOutputFile, "boolean"))
-    metadata.canReadOutputFile = structuredResult.canReadOutputFile;
-  if (structuredResult.sessionUrl) metadata.sessionUrl = structuredResult.sessionUrl;
   const messageId =
     session.toolMessageIdsByCallId.get(toolUseId) ??
     (taskId ? session.subagentMessageIdsByTaskId.get(taskId) : undefined) ??
@@ -251,7 +267,7 @@ export const emitClaudeTaskStopSubagentPart = ({
   timestamp,
 }: {
   emit: (event: AgentEvent) => void;
-  resultRaw: Record<string, JsonValue>;
+  resultRaw: Record<string, unknown>;
   resultText: string;
   session: ClaudeSubagentSession;
   timestamp: string;
@@ -380,8 +396,8 @@ export const handleClaudeSubagentSystemMessage = ({
       return;
     }
     const details: Partial<Extract<AgentStreamPart, { kind: "subagent" }>> = {};
-    // SAFETY: The runtime adapter builds this value from the contract fields required by `Record<string, JsonValue>`.
-    const patch = message.patch as Record<string, JsonValue>;
+    // SAFETY: The runtime adapter builds this value from the contract fields required by `Record<string, unknown>`.
+    const patch = message.patch as Record<string, unknown>;
     const error =
       readStringProp(patch, "error") ??
       readStringProp(message, "error") ??

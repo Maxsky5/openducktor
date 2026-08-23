@@ -1,51 +1,31 @@
 import { extname } from "node:path";
 import type { ElectronReleasePlatform } from "./electron-release-targets";
 
-interface ElectronBuilderPlatformFlagsContract extends Record<
-  ElectronReleasePlatform,
-  "--linux" | "--mac" | "--win"
-> {}
-
-interface LocalElectronPackageTargetsContract extends Record<
-  ElectronReleasePlatform,
-  readonly string[]
-> {}
-
-interface InstallableArtifactExtensionsContract extends Record<
-  ElectronReleasePlatform,
-  ReadonlySet<string>
-> {}
-
-interface ReleaseArtifactExtensionsContract extends Record<
-  ElectronReleasePlatform,
-  ReadonlySet<string>
-> {}
-
-export const electronBuilderPlatformFlags: ElectronBuilderPlatformFlagsContract = {
+export const electronBuilderPlatformFlags = {
   linux: "--linux",
   macos: "--mac",
   windows: "--win",
-};
+} satisfies Record<ElectronReleasePlatform, "--linux" | "--mac" | "--win">;
 
-export const localElectronPackageTargets: LocalElectronPackageTargetsContract = {
+export const localElectronPackageTargets = {
   linux: ["AppImage"],
   macos: ["dmg"],
   windows: ["nsis"],
-};
+} satisfies Record<ElectronReleasePlatform, readonly string[]>;
 
-const installableArtifactExtensions: InstallableArtifactExtensionsContract = {
+const installableArtifactExtensions = {
   linux: new Set([".AppImage", ".deb"]),
   macos: new Set([".dmg", ".zip"]),
   windows: new Set([".exe", ".zip"]),
-};
+} satisfies Record<ElectronReleasePlatform, ReadonlySet<string>>;
 
 const companionArtifactExtensions: ReadonlySet<string> = new Set([".blockmap"]);
 
-const releaseArtifactExtensions: ReleaseArtifactExtensionsContract = {
+const releaseArtifactExtensions = {
   linux: new Set([".AppImage", ".deb", ".blockmap"]),
   macos: new Set([".dmg", ".zip", ".blockmap"]),
   windows: new Set([".exe", ".zip", ".blockmap"]),
-};
+} satisfies Record<ElectronReleasePlatform, ReadonlySet<string>>;
 
 export const defaultElectronUpdateChannel = "latest";
 

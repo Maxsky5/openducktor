@@ -236,7 +236,7 @@ const preparePromptSend = (request: SendAgentUserMessageInput): PreparedUserSend
         throw toOpenCodeRequestError("prompt session", response.error, response.response);
       }
       return {
-        assistantMessageId: resolveAssistantResponseMessageId(response.data),
+        assistantMessageId: null,
       };
     },
   };

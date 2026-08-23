@@ -45,10 +45,10 @@ export const createRuntimeOrchestratorService = ({
   activeMcpProbeRetryDelayMs = ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
   logger,
 }: {
-  gitPort: GitPort;
+  gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: RuntimeRegistryPort;
-  taskReader: TaskReader;
+  taskReader: Pick<TaskReader, "getTaskMetadata">;
   activeMcpProbeRetryDelayMs?: number;
   logger?: RuntimeOrchestratorLogger;
 }): RuntimeOrchestratorService => {

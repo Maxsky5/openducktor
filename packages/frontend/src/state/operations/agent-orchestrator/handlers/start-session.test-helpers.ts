@@ -28,8 +28,8 @@ import type {
 import type { RuntimeInfo } from "../runtime/runtime";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
-import type { JsonValue } from "@openducktor/contracts";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 export type TestAgentSessionState = AgentSessionFixtureOverrides & {
@@ -68,7 +68,7 @@ export const persistedSessionRecord = (
     workingDirectory: string;
     runtimeKind: AgentSessionRecord["runtimeKind"];
     selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, JsonValue>,
+  } & Record<string, unknown>,
 ): AgentSessionRecord => ({
   runtimeKind: input.runtimeKind,
   externalSessionId: input.externalSessionId,
@@ -312,12 +312,13 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       onSessionCollectionChange?.(sessionsRef.current);
     });
 
-  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentEnginePort`.
+  const agentEngine =
+    adapter instanceof OpencodeSdkAdapter ? createOpenCodeAgentEngineTestAdapter(adapter) : adapter;
   const start = createStartAgentSession(
     toStartSessionDependencies({
       activeRepo,
       workspaceId,
-      adapter: adapter as AgentEnginePort,
+      adapter: agentEngine,
       sessionsRef,
       replaceSession,
       removeSession,

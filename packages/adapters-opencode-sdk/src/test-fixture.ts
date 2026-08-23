@@ -1,19 +1,10 @@
-import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2/client";
-import type { JsonValue } from "@openducktor/contracts";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { JsonObject } from "@openducktor/contracts";
 
-export const createInvalidOpencodeEventFixture = (value: JsonValue): Event => {
-  // SAFETY: These tests deliberately send malformed JSON through the OpenCode event boundary.
-  return value as Event;
-};
+export const createInvalidOpencodeEventFixture = (value: JsonObject): JsonObject => value;
 
-export const createInvalidOpencodePartFixture = (value: JsonValue): Part => {
-  // SAFETY: These tests deliberately send malformed JSON through the OpenCode part boundary.
-  return value as Part;
-};
+export const createInvalidOpencodePartFixture = (value: JsonObject): JsonObject => value;
 
 export const createGlobalEventClientFixture = (
   client: Pick<OpencodeClient, "global">,
-): OpencodeClient => {
-  // SAFETY: The event-stream test reads only the supplied global event API.
-  return client as OpencodeClient;
-};
+): Pick<OpencodeClient, "global"> => client;

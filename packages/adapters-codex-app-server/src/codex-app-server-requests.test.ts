@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_APP_SERVER_SERVER_REQUEST_METHOD, type JsonValue } from "@openducktor/contracts";
+import {
+  CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  type CodexAppServerJsonValue,
+} from "@openducktor/contracts";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
@@ -11,7 +14,10 @@ import {
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
 
-const codexMcpToolApprovalRequest = (persist: JsonValue | undefined, includeToolTitle = true) => ({
+const codexMcpToolApprovalRequest = (
+  persist: CodexAppServerJsonValue | undefined,
+  includeToolTitle = true,
+) => ({
   id: 7,
   method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.MCP_SERVER_ELICITATION_REQUEST,
   params: {
@@ -59,14 +65,22 @@ describe("Codex App Server request parsing", () => {
       id: "53",
       method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
       params: {
+        autoResolutionMs: null,
+        isBlocking: true,
+        itemId: "item-1",
         threadId: "thread-1",
         turnId: "turn-1",
         questions: [
           {
             id: "question-1",
             header: "Proceed",
+            isOther: false,
+            isSecret: false,
             question: "Continue?",
-            options: ["Yes", "No"],
+            options: [
+              { label: "Yes", description: "Continue" },
+              { label: "No", description: "Stop" },
+            ],
           },
         ],
       },

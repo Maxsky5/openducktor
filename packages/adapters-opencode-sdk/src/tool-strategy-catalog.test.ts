@@ -20,7 +20,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "shell",
         tool: "bash",
         rawInput: { command: "bun run test" },
-        rawOutput: undefined,
         expectedType: "bash",
         expectedPreview: "bun run test",
       },
@@ -28,7 +27,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "read",
         tool: "read",
         rawInput: { filePath: "/repo/src/index.ts" },
-        rawOutput: undefined,
         expectedType: "read",
         expectedPreview: "/repo/src/index.ts",
       },
@@ -36,7 +34,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "list",
         tool: "list",
         rawInput: { path: "/repo/src" },
-        rawOutput: undefined,
         expectedType: "list",
         expectedPreview: "/repo/src",
       },
@@ -44,7 +41,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "search",
         tool: "grep",
         rawInput: { pattern: "deriveToolType", path: "/repo/src" },
-        rawOutput: undefined,
         expectedType: "search",
         expectedPreview: "deriveToolType in /repo/src",
       },
@@ -52,7 +48,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "todo",
         tool: "todowrite",
         rawInput: { todos: [{ content: "Add catalog" }, { content: "Run tests" }] },
-        rawOutput: undefined,
         expectedType: "todo",
         expectedPreview: "2 todos",
       },
@@ -60,7 +55,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "file edit",
         tool: "apply_patch",
         rawInput: { filePath: "/repo/src/tool-preview.ts", patch: "@@" },
-        rawOutput: undefined,
         expectedType: "file_edit",
         expectedPreview: "/repo/src/tool-preview.ts",
       },
@@ -68,7 +62,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "question",
         tool: "question",
         rawInput: { questions: [{ question: "Keep the current preview?" }] },
-        rawOutput: undefined,
         expectedType: "question",
         expectedPreview: "Keep the current preview?",
       },
@@ -76,7 +69,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "subagent task",
         tool: "task",
         rawInput: { agent: "build", prompt: "Inspect the adapter" },
-        rawOutput: undefined,
         expectedType: "generic",
         expectedPreview: "build",
       },
@@ -84,7 +76,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "web",
         tool: "websearch",
         rawInput: { query: "OpenCode SDK tools" },
-        rawOutput: undefined,
         expectedType: "web",
         expectedPreview: "OpenCode SDK tools",
       },
@@ -92,7 +83,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "session",
         tool: "session_read",
         rawInput: { sessionId: "session-42" },
-        rawOutput: undefined,
         expectedType: "generic",
         expectedPreview: "session-42",
       },
@@ -100,7 +90,6 @@ describe("OpenCode tool strategy catalog", () => {
         label: "generic fallback",
         tool: "custom_runtime_tool",
         rawInput: { description: "Inspect runtime state" },
-        rawOutput: undefined,
         expectedType: "generic",
         expectedPreview: "Inspect runtime state",
       },
@@ -114,7 +103,6 @@ describe("OpenCode tool strategy catalog", () => {
         deriveToolPreview({
           tool: testCase.tool,
           rawInput: testCase.rawInput,
-          rawOutput: testCase.rawOutput,
         }),
         testCase.label,
       ).toBe(testCase.expectedPreview);
@@ -124,12 +112,12 @@ describe("OpenCode tool strategy catalog", () => {
   test("preserves the shorter preview limit only for the literal bash tool", () => {
     const command = "x".repeat(200);
 
-    expect(deriveToolPreview({ tool: "bash", rawInput: { command }, rawOutput: undefined })).toBe(
+    expect(deriveToolPreview({ tool: "bash", rawInput: { command } })).toBe(
       `${"x".repeat(120)}...`,
     );
 
     for (const tool of ["shell", "exec", "command"]) {
-      expect(deriveToolPreview({ tool, rawInput: { command }, rawOutput: undefined }), tool).toBe(
+      expect(deriveToolPreview({ tool, rawInput: { command } }), tool).toBe(
         `${"x".repeat(160)}...`,
       );
     }
@@ -140,7 +128,6 @@ describe("OpenCode tool strategy catalog", () => {
       deriveToolPreview({
         tool: "webfetch",
         rawInput: { href: "https://openducktor.dev/docs" },
-        rawOutput: undefined,
       }),
     ).toBe("https://openducktor.dev/docs");
 
@@ -148,7 +135,6 @@ describe("OpenCode tool strategy catalog", () => {
       deriveToolPreview({
         tool: "webfetch_custom",
         rawInput: { href: "https://openducktor.dev/docs" },
-        rawOutput: undefined,
       }),
     ).toBeUndefined();
   });
@@ -231,7 +217,6 @@ describe("OpenCode tool strategy catalog", () => {
           deriveToolPreview({
             tool: toolName,
             rawInput: testCase.rawInput,
-            rawOutput: undefined,
           }),
         ).toBe(testCase.expectedPreview);
       }

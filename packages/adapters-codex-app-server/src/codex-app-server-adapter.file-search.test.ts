@@ -1,12 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { JsonValue, RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue, RuntimeInstanceSummary } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
   makeRuntimeSummary,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./types";
 
-const createTransport = (response: JsonValue | undefined) => {
+const createTransport = (response: CodexAppServerJsonValue | undefined) => {
   const calls: CodexJsonRpcRequest[] = [];
   const transport: CodexJsonRpcTransport = {
     async request(request) {

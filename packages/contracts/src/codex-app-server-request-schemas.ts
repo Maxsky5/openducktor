@@ -15,7 +15,7 @@ const approvalsReviewerSchema = z.enum(["auto_review", "guardian_subagent", "use
 const personalitySchema = z.enum(["friendly", "none", "pragmatic"]);
 const sortDirectionSchema = z.enum(["asc", "desc"]);
 const turnItemsViewSchema = z.enum(["notLoaded", "summary", "full"]);
-const multiAgentModeSchema = z.union([
+export const codexAppServerMultiAgentModeSchema = z.union([
   z.enum(["explicitRequestOnly", "proactive"]),
   z.strictObject({ custom: z.string() }),
 ]);
@@ -54,7 +54,7 @@ const textElementSchema = z.strictObject({
   placeholder: z.string().nullable(),
 });
 
-const userInputSchema = z.discriminatedUnion("type", [
+export const codexAppServerUserInputSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("text"),
     text: z.string(),
@@ -403,7 +403,7 @@ export const codexAppServerRequestParamsSchemas = {
     allowProviderModelFallback: z.boolean().optional(),
     serviceName: nullableString,
     personality: personalitySchema.nullable().optional(),
-    multiAgentMode: multiAgentModeSchema.nullable().optional(),
+    multiAgentMode: codexAppServerMultiAgentModeSchema.nullable().optional(),
     ephemeral: nullableBoolean,
     historyMode: z.enum(["legacy", "paginated"]).nullable().optional(),
     sessionStartSource: z.enum(["clear", "startup"]).nullable().optional(),
@@ -431,7 +431,7 @@ export const codexAppServerRequestParamsSchemas = {
   "turn/start": z.strictObject({
     threadId: z.string(),
     clientUserMessageId: nullableString,
-    input: z.array(userInputSchema),
+    input: z.array(codexAppServerUserInputSchema),
     responsesapiClientMetadata: z.record(z.string(), z.string()).nullable().optional(),
     additionalContext: z.record(z.string(), additionalContextEntrySchema).nullable().optional(),
     environments: z.array(turnEnvironmentSchema).nullable().optional(),
@@ -448,12 +448,12 @@ export const codexAppServerRequestParamsSchemas = {
     personality: personalitySchema.nullable().optional(),
     outputSchema: jsonValueSchema.nullable().optional(),
     collaborationMode: collaborationModeSchema.nullable().optional(),
-    multiAgentMode: multiAgentModeSchema.nullable().optional(),
+    multiAgentMode: codexAppServerMultiAgentModeSchema.nullable().optional(),
   }),
   "turn/steer": z.strictObject({
     threadId: z.string(),
     clientUserMessageId: nullableString,
-    input: z.array(userInputSchema),
+    input: z.array(codexAppServerUserInputSchema),
     responsesapiClientMetadata: z.record(z.string(), z.string()).nullable().optional(),
     additionalContext: z.record(z.string(), additionalContextEntrySchema).nullable().optional(),
     expectedTurnId: z.string(),

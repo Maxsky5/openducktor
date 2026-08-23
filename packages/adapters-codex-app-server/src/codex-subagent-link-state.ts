@@ -2,8 +2,6 @@ import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentStreamPart, AgentSubagentStatus } from "@openducktor/core";
 import type { CodexSubAgentSourceMetadata, CodexThreadSnapshot } from "./codex-app-server-threads";
 
-interface STATUSPRECEDENCEContract extends Record<AgentSubagentStatus, number> {}
-
 type CodexSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 
 export type CodexSubagentRoute = {
@@ -90,13 +88,13 @@ const defaultCorrelationKey = (input: CodexSubagentLinkInput): string => {
   return linkedCorrelationKey(input.parentThreadId, input.childThreadId);
 };
 
-const STATUS_PRECEDENCE: STATUSPRECEDENCEContract = {
+const STATUS_PRECEDENCE = {
   pending: 0,
   running: 1,
   cancelled: 2,
   completed: 3,
   error: 4,
-};
+} satisfies Record<AgentSubagentStatus, number>;
 
 const isTerminalStatus = (status: AgentSubagentStatus): boolean =>
   status === "completed" || status === "cancelled" || status === "error";

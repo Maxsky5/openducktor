@@ -4,12 +4,10 @@ import {
   consumeClaudeStreamEmittedToolInput,
   rememberClaudeStreamToolStart,
 } from "./claude-agent-sdk-tool-input-stream";
-import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import { createFocusedTestService } from "../../test-support/focused-service";
 
 describe("Claude streamed tool input", () => {
   test("releases a streamed tool after its final assistant envelope consumes it", () => {
-    const session = createFocusedTestService<ClaudeEventSession>({});
+    const session = { externalSessionId: "session-1" };
     rememberClaudeStreamToolStart(session, 1, {
       blockType: "tool_use",
       callId: "tool-1",

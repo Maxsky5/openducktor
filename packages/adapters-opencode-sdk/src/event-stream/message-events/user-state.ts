@@ -1,5 +1,4 @@
 import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import { readStringProp } from "../../guards";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { QueuedUserMessageSend, SessionRecord } from "../../types";
@@ -10,7 +9,7 @@ import {
 import type { EventStreamRuntime } from "../shared";
 
 export const readExplicitUserMessageState = (
-  ...sources: Array<JsonValue | undefined>
+  ...sources: Array<unknown>
 ): AgentUserMessageState | undefined => {
   for (const source of sources) {
     const rawState = readStringProp(source, ["state"]);
@@ -42,11 +41,23 @@ export const takeQueuedUserSendMatch = (
     parts,
     ...(model ? { model } : undefined),
   });
-  const matchIndex = session.pendingQueuedUserMessages.findIndex(
+  const modelFreeSignature = model ? buildQueuedDisplaySignature({ visible, parts }) : signature;
+  const modelFreeAttachmentIdentitySignature = model
+    ? buildQueuedDisplayAttachmentIdentitySignature({ visible, parts })
+    : attachmentIdentitySignature;
+  const exactMatchIndex = session.pendingQueuedUserMessages.findIndex(
     (entry) =>
       entry.signature === signature ||
       entry.attachmentIdentitySignature === attachmentIdentitySignature,
   );
+  const matchIndex =
+    exactMatchIndex >= 0
+      ? exactMatchIndex
+      : session.pendingQueuedUserMessages.findIndex(
+          (entry) =>
+            entry.signature === modelFreeSignature ||
+            entry.attachmentIdentitySignature === modelFreeAttachmentIdentitySignature,
+        );
   if (matchIndex < 0) {
     return null;
   }

@@ -648,7 +648,7 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>`.
+// SAFETY: runtimeCapabilityClasses satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>; Object.entries only erases those key and value types.
 const runtimeCapabilityClassEntries = Object.entries(runtimeCapabilityClasses).sort(
   ([left], [right]) => right.length - left.length,
 ) as Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>;

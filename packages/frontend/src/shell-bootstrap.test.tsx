@@ -5,9 +5,8 @@ import { resolve } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { Theme } from "@openducktor/contracts";
 import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bridge";
-import type { HostClient } from "@openducktor/host-client";
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
-import { createFocusedFixture } from "./test-utils/focused-fixture";
+import { createHostClientFixture } from "./test-utils/focused-fixture";
 
 if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
@@ -25,8 +24,8 @@ const expectNoManualShellBootstrapSteps = (source: string): void => {
 };
 
 const createTestShellBridge = (): ShellBridge =>
-  createFocusedFixture<ShellBridge>({
-    client: createFocusedFixture<HostClient>({}),
+  ({
+    client: createHostClientFixture({}),
     subscribeRunEvents: async () => () => {},
     subscribeDevServerEvents: async () => ({
       transportEpoch: "test:0",
@@ -50,7 +49,13 @@ const createTestShellBridge = (): ShellBridge =>
     },
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
-  });
+    resolveTaskAssetSrc: async () => "asset://task-preview",
+    terminals: {
+      connect: async () => {
+        throw new Error("Terminal transport is not configured for this test.");
+      },
+    },
+  }) satisfies ShellBridge;
 
 type BootstrapHarnessOptions = {
   loadSettingsSnapshot?: () => Promise<{ theme: Theme }>;

@@ -27,10 +27,7 @@ import {
 } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
-import {
-  parseClaudeJsonValue,
-  parseClaudeUserToolResultIngress,
-} from "./claude-agent-sdk-ingress-schemas";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { consumeClaudeStreamEmittedToolInput } from "./claude-agent-sdk-tool-input-stream";
 import { handleClaudeUserToolResultMessage } from "./claude-agent-sdk-tool-results";
 import {
@@ -66,7 +63,7 @@ export const handleClaudeSdkMessage = ({
   session,
   timestamp,
 }: SdkMessageHandlerInput): void => {
-  const messageValue = parseClaudeJsonValue(message, "claudeSdkMessage");
+  const messageValue = message;
   if (message.type === "system" && message.subtype === "init") {
     return;
   }
@@ -244,7 +241,7 @@ const handleAssistantMessage = ({
 }): void => {
   emitSupersededTranscriptMessage({ emit, message, session, timestamp });
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
-  const assistantMessage = parseClaudeJsonValue(message.message, "claudeAssistantMessage");
+  const assistantMessage = message.message;
   const content = isRecord(assistantMessage) ? assistantMessage.content : undefined;
   const text = textFromContentBlocks(content);
   const hasToolUse =

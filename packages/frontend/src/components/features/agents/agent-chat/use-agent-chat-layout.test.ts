@@ -2,7 +2,6 @@ import { runtimeTypeName } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createFocusedFixture } from "@/test-utils/focused-fixture";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
   COMPOSER_EDITOR_MIN_HEIGHT_PX,
@@ -199,17 +198,7 @@ describe("use-agent-chat-layout helpers", () => {
       overflowY: "hidden" as "auto" | "hidden",
     };
     const assignedHeights: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `CSSStyleDeclaration` used by this case.
-    const style = {} as CSSStyleDeclaration;
-    // SAFETY: This test creates the DOM fixture that supplies `CSSStyleDeclaration` before this lookup.
-    const measurementClone = createFocusedFixture<HTMLTextAreaElement>({
-      style: {} as CSSStyleDeclaration,
-      scrollHeight: COMPOSER_EDITOR_MIN_HEIGHT_PX,
-      value: "",
-      rows: 1,
-      setAttribute: () => {},
-      remove: () => {},
-    });
+    const style = { height: styleState.height, overflowY: styleState.overflowY };
 
     Object.defineProperty(style, "height", {
       configurable: true,
@@ -227,45 +216,13 @@ describe("use-agent-chat-layout helpers", () => {
       },
     });
 
-    const textarea = createFocusedFixture<HTMLTextAreaElement>({
-      cloneNode: () => measurementClone,
-      getBoundingClientRect: () => createFocusedFixture<DOMRect>({ height: 120, width: 320 }),
-      ownerDocument: createFocusedFixture<Document>({
-        body: createFocusedFixture<HTMLElement>({
-          appendChild: (node) => node,
-        }),
-        defaultView: createFocusedFixture<Window & typeof globalThis>({
-          getComputedStyle: () =>
-            createFocusedFixture<CSSStyleDeclaration>({
-              boxSizing: "border-box",
-              fontFamily: "monospace",
-              fontSize: "14px",
-              fontStyle: "normal",
-              fontWeight: "400",
-              letterSpacing: "normal",
-              lineHeight: "20px",
-              paddingTop: "8px",
-              paddingRight: "12px",
-              paddingBottom: "8px",
-              paddingLeft: "12px",
-              textIndent: "0px",
-              textTransform: "none",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              wordSpacing: "0px",
-              overflowWrap: "break-word",
-              borderTopWidth: "1px",
-              borderRightWidth: "1px",
-              borderBottomWidth: "1px",
-              borderLeftWidth: "1px",
-            }),
-        }),
-      }),
+    const textarea = {
+      getBoundingClientRect: () => ({ height: 120 }),
       style,
-      rows: 1,
       scrollHeight: 120,
+      textContent: null,
       value: "line one\nline two",
-    });
+    };
 
     const result = resizeComposerTextareaElement(textarea);
 

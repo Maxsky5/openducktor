@@ -14,24 +14,19 @@ import {
 import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
-interface LIFECYCLESTATUSPRECEDENCEContract extends Record<
-  CodexSubagentLifecycleUpdate["status"],
-  number
-> {}
-
 type CodexSubagentLifecycleProjectorDeps = {
   sessions: CodexSessionLookup;
   subagents: CodexSubagentLinkState;
   emitParentSessionEvent: (externalSessionId: string, event: AgentEvent) => void;
 };
 
-const LIFECYCLE_STATUS_PRECEDENCE: LIFECYCLESTATUSPRECEDENCEContract = {
+const LIFECYCLE_STATUS_PRECEDENCE = {
   pending: 0,
   running: 1,
   cancelled: 2,
   completed: 3,
   error: 4,
-};
+} satisfies Record<CodexSubagentLifecycleUpdate["status"], number>;
 
 const isNewerLifecycleUpdate = (
   existing: CodexSubagentLifecycleUpdate,

@@ -1,6 +1,6 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
-import type { CodexAppServerThreadStatus, JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerThreadStatus, CodexAppServerJsonValue } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRef,
@@ -18,6 +18,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexAppServerAdapter, CodexJsonRpcRequest } from "./index";
+import { codexTokenUsageFixture } from "./test-fixtures/codex-protocol";
 
 const runtimeEventReceivedAt = "2026-07-06T12:00:00.000Z";
 
@@ -154,7 +155,7 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
       const threadId = (request.params as { threadId: string }).threadId;
       // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
-        ...codexThreadStartResultFixture(threadId),
+        ...codexThreadStartResultFixture(threadId, "thread/resume"),
         thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }),
       } as Response;
     }
@@ -204,6 +205,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
                   type: "agentMessage",
                   phase: "final_answer",
                   text: "Done",
+                  memoryCitation: null,
                 },
               ],
             }),
@@ -221,7 +223,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
       this.loaded = true;
       // SAFETY: This test controls the fixture and supplies `Response` used by this case.
       return {
-        ...codexThreadStartResultFixture("thread-idle"),
+        ...codexThreadStartResultFixture("thread-idle", "thread/resume"),
         thread: codexThreadFixture({ id: "thread-idle", status: { type: "idle" } }),
       } as Response;
     }
@@ -230,7 +232,7 @@ class StoredIdleHistoryTransport extends RecordingTransport {
 }
 
 class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
-  emitRestoredUsage: ((message: JsonValue | undefined) => void) | null = null;
+  emitRestoredUsage: ((message: CodexAppServerJsonValue | undefined) => void) | null = null;
 
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
@@ -241,11 +243,7 @@ class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
           params: {
             threadId: "thread-idle",
             turnId: "turn-1",
-            tokenUsage: {
-              total: { totalTokens: 42_000 },
-              last: { totalTokens: 42_000 },
-              modelContextWindow: 200_000,
-            },
+            tokenUsage: codexTokenUsageFixture(42_000),
           },
         });
       }, 0);
@@ -491,7 +489,16 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
           itemId: "idle-question-item",
           threadId: "thread-idle",
           turnId: "turn-idle",
-          questions: [{ id: "question-1", header: "Confirm", question: "Continue?" }],
+          questions: [
+            {
+              id: "question-1",
+              header: "Confirm",
+              question: "Continue?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
         },
       },
     });

@@ -1,4 +1,4 @@
-import { ODT_MCP_TOOL_NAMES, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import { ODT_MCP_TOOL_NAMES, hasRuntimeType } from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentEvent,
@@ -38,7 +38,7 @@ const ODT_MCP_TOOL_NAME_SET = new Set<string>(ODT_MCP_TOOL_NAMES);
 
 const decideTrustedOdtTool = (
   session: CodexSessionState,
-  serverName: JsonValue | undefined,
+  serverName: string,
   toolName: string | undefined,
 ): TrustedOdtToolDecision => {
   if (serverName !== "openducktor") {
@@ -70,7 +70,9 @@ const decideTrustedOdtTool = (
     };
   }
 
-  if (AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].includes(workflowTool)) {
+  if (
+    AGENT_ROLE_TOOL_POLICY[sessionAssociation.role].some((candidate) => candidate === workflowTool)
+  ) {
     return { kind: "allow" };
   }
   return {
@@ -99,6 +101,11 @@ type RequestRouteContext = {
   runtimeId: string;
   route: CodexSubagentRoute | null;
 };
+
+type PendingRequestEvent = Extract<
+  AgentEvent,
+  { type: "approval_required" | "question_required" | "assistant_part" }
+>;
 
 const resolveRequestRouteContext = (
   context: CodexServerRequestHandlerContext,
@@ -142,22 +149,27 @@ const resolveRequestRouteContext = (
 const emitPendingEvent = (
   context: CodexServerRequestHandlerContext,
   routeContext: RequestRouteContext,
-  event: AgentEvent,
+  event: PendingRequestEvent,
   targetSession?: CodexSessionState,
 ): void => {
+  const routedEvent =
+    event.type === "assistant_part"
+      ? event
+      : {
+          ...event,
+          ...codexSubagentRouteEventFields(routeContext.route),
+        };
   if (targetSession && context.emitRoutedRequestEvent) {
     context.emitRoutedRequestEvent(targetSession, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.ownerThreadId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
     return;
   }
   if (routeContext.ownerSession) {
     context.emitSessionEvent(routeContext.ownerThreadId, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.ownerThreadId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
   if (
@@ -165,9 +177,8 @@ const emitPendingEvent = (
     context.sessionForThreadId(routeContext.route.parentExternalSessionId)
   ) {
     context.emitSessionEvent(routeContext.route.parentExternalSessionId, {
-      ...event,
+      ...routedEvent,
       externalSessionId: routeContext.route.parentExternalSessionId,
-      ...codexSubagentRouteEventFields(routeContext.route),
     });
   }
 };
@@ -239,7 +250,7 @@ export const handleCodexServerRequest = async (
 
     const workflowToolDecision = decideTrustedOdtTool(
       routeContext.policySession,
-      mcpElicitationApproval.metadata?.serverName,
+      mcpElicitationApproval.metadata.serverName,
       mcpElicitationApproval.tool?.name,
     );
     if (workflowToolDecision.kind === "reject") {

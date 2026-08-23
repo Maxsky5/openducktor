@@ -29,7 +29,10 @@ const modelListResponse = () => ({
       hidden: false,
       supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced reasoning" }],
       defaultReasoningEffort: "medium",
+      defaultServiceTier: null,
       inputModalities: ["text"],
+      modelSpecialty: null,
+      multiAgentVersion: null,
       serviceTiers: [],
       supportsPersonality: true,
       isDefault: true,
@@ -47,7 +50,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          return codexThreadStartResultFixture("thread-1");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           return {};
@@ -72,7 +75,10 @@ describe("CodexAppServerAdapter manual compaction", () => {
                   { reasoningEffort: "medium", description: "Balanced reasoning" },
                 ],
                 defaultReasoningEffort: "medium",
+                defaultServiceTier: null,
                 inputModalities: ["text"],
+                modelSpecialty: null,
+                multiAgentVersion: null,
                 serviceTiers: [],
                 supportsPersonality: true,
                 isDefault: true,
@@ -137,7 +143,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          return codexThreadStartResultFixture("thread-1");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           return {};
@@ -169,7 +175,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       async request(request) {
         calls.push(request);
         if (request.method === "thread/resume") {
-          return codexThreadStartResultFixture("thread-1");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         if (request.method === "thread/compact/start") {
           throw new Error("thread is busy");
@@ -197,7 +203,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
           return {};
         }
         if (request.method === "thread/resume") {
-          return codexThreadStartResultFixture("thread-1");
+          return codexThreadStartResultFixture("thread-1", "thread/resume");
         }
         throw new Error(`Unexpected method '${request.method}'.`);
       },
@@ -227,7 +233,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
         async request(request) {
           calls.push(request);
           if (request.method === "thread/resume") {
-            return codexThreadStartResultFixture("thread-1");
+            return codexThreadStartResultFixture("thread-1", "thread/resume");
           }
           if (request.method === "thread/compact/start") {
             return {};
@@ -237,7 +243,7 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
       { subscribeEvents: runtimeStream.subscribeEvents },
     );
-    const events: Array<{ type: string; [key: string]: JsonValue }> = [];
+    const events: Array<{ type: string; [key: string]: CodexAppServerJsonValue }> = [];
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -266,11 +272,12 @@ describe("CodexAppServerAdapter manual compaction", () => {
       method: "turn/completed",
       params: {
         threadId: "thread-1",
-        turn: {
+        turn: codexTurnFixture({
           id: "compact-turn-1",
           status: "completed",
           completedAt: 1_778_112_003,
-        },
+          items: [],
+        }),
       },
     });
     runtimeStream.emitNotification({
@@ -298,12 +305,12 @@ describe("CodexAppServerAdapter manual compaction", () => {
 
   test("does not synthesize a user message before synchronous compaction lifecycle events", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
-    const events: Array<{ type: string; [key: string]: JsonValue }> = [];
+    const events: Array<{ type: string; [key: string]: CodexAppServerJsonValue }> = [];
     const adapter = createAdapterWithTransport(
       {
         async request(request) {
           if (request.method === "thread/resume") {
-            return codexThreadStartResultFixture("thread-1");
+            return codexThreadStartResultFixture("thread-1", "thread/resume");
           }
           if (request.method === "thread/loaded/list") {
             return { data: ["thread-1"], nextCursor: null };

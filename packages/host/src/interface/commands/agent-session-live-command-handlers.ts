@@ -17,6 +17,7 @@ import {
   agentSessionLiveReplyQuestionInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { z } from "zod";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type {
   LocalAttachmentService,
@@ -24,15 +25,10 @@ import type {
 } from "../../application/attachments/local-attachment-service";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlers } from "../router/host-command-router";
-import type { JsonValue } from "@openducktor/contracts";
-
-type Parser<Output> = {
-  parse(value: JsonValue | undefined): Output;
-};
 
 const parseCommandInput = <Output>(
-  schema: Parser<Output>,
-  args: Record<string, JsonValue> | undefined,
+  schema: z.ZodType<Output>,
+  args: Record<string, unknown> | undefined,
   command: string,
 ) =>
   Effect.try({

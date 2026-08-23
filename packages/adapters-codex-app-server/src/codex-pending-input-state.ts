@@ -4,9 +4,9 @@ import { codexServerRequestKey } from "./codex-app-server-approvals";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import type { CodexRuntimeServerRequest } from "./codex-runtime-event-schema";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type CodexNativeServerRequest = CodexRuntimeServerRequest;
+type CodexPendingQuestionInput = Pick<AgentPendingQuestionRequest, "questions">;
 
 type PendingApprovalRequestProjection = Omit<
   AgentPendingApprovalRequest,
@@ -32,7 +32,7 @@ export type PendingQuestionEntry = {
   request: AgentPendingQuestionRequest;
   nativeRequest: CodexNativeServerRequest;
   questionIds: string[];
-  input: Record<string, JsonValue>;
+  input: CodexPendingQuestionInput;
   route?: CodexSubagentRoute;
 };
 

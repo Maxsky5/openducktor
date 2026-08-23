@@ -1,7 +1,7 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import type { JsonValue } from "@openducktor/contracts";
 import { asUnknownRecord, readArrayProp, readStringProp, type UnknownRecord } from "../../guards";
+import { opencodePartPayloadSchema } from "../../opencode-ingress";
 import type { readMessageModelSelection } from "../../message-normalizers";
 import type { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { SessionMessageMetadata } from "../../types";
@@ -72,7 +72,7 @@ export const hasTerminalStopSignalInParts = (
   );
 };
 
-const hasTerminalStopSignalInRawParts = (parts: JsonValue[]): boolean => {
+const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
   return parts.some((part) => {
     const record = asUnknownRecord(part);
     return (
@@ -85,7 +85,7 @@ const hasTerminalStopSignalInRawParts = (parts: JsonValue[]): boolean => {
 
 export const hasMessageStopSignal = (input: {
   finish: string | undefined;
-  rawParts: JsonValue[];
+  rawParts: unknown[];
   parts: Part[];
 }): boolean => {
   return (
@@ -137,9 +137,9 @@ export const updateMessageMetadata = (
 };
 
 export const readRawMessageParts = (
-  properties: JsonValue | undefined,
-  info: JsonValue | undefined,
-): JsonValue[] => {
+  properties: UnknownRecord,
+  info: UnknownRecord | undefined,
+): unknown[] => {
   const directParts = readArrayProp(properties, "parts");
   if (directParts) {
     return directParts;
@@ -147,21 +147,7 @@ export const readRawMessageParts = (
   return readArrayProp(info, "parts") ?? [];
 };
 
-export const normalizeMessagePart = (
-  rawPartRecord: UnknownRecord,
-  messageId: string,
-  externalSessionId: string,
-): Part => {
-  // SAFETY: The runtime adapter builds this value from the contract fields required by `Part`.
-  return {
-    ...(rawPartRecord as Part),
-    ...(readStringProp(rawPartRecord, ["sessionID", "sessionId", "session_id"])
-      ? undefined
-      : { sessionID: externalSessionId }),
-    ...(readStringProp(rawPartRecord, ["messageID", "messageId", "message_id"])
-      ? undefined
-      : { messageID: messageId }),
-  } as Part;
-};
+export const normalizeMessagePart = (rawPartRecord: UnknownRecord): Part =>
+  opencodePartPayloadSchema.parse(rawPartRecord);
 
 export type MessageEventHandler = (event: Event, runtime: EventStreamRuntime) => boolean;

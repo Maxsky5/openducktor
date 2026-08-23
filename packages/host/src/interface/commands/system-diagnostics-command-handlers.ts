@@ -1,12 +1,11 @@
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import type { HostCommandHandlers } from "../router/host-command-router";
 import { optionalBoolean, requireRecord, requireString } from "./command-inputs";
-import type { JsonValue } from "@openducktor/contracts";
 
-const parseRuntimeCheckForce = (args: Record<string, JsonValue> | undefined): boolean | undefined =>
+const parseRuntimeCheckForce = (args: Record<string, unknown> | undefined): boolean | undefined =>
   optionalBoolean(args?.force, "runtime_check force");
 
-const parseRepoPath = (args: Record<string, JsonValue> | undefined, command: string): string => {
+const parseRepoPath = (args: Record<string, unknown> | undefined, command: string): string => {
   const record = requireRecord(args, `${command} input`);
   return requireString(record.repoPath, "repoPath");
 };

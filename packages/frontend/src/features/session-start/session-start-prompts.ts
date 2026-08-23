@@ -16,10 +16,6 @@ import {
   type SessionLaunchActionId,
 } from "./session-start-launch-options";
 
-interface LAUNCHACTIONSBYROLEContract extends Record<AgentRole, SessionLaunchActionId[]> {}
-
-interface LAUNCHACTIONLABELSContract extends Record<SessionLaunchActionId, string> {}
-
 type TaskPromptContext = {
   title?: string;
   issueType?: "task" | "feature" | "bug" | "epic";
@@ -42,14 +38,14 @@ type SessionMessagePromptOptions = SharedPromptOptions & {
   git?: AgentPromptGitContext;
 };
 
-export const LAUNCH_ACTIONS_BY_ROLE: LAUNCHACTIONSBYROLEContract = {
+export const LAUNCH_ACTIONS_BY_ROLE = {
   spec: getSessionLaunchActionsForRole("spec").map((action) => action.id),
   planner: getSessionLaunchActionsForRole("planner").map((action) => action.id),
   build: getSessionLaunchActionsForRole("build").map((action) => action.id),
   qa: getSessionLaunchActionsForRole("qa").map((action) => action.id),
-};
+} satisfies Record<AgentRole, SessionLaunchActionId[]>;
 
-export const LAUNCH_ACTION_LABELS: LAUNCHACTIONLABELSContract = {
+export const LAUNCH_ACTION_LABELS = {
   spec_initial: SESSION_LAUNCH_ACTIONS.spec_initial.label,
   planner_initial: SESSION_LAUNCH_ACTIONS.planner_initial.label,
   build_implementation_start: SESSION_LAUNCH_ACTIONS.build_implementation_start.label,
@@ -58,7 +54,7 @@ export const LAUNCH_ACTION_LABELS: LAUNCHACTIONLABELSContract = {
   build_pull_request_generation: SESSION_LAUNCH_ACTIONS.build_pull_request_generation.label,
   build_rebase_conflict_resolution: SESSION_LAUNCH_ACTIONS.build_rebase_conflict_resolution.label,
   qa_review: SESSION_LAUNCH_ACTIONS.qa_review.label,
-};
+} satisfies Record<SessionLaunchActionId, string>;
 
 export const isLaunchActionId = isSessionLaunchActionId;
 

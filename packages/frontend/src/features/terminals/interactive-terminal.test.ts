@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   createDataTransferItemFixture,
   createDataTransferItemListFixture,
+  createDataTransferFixture,
   createFileListFixture,
-  createFocusedFixture,
 } from "@/test-utils/focused-fixture";
 import { TERMINAL_PROTOCOL_VERSION } from "@openducktor/contracts";
 import {
@@ -182,7 +182,7 @@ describe("InteractiveTerminal policies", () => {
     });
 
     handlePaste({
-      clipboardData: createFocusedFixture<DataTransfer>({
+      clipboardData: createDataTransferFixture({
         files: createFileListFixture([]),
         items: createDataTransferItemListFixture([
           createDataTransferItemFixture({ kind: "file", type: "image/png" }),
@@ -206,7 +206,7 @@ describe("InteractiveTerminal policies", () => {
     });
 
     handlePaste({
-      clipboardData: createFocusedFixture<DataTransfer>({
+      clipboardData: createDataTransferFixture({
         files: createFileListFixture([]),
         items: createDataTransferItemListFixture([
           createDataTransferItemFixture({ kind: "string", type: "text/plain" }),
@@ -225,7 +225,7 @@ describe("InteractiveTerminal policies", () => {
     const first = new File([new Uint8Array([1])], "first image.png", { type: "image/png" });
     const second = new File([new Uint8Array([2])], "second.jpg", { type: "image/jpeg" });
     const text = new File(["notes"], "notes.txt", { type: "text/plain" });
-    const transfer = createFocusedFixture<DataTransfer>({
+    const transfer = createDataTransferFixture({
       files: createFileListFixture([first, text, second]),
       items: createDataTransferItemListFixture([]),
     });

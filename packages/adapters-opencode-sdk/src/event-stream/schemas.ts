@@ -1,4 +1,4 @@
-import { jsonValueSchema, type JsonValue, hasRuntimeType } from "@openducktor/contracts";
+import { hasRuntimeType, type JsonObject, jsonValueSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import { asUnknownRecord, type UnknownRecord } from "../guards";
 import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
@@ -25,7 +25,7 @@ export type ParsedPermissionAsked = {
   permission: string;
   patterns: string[];
   save?: string[];
-  metadata?: Record<string, JsonValue>;
+  metadata?: JsonObject;
 };
 
 type ParsedQuestionOption = {
@@ -359,10 +359,6 @@ export const readSessionErrorMessage = (properties: UnknownRecord): string => {
   return parsed.success && parsed.data.error?.data?.message
     ? parsed.data.error.data.message
     : "Unknown session error";
-};
-
-export const readTodoPayload = (properties: UnknownRecord | undefined): JsonValue | undefined => {
-  return properties?.todos;
 };
 
 export const readEventInfo = (properties: UnknownRecord | undefined): UnknownRecord | undefined => {

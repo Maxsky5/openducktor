@@ -1,11 +1,9 @@
-import type { JsonValue } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import {
   extractMessageTotalTokens,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
-  readTextFromMessageInfo,
   readTextFromParts,
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
@@ -39,13 +37,6 @@ describe("message-normalizers", () => {
     ];
 
     expect(readTextFromParts(parts)).toBe("First line\nSecond line");
-  });
-
-  test("readTextFromMessageInfo resolves nested message text", () => {
-    expect(readTextFromMessageInfo({ message: { text: "  From nested info  " } })).toBe(
-      "  From nested info  ",
-    );
-    expect(readTextFromMessageInfo(null)).toBe("");
   });
 
   test("normalizes user display parts by filtering synthetic text and preserving file refs", () => {
@@ -625,9 +616,23 @@ describe("message-normalizers", () => {
   test("readMessageModelSelection supports assistant and user message shapes", () => {
     expect(
       readMessageModelSelection({
+        id: "assistant-1",
+        sessionID: "session-1",
+        role: "assistant",
+        time: { created: 1 },
         providerID: "openai",
         modelID: "gpt-5",
+        parentID: "user-1",
+        mode: "build",
         agent: "Hephaestus",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
         variant: "high",
       }),
     ).toEqual({
@@ -639,12 +644,16 @@ describe("message-normalizers", () => {
 
     expect(
       readMessageModelSelection({
+        id: "user-1",
+        sessionID: "session-1",
+        role: "user",
+        time: { created: 1 },
         model: {
           providerID: "anthropic",
           modelID: "claude-3-7-sonnet",
+          variant: "max",
         },
         agent: "Ares",
-        variant: "max",
       }),
     ).toEqual({
       providerId: "anthropic",
@@ -656,6 +665,17 @@ describe("message-normalizers", () => {
 
   test("extractMessageTotalTokens prefers info token breakdown", () => {
     const info = {
+      id: "assistant-1",
+      sessionID: "session-1",
+      role: "assistant",
+      time: { created: 1 },
+      parentID: "user-1",
+      providerID: "openai",
+      modelID: "gpt-5",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/repo", root: "/repo" },
+      cost: 0,
       tokens: {
         input: 300,
         output: 120,
@@ -672,16 +692,34 @@ describe("message-normalizers", () => {
   });
 
   test("extractMessageTotalTokens falls back to max part token total", () => {
-    const parts: Array<Part | Record<string, JsonValue>> = [
+    const parts: Part[] = [
       {
         id: "part-1",
-        tokens: 42,
+        sessionID: "session-1",
+        messageID: "assistant-1",
+        type: "step-finish",
+        cost: 0,
+        reason: "stop",
+        tokens: {
+          total: 42,
+          input: 10,
+          output: 30,
+          reasoning: 2,
+          cache: { read: 0, write: 0 },
+        },
       },
       {
         id: "part-2",
+        sessionID: "session-1",
+        messageID: "assistant-1",
+        type: "step-finish",
+        cost: 0,
+        reason: "stop",
         tokens: {
           input: 10,
           output: 60,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
         },
       },
     ];
@@ -721,6 +759,6 @@ describe("message-normalizers", () => {
       ],
     );
 
-    expect(total).toBe(17);
+    expect(total).toBeUndefined();
   });
 });

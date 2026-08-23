@@ -5,7 +5,6 @@ import type {
   PullRequestReviewOutcome,
   PullRequestReviewPullRequest,
   PullRequestReviewState,
-  JsonValue,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
@@ -14,6 +13,7 @@ import {
 } from "../../../application/tasks/support/github-pull-requests";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
+  type GithubPayloadValue,
   parseGithubJsonObject,
   parseGithubNextPageCursor,
   requireGithubObject,
@@ -108,7 +108,7 @@ query PullRequestReviewOverview(
 }
 `;
 
-const requirePositiveNumber = (value: JsonValue | undefined, field: string): number => {
+const requirePositiveNumber = (value: unknown, field: string): number => {
   if (hasRuntimeType(value, "number") && Number.isInteger(value) && value > 0) {
     return value;
   }
@@ -118,10 +118,7 @@ const requirePositiveNumber = (value: JsonValue | undefined, field: string): num
   });
 };
 
-const normalizeReviewState = (
-  state: JsonValue | undefined,
-  isDraft: JsonValue | undefined,
-): PullRequestReviewState => {
+const normalizeReviewState = (state: unknown, isDraft: unknown): PullRequestReviewState => {
   const normalized = hasRuntimeType(state, "string") ? state.trim().toLowerCase() : "";
   if (isDraft === true && normalized === "open") {
     return "draft";
@@ -136,7 +133,7 @@ const normalizeReviewState = (
 };
 
 const parseComment = (
-  payloadValue: JsonValue | undefined,
+  payloadValue: GithubPayloadValue,
   field: string,
 ): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
@@ -165,7 +162,7 @@ const parseComment = (
 };
 
 const parseReviewOutcome = (
-  state: JsonValue | undefined,
+  state: GithubPayloadValue,
   field: string,
 ): PullRequestReviewOutcome | null => {
   if (!hasRuntimeType(state, "string")) {
@@ -196,7 +193,7 @@ const parseReviewOutcome = (
 };
 
 const parseReview = (
-  payloadValue: JsonValue | undefined,
+  payloadValue: GithubPayloadValue,
   field: string,
 ): PullRequestReviewActivity | null => {
   const payload = requireGithubObject(payloadValue, field);
@@ -234,9 +231,9 @@ const parseReview = (
 };
 
 const parseConnection = (
-  connectionValue: JsonValue | undefined,
+  connectionValue: GithubPayloadValue,
   field: string,
-  parseItem: (payload: JsonValue | undefined, field: string) => PullRequestReviewActivity | null,
+  parseItem: (payload: GithubPayloadValue, field: string) => PullRequestReviewActivity | null,
   included: boolean,
 ): ParsedConnection => {
   if (!included) {

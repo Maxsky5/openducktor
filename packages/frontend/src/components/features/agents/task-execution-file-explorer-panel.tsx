@@ -66,17 +66,16 @@ const TREE_THEME_BY_MODE = {
   },
 } satisfies Record<"light" | "dark", TreeThemeInput>;
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `CSSProperties`.
-const treeStylesForTheme = (theme: "light" | "dark"): CSSProperties =>
-  ({
-    ...themeToTreeStyles(TREE_THEME_BY_MODE[theme]),
-    "--trees-bg-override": "var(--card)",
-    "--trees-fg-override": "var(--foreground)",
-    "--trees-border-color-override": "var(--border)",
-    "--trees-selected-bg-override": "var(--selected-surface)",
-    "--trees-selected-fg-override": "var(--foreground)",
-    height: "100%",
-  }) as CSSProperties;
+type TreeCssProperties = CSSProperties & Record<`--trees-${string}`, string>;
+const treeStylesForTheme = (theme: "light" | "dark"): TreeCssProperties => ({
+  ...themeToTreeStyles(TREE_THEME_BY_MODE[theme]),
+  "--trees-bg-override": "var(--card)",
+  "--trees-fg-override": "var(--foreground)",
+  "--trees-border-color-override": "var(--border)",
+  "--trees-selected-bg-override": "var(--selected-surface)",
+  "--trees-selected-fg-override": "var(--foreground)",
+  height: "100%",
+});
 
 const buildEntriesByPath = (
   entries: readonly WorkspaceFileTreeEntry[] | undefined,

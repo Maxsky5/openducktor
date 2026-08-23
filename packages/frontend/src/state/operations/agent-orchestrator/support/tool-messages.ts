@@ -5,22 +5,21 @@ import {
   findSessionMessageById,
   type SessionMessageOwner,
 } from "./messages";
-import type { JsonValue } from "@openducktor/contracts";
 
 export const normalizeToolInput = (
-  input: Record<string, JsonValue> | undefined,
-): Record<string, JsonValue> | undefined => {
+  input: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined => {
   if (!input) {
     return undefined;
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
 
-const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, JsonValue>`.
-export const normalizeToolText = (value: JsonValue | undefined): string | undefined => {
+// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Record<string, unknown>`.
+export const normalizeToolText = (value: unknown): string | undefined => {
   if (hasRuntimeType(value, "string")) {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -34,10 +33,7 @@ export const normalizeToolText = (value: JsonValue | undefined): string | undefi
   if (Array.isArray(value) && value.length === 0) {
     return undefined;
   }
-  if (
-    hasRuntimeType(value, "object") &&
-    Object.keys(value as Record<string, JsonValue>).length === 0
-  ) {
+  if (isJsonRecord(value) && Object.keys(value).length === 0) {
     return undefined;
   }
   try {
@@ -101,7 +97,7 @@ export const resolveToolMessageId = (
   return byRunningTool?.id ?? fallbackId;
 };
 
-// SAFETY: JSON.parse can only produce JSON data, which satisfies `Record<string, JsonValue>` at this boundary.
+// SAFETY: JSON.parse can only produce JSON data, which satisfies `Record<string, unknown>` at this boundary.
 export const normalizeSessionErrorMessage = (value: string): string => {
   const trimmed = value.trim();
   const withoutQuotes = trimmed

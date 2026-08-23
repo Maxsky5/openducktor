@@ -34,8 +34,7 @@ import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigati
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
-// SAFETY: The surrounding boundary constructs or validates every member required by `Record<AgentRole, string>`.
-const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
+const ROLE_LABELS = AGENT_ROLE_LABELS;
 
 type UseKanbanSessionStartFlowArgs = {
   activeWorkspaceId: string | null;

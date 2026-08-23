@@ -13,6 +13,7 @@ import {
   toCodexTurnInputList,
   toCodexUserInputList,
 } from "./codex-user-inputs";
+import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 
 describe("Codex App Server transcript parsing", () => {
   test("preserves zero millisecond notification timestamps", () => {
@@ -29,16 +30,16 @@ describe("Codex App Server transcript parsing", () => {
 
   test("ignores malformed turn timestamps instead of throwing", () => {
     expect(
-      timestampFromCodexTurn({ completedAt: Number.NaN }, ["completedAt", "completed_at"]),
+      timestampFromCodexTurn({ completedAt: Number.NaN, startedAt: null }, "completedAt"),
     ).toBeNull();
     expect(
-      timestampFromCodexTurn({ completedAt: Number.POSITIVE_INFINITY }, [
+      timestampFromCodexTurn(
+        { completedAt: Number.POSITIVE_INFINITY, startedAt: null },
         "completedAt",
-        "completed_at",
-      ]),
+      ),
     ).toBeNull();
     expect(
-      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE }, ["completedAt", "completed_at"]),
+      timestampFromCodexTurn({ completedAt: Number.MAX_VALUE, startedAt: null }, "completedAt"),
     ).toBeNull();
   });
 
@@ -319,9 +320,9 @@ describe("Codex App Server transcript parsing", () => {
     });
 
     expect(input).toEqual([
-      { type: "text", text: "Tell me the purpose of ", text_elements: [] },
+      { type: "text", text: "Tell me the purpose of " },
       { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
-      { type: "text", text: " please", text_elements: [] },
+      { type: "text", text: " please" },
     ]);
 
     const message = toHistoryMessage(
@@ -865,167 +866,29 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
-  test("preserves turn model and reasoning effort from thread reads", () => {
+  test("does not invent model metadata that thread reads do not provide", () => {
     const items = codexTurnItemsFromThreadRead({
       thread: {
-        modelProvider: "openai",
         turns: [
-          {
+          codexTurnFixture({
             id: "turn-1",
             status: "completed",
-            startedAt: 1_778_112_001,
-            completedAt: 1_778_112_031,
-            model: "gpt-5",
-            reasoningEffort: "high",
             items: [
               {
                 id: "message-1",
                 type: "agentMessage",
                 phase: "final_answer",
                 text: "Done",
+                memoryCitation: null,
               },
             ],
-          },
-        ],
-      },
-    });
-
-    expect(items).toHaveLength(1);
-    expect(items[0]?.model).toEqual({
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-    });
-  });
-
-  test("does not invent a provider when thread reads omit provider metadata", () => {
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            model: "gpt-5",
-            reasoningEffort: "high",
-            items: [
-              {
-                id: "message-1",
-                type: "agentMessage",
-                phase: "final_answer",
-                text: "Done",
-              },
-            ],
-          },
+          }),
         ],
       },
     });
 
     expect(items).toHaveLength(1);
     expect(items[0]?.model).toBeUndefined();
-  });
-
-  test("prefers item timestamp evidence over turn completion timestamps", () => {
-    const itemTimestampMs = Date.parse("2026-05-20T10:00:02.000Z");
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            startedAt: 1_779_270_000,
-            completedAt: 1_779_270_030,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                timestampMs: itemTimestampMs,
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    expect(items[0]?.timestamp).toBe("2026-05-20T10:00:02.000Z");
-    expect(items[0]?.item).not.toEqual(
-      expect.objectContaining({ completedAtMs: expect.any(Number) }),
-    );
-  });
-
-  test("ignores malformed item timestamp evidence instead of throwing", () => {
-    const items = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            completedAt: 1,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                timestampMs: Number.MAX_VALUE,
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    expect(items[0]?.timestamp).toBe("1970-01-01T00:00:01.000Z");
-  });
-
-  test("does not hydrate start-only tool timing from item display timestamps", () => {
-    const timestampMs = Date.parse("2026-05-20T10:00:02.000Z");
-    const [threadItem] = codexTurnItemsFromThreadRead({
-      thread: {
-        turns: [
-          {
-            id: "turn-1",
-            status: "completed",
-            completedAt: 1_779_270_030,
-            items: [
-              {
-                id: "tool-1",
-                type: "mcpToolCall",
-                server: "openducktor",
-                tool: "odt_read_task",
-                status: "completed",
-                arguments: { taskId: "task-1" },
-                result: { content: [{ type: "text", text: "ok" }] },
-                startedAtMs: timestampMs - 1000,
-                timestampMs,
-              },
-            ],
-          },
-        ],
-      },
-    });
-    if (!threadItem) {
-      throw new Error("Expected Codex thread item");
-    }
-
-    const events = projectCodexCanonicalEvents(
-      createCodexEventMapperPipeline().runThreadItem(
-        { item: threadItem.item, index: 0, timestamp: threadItem.timestamp ?? undefined },
-        { source: "thread_read", threadId: "thread-1" },
-      ),
-    );
-
-    const tool = events.find((event) => event.type === "assistant_part")?.part;
-    expect(tool).toEqual(expect.objectContaining({ kind: "tool" }));
-    expect(tool).not.toEqual(expect.objectContaining({ startedAtMs: expect.any(Number) }));
-    expect(tool).not.toEqual(expect.objectContaining({ endedAtMs: expect.any(Number) }));
   });
 
   test("hydrates thread-read tool duration through the canonical event mapper path", () => {

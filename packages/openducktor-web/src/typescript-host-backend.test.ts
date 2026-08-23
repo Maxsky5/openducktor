@@ -17,7 +17,7 @@ import {
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 } from "./typescript-host-backend-support";
-import type { JsonValue, TaskEventStreamFrame } from "@openducktor/contracts";
+import type { TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
 // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
@@ -50,7 +50,7 @@ class StructuredHostCommandFailure extends Error {
 
 type TestHostCommandInvoke = (
   command: string,
-  args?: Record<string, JsonValue>,
+  args?: Record<string, unknown>,
 ) => Effect.Effect<unknown, unknown>;
 
 const createDeferred = <Value = void>() => {

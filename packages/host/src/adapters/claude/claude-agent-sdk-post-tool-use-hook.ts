@@ -15,11 +15,10 @@ import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
-import type { JsonValue } from "@openducktor/contracts";
 
 type ClaudePostToolUseSession = ClaudeEventSession & Pick<ClaudeSession, "toolEndedAtMsByCallId">;
 
-const hookResponseText = (response: Record<string, JsonValue>): string =>
+const hookResponseText = (response: Record<string, unknown>): string =>
   readStringProp(response, "message") ?? readStringProp(response, "content") ?? "";
 
 const emitFileEditResult = ({

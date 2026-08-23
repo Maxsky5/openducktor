@@ -1,8 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-interface REPOAGENTDEFAULTLABELSContract extends Record<RepoAgentDefaultRole, string> {}
-
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
 type RepoAgentDefaultDraft = {
@@ -13,12 +11,12 @@ type RepoAgentDefaultDraft = {
   profileId?: string | null | undefined;
 };
 
-const REPO_AGENT_DEFAULT_LABELS: REPOAGENTDEFAULTLABELSContract = {
+const REPO_AGENT_DEFAULT_LABELS = {
   spec: "Specification",
   planner: "Planner",
   build: "Builder",
   qa: "QA",
-};
+} satisfies Record<RepoAgentDefaultRole, string>;
 
 const trimNonEmpty = (value: string | null | undefined): string | null => {
   const trimmed = value?.trim();

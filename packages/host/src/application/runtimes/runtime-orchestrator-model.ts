@@ -99,7 +99,10 @@ export const resolveRuntimeDescriptor = (
     }
     return runtime;
   });
-export const resolveRepoPath = (gitPort: GitPort, repoPath: string) =>
+export const resolveRepoPath = (
+  gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">,
+  repoPath: string,
+) =>
   Effect.gen(function* () {
     const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
       Effect.mapError(
@@ -130,7 +133,7 @@ export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
   return `${runtimeRoute.type}:${runtimeRoute.identity}`;
 };
 export const loadTargetSession = (
-  taskReader: TaskReader,
+  taskReader: Pick<TaskReader, "getTaskMetadata">,
   repoPath: string,
   taskId: string,
   request: AgentSessionStopTarget,

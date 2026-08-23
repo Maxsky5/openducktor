@@ -9,7 +9,7 @@ import {
   askBuilderToResolveTaskApprovalGitConflict,
 } from "./task-approval-flow-git-conflict";
 
-interface INITIALGITCONFLICTSTATEContract {
+interface TaskApprovalGitConflictState {
   open: boolean;
   taskId: string | null;
   conflict: GitConflict | null;
@@ -26,7 +26,7 @@ type UseTaskApprovalGitConflictFlowArgs = {
   workspaceRepoPath: string | null;
 };
 
-const INITIAL_GIT_CONFLICT_STATE: INITIALGITCONFLICTSTATEContract = {
+const INITIAL_GIT_CONFLICT_STATE: TaskApprovalGitConflictState = {
   open: false,
   taskId: null,
   conflict: null,

@@ -94,7 +94,7 @@ export const requireRuntime = (
 };
 
 export const toControlSummary = (
-  summary: Parameters<typeof agentSessionControlSummarySchema.parse>[0],
+  summary: AgentSessionControlSummary,
 ): Effect.Effect<AgentSessionControlSummary, HostValidationError> =>
   parseOutput(
     agentSessionControlSummarySchema,

@@ -1,6 +1,5 @@
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import { parseDiffGitHeaderToken } from "./git-diff";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type HunkSpec = {
   oldStart: number;
@@ -25,7 +24,7 @@ export type ParsedPatch = {
   renamePaths?: RenamePaths;
 };
 
-const invalidPatch = (message: string, details?: Record<string, JsonValue>): HostValidationError =>
+const invalidPatch = (message: string, details?: HostErrorDetails): HostValidationError =>
   new HostValidationError({
     message,
     details,

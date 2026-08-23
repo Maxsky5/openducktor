@@ -1,30 +1,14 @@
-import type { JsonValue } from "@openducktor/contracts";
-import {
-  jsonValueSchema,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  hasRuntimeType,
-} from "@openducktor/contracts";
+import type { ConfigProvidersResponse } from "@opencode-ai/sdk/v2/client";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { asUnknownRecord, readArrayProp, readRecordProp, readUnknownProp } from "./guards";
 import {
   opencodeProviderCatalogPayloadSchema,
-  type ParsedOpencodeProviderCatalog,
+  type ParsedOpencodeProviderModel,
 } from "./opencode-ingress";
 
-const ATTACHMENT_MODALITIES = ["image", "audio", "video", "pdf"] as const;
-
-type ProviderCatalogModel = {
-  name?: string | undefined;
-  variants?: Record<string, JsonValue> | undefined;
-  limit?: { context?: number | undefined; output?: number | undefined } | undefined;
-  capabilities?:
-    | {
-        input?:
-          | Partial<Record<(typeof ATTACHMENT_MODALITIES)[number], boolean | undefined>>
-          | undefined;
-      }
-    | undefined;
-  modalities?: { input?: string[] | undefined } | undefined;
+type AssistantResponsePayload = {
+  info?: { id?: string | undefined } | undefined;
+  parts?: Array<{ messageID?: string | undefined }> | undefined;
 };
 
 interface NormalizedModelInput {
@@ -51,120 +35,56 @@ export const normalizeModelInput = (
 };
 
 export const resolveAssistantResponseMessageId = (
-  payload: Parameters<typeof jsonValueSchema.safeParse>[0],
+  payload: AssistantResponsePayload | undefined,
 ): string | null => {
-  const parsed = jsonValueSchema.safeParse(payload);
-  if (!parsed.success) {
-    return null;
-  }
-  const payloadRecord = asUnknownRecord(parsed.data);
-  if (!payloadRecord) {
-    return null;
-  }
-  const infoId = readUnknownProp(readRecordProp(payloadRecord, "info"), "id");
-  if (hasRuntimeType(infoId, "string") && infoId.trim().length > 0) {
-    return infoId.trim();
+  const infoId = payload?.info?.id?.trim();
+  if (infoId) {
+    return infoId;
   }
 
-  const parts = readArrayProp(payloadRecord, "parts");
-  if (!parts) {
-    return null;
-  }
-  for (const part of parts) {
-    const partRecord = asUnknownRecord(part);
-    if (!partRecord) {
-      continue;
-    }
-    const messageId = readUnknownProp(partRecord, "messageID");
-    if (hasRuntimeType(messageId, "string") && messageId.trim().length > 0) {
-      return messageId.trim();
+  for (const part of payload?.parts ?? []) {
+    const messageId = part.messageID?.trim();
+    if (messageId) {
+      return messageId;
     }
   }
   return null;
 };
 
-export const toToolIdList = (payload: JsonValue | undefined): string[] => {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
+export const toToolIdList = (payload: readonly string[]): string[] => {
   return payload
-    .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0 && entry !== "invalid");
 };
 
 const normalizeModelAttachmentSupport = (
-  model: ProviderCatalogModel,
-):
-  | {
-      image: boolean;
-      audio: boolean;
-      video: boolean;
-      pdf: boolean;
-    }
-  | undefined => {
-  const capabilitiesInput = model.capabilities?.input;
-  if (capabilitiesInput) {
-    return {
-      image: capabilitiesInput.image === true,
-      audio: capabilitiesInput.audio === true,
-      video: capabilitiesInput.video === true,
-      pdf: capabilitiesInput.pdf === true,
-    };
-  }
+  model: ParsedOpencodeProviderModel,
+): NonNullable<AgentModelCatalog["models"][number]["attachmentSupport"]> => ({
+  audio: model.capabilities.input.audio,
+  image: model.capabilities.input.image,
+  pdf: model.capabilities.input.pdf,
+  video: model.capabilities.input.video,
+});
 
-  const modalitiesInput = model.modalities?.input;
-  if (modalitiesInput) {
-    const supported = new Set(
-      modalitiesInput.filter((entry): entry is (typeof ATTACHMENT_MODALITIES)[number] =>
-        ATTACHMENT_MODALITIES.some((modality) => modality === entry),
-      ),
-    );
-    return {
-      image: supported.has("image"),
-      audio: supported.has("audio"),
-      video: supported.has("video"),
-      pdf: supported.has("pdf"),
-    };
-  }
-
-  return undefined;
-};
-
-export const mapProviderListToCatalog = (
-  payload: Parameters<typeof opencodeProviderCatalogPayloadSchema.parse>[0],
-): AgentModelCatalog => {
-  const parsed: ParsedOpencodeProviderCatalog = opencodeProviderCatalogPayloadSchema.parse(payload);
+export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): AgentModelCatalog => {
+  const parsed = opencodeProviderCatalogPayloadSchema.parse(payload);
   const defaults = { ...parsed.default };
 
   const models = parsed.providers.flatMap((provider) => {
-    const providerId = provider.id;
-    const providerName = provider.name;
-    const providerModels = provider.models;
-    if (!providerId || !providerName || !providerModels) {
-      return [];
-    }
-
-    return Object.entries(providerModels).map(([modelId, rawModel]) => {
-      const contextWindow = rawModel.limit?.context;
-      const outputLimit = rawModel.limit?.output;
+    return Object.entries(provider.models).map(([modelId, rawModel]) => {
       const variants = rawModel.variants ? Object.keys(rawModel.variants) : [];
       const attachmentSupport = normalizeModelAttachmentSupport(rawModel);
 
       return {
-        id: `${providerId}/${modelId}`,
-        providerId,
-        providerName,
+        id: `${provider.id}/${modelId}`,
+        providerId: provider.id,
+        providerName: provider.name,
         modelId,
-        modelName: rawModel.name ?? modelId,
+        modelName: rawModel.name,
         variants,
-        ...(hasRuntimeType(contextWindow, "number") && Number.isFinite(contextWindow)
-          ? { contextWindow }
-          : undefined),
-        ...(hasRuntimeType(outputLimit, "number") && Number.isFinite(outputLimit)
-          ? { outputLimit }
-          : undefined),
-        ...(attachmentSupport ? { attachmentSupport } : undefined),
+        contextWindow: rawModel.limit.context,
+        outputLimit: rawModel.limit.output,
+        attachmentSupport,
       };
     });
   });

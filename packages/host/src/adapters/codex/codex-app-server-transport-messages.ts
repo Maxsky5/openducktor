@@ -16,13 +16,12 @@ import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
   type CodexAppServerCurrentTimeReadResponse,
   type CodexAppServerRequestId,
-  type JsonValue,
   hasRuntimeType,
 } from "@openducktor/contracts";
 
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
-export const isJsonRecord = (value: JsonValue | undefined): value is Record<string, JsonValue> =>
+export const isJsonRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isCodexServerRequestMethod = (method: string): method is CodexAppServerServerRequestMethod =>
@@ -44,7 +43,7 @@ export const appendCapturedStderr = (current: string, line: string): string => {
   return encoded.subarray(encoded.byteLength - MAX_CAPTURED_STDERR_BYTES).toString("utf8");
 };
 
-export const extractErrorMessage = (value: JsonValue | undefined): string => {
+export const extractErrorMessage = (value: unknown): string => {
   if (hasRuntimeType(value, "string")) {
     return value;
   }
@@ -81,17 +80,17 @@ export const respondToAutomaticServerRequest = (
 
 export function parseStreamMessage(
   runtimeId: string,
-  message: Record<string, JsonValue>,
+  message: Record<string, unknown>,
   kind: "notification",
 ): CodexAppServerServerNotification;
 export function parseStreamMessage(
   runtimeId: string,
-  message: Record<string, JsonValue>,
+  message: Record<string, unknown>,
   kind: "server_request",
 ): CodexAppServerServerRequest;
 export function parseStreamMessage(
   runtimeId: string,
-  message: Record<string, JsonValue>,
+  message: Record<string, unknown>,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage {
   if (!hasRuntimeType(message.method, "string") || message.method.trim().length === 0) {

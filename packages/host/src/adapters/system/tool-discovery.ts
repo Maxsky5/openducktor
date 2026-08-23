@@ -2,7 +2,11 @@ import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
 import { normalizeUserPathInput } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
-import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostErrorDetails,
+  HostDependencyError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
@@ -22,7 +26,6 @@ import {
   type ToolDiscoveryPathOptions,
   type ToolDiscoverySource,
 } from "./tool-discovery-descriptors";
-import type { JsonValue } from "@openducktor/contracts";
 
 export type { ToolDiscoveryPathOptions } from "./tool-discovery-descriptors";
 
@@ -67,7 +70,7 @@ const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
   variable: string,
   message: string,
-  details?: Record<string, JsonValue>,
+  details?: HostErrorDetails,
 ) =>
   new HostValidationError({
     field: variable,
@@ -79,7 +82,7 @@ const invalidProvidedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, JsonValue>,
+  details?: HostErrorDetails,
 ) =>
   new HostValidationError({
     field: `providedToolPaths.${toolId}`,
@@ -91,7 +94,7 @@ const invalidSavedToolPathError = (
   descriptor: ToolDiscoveryDescriptor,
   toolId: ToolDiscoveryId,
   message: string,
-  details?: Record<string, JsonValue>,
+  details?: HostErrorDetails,
 ) =>
   new HostValidationError({
     field: `agentRuntimes.${toolId}.executablePath`,
@@ -113,7 +116,7 @@ const resolveExplicitToolPathSource = ({
   detailKey: string;
   displayLabel: string;
   env: NodeJS.ProcessEnv;
-  invalidError: (message: string, details?: Record<string, JsonValue>) => HostValidationError;
+  invalidError: (message: string, details?: HostErrorDetails) => HostValidationError;
   rawPath: string;
   sourceCategory: ToolDiscoverySourceCategory;
   systemCommands: SystemCommandPort;
@@ -140,7 +143,7 @@ const resolveExplicitToolPathSource = ({
 const missingToolError = (
   descriptor: ToolDiscoveryDescriptor,
   checked: readonly string[],
-  details?: Record<string, JsonValue>,
+  details?: HostErrorDetails,
 ) =>
   new HostDependencyError({
     dependency: descriptor.command,

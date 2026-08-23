@@ -1,9 +1,12 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { Part, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
-import type { JsonValue } from "@openducktor/contracts";
 import { asUnknownRecord, readRecordProp, readStringProp, type UnknownRecord } from "../guards";
-import type { ParsedOpencodeEvent as Event } from "../opencode-ingress";
+import {
+  opencodePartPayloadSchema,
+  opencodeSessionDetailPayloadSchema,
+  type ParsedOpencodeEvent as Event,
+} from "../opencode-ingress";
 import {
   isAwaitingRuntimeTurnStart,
   markStreamTurnActive,
@@ -39,9 +42,9 @@ export type PendingSubagentSessionBinding = {
 
 type SessionLifecycleEvent = {
   type: "session.created" | "session.updated" | "session.deleted";
-  properties: UnknownRecord | undefined;
-  info: UnknownRecord | undefined;
-  externalSessionId: string | undefined;
+  properties: UnknownRecord;
+  info: Session;
+  externalSessionId: string;
   parentExternalSessionId: string | undefined;
 };
 
@@ -121,7 +124,7 @@ const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"
 const NESTED_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id"] as const;
 
 const readParentExternalSessionIdFromRecord = (
-  source: JsonValue | undefined,
+  source: UnknownRecord | undefined,
 ): string | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
@@ -139,25 +142,12 @@ const readParentExternalSessionIdFromRecord = (
 };
 
 export const readEventParentExternalSessionId = (
-  properties: JsonValue | undefined,
+  properties: UnknownRecord | undefined,
 ): string | undefined => {
   return (
     readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
     readParentExternalSessionIdFromRecord(properties)
   );
-};
-
-const readLifecycleParentExternalSessionId = (info: JsonValue | undefined): string | undefined => {
-  const parentExternalSessionId = readStringProp(info, ["parentID"]);
-  if (parentExternalSessionId?.trim()) {
-    return parentExternalSessionId;
-  }
-  if (hasRuntimeType(asUnknownRecord(info)?.parentID, "string")) {
-    throw new Error(
-      "OpenCode session lifecycle event has malformed info.parentID lineage; expected a non-blank string.",
-    );
-  }
-  return undefined;
 };
 
 export const flushPendingSubagentInputEventsForSession = (
@@ -274,15 +264,14 @@ export const applyDeltaToPart = (part: Part, field: string, delta: string): Part
     return null;
   }
 
-  // SAFETY: The preceding runtime guard establishes `Part` before this assertion.
-  return {
+  return opencodePartPayloadSchema.parse({
     ...part,
     [normalizedField]: `${hasRuntimeType(existing, "string") ? existing : ""}${delta}`,
-  } as Part;
+  });
 };
 
 export const readEventSessionId = (event: Event): string | undefined => {
-  const properties = readEventProperties(event);
+  const properties = event.properties;
   if (!properties) {
     return undefined;
   }
@@ -316,23 +305,34 @@ export const readEventSessionId = (event: Event): string | undefined => {
 };
 
 export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent | undefined => {
-  const eventType = String(event.type);
   if (
-    eventType !== "session.created" &&
-    eventType !== "session.updated" &&
-    eventType !== "session.deleted"
+    event.type !== "session.created" &&
+    event.type !== "session.updated" &&
+    event.type !== "session.deleted"
   ) {
     return undefined;
   }
 
-  const properties = readEventProperties(event);
-  const info = readEventInfo(properties);
+  const properties = event.properties;
+  const parsedInfo = opencodeSessionDetailPayloadSchema.safeParse(readEventInfo(properties));
+  if (!parsedInfo.success) {
+    const issues = parsedInfo.error.issues
+      .map((issue) => `info.${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`Invalid OpenCode ${event.type} info payload: ${issues}`);
+  }
+  const info = parsedInfo.data;
+  if (info.parentID !== undefined && info.parentID.trim().length === 0) {
+    throw new Error(
+      `Invalid OpenCode ${event.type} info payload: info.parentID must be a non-empty session id`,
+    );
+  }
   return {
-    type: eventType,
+    type: event.type,
     properties,
     info,
-    externalSessionId: readEventSessionId(event),
-    parentExternalSessionId: readLifecycleParentExternalSessionId(info),
+    externalSessionId: info.id,
+    parentExternalSessionId: info.parentID,
   };
 };
 

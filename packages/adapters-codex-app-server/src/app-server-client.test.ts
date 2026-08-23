@@ -90,14 +90,13 @@ describe("createCodexAppServerClient", () => {
     const transport: CodexJsonRpcTransport = {
       async request(request) {
         calls.push(request);
-        return { data: [{ cwd: "/repo", skills: [] }], errors: [] };
+        return { data: [{ cwd: "/repo", skills: [], errors: [] }] };
       },
     };
     const client = createCodexAppServerClient(transport);
 
     await expect(client.skillsList({ cwds: ["/repo"], forceReload: false })).resolves.toEqual({
-      data: [{ cwd: "/repo", skills: [] }],
-      errors: [],
+      data: [{ cwd: "/repo", skills: [], errors: [] }],
     });
     expect(calls).toEqual([
       {

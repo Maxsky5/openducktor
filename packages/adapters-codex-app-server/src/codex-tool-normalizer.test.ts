@@ -171,23 +171,17 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
-  test("keeps file change cards out of ODT error parsing", () => {
+  test("renders exact Codex file changes as completed tool cards", () => {
     const part = toStreamPart(
       {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new" }],
-        content: [
+        changes: [
           {
-            type: "text",
-            text: JSON.stringify({
-              ok: false,
-              error: {
-                code: "TASK_POLICY_ERROR",
-                message: "This belongs to another tool surface",
-              },
-            }),
+            path: "src/app.ts",
+            kind: { type: "update", move_path: null },
+            diff: "@@ -1 +1 @@\n-old\n+new",
           },
         ],
       },
@@ -222,7 +216,13 @@ describe("Codex tool normalization", () => {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts" }],
+        changes: [
+          {
+            path: "   ",
+            kind: { type: "update", move_path: null },
+            diff: "@@ -1 +1 @@\n-old\n+new",
+          },
+        ],
       },
       "message-live",
       "change-1",
@@ -234,8 +234,7 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "error",
-        error:
-          "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
+        error: "Malformed Codex file change: entry 0 has empty file path.",
       }),
     );
     expect(part).not.toHaveProperty("input");
@@ -251,8 +250,8 @@ describe("Codex tool normalization", () => {
         status: "completed",
         changes: [
           {
-            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
-            type: "modified",
+            path: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            kind: { type: "update", move_path: null },
             diff: "import { render, screen } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
           },
         ],
@@ -296,7 +295,7 @@ describe("Codex tool normalization", () => {
         id: "patch-1",
         namespace: "functions",
         tool: "apply_patch",
-        input: patch,
+        arguments: { patch },
         success: true,
         status: "completed",
       },
@@ -375,7 +374,7 @@ function AuthConsumer() {}
         id: "patch-1",
         namespace: "functions",
         tool: "apply_patch",
-        input: patch,
+        arguments: { patch },
         success: true,
         status: "completed",
       },
@@ -410,7 +409,10 @@ function AuthConsumer() {}
         id: "question-1",
         namespace: "functions",
         tool: "request_user_input",
-        input: JSON.stringify({ requestId: "32", questions: [{ question: "Pick a mode" }] }),
+        arguments: JSON.stringify({
+          requestId: "32",
+          questions: [{ question: "Pick a mode" }],
+        }),
         contentItems: [{ type: "text", text: "answered" }],
         success: true,
         status: "completed",

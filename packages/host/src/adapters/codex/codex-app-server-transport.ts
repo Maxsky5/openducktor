@@ -39,7 +39,6 @@ import type {
   CodexAppServerRequestId,
   CodexAppServerRespondError,
   CodexAppServerRespondResult,
-  JsonValue,
 } from "@openducktor/contracts";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
@@ -165,7 +164,7 @@ export const createCodexAppServerTransport = (
     cancelledSentRequests.set(id, timeout);
   };
 
-  const resolveResponse = (id: number, message: Record<string, JsonValue>): void => {
+  const resolveResponse = (id: number, message: Record<string, unknown>): void => {
     const request = pending.get(id);
     if (!request) {
       if (forgetCancelledSentRequest(id)) {
@@ -253,7 +252,7 @@ export const createCodexAppServerTransport = (
     pending.clear();
   };
 
-  const handleMessage = (message: JsonValue | undefined): void => {
+  const handleMessage = (message: unknown): void => {
     if (!isJsonRecord(message)) {
       failFast(
         new HostValidationError({

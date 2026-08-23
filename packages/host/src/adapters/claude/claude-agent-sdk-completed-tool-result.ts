@@ -6,19 +6,18 @@ import {
   claudeTodoToolPresentation,
 } from "./claude-agent-sdk-todos";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
-import type { JsonValue } from "@openducktor/contracts";
 
 type CompletedToolPart = Extract<AgentStreamPart, { kind: "tool" }>;
 
 type ProjectClaudeCompletedToolResultInput = {
   callId: string;
   endedAtMs: number;
-  input?: Record<string, JsonValue>;
+  input?: Record<string, unknown>;
   isError: boolean;
   messageId: string;
-  metadata?: Record<string, JsonValue>;
+  metadata?: Record<string, unknown>;
   preview?: string;
-  raw: Record<string, JsonValue>;
+  raw: Record<string, unknown>;
   resultText: string;
   startedAtMs?: number;
   state: ClaudeTodoState;

@@ -1,8 +1,7 @@
-import { hasRuntimeType, type CodexAppServerTurn } from "@openducktor/contracts";
+import type { CodexAppServerTurn } from "@openducktor/contracts";
 import {
   isCodexThreadNotLoadedError,
   isCodexUnmaterializedThreadError,
-  isPlainObject,
 } from "./codex-app-server-shared";
 import {
   type CodexThreadInventory,
@@ -366,26 +365,7 @@ export class CodexThreadInventoryReader {
         sortDirection: "asc",
         itemsView,
       });
-      if (!Array.isArray(response.data)) {
-        throw new Error("Codex thread/turns/list response data must be an array.");
-      }
-      for (const [turnIndex, turn] of response.data.entries()) {
-        if (!isPlainObject(turn)) {
-          throw new Error(`Codex thread/turns/list response data[${turnIndex}] must be an object.`);
-        }
-        if (!hasRuntimeType(turn.id, "string")) {
-          throw new Error(
-            `Codex thread/turns/list response data[${turnIndex}] is missing a string id.`,
-          );
-        }
-        if (itemsView === "full" && !Array.isArray(turn.items)) {
-          throw new Error(
-            `Codex thread/turns/list response data[${turnIndex}].items must be an array.`,
-          );
-        }
-        // SAFETY: The checks above validate the paginated turn shape required by the adapter.
-        turns.push(turn as CodexAppServerTurn);
-      }
+      turns.push(...response.data);
       cursor = response.nextCursor;
       if (cursor && seenCursors.has(cursor)) {
         throw new Error("Codex thread/turns/list returned a repeated pagination cursor.");

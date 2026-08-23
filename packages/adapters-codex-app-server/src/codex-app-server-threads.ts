@@ -1,7 +1,6 @@
 import { hasRuntimeType } from "@openducktor/contracts";
 import type { AgentSessionAssociation, AgentSessionSummary } from "@openducktor/core";
 import type {
-  CodexAppServerJsonValue,
   CodexAppServerSessionSource,
   CodexAppServerThread,
   CodexAppServerThreadLoadedListResponse,
@@ -64,7 +63,7 @@ export type CodexThreadSnapshot = {
 export type CodexSubAgentSourceMetadata = {
   parentThreadId: string;
   depth: number;
-  agentPath: CodexAppServerJsonValue | null;
+  agentPath: string | null;
   agentNickname: string | null;
   agentRole: string | null;
 };

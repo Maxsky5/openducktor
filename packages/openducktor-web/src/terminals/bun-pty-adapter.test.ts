@@ -15,22 +15,6 @@ interface CapturedContract {
   options: BunPtySpawnOptions | null;
 }
 
-interface CapturedContract128 {
-  options: BunPtySpawnOptions | null;
-}
-
-interface CapturedContract170 {
-  options: BunPtySpawnOptions | null;
-}
-
-interface CapturedContract214 {
-  options: BunPtySpawnOptions | null;
-}
-
-interface CapturedContract281 {
-  options: BunPtySpawnOptions | null;
-}
-
 const injectedCleanupFailure = () =>
   terminateProcessTree({
     pid: 0,
@@ -146,7 +130,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("resumes a partial input write after terminal drain", async () => {
-    const captured: CapturedContract128 = { options: null };
+    const captured: CapturedContract = { options: null };
     const writes: number[][] = [];
     let writeCalls = 0;
     const terminal = {
@@ -188,7 +172,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("retries process-tree cleanup after a failed termination", async () => {
-    const captured: CapturedContract170 = { options: null };
+    const captured: CapturedContract = { options: null };
     let cleanupCalls = 0;
     let terminalCloseCalls = 0;
     let terminalClosed = false;
@@ -232,7 +216,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("publishes one convergent natural-finalization failure and allows explicit retry", async () => {
-    const captured: CapturedContract214 = { options: null };
+    const captured: CapturedContract = { options: null };
     const failures: string[] = [];
     let reportFailure: (() => void) | null = null;
     const failureReported = new Promise<void>((resolve) => {
@@ -299,7 +283,7 @@ describe("createBunPtyPort", () => {
   });
 
   test("does not report success after EOF timeout when Bun already marks the terminal closed", async () => {
-    const captured: CapturedContract281 = { options: null };
+    const captured: CapturedContract = { options: null };
     let cleanupCalls = 0;
     let terminalCloseCalls = 0;
     let terminalClosed = false;

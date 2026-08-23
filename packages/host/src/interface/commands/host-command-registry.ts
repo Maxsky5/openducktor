@@ -390,13 +390,11 @@ export const parseHostCommandName = (value: string): HostCommandName => {
   });
 };
 
-export const parseHostCommandResponse = (
-  command: string,
-  value: Parameters<typeof jsonValueSchema.parse>[0],
-): JsonValue => {
+export const parseHostCommandResponse = (command: string, value: unknown): JsonValue => {
+  const jsonValue = jsonValueSchema.parse(value);
   const hostCommand = parseHostCommandName(command);
   try {
-    return jsonValueSchema.parse(HOST_COMMAND_RESPONSE_SCHEMAS[hostCommand].parse(value));
+    return jsonValueSchema.parse(HOST_COMMAND_RESPONSE_SCHEMAS[hostCommand].parse(jsonValue));
   } catch (cause) {
     throw new HostValidationError({
       message: `Host command '${hostCommand}' returned an invalid response.`,

@@ -18,7 +18,7 @@ export const createTerminalClientSession = ({
   send,
 }: {
   clientId: string;
-  terminalService: TerminalService;
+  terminalService: Pick<TerminalService, "acknowledge" | "attach" | "detach" | "resize" | "write">;
   send(message: TerminalServerMessage, payload: Uint8Array): void;
 }): TerminalClientSession => {
   const attachedTerminalIds = new Set<string>();

@@ -156,11 +156,13 @@ const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2
   })
   .strict();
 
-const withCodexRuntimeValidation = <T extends z.ZodTypeAny>(schema: T) =>
+const withCodexRuntimeValidation = <
+  T extends z.ZodType<{ roleOverrides: z.output<typeof codexRoleOverridesSchema> }>,
+>(
+  schema: T,
+) =>
   schema.superRefine((config, context) => {
-    // SAFETY: The surrounding boundary constructs or validates every member required by `CodexRuntimeConfig`.
-    const candidate = config as CodexRuntimeConfig;
-    if (candidate.roleOverrides.build?.sandboxMode === "read-only") {
+    if (config.roleOverrides.build?.sandboxMode === "read-only") {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message:

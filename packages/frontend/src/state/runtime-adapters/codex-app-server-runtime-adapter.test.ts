@@ -17,17 +17,19 @@ const createCodexRuntime = (runtimeId: string) => ({
 
 describe("createCodexAppServerRuntimeAdapter", () => {
   test("keeps pure catalog reads on the renderer adapter without raw live-event plumbing", async () => {
-    const originalRuntimeRequire = host.runtimeRequire;
-    const originalCodexAppServerRequest = host.codexAppServerRequest;
-    const codexRequest = mock(async (_runtimeId: string, method: string) => {
-      if (method !== "model/list") {
-        throw new Error(`Unexpected Codex app-server request method: ${method}`);
+    const requestImplementation: typeof host.codexAppServerRequest = async (
+      _runtimeId,
+      request,
+    ) => {
+      if (request.method !== "model/list") {
+        throw new Error(`Unexpected Codex app-server request method: ${request.method}`);
       }
       return {
         data: [
           {
             additionalSpeedTiers: [],
             availabilityNux: null,
+            defaultServiceTier: null,
             defaultReasoningEffort: "medium",
             description: "GPT-5 model",
             hidden: false,
@@ -36,6 +38,8 @@ describe("createCodexAppServerRuntimeAdapter", () => {
             displayName: "GPT-5",
             inputModalities: ["text", "image"],
             isDefault: true,
+            modelSpecialty: null,
+            multiAgentVersion: null,
             serviceTiers: [],
             supportedReasoningEfforts: [
               { reasoningEffort: "medium", description: "Balanced reasoning" },
@@ -47,14 +51,13 @@ describe("createCodexAppServerRuntimeAdapter", () => {
         ],
         nextCursor: null,
       };
-    });
+    };
+    const codexRequest = mock(requestImplementation);
+    const originalRuntimeRequire = host.runtimeRequire;
+    const originalCodexAppServerRequest = host.codexAppServerRequest;
 
-    // SAFETY: This test controls the fixture and supplies `typeof host.runtimeRequire` used by this case.
-    host.runtimeRequire = mock(async () =>
-      createCodexRuntime("runtime-codex-live"),
-    ) as typeof host.runtimeRequire;
-    // SAFETY: This test controls the fixture and supplies `typeof host.codexAppServerRequest` used by this case.
-    host.codexAppServerRequest = codexRequest as typeof host.codexAppServerRequest;
+    host.runtimeRequire = async () => createCodexRuntime("runtime-codex-live");
+    host.codexAppServerRequest = codexRequest;
 
     try {
       const adapter = createCodexAppServerRuntimeAdapter();
@@ -67,8 +70,7 @@ describe("createCodexAppServerRuntimeAdapter", () => {
       });
       expect(codexRequest).toHaveBeenCalledWith(
         "runtime-codex-live",
-        "model/list",
-        expect.any(Object),
+        expect.objectContaining({ method: "model/list" }),
       );
     } finally {
       host.runtimeRequire = originalRuntimeRequire;

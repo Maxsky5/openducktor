@@ -1,8 +1,10 @@
 export {
   type AppUpdateBridge,
   createDisabledAppUpdateBridge,
+  type DevServerEventListener,
   type DevServerEventSubscription,
   type HostBridge,
+  type RunEventListener,
   type ShellBridge,
   type ShellCapabilities,
   type TerminalBridge,

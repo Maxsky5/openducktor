@@ -19,6 +19,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionTurnState } from "../support/session-turn-state";
 import { createAgentSessionRuntimeSnapshotFixture, createTaskCardFixture } from "../test-utils";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createAgentSessionActions } from "./session-actions";
 
 type BuildSessionOverrides = AgentSessionFixtureOverrides;
@@ -96,8 +97,11 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     sessionsRef: overrideSessionsRef,
     ...actionOverrides
   } = overrides;
-  // SAFETY: The surrounding boundary constructs or validates every member required by `AgentEnginePort`.
-  const adapter = (adapterOverride ?? new OpencodeSdkAdapter()) as AgentEnginePort;
+  const adapterCandidate = adapterOverride ?? new OpencodeSdkAdapter();
+  const adapter =
+    adapterCandidate instanceof OpencodeSdkAdapter
+      ? createOpenCodeAgentEngineTestAdapter(adapterCandidate)
+      : adapterCandidate;
   const sessionsRef = overrideSessionsRef ?? createSessionsRef();
   sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const sessionTurnState = createSessionTurnStateFixture();

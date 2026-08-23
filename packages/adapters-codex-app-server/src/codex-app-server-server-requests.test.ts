@@ -8,7 +8,7 @@ import {
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
 import type { CodexServerRequestRecord, CodexSessionState } from "./types";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerJsonValue } from "@openducktor/contracts";
 
 const createSession = (
   role: AgentRole | null,
@@ -29,7 +29,7 @@ const createSession = (
   taskId: "task-1",
 });
 
-// SAFETY: This test controls the fixture and supplies `Record<string, JsonValue>` used by this case.
+// SAFETY: This test controls the fixture and supplies `Record<string, CodexAppServerJsonValue>` used by this case.
 const createRequestContext = ({
   events,
   pendingInput = new CodexPendingInputState(),
@@ -58,7 +58,7 @@ const createRequestContext = ({
   flushQueuedUserMessagesLater,
   emitSessionEvent: (externalSessionId: string, event: AgentEvent) =>
     events.push({
-      ...(event as Record<string, JsonValue>),
+      ...(event as Record<string, CodexAppServerJsonValue>),
       emittedExternalSessionId: externalSessionId,
     }),
   emitRetainedSessionEvent: (session, event) =>

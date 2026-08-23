@@ -283,6 +283,7 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
           additionalSpeedTiers: [],
           availabilityNux: null,
           defaultReasoningEffort: "future-adaptive",
+          defaultServiceTier: null,
           description: "Codex 0.149 model",
           displayName: "GPT-5.3 Codex",
           hidden: false,
@@ -290,6 +291,8 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
           inputModalities: ["text", "image"],
           isDefault: true,
           model: "gpt-5.3-codex",
+          modelSpecialty: null,
+          multiAgentVersion: null,
           serviceTiers: [],
           supportedReasoningEfforts: [
             { reasoningEffort: "future-adaptive", description: "Future reasoning" },

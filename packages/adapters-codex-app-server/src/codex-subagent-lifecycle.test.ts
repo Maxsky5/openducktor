@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { JsonValue } from "@openducktor/contracts";
+import type { CodexAppServerTurn } from "@openducktor/contracts";
 import { codexSubagentLifecycleUpdateFromNotification } from "./codex-subagent-lifecycle";
+import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 
-const notification = (method: string, turn: Record<string, JsonValue>) => ({
+const notification = (method: "turn/started" | "turn/completed", turn: CodexAppServerTurn) => ({
   method,
   receivedAt: "2026-07-10T12:00:00.000Z",
   params: {
@@ -15,11 +16,15 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
   test("treats a new child turn as an explicit restart", () => {
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/started", {
-          id: "turn-1",
-          status: "inProgress",
-          startedAt: 1_783_684_799,
-        }),
+        notification(
+          "turn/started",
+          codexTurnFixture({
+            items: [],
+            id: "turn-1",
+            status: "inProgress",
+            startedAt: 1_783_684_799,
+          }),
+        ),
       ),
     ).toEqual({
       status: "running",
@@ -31,11 +36,15 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
   test("maps completed and failed child turns to terminal statuses", () => {
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/completed", {
-          id: "turn-1",
-          status: "completed",
-          completedAt: 1_783_684_800,
-        }),
+        notification(
+          "turn/completed",
+          codexTurnFixture({
+            completedAt: 1_783_684_800,
+            id: "turn-1",
+            items: [],
+            status: "completed",
+          }),
+        ),
       ),
     ).toEqual({
       status: "completed",
@@ -44,12 +53,20 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
     });
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/completed", {
-          id: "turn-2",
-          status: "failed",
-          completedAt: 1_783_684_800,
-          error: { message: "Child failed" },
-        }),
+        notification(
+          "turn/completed",
+          codexTurnFixture({
+            completedAt: 1_783_684_800,
+            error: {
+              additionalDetails: null,
+              codexErrorInfo: null,
+              message: "Child failed",
+            },
+            id: "turn-2",
+            items: [],
+            status: "failed",
+          }),
+        ),
       ),
     ).toEqual({
       status: "error",
@@ -59,31 +76,32 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
     });
   });
 
-  test("uses snake-case Codex lifecycle timestamps when present", () => {
+  test("uses receipt time when the exact Codex lifecycle timestamp is null", () => {
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/started", {
-          id: "turn-1",
-          status: "inProgress",
-          started_at: 1_783_684_799,
-        }),
+        notification(
+          "turn/started",
+          codexTurnFixture({ id: "turn-1", items: [], status: "inProgress" }),
+        ),
       ),
-    ).toMatchObject({ timestampMs: 1_783_684_799_000 });
+    ).toMatchObject({ timestampMs: Date.parse("2026-07-10T12:00:00.000Z") });
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/completed", {
-          id: "turn-1",
-          status: "completed",
-          completed_at: 1_783_684_800,
-        }),
+        notification(
+          "turn/completed",
+          codexTurnFixture({ id: "turn-1", items: [], status: "completed" }),
+        ),
       ),
-    ).toMatchObject({ timestampMs: 1_783_684_800_000 });
+    ).toMatchObject({ timestampMs: Date.parse("2026-07-10T12:00:00.000Z") });
   });
 
   test("keeps interrupted child threads resumable and ignores idle status notifications", () => {
     expect(
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/completed", { id: "turn-1", status: "interrupted" }),
+        notification(
+          "turn/completed",
+          codexTurnFixture({ id: "turn-1", items: [], status: "interrupted" }),
+        ),
       ),
     ).toBeNull();
     expect(
@@ -98,7 +116,10 @@ describe("codexSubagentLifecycleUpdateFromNotification", () => {
   test("fails fast on lifecycle shapes outside the verified Codex contract", () => {
     expect(() =>
       codexSubagentLifecycleUpdateFromNotification(
-        notification("turn/completed", { id: "turn-1", status: "inProgress" }),
+        notification(
+          "turn/completed",
+          codexTurnFixture({ id: "turn-1", items: [], status: "inProgress" }),
+        ),
       ),
     ).toThrow("unexpected turn status 'inProgress'");
   });

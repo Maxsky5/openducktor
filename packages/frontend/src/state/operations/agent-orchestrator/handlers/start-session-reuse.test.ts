@@ -22,10 +22,6 @@ interface SessionsRefContract {
   current: AgentSessionCollection;
 }
 
-interface SessionsRefContract521 {
-  current: AgentSessionCollection;
-}
-
 const sessionFixture = (
   overrides: Parameters<typeof baseSessionFixture>[0],
 ): ReturnType<typeof baseSessionFixture> =>
@@ -526,7 +522,7 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const sessionsRef: SessionsRefContract521 = {
+    const sessionsRef: SessionsRefContract = {
       current: createAgentSessionCollection([
         sessionFixture({
           externalSessionId: "existing-spec-ext",

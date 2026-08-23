@@ -119,8 +119,8 @@ const createFakeGitPort = ({
   statuses?: GitFileStatus[];
   diffs?: FileDiff[];
   changedFiles?: GitChangedFile[];
-} = {}): GitPort =>
-  createFocusedTestService<GitPort>({
+} = {}): Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff"> =>
+  createFocusedTestService<GitPort>()({
     isGitRepository: () => Effect.succeed(isRepository),
     getRepositoryRoot: () => Effect.succeed(repositoryRoot),
     listFiles: () => Effect.succeed(files),
