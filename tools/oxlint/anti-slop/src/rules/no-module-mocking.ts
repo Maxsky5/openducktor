@@ -2,7 +2,7 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
-const moduleMockMethods = new Set(["doMock", "mock", "unstable_mockModule"]);
+const moduleMockMethods = new Set(["doMock", "mock", "module", "unstable_mockModule"]);
 
 function resolveVariable(
   sourceCode: SourceCode,
@@ -22,10 +22,51 @@ function importedName(node: ESTree.Node): string | null {
   return node.imported.type === "Identifier" ? node.imported.name : node.imported.value;
 }
 
-function isTestFrameworkObject(
+function hasFrameworkImport(
   sourceCode: SourceCode,
-  expression: ESTree.Expression,
-): expression is ESTree.IdentifierReference {
+  identifier: ESTree.IdentifierReference,
+  sourceName: string,
+  importedBinding: string,
+): boolean {
+  const variable = resolveVariable(sourceCode, identifier);
+  if (variable === null || variable.defs.length === 0) return false;
+  return variable.defs.some((definition) => {
+    if (definition.type !== "ImportBinding" || definition.parent?.type !== "ImportDeclaration") {
+      return false;
+    }
+    return (
+      definition.parent.source.value === sourceName &&
+      importedName(definition.node) === importedBinding
+    );
+  });
+}
+
+function isBunMockObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
+  if (expression.type === "Identifier") {
+    return hasFrameworkImport(sourceCode, expression, "bun:test", "mock");
+  }
+  if (
+    expression.type !== "MemberExpression" ||
+    expression.computed ||
+    expression.object.type !== "Identifier" ||
+    expression.property.type !== "Identifier" ||
+    expression.property.name !== "mock"
+  ) {
+    return false;
+  }
+  const variable = resolveVariable(sourceCode, expression.object);
+  if (variable === null || variable.defs.length === 0) return false;
+  return variable.defs.some(
+    (definition) =>
+      definition.type === "ImportBinding" &&
+      definition.node.type === "ImportNamespaceSpecifier" &&
+      definition.parent?.type === "ImportDeclaration" &&
+      definition.parent.source.value === "bun:test",
+  );
+}
+
+function isTestFrameworkObject(sourceCode: SourceCode, expression: ESTree.Expression): boolean {
+  if (isBunMockObject(sourceCode, expression)) return true;
   if (expression.type !== "Identifier") return false;
   if (
     (expression.name === "vi" || expression.name === "jest") &&
@@ -38,16 +79,10 @@ function isTestFrameworkObject(
   if (variable === null || variable.defs.length === 0) {
     return expression.name === "vi" || expression.name === "jest";
   }
-  return variable.defs.some((definition) => {
-    if (definition.type !== "ImportBinding" || definition.parent?.type !== "ImportDeclaration") {
-      return false;
-    }
-    const source = definition.parent.source.value;
-    const name = importedName(definition.node);
-    return (
-      (source === "vitest" && name === "vi") || (source === "@jest/globals" && name === "jest")
-    );
-  });
+  return (
+    hasFrameworkImport(sourceCode, expression, "vitest", "vi") ||
+    hasFrameworkImport(sourceCode, expression, "@jest/globals", "jest")
+  );
 }
 
 function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): boolean {
@@ -73,7 +108,7 @@ export const noModuleMockingRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Vitest and Jest module mocking; tests must replace dependencies through real interfaces.",
+        "Disallow Bun, Vitest, and Jest module mocking; tests must replace dependencies through real interfaces.",
     },
     messages: {
       moduleMock:

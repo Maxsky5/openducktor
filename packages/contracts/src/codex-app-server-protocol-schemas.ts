@@ -120,7 +120,7 @@ const mcpElicitationConstOptionSchema = z.object({
   const: z.string(),
   title: z.string(),
 });
-const codexAppServerMcpElicitationPrimitiveSchema = z.union([
+export const codexAppServerMcpElicitationPrimitiveSchema = z.union([
   z.object({
     type: z.literal("string"),
     ...mcpElicitationSchemaDescription,
@@ -215,6 +215,20 @@ export const codexAppServerExecCommandApprovalParamsSchema = z.object({
   reason: z.string().nullable(),
 });
 
+export const codexAppServerCommandExecutionApprovalDecisionSchema = z.union([
+  z.enum(["accept", "acceptForSession", "decline", "cancel"]),
+  z.object({
+    acceptWithExecpolicyAmendment: z.object({
+      execpolicy_amendment: z.array(z.string()),
+    }),
+  }),
+  z.object({
+    applyNetworkPolicyAmendment: z.object({
+      network_policy_amendment: codexAppServerNetworkPolicyAmendmentSchema,
+    }),
+  }),
+]);
+
 export const codexAppServerCommandExecutionRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   startedAtMs: z.number().int(),
@@ -234,21 +248,7 @@ export const codexAppServerCommandExecutionRequestApprovalParamsSchema = z.objec
     .nullable()
     .optional(),
   availableDecisions: z
-    .array(
-      z.union([
-        z.enum(["accept", "acceptForSession", "decline", "cancel"]),
-        z.object({
-          acceptWithExecpolicyAmendment: z.object({
-            execpolicy_amendment: z.array(z.string()),
-          }),
-        }),
-        z.object({
-          applyNetworkPolicyAmendment: z.object({
-            network_policy_amendment: codexAppServerNetworkPolicyAmendmentSchema,
-          }),
-        }),
-      ]),
-    )
+    .array(codexAppServerCommandExecutionApprovalDecisionSchema)
     .nullable()
     .optional(),
 });
@@ -302,6 +302,58 @@ export const codexAppServerThreadStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notLoaded") }),
   z.object({ type: z.literal("systemError") }),
 ]);
+
+export type CodexAppServerAdditionalFileSystemPermissions = z.output<
+  typeof codexAppServerAdditionalFileSystemPermissionsSchema
+>;
+export type CodexAppServerAdditionalNetworkPermissions = z.output<
+  typeof codexAppServerAdditionalNetworkPermissionsSchema
+>;
+export type CodexAppServerCommandAction = z.output<typeof codexAppServerCommandActionSchema>;
+export type CodexAppServerCommandExecutionApprovalDecision = z.output<
+  typeof codexAppServerCommandExecutionApprovalDecisionSchema
+>;
+export type CodexAppServerCommandExecutionRequestApprovalParams = z.output<
+  typeof codexAppServerCommandExecutionRequestApprovalParamsSchema
+>;
+export type CodexAppServerCurrentTimeReadParams = z.output<
+  typeof codexAppServerCurrentTimeReadParamsSchema
+>;
+export type CodexAppServerCurrentTimeReadResponse = z.output<
+  typeof codexAppServerCurrentTimeReadResponseSchema
+>;
+export type CodexAppServerExecCommandApprovalParams = z.output<
+  typeof codexAppServerExecCommandApprovalParamsSchema
+>;
+export type CodexAppServerFileSystemPath = z.output<typeof codexAppServerFileSystemPathSchema>;
+export type CodexAppServerFileSystemSandboxEntry = z.output<
+  typeof codexAppServerFileSystemSandboxEntrySchema
+>;
+export type CodexAppServerFileSystemSpecialPath = z.output<
+  typeof codexAppServerFileSystemSpecialPathSchema
+>;
+export type CodexAppServerLegacyParsedCommand = z.output<
+  typeof codexAppServerLegacyParsedCommandSchema
+>;
+export type CodexAppServerMcpElicitationPrimitiveSchema = z.output<
+  typeof codexAppServerMcpElicitationPrimitiveSchema
+>;
+export type CodexAppServerMcpServerElicitationRequestParams = z.output<
+  typeof codexAppServerMcpServerElicitationRequestParamsSchema
+>;
+export type CodexAppServerNetworkApprovalContext = z.output<
+  typeof codexAppServerNetworkApprovalContextSchema
+>;
+export type CodexAppServerNetworkPolicyAmendment = z.output<
+  typeof codexAppServerNetworkPolicyAmendmentSchema
+>;
+export type CodexAppServerPermissionsRequestApprovalParams = z.output<
+  typeof codexAppServerPermissionsRequestApprovalParamsSchema
+>;
+export type CodexAppServerRequestPermissionProfile = z.output<
+  typeof codexAppServerRequestPermissionProfileSchema
+>;
+export type CodexAppServerThreadStatus = z.output<typeof codexAppServerThreadStatusSchema>;
 
 const codexAppServerSubAgentSourceSchema = z.union([
   z.enum(["review", "compact", "memory_consolidation"]),

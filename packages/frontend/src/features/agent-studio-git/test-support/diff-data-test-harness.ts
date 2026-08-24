@@ -4,14 +4,12 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-
-const actualHostOperationsModule = await import("@/state/operations/host");
-const actualHostClientModule = await import("@/lib/host-client");
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
 if (hasRuntimeType(globalThis.document, "undefined")) {
@@ -195,25 +193,16 @@ export const dispatchScheduledRefresh = (): void => {
 
 export const setupAgentStudioDiffDataTestHarness = (): void => {
   beforeEach(async () => {
-    mock.module("@/state/operations/host", () => ({
-      host: {
-        taskWorktreeGet: taskWorktreeGetMock,
-        runsList: taskWorktreeEntriesMock,
-        gitFetchRemote: gitFetchRemoteMock,
-        gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-        gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-      },
-    }));
-
-    mock.module("@/lib/host-client", () => ({
-      hostClient: {
-        taskWorktreeGet: taskWorktreeGetMock,
-        runsList: taskWorktreeEntriesMock,
-        gitFetchRemote: gitFetchRemoteMock,
-        gitGetWorktreeStatus: gitGetWorktreeStatusMock,
-        gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
-      },
-    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          taskWorktreeGet: taskWorktreeGetMock,
+          gitFetchRemote: gitFetchRemoteMock,
+          gitGetWorktreeStatus: gitGetWorktreeStatusMock,
+          gitGetWorktreeStatusSummary: gitGetWorktreeStatusSummaryMock,
+        },
+      }),
+    );
 
     ({ useAgentStudioDiffData } = await import("../use-agent-studio-diff-data"));
     taskWorktreeEntriesMock.mockClear();
@@ -244,10 +233,7 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
     );
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/lib/host-client", async () => actualHostClientModule],
-    ]);
+  afterEach(() => {
+    configureShellBridge(createUnavailableShellBridge());
   });
 };

@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitConflict, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -24,12 +23,20 @@ type PullRequestReviewQueriesModule = typeof import("@/state/queries/pull-reques
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
-let realBuildToolsSnapshot: BuildToolsSnapshotModule | null = null;
-let realGitActions: GitActionsModule | null = null;
-let realPullRequestReviewQueries: PullRequestReviewQueriesModule | null = null;
+const realBuildToolsSnapshot: BuildToolsSnapshotModule =
+  await import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
+const realGitActions: GitActionsModule = await import("../use-agent-studio-git-actions");
+const realPullRequestReviewQueries: PullRequestReviewQueriesModule =
+  await import("@/state/queries/pull-request-review");
+let testSpies: Array<{ mockRestore(): void }> = [];
 
-const buildToolsSnapshotMock = mock(() => buildToolsSnapshotState.current);
-const gitActionsMock = mock(() => gitActionsState.current);
+type BuildToolsSnapshotHook = BuildToolsSnapshotModule["useAgentStudioBuildToolsWorktreeSnapshot"];
+type GitActionsHook = GitActionsModule["useAgentStudioGitActions"];
+type BuildToolsSnapshot = ReturnType<BuildToolsSnapshotHook>;
+type GitActionsState = ReturnType<GitActionsHook>;
+
+const buildToolsSnapshotMock = mock<BuildToolsSnapshotHook>(() => buildToolsSnapshotState.current);
+const gitActionsMock = mock<GitActionsHook>(() => gitActionsState.current);
 type PrefetchPullRequestReviewContext =
   PullRequestReviewQueriesModule["prefetchPullRequestReviewContextFromQuery"];
 const prefetchPullRequestReviewContextMock = mock(
@@ -38,7 +45,7 @@ const prefetchPullRequestReviewContextMock = mock(
     _input: Parameters<PrefetchPullRequestReviewContext>[1],
   ) => {},
 );
-const refreshWorktreeMock = mock(async (_mode?: "soft" | "hard") => {});
+const refreshWorktreeMock = mock<BuildToolsSnapshot["refreshWorktree"]>(async () => {});
 
 const linkedPullRequest = {
   providerId: "github",
@@ -49,7 +56,24 @@ const linkedPullRequest = {
   updatedAt: "2026-07-08T10:05:00Z",
 } satisfies PullRequest;
 
-const createSnapshot = (gitConflictId: string | null) => ({
+const createEmptyScopeState =
+  (): BuildToolsSnapshot["diffData"]["scopeStatesByScope"]["target"] => ({
+    branch: null,
+    gitConflict: null,
+    fileDiffs: [],
+    fileStatuses: [],
+    uncommittedFileCount: 0,
+    commitsAheadBehind: null,
+    upstreamAheadBehind: null,
+    upstreamStatus: "tracking",
+    error: null,
+    hashVersion: null,
+    statusHash: null,
+    diffHash: null,
+  });
+
+const createSnapshot = (): BuildToolsSnapshot => ({
+  isEnabled: true,
   context: {
     repoPath: "/repo",
     taskId: "task-1",
@@ -59,33 +83,43 @@ const createSnapshot = (gitConflictId: string | null) => ({
     hasSelectedTask: true,
   },
   diffData: {
+    branch: null,
     fileStatuses: [],
+    fileDiffs: [],
+    uncommittedFileCount: 0,
     gitConflict: null,
     worktreePath: null,
     targetBranch: "origin/main",
     diffScope: "uncommitted",
+    scopeStatesByScope: {
+      target: createEmptyScopeState(),
+      uncommitted: createEmptyScopeState(),
+    },
     loadedScopesByScope: { target: false, uncommitted: true },
     upstreamStatus: "tracking",
+    commitsAheadBehind: null,
     hashVersion: null,
     statusHash: null,
     diffHash: null,
     upstreamAheadBehind: null,
     isLoading: false,
+    error: null,
     statusSnapshotKey: null,
     refresh: async () => {},
+    setDiffScope: () => {},
   },
-  gitPanelContextMode: "documents",
+  gitPanelContextMode: "repository",
   openInTarget: { path: null, disabledReason: null },
   resolvedGitPanelBranch: null,
   targetBranchState: {
     validationError: null,
-    effectiveTargetBranch: "origin/main",
+    effectiveTargetBranch: { remote: "origin", branch: "main" },
     selectionValue: "origin/main",
     displayTargetBranch: "origin/main",
   },
   worktree: {
     path: "/repo/.worktrees/task-1",
-    status: "ready",
+    status: "resolved",
     error: null,
     retry: async () => {},
     isResolving: false,
@@ -97,12 +131,26 @@ const createSnapshot = (gitConflictId: string | null) => ({
     isExpanded: false,
     isLoading: false,
     disabledReason: null,
+    repoPath: "/repo",
+    taskId: "task-1",
+    worktreePath: "/repo/.worktrees/task-1",
+    scripts: [],
+    selectedScriptId: null,
+    selectedScript: null,
+    selectedScriptTerminalBuffer: null,
+    error: null,
+    isStartPending: false,
+    isStopPending: false,
+    isRestartPending: false,
+    onSelectScript: () => {},
+    onStart: () => {},
+    onStop: () => {},
+    onRestart: () => {},
   },
   refreshWorktree: refreshWorktreeMock,
-  gitConflictId,
 });
 
-const createGitActions = (gitConflictId: GitConflict["operation"] | null) => ({
+const createGitActions = (gitConflictId: GitConflict["operation"] | null): GitActionsState => ({
   gitConflict: gitConflictId
     ? {
         operation: gitConflictId,
@@ -121,7 +169,7 @@ const createGitActions = (gitConflictId: GitConflict["operation"] | null) => ({
   isResetting: false,
   isResetDisabled: false,
   resetDisabledReason: null,
-  gitConflictAction: "idle",
+  gitConflictAction: null,
   gitConflictAutoOpenNonce: 0,
   gitConflictCloseNonce: 0,
   showLockReasonBanner: false,
@@ -149,7 +197,7 @@ const createGitActions = (gitConflictId: GitConflict["operation"] | null) => ({
   pullFromUpstream: async () => {},
 });
 
-const buildToolsSnapshotState = { current: createSnapshot(null) };
+const buildToolsSnapshotState = { current: createSnapshot() };
 const gitActionsState = { current: createGitActions(null) };
 
 type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
@@ -232,49 +280,26 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 beforeEach(async () => {
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
-  buildToolsSnapshotState.current = createSnapshot("rebase");
+  buildToolsSnapshotState.current = createSnapshot();
   gitActionsState.current = createGitActions("rebase");
 
-  realBuildToolsSnapshot =
-    await import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
-  realGitActions = await import("../use-agent-studio-git-actions");
-  const pullRequestReviewQueries = await import("@/state/queries/pull-request-review");
-  realPullRequestReviewQueries = pullRequestReviewQueries;
-
-  mock.module(
-    "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot",
-    () => ({
-      useAgentStudioBuildToolsWorktreeSnapshot: buildToolsSnapshotMock,
-    }),
-  );
-  mock.module("../use-agent-studio-git-actions", () => ({
-    useAgentStudioGitActions: gitActionsMock,
-  }));
-  mock.module("@/state/queries/pull-request-review", () => ({
-    ...pullRequestReviewQueries,
-    prefetchPullRequestReviewContextFromQuery: prefetchPullRequestReviewContextMock,
-  }));
+  testSpies = [
+    spyOn(realBuildToolsSnapshot, "useAgentStudioBuildToolsWorktreeSnapshot").mockImplementation(
+      buildToolsSnapshotMock,
+    ),
+    spyOn(realGitActions, "useAgentStudioGitActions").mockImplementation(gitActionsMock),
+    spyOn(
+      realPullRequestReviewQueries,
+      "prefetchPullRequestReviewContextFromQuery",
+    ).mockImplementation(prefetchPullRequestReviewContextMock),
+  ];
 
   ({ useAgentsPageRightPanelModel } = await import("./use-agents-page-right-panel-model"));
 });
 
-afterEach(async () => {
-  const buildToolsSnapshot = realBuildToolsSnapshot;
-  const gitActions = realGitActions;
-  const pullRequestReviewQueries = realPullRequestReviewQueries;
-
-  if (!buildToolsSnapshot || !gitActions || !pullRequestReviewQueries) {
-    return;
-  }
-
-  await restoreMockedModules([
-    [
-      "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot",
-      () => Promise.resolve(buildToolsSnapshot),
-    ],
-    ["../use-agent-studio-git-actions", () => Promise.resolve(gitActions)],
-    ["@/state/queries/pull-request-review", () => Promise.resolve(pullRequestReviewQueries)],
-  ]);
+afterEach(() => {
+  for (const testSpy of testSpies) testSpy.mockRestore();
+  testSpies = [];
 });
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
@@ -333,7 +358,7 @@ describe("useAgentsPageRightPanelModel", () => {
 
     expect(events).toEqual(["rebase"]);
 
-    buildToolsSnapshotState.current = createSnapshot("pull_rebase");
+    buildToolsSnapshotState.current = createSnapshot();
     gitActionsState.current = createGitActions("pull_rebase");
 
     await harness.update(
@@ -390,7 +415,7 @@ describe("useAgentsPageRightPanelModel", () => {
     const queryClient = createQueryClient();
     const requestedRootPath = "/repo-link/.worktrees/task-1";
     const canonicalRootPath = "/repo/.worktrees/task-1";
-    const snapshot = createSnapshot("A");
+    const snapshot = createSnapshot();
     buildToolsSnapshotState.current = {
       ...snapshot,
       gitPanelContextMode: "worktree",

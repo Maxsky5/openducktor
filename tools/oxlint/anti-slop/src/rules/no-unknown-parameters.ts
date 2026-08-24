@@ -145,28 +145,44 @@ function isTypeofResultLiteral(expression: ESTree.Expression): boolean {
   );
 }
 
-function isBinaryNarrowingExpression(
+function isNullishExpression(expression: ESTree.Expression): boolean {
+  return (
+    (expression.type === "Literal" && expression.value === null) ||
+    (expression.type === "Identifier" && expression.name === "undefined")
+  );
+}
+
+function binaryNarrowingPolarity(
   expression: ESTree.BinaryExpression | ESTree.PrivateInExpression,
   parameterName: string,
-): boolean {
-  if (expression.left.type === "PrivateIdentifier") return false;
+): "false" | "true" | null {
+  if (expression.left.type === "PrivateIdentifier") return null;
   if (expression.operator === "instanceof") {
-    return isParameterIdentifier(expression.left, parameterName);
+    return isParameterIdentifier(expression.left, parameterName) ? "true" : null;
   }
-  if (!equalityOperators.has(expression.operator)) return false;
+  if (!equalityOperators.has(expression.operator)) return null;
+  const comparesNullish =
+    (isParameterIdentifier(expression.left, parameterName) &&
+      isNullishExpression(expression.right)) ||
+    (isParameterIdentifier(expression.right, parameterName) &&
+      isNullishExpression(expression.left));
+  if (comparesNullish) {
+    return expression.operator === "!=" || expression.operator === "!==" ? "false" : "true";
+  }
   const comparesTypeof =
     (isTypeofParameter(expression.left, parameterName) &&
       isTypeofResultLiteral(expression.right)) ||
     (isTypeofParameter(expression.right, parameterName) && isTypeofResultLiteral(expression.left));
-  return comparesTypeof;
+  if (!comparesTypeof) return null;
+  return expression.operator === "!=" || expression.operator === "!==" ? "false" : "true";
 }
 
 function isNarrowingExpression(expression: ESTree.Expression, parameterName: string): boolean {
   if (expression.type === "ParenthesizedExpression") {
     return isNarrowingExpression(expression.expression, parameterName);
   }
-  if (expression.type === "UnaryExpression") {
-    return expression.operator === "!" && isNarrowingExpression(expression.argument, parameterName);
+  if (expression.type === "UnaryExpression" && expression.operator === "!") {
+    return isNegativeNarrowingExpression(expression.argument, parameterName);
   }
   if (expression.type === "LogicalExpression") {
     if (expression.operator === "&&") {
@@ -181,7 +197,7 @@ function isNarrowingExpression(expression: ESTree.Expression, parameterName: str
     );
   }
   if (expression.type === "BinaryExpression") {
-    return isBinaryNarrowingExpression(expression, parameterName);
+    return binaryNarrowingPolarity(expression, parameterName) === "true";
   }
   if (expression.type !== "CallExpression") return false;
   const name = calleeName(expression.callee);
@@ -200,17 +216,19 @@ function isNegativeNarrowingExpression(
     return isNarrowingExpression(expression.argument, parameterName);
   }
   if (expression.type === "LogicalExpression") {
-    if (expression.operator === "&&") return false;
+    if (expression.operator === "&&") {
+      return (
+        isNegativeNarrowingExpression(expression.left, parameterName) &&
+        isNegativeNarrowingExpression(expression.right, parameterName)
+      );
+    }
     return (
       isNegativeNarrowingExpression(expression.left, parameterName) ||
       isNegativeNarrowingExpression(expression.right, parameterName)
     );
   }
   if (expression.type !== "BinaryExpression") return false;
-  return (
-    (expression.operator === "!=" || expression.operator === "!==") &&
-    isBinaryNarrowingExpression(expression, parameterName)
-  );
+  return binaryNarrowingPolarity(expression, parameterName) === "false";
 }
 
 function expressionReferencesParameter(
@@ -220,6 +238,7 @@ function expressionReferencesParameter(
   if (expression.type === "Identifier") return expression.name === parameterName;
   if (
     expression.type === "ParenthesizedExpression" ||
+    expression.type === "ChainExpression" ||
     expression.type === "TSAsExpression" ||
     expression.type === "TSTypeAssertion" ||
     expression.type === "TSNonNullExpression"
@@ -228,6 +247,14 @@ function expressionReferencesParameter(
   }
   if (expression.type === "AwaitExpression" || expression.type === "UnaryExpression") {
     return expressionReferencesParameter(expression.argument, parameterName);
+  }
+  if (expression.type === "AssignmentExpression") {
+    return (
+      (expression.left.type !== "ArrayPattern" &&
+        expression.left.type !== "ObjectPattern" &&
+        expressionReferencesParameter(expression.left, parameterName)) ||
+      expressionReferencesParameter(expression.right, parameterName)
+    );
   }
   if (expression.type === "BinaryExpression" || expression.type === "LogicalExpression") {
     if (expression.left.type === "PrivateIdentifier") return false;
@@ -245,15 +272,30 @@ function expressionReferencesParameter(
   }
   if (expression.type === "MemberExpression") {
     return (
-      expression.object.type !== "Super" &&
-      expressionReferencesParameter(expression.object, parameterName)
+      (expression.object.type !== "Super" &&
+        expressionReferencesParameter(expression.object, parameterName)) ||
+      (expression.computed && expressionReferencesParameter(expression.property, parameterName))
     );
   }
   if (expression.type === "CallExpression" || expression.type === "NewExpression") {
-    return expression.arguments.some((argument) =>
-      argument.type === "SpreadElement"
-        ? expressionReferencesParameter(argument.argument, parameterName)
-        : expressionReferencesParameter(argument, parameterName),
+    return (
+      (expression.callee.type !== "Super" &&
+        expressionReferencesParameter(expression.callee, parameterName)) ||
+      expression.arguments.some((argument) =>
+        argument.type === "SpreadElement"
+          ? expressionReferencesParameter(argument.argument, parameterName)
+          : expressionReferencesParameter(argument, parameterName),
+      )
+    );
+  }
+  if (expression.type === "SequenceExpression") {
+    return expression.expressions.some((item) =>
+      expressionReferencesParameter(item, parameterName),
+    );
+  }
+  if (expression.type === "TemplateLiteral") {
+    return expression.expressions.some((item) =>
+      expressionReferencesParameter(item, parameterName),
     );
   }
   if (expression.type === "ArrayExpression") {
@@ -270,7 +312,12 @@ function expressionReferencesParameter(
       if (property.type === "SpreadElement") {
         return expressionReferencesParameter(property.argument, parameterName);
       }
-      return expressionReferencesParameter(property.value, parameterName);
+      return (
+        (property.computed &&
+          property.key.type !== "PrivateIdentifier" &&
+          expressionReferencesParameter(property.key, parameterName)) ||
+        expressionReferencesParameter(property.value, parameterName)
+      );
     });
   }
   return false;
@@ -332,73 +379,340 @@ function hasUnparsedParameterReference(
   });
 }
 
-function bodyReturnsParameterAfter(
-  body: ESTree.BlockStatement,
-  statementIndex: number,
-  parameterName: string,
-): boolean {
-  return body.body
-    .slice(statementIndex + 1)
-    .some(
-      (statement) =>
-        statement.type === "ReturnStatement" &&
-        statement.argument !== null &&
-        expressionReferencesParameter(statement.argument, parameterName),
-    );
-}
-
-function statementAlwaysExits(statement: ESTree.Statement): boolean {
-  if (statement.type === "ReturnStatement" || statement.type === "ThrowStatement") return true;
+function statementReferencesParameter(statement: ESTree.Statement, parameterName: string): boolean {
   if (statement.type === "BlockStatement") {
-    return statement.body.some(statementAlwaysExits);
-  }
-  if (statement.type !== "IfStatement" || statement.alternate === null) return false;
-  return statementAlwaysExits(statement.consequent) && statementAlwaysExits(statement.alternate);
-}
-
-function statementValidatesParameter(
-  statement: ESTree.Statement,
-  parameterName: string,
-  hasOutputContract: boolean,
-): boolean {
-  if (statement.type === "IfStatement") {
-    const rejectsInvalidInput =
-      statementAlwaysExits(statement.consequent) &&
-      isNegativeNarrowingExpression(statement.test, parameterName);
-    const rejectsNonMatchingInput =
-      statement.alternate !== null &&
-      statementAlwaysExits(statement.alternate) &&
-      isNarrowingExpression(statement.test, parameterName);
-    return rejectsInvalidInput || rejectsNonMatchingInput;
+    return statement.body.some((child) => statementReferencesParameter(child, parameterName));
   }
   if (statement.type === "ExpressionStatement") {
-    if (!hasOutputContract || statement.expression.type !== "CallExpression") return false;
-    const name = calleeName(statement.expression.callee);
-    return (
-      /^(?:assert|require)[A-Z_]/u.test(name ?? "") &&
-      directlyReceivesParameter(statement.expression, parameterName)
-    );
+    return expressionReferencesParameter(statement.expression, parameterName);
   }
-  if (statement.type === "ReturnStatement") {
+  if (statement.type === "ReturnStatement" || statement.type === "ThrowStatement") {
     return (
       statement.argument !== null &&
-      ((isParserCall(statement.argument, parameterName, hasOutputContract) &&
-        !hasUnparsedParameterReference(statement.argument, parameterName, hasOutputContract)) ||
-        isNarrowingExpression(statement.argument, parameterName))
+      expressionReferencesParameter(statement.argument, parameterName)
     );
   }
   if (statement.type === "VariableDeclaration") {
+    return statement.declarations.some(
+      (declaration) =>
+        declaration.init !== null && expressionReferencesParameter(declaration.init, parameterName),
+    );
+  }
+  if (statement.type === "IfStatement") {
     return (
-      hasOutputContract &&
-      statement.declarations.some(
-        (declaration) =>
-          declaration.init !== null &&
-          (isParserCall(declaration.init, parameterName, true) ||
-            isNarrowingExpression(declaration.init, parameterName)),
+      expressionReferencesParameter(statement.test, parameterName) ||
+      statementReferencesParameter(statement.consequent, parameterName) ||
+      (statement.alternate !== null &&
+        statementReferencesParameter(statement.alternate, parameterName))
+    );
+  }
+  if (statement.type === "DoWhileStatement" || statement.type === "WhileStatement") {
+    return (
+      expressionReferencesParameter(statement.test, parameterName) ||
+      statementReferencesParameter(statement.body, parameterName)
+    );
+  }
+  if (statement.type === "ForStatement") {
+    const initializationReferencesParameter =
+      statement.init !== null &&
+      (statement.init.type === "VariableDeclaration"
+        ? statementReferencesParameter(statement.init, parameterName)
+        : expressionReferencesParameter(statement.init, parameterName));
+    return (
+      initializationReferencesParameter ||
+      (statement.test !== null && expressionReferencesParameter(statement.test, parameterName)) ||
+      (statement.update !== null &&
+        expressionReferencesParameter(statement.update, parameterName)) ||
+      statementReferencesParameter(statement.body, parameterName)
+    );
+  }
+  if (statement.type === "ForInStatement" || statement.type === "ForOfStatement") {
+    return (
+      expressionReferencesParameter(statement.right, parameterName) ||
+      statementReferencesParameter(statement.body, parameterName)
+    );
+  }
+  if (statement.type === "SwitchStatement") {
+    return (
+      expressionReferencesParameter(statement.discriminant, parameterName) ||
+      statement.cases.some(
+        (switchCase) =>
+          (switchCase.test !== null &&
+            expressionReferencesParameter(switchCase.test, parameterName)) ||
+          switchCase.consequent.some((child) => statementReferencesParameter(child, parameterName)),
       )
     );
   }
+  if (statement.type === "TryStatement") {
+    return (
+      statementReferencesParameter(statement.block, parameterName) ||
+      (statement.handler !== null &&
+        statementReferencesParameter(statement.handler.body, parameterName)) ||
+      (statement.finalizer !== null &&
+        statementReferencesParameter(statement.finalizer, parameterName))
+    );
+  }
+  if (statement.type === "LabeledStatement" || statement.type === "WithStatement") {
+    return statementReferencesParameter(statement.body, parameterName);
+  }
   return false;
+}
+
+function returnExpressionValidatesParameter(
+  expression: ESTree.Expression,
+  parameterName: string,
+  hasOutputContract: boolean,
+): boolean {
+  return (
+    (isParserCall(expression, parameterName, hasOutputContract) &&
+      !hasUnparsedParameterReference(expression, parameterName, hasOutputContract)) ||
+    isNarrowingExpression(expression, parameterName) ||
+    isNegativeNarrowingExpression(expression, parameterName)
+  );
+}
+
+function isSafeInspectionExpression(
+  expression: ESTree.Expression,
+  parameterName: string,
+  hasOutputContract: boolean,
+): boolean {
+  if (!expressionReferencesParameter(expression, parameterName)) return true;
+  if (returnExpressionValidatesParameter(expression, parameterName, hasOutputContract)) {
+    return true;
+  }
+  if (expression.type === "ParenthesizedExpression") {
+    return isSafeInspectionExpression(expression.expression, parameterName, hasOutputContract);
+  }
+  if (expression.type === "UnaryExpression") {
+    return (
+      (expression.operator === "!" || expression.operator === "typeof") &&
+      isSafeInspectionExpression(expression.argument, parameterName, hasOutputContract)
+    );
+  }
+  if (expression.type === "BinaryExpression") {
+    return (
+      equalityOperators.has(expression.operator) ||
+      expression.operator === "<" ||
+      expression.operator === "<=" ||
+      expression.operator === ">" ||
+      expression.operator === ">="
+    );
+  }
+  if (expression.type === "LogicalExpression") {
+    return (
+      isSafeInspectionExpression(expression.left, parameterName, hasOutputContract) &&
+      isSafeInspectionExpression(expression.right, parameterName, hasOutputContract)
+    );
+  }
+  return false;
+}
+
+function isSafeDiagnosticExpression(
+  expression: ESTree.Expression,
+  parameterName: string,
+  hasOutputContract: boolean,
+): boolean {
+  if (!expressionReferencesParameter(expression, parameterName)) return true;
+  if (isSafeInspectionExpression(expression, parameterName, hasOutputContract)) return true;
+  if (
+    expression.type === "ParenthesizedExpression" ||
+    expression.type === "TSAsExpression" ||
+    expression.type === "TSTypeAssertion" ||
+    expression.type === "TSNonNullExpression"
+  ) {
+    return isSafeDiagnosticExpression(expression.expression, parameterName, hasOutputContract);
+  }
+  if (expression.type === "CallExpression") {
+    if (calleeName(expression.callee) !== "runtimeTypeName") return false;
+    return expression.arguments.every((argument) => {
+      const value = argument.type === "SpreadElement" ? argument.argument : argument;
+      return (
+        isParameterIdentifier(value, parameterName) ||
+        isSafeDiagnosticExpression(value, parameterName, hasOutputContract)
+      );
+    });
+  }
+  if (expression.type === "NewExpression") {
+    return expression.arguments.every((argument) => {
+      const value = argument.type === "SpreadElement" ? argument.argument : argument;
+      return isSafeDiagnosticExpression(value, parameterName, hasOutputContract);
+    });
+  }
+  if (expression.type === "ObjectExpression") {
+    return expression.properties.every((property) => {
+      const value = property.type === "SpreadElement" ? property.argument : property.value;
+      return isSafeDiagnosticExpression(value, parameterName, hasOutputContract);
+    });
+  }
+  if (expression.type === "TemplateLiteral") {
+    return expression.expressions.every((value) =>
+      isSafeDiagnosticExpression(value, parameterName, hasOutputContract),
+    );
+  }
+  return false;
+}
+
+function isFailureExpression(
+  expression: ESTree.Expression,
+  parameterName: string,
+  hasOutputContract: boolean,
+): boolean {
+  if (expression.type !== "CallExpression" || calleeName(expression.callee) !== "fail") {
+    return false;
+  }
+  return expression.arguments.every((argument) => {
+    const value = argument.type === "SpreadElement" ? argument.argument : argument;
+    return isSafeDiagnosticExpression(value, parameterName, hasOutputContract);
+  });
+}
+
+type ParameterFlow = {
+  readonly safe: boolean;
+  readonly exits: boolean;
+  readonly narrowedAfter: boolean;
+  readonly validated: boolean;
+};
+
+function safeFlow(narrowedAfter: boolean, validated: boolean, exits = false): ParameterFlow {
+  return { safe: true, exits, narrowedAfter, validated };
+}
+
+const unsafeFlow: ParameterFlow = {
+  safe: false,
+  exits: false,
+  narrowedAfter: false,
+  validated: false,
+};
+
+function analyzeStatementSequence(
+  statements: ESTree.Statement[],
+  parameterName: string,
+  hasOutputContract: boolean,
+  initiallyNarrowed: boolean,
+): ParameterFlow {
+  let narrowed = initiallyNarrowed;
+  let validated = initiallyNarrowed;
+  for (const statement of statements) {
+    const result = analyzeStatement(statement, parameterName, hasOutputContract, narrowed);
+    if (!result.safe) return unsafeFlow;
+    validated ||= result.validated;
+    if (result.exits) return safeFlow(false, validated, true);
+    narrowed = result.narrowedAfter;
+  }
+  return safeFlow(narrowed, validated);
+}
+
+function analyzeStatement(
+  statement: ESTree.Statement,
+  parameterName: string,
+  hasOutputContract: boolean,
+  narrowed: boolean,
+): ParameterFlow {
+  if (statement.type === "BlockStatement") {
+    return analyzeStatementSequence(statement.body, parameterName, hasOutputContract, narrowed);
+  }
+  if (statement.type === "ReturnStatement") {
+    if (
+      statement.argument === null ||
+      !expressionReferencesParameter(statement.argument, parameterName)
+    ) {
+      return safeFlow(false, narrowed, true);
+    }
+    if (narrowed) return safeFlow(false, true, true);
+    const validates = returnExpressionValidatesParameter(
+      statement.argument,
+      parameterName,
+      hasOutputContract,
+    );
+    return validates || isFailureExpression(statement.argument, parameterName, hasOutputContract)
+      ? safeFlow(false, validates, true)
+      : unsafeFlow;
+  }
+  if (statement.type === "ThrowStatement") {
+    if (
+      !expressionReferencesParameter(statement.argument, parameterName) ||
+      narrowed ||
+      isSafeDiagnosticExpression(statement.argument, parameterName, hasOutputContract)
+    ) {
+      return safeFlow(false, narrowed, true);
+    }
+    return unsafeFlow;
+  }
+  if (statement.type === "VariableDeclaration") {
+    let validated = narrowed;
+    for (const declaration of statement.declarations) {
+      if (
+        declaration.init === null ||
+        !expressionReferencesParameter(declaration.init, parameterName) ||
+        narrowed
+      ) {
+        continue;
+      }
+      if (!returnExpressionValidatesParameter(declaration.init, parameterName, hasOutputContract)) {
+        return unsafeFlow;
+      }
+      validated = true;
+    }
+    return safeFlow(narrowed, validated);
+  }
+  if (statement.type === "ExpressionStatement") {
+    if (!expressionReferencesParameter(statement.expression, parameterName)) {
+      return safeFlow(narrowed, narrowed);
+    }
+    if (narrowed) return safeFlow(true, true);
+    if (statement.expression.type !== "CallExpression") return unsafeFlow;
+    const name = calleeName(statement.expression.callee);
+    const assertsParameter =
+      hasOutputContract &&
+      /^(?:assert|require)[A-Z_]/u.test(name ?? "") &&
+      directlyReceivesParameter(statement.expression, parameterName);
+    if (assertsParameter) return safeFlow(true, true);
+    const parsesParameter =
+      isParserCall(statement.expression, parameterName, hasOutputContract) &&
+      !hasUnparsedParameterReference(statement.expression, parameterName, hasOutputContract);
+    return parsesParameter ? safeFlow(false, true) : unsafeFlow;
+  }
+  if (statement.type === "IfStatement") {
+    if (
+      !narrowed &&
+      !isSafeInspectionExpression(statement.test, parameterName, hasOutputContract)
+    ) {
+      return unsafeFlow;
+    }
+    const positiveNarrowing = isNarrowingExpression(statement.test, parameterName);
+    const negativeNarrowing = isNegativeNarrowingExpression(statement.test, parameterName);
+    const consequent = analyzeStatement(
+      statement.consequent,
+      parameterName,
+      hasOutputContract,
+      narrowed || positiveNarrowing,
+    );
+    if (!consequent.safe) return unsafeFlow;
+    const alternate =
+      statement.alternate === null
+        ? safeFlow(narrowed || negativeNarrowing, negativeNarrowing)
+        : analyzeStatement(
+            statement.alternate,
+            parameterName,
+            hasOutputContract,
+            narrowed || negativeNarrowing,
+          );
+    if (!alternate.safe) return unsafeFlow;
+    const validated =
+      narrowed ||
+      positiveNarrowing ||
+      negativeNarrowing ||
+      consequent.validated ||
+      alternate.validated;
+    if (consequent.exits && alternate.exits) return safeFlow(false, validated, true);
+    if (consequent.exits) return safeFlow(alternate.narrowedAfter, validated);
+    if (alternate.exits) return safeFlow(consequent.narrowedAfter, validated);
+    return safeFlow(consequent.narrowedAfter && alternate.narrowedAfter, validated);
+  }
+  if (narrowed) return safeFlow(true, true);
+  return statementReferencesParameter(statement, parameterName)
+    ? unsafeFlow
+    : safeFlow(narrowed, narrowed);
 }
 
 function bodyValidatesParameter(
@@ -407,19 +721,10 @@ function bodyValidatesParameter(
   hasOutputContract: boolean,
 ): boolean {
   if (body.type !== "BlockStatement") {
-    return (
-      isParserCall(body, parameterName, hasOutputContract) ||
-      isNarrowingExpression(body, parameterName)
-    );
+    return returnExpressionValidatesParameter(body, parameterName, hasOutputContract);
   }
-  return body.body.some(
-    (statement, statementIndex) =>
-      statementValidatesParameter(statement, parameterName, hasOutputContract) &&
-      !(
-        statement.type === "VariableDeclaration" &&
-        bodyReturnsParameterAfter(body, statementIndex, parameterName)
-      ),
-  );
+  const result = analyzeStatementSequence(body.body, parameterName, hasOutputContract, false);
+  return result.safe && result.validated;
 }
 
 function isValidatedUnknownParameter(node: ParameterOwner, name: string): boolean {

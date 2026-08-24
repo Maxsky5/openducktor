@@ -25,28 +25,29 @@ import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import { opencodePartPayloadSchema, type ParsedOpencodePart } from "./opencode-ingress";
 
 const toDisplayText = (value: unknown): string | undefined => {
-  if (hasRuntimeType(value, "string")) {
-    const trimmed = value.trim();
+  const parsed = jsonValueSchema.safeParse(value);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const displayValue = parsed.data;
+  if (hasRuntimeType(displayValue, "string")) {
+    const trimmed = displayValue.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
-  if (value === undefined || value === null) {
+  if (displayValue === null) {
     return undefined;
   }
-  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
-    return String(value);
+  if (hasRuntimeType(displayValue, "number") || hasRuntimeType(displayValue, "boolean")) {
+    return String(displayValue);
   }
-  if (Array.isArray(value) && value.length === 0) {
+  if (Array.isArray(displayValue) && displayValue.length === 0) {
     return undefined;
   }
-  const valueRecord = asUnknownRecord(value);
+  const valueRecord = asUnknownRecord(displayValue);
   if (valueRecord && Object.keys(valueRecord).length === 0) {
     return undefined;
   }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
+  return JSON.stringify(displayValue, null, 2);
 };
 
 const parseStructuredTextObject = (value: string | undefined): JsonObject | undefined => {

@@ -1,10 +1,18 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { act, type ReactElement, useState } from "react";
+import { act, type NamedExoticComponent, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+
+const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
+type RestorableSpy = { mockRestore(): void };
+let pierreViewerSpies: RestorableSpy[] = [];
+
+const namedExoticMock = <Props,>(
+  component: (props: Props) => ReactElement | null,
+  original: NamedExoticComponent<Props>,
+): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
 
 type FileDiffListComponent = (typeof import("./file-diff-list"))["FileDiffList"];
 
@@ -122,30 +130,29 @@ const resetInlineComments = (): void => {
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
-  mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
-    PierreDiffPreloader: preloaderMock,
-    PierreDiffViewer: viewerMock,
-    PierreFileViewer: fileViewerMock,
-  }));
+  pierreViewerSpies = [
+    spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
+      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+    ),
+    spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
+      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+    ),
+    spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
+      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+    ),
+  ];
 
   ({ FileDiffList } = await import("./file-diff-list"));
 });
 
 afterEach(() => {
+  for (const pierreViewerSpy of pierreViewerSpies) pierreViewerSpy.mockRestore();
+  pierreViewerSpies = [];
   cleanup();
   preloaderMock.mockClear();
   viewerMock.mockClear();
   fileViewerMock.mockClear();
   resetInlineComments();
-});
-
-afterEach(async () => {
-  await restoreMockedModules([
-    [
-      "@/components/features/agents/pierre-diff-viewer",
-      () => import("@/components/features/agents/pierre-diff-viewer"),
-    ],
-  ]);
 });
 
 afterAll(() => {

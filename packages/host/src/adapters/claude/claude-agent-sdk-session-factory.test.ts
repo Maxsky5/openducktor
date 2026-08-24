@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
@@ -49,10 +49,7 @@ describe("createClaudeAgentSdkSession", () => {
         yield* [];
       },
     });
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -109,7 +106,7 @@ describe("createClaudeAgentSdkSession", () => {
       expect(sessionStore.get("session-repository")).toBeUndefined();
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
@@ -130,10 +127,7 @@ describe("createClaudeAgentSdkSession", () => {
         yield* [];
       },
     });
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -195,7 +189,7 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
@@ -217,13 +211,12 @@ describe("createClaudeAgentSdkSession", () => {
       },
     });
     let capturedOptions: realClaudeSdk.Options | undefined;
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: (input: Parameters<typeof realClaudeSdk.query>[0]) => {
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(
+      (input: Parameters<typeof realClaudeSdk.query>[0]) => {
         capturedOptions = input.options;
         return fakeQuery;
       },
-    }));
+    );
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -307,7 +300,7 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
@@ -319,10 +312,7 @@ describe("createClaudeAgentSdkSession", () => {
       initializationResult: () => initialization.promise,
       async *[Symbol.asyncIterator]() {},
     });
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-    }));
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -388,7 +378,7 @@ describe("createClaudeAgentSdkSession", () => {
       expect(events.some((event) => event.type === "session_started")).toBe(false);
       expect(sessionStore.get("session-1")).toBeUndefined();
     } finally {
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
     }
   });
 
@@ -413,11 +403,10 @@ describe("createClaudeAgentSdkSession", () => {
       throw new Error("fresh sessions must not be renamed before their first message");
     });
     const query = mock((_input: Parameters<typeof realClaudeSdk.query>[0]) => fakeQuery);
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query,
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(query);
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(
       renameSession,
-    }));
+    );
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -481,7 +470,8 @@ describe("createClaudeAgentSdkSession", () => {
       sessionStore.close(session);
     } finally {
       streamFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
+      renameSessionSpy.mockRestore();
     }
   });
 
@@ -511,14 +501,11 @@ describe("createClaudeAgentSdkSession", () => {
       },
       return: queryReturn,
     });
-    mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-      ...realClaudeSdk,
-      query: () => fakeQuery,
-      renameSession: async () => {
-        renameStarted.resolve();
-        throw new Error("rename unavailable");
-      },
-    }));
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
+    const renameSessionSpy = spyOn(realClaudeSdk, "renameSession").mockImplementation(async () => {
+      renameStarted.resolve();
+      throw new Error("rename unavailable");
+    });
 
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
@@ -593,7 +580,8 @@ describe("createClaudeAgentSdkSession", () => {
     } finally {
       streamFinished.resolve();
       teardownFinished.resolve();
-      mock.module("@anthropic-ai/claude-agent-sdk", () => realClaudeSdk);
+      querySpy.mockRestore();
+      renameSessionSpy.mockRestore();
     }
   });
 });

@@ -27,5 +27,17 @@ tester.run("anti-slop/no-module-mocking", noModuleMockingRule, {
       code: "import { jest } from '@jest/globals'; jest.mock('./user-store');",
       errors: [error],
     },
+    {
+      code: "import { mock } from 'bun:test'; mock.module('./user-store', () => ({}));",
+      errors: [error],
+    },
+    {
+      code: "import { mock as bunMock } from 'bun:test'; bunMock.module('./user-store', () => ({}));",
+      errors: [error],
+    },
+    {
+      code: "import * as bunTest from 'bun:test'; bunTest.mock.module('./user-store', () => ({}));",
+      errors: [error],
+    },
   ],
 });

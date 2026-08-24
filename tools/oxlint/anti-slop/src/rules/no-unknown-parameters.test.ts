@@ -22,6 +22,12 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function readObject(input: unknown) { if (!isPlainObject(input) || input.disabled === true) return null; return input.name; }",
     "function normalizeText(input: unknown): string { const value = typeof input === 'string' ? input : ''; return value.trim(); }",
     "function compare(left: unknown, right: unknown): boolean { if (typeof left !== 'string') return false; if (typeof right !== 'string') return false; return left === right; }",
+    "function optionalText(input: unknown): string | null | undefined { if (input === undefined || input === null) return input; return requireString(input); }",
+    "function positiveInteger(input: unknown): number | null | undefined { if (input === undefined || input === null) return input; if (!hasRuntimeType(input, 'number') || !Number.isInteger(input) || input <= 0) throw new Error('invalid'); return input; }",
+    "function stringArray(input: unknown): string[] { if (!Array.isArray(input)) throw new HostValidationError({ details: { inputType: runtimeTypeName(input) } }); return input.map(requireString); }",
+    "function stringArrayEffect(input: unknown) { if (!Array.isArray(input)) return Effect.fail(new HostValidationError({ details: { inputType: runtimeTypeName(input) } })); return Effect.succeed(input.map(requireString)); }",
+    "function readKind(input: unknown): string | undefined { if (!isPlainObject(input)) return undefined; switch (input.kind) { case 'known': return input.kind; default: return undefined; } }",
+    "function readOptions(input: unknown): string[] | null { if (!Array.isArray(input)) return null; const options = []; for (const option of input) options.push(requireString(option)); return options; }",
     "const isLabel = (input: unknown): boolean => typeof input === 'string';",
     "function readWith(guard: (input: unknown) => input is User) { return guard(source); }",
     "type Loader = (input: string) => void;",
@@ -90,6 +96,34 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function load(input: unknown) { if (input === null) return null; return input; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { consume(input); return schema.parse(input); }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { const parsed = schema.parse(input); consume(input); return parsed; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { if (allowRaw) return input; if (typeof input !== 'string') return; return input; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { if (typeof input !== 'string') { if (ready) return fallback; log(); } return input; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { throw new Error(JSON.stringify(input)); }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { const parsed = schema.parse(input); switch (mode) { case 'raw': return input; default: return parsed; } }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown) { const parsed = schema.parse(input); return input(); }",
       errors: [error],
     },
   ],

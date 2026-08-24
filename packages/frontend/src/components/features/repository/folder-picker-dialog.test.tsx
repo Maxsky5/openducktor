@@ -1,14 +1,15 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ComponentProps, createElement, type ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
-const actualHostOperationsModule = await import("@/state/operations/host");
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
+let scrollAreaSpy: { mockRestore(): void };
 
 enableReactActEnvironment();
 
@@ -47,25 +48,22 @@ describe("FolderPickerDialog", () => {
       createListing(),
     );
 
-    mock.module("@/state/operations/host", () => ({
-      host: {
-        filesystemListDirectory: filesystemListDirectoryMock,
-      },
-    }));
-
-    mock.module("@/components/ui/scroll-area", () => ({
-      ScrollArea: ({ children, ...props }: ComponentProps<"div"> & { children: ReactNode }) =>
-        createElement("div", props, children),
-    }));
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: { filesystemListDirectory: filesystemListDirectoryMock },
+      }),
+    );
+    scrollAreaSpy = spyOn(actualScrollAreaModule, "ScrollArea").mockImplementation(
+      ({ children, ...props }: Parameters<typeof actualScrollAreaModule.ScrollArea>[0]) =>
+        createElement("div", props, children ?? null),
+    );
 
     ({ FolderPickerDialog } = await import("./folder-picker-dialog"));
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/operations/host", async () => actualHostOperationsModule],
-      ["@/components/ui/scroll-area", async () => actualScrollAreaModule],
-    ]);
+  afterEach(() => {
+    scrollAreaSpy.mockRestore();
+    configureShellBridge(createUnavailableShellBridge());
   });
 
   const renderDialog = (

@@ -23,6 +23,8 @@ import type {
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
   CodexAppServerRequestId,
+  CodexAppServerRespondError,
+  CodexAppServerRespondResult,
   CodexAppServerSkillsListParams,
   CodexAppServerThreadCompactStartParams,
   CodexAppServerThreadCompactStartResult,
@@ -109,8 +111,8 @@ export type CodexCatalogInvalidation = {
 export type CodexServerRequestResponder = (
   runtimeId: string,
   requestId: CodexAppServerRequestId,
-  result?: CodexAppServerJsonValue,
-  cause?: unknown,
+  result?: CodexAppServerRespondResult,
+  error?: CodexAppServerRespondError,
 ) => Promise<void>;
 
 export type CodexAppServerStreamEvent = {

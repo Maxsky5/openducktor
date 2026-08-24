@@ -7,11 +7,7 @@ import {
   getFiletypeFromFileName,
   type SelectedLineRange,
 } from "@pierre/diffs";
-import {
-  File as PierreReactFile,
-  FileDiff as PierreReactFileDiff,
-  useWorkerPool,
-} from "@pierre/diffs/react";
+import { File as PierreReactFile, FileDiff as PierreReactFileDiff } from "@pierre/diffs/react";
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
@@ -35,6 +31,7 @@ import {
   getHunkResetAnnotations,
   getRenderableFileDiff,
 } from "./pierre-diff-viewer-model";
+import { useWorkerPool } from "./pierre-diff-viewer-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 

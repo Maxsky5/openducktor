@@ -1,28 +1,37 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { SelectedLineRange } from "@pierre/diffs";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
 } from "@/test-utils/console-capture";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
 let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
-let workerPoolMock: {
-  cleanUpTasks?: ReturnType<typeof mock>;
-  getDiffResultCache: ReturnType<typeof mock>;
-  getFileResultCache?: ReturnType<typeof mock>;
-  highlightDiffAST?: ReturnType<typeof mock>;
-  highlightFileAST?: ReturnType<typeof mock>;
-  isWorkingPool?: ReturnType<typeof mock>;
-  primeDiffHighlightCache: ReturnType<typeof mock>;
+import type { PierreDiffViewerWorkerPool } from "./pierre-diff-viewer-react";
+
+type WorkerPoolMock = PierreDiffViewerWorkerPool & {
   primeFileHighlightCache?: ReturnType<typeof mock>;
-  subscribeToStatChanges?: ReturnType<typeof mock>;
-} | null = null;
+};
+
+const createDefaultWorkerPoolMock = (): WorkerPoolMock => ({
+  cleanUpTasks: mock(() => undefined),
+  getDiffResultCache: mock(() => undefined),
+  getFileResultCache: mock(() => undefined),
+  highlightDiffAST: mock(() => undefined),
+  highlightFileAST: mock(() => undefined),
+  isWorkingPool: mock(() => false),
+  primeDiffHighlightCache: mock(() => undefined),
+  subscribeToStatChanges: mock(() => () => undefined),
+});
+
+let workerPoolMock: WorkerPoolMock | undefined;
 let pierreFileMountCount = 0;
 let pierreFileDiffMountCount = 0;
+const actualPierreDiffsReact = await import("@pierre/diffs/react");
+const actualPierreViewerReact = await import("./pierre-diff-viewer-react");
+const actualThemeProvider = await import("@/components/layout/theme-provider");
+let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
 const mockedGutterSelection = {
@@ -52,98 +61,94 @@ beforeEach(async () => {
     await withCapturedConsoleMethods(
       ["debug", "error", "info", "log", "warn"],
       async (consoleCalls) => {
-        mock.module("@pierre/diffs/react", () => ({
-          File: (props: {
-            file: { name: string; contents: string; cacheKey?: string };
-            options?: {
-              disableFileHeader?: boolean;
-              overflow?: string;
-              themeType?: string;
-              tokenizeMaxLength?: number;
-            };
-          }) => {
-            const [mountId] = useState(() => {
-              pierreFileMountCount += 1;
-              return pierreFileMountCount;
-            });
-            return (
-              <div
-                data-testid="pierre-file"
-                data-cache-key={props.file.cacheKey ?? ""}
-                data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
-                data-file-contents={props.file.contents}
-                data-file-name={props.file.name}
-                data-mount-id={String(mountId)}
-                data-overflow={String(props.options?.overflow ?? "")}
-                data-theme-type={String(props.options?.themeType ?? "")}
-                data-tokenize-max-length={String(props.options?.tokenizeMaxLength ?? "")}
-              />
-            );
-          },
-          FileDiff: (props: {
-            options?: {
-              diffIndicators?: string;
-              diffStyle?: string;
-              hunkSeparators?: string;
-              lineDiffType?: string;
-              onGutterUtilityClick?: (range: SelectedLineRange) => void;
-              onLineSelectionChange?: (range: SelectedLineRange | null) => void;
-              onLineSelectionStart?: (range: SelectedLineRange | null) => void;
-              overflow?: string;
-              tokenizeMaxLength?: number;
-            };
-            selectedLines?: SelectedLineRange | null;
-          }) => {
-            const { options } = props;
-            const [mountId] = useState(() => {
-              pierreFileDiffMountCount += 1;
-              return pierreFileDiffMountCount;
-            });
-            const selectedLinesText = Object.hasOwn(props, "selectedLines")
-              ? JSON.stringify(props.selectedLines)
-              : OMITTED_SELECTED_LINES_LABEL;
-            return (
-              <div
-                data-testid="pierre-file-diff"
-                data-mount-id={String(mountId)}
-                data-diff-indicators={String(options?.diffIndicators ?? "")}
-                data-diff-style={String(options?.diffStyle ?? "")}
-                data-hunk-separators={String(options?.hunkSeparators ?? "")}
-                data-line-diff-type={String(options?.lineDiffType ?? "")}
-                data-overflow={String(options?.overflow ?? "")}
-                data-tokenize-max-length={String(options?.tokenizeMaxLength ?? "")}
-              >
-                <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
-                <button
-                  type="button"
-                  data-testid="pierre-selection-start"
-                  onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
+        moduleSpies = [
+          spyOn(actualPierreDiffsReact, "File").mockImplementation(
+            (props: {
+              file: { name: string; contents: string; cacheKey?: string };
+              options?: {
+                disableFileHeader?: boolean;
+                overflow?: string;
+                themeType?: string;
+                tokenizeMaxLength?: number;
+              };
+            }) => {
+              const [mountId] = useState(() => {
+                pierreFileMountCount += 1;
+                return pierreFileMountCount;
+              });
+              return (
+                <div
+                  data-testid="pierre-file"
+                  data-cache-key={props.file.cacheKey ?? ""}
+                  data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
+                  data-file-contents={props.file.contents}
+                  data-file-name={props.file.name}
+                  data-mount-id={String(mountId)}
+                  data-overflow={String(props.options?.overflow ?? "")}
+                  data-theme-type={String(props.options?.themeType ?? "")}
+                  data-tokenize-max-length={String(props.options?.tokenizeMaxLength ?? "")}
+                />
+              );
+            },
+          ),
+          spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(
+            <LAnnotation,>(
+              props: Parameters<typeof actualPierreDiffsReact.FileDiff<LAnnotation>>[0],
+            ) => {
+              const { options } = props;
+              const [mountId] = useState(() => {
+                pierreFileDiffMountCount += 1;
+                return pierreFileDiffMountCount;
+              });
+              const selectedLinesText = Object.hasOwn(props, "selectedLines")
+                ? JSON.stringify(props.selectedLines)
+                : OMITTED_SELECTED_LINES_LABEL;
+              return (
+                <div
+                  data-testid="pierre-file-diff"
+                  data-mount-id={String(mountId)}
+                  data-diff-indicators={String(options?.diffIndicators ?? "")}
+                  data-diff-style={String(options?.diffStyle ?? "")}
+                  data-hunk-separators={String(options?.hunkSeparators ?? "")}
+                  data-line-diff-type={String(options?.lineDiffType ?? "")}
+                  data-overflow={String(options?.overflow ?? "")}
+                  data-tokenize-max-length={String(options?.tokenizeMaxLength ?? "")}
                 >
-                  Selection start
-                </button>
-                <button
-                  type="button"
-                  data-testid="pierre-selection-change"
-                  onClick={() => options?.onLineSelectionChange?.(mockedGutterSelection)}
-                >
-                  Selection change
-                </button>
-                <button
-                  type="button"
-                  data-testid="pierre-gutter-utility"
-                  onClick={() => options?.onGutterUtilityClick?.(mockedGutterSelection)}
-                >
-                  Gutter utility
-                </button>
-              </div>
-            );
-          },
-          Virtualizer: ({ children }: { children: React.ReactNode }) => children,
-          useWorkerPool: () => workerPoolMock,
-        }));
-        mock.module("@/components/layout/theme-provider", () => ({
-          useTheme: () => ({ theme: "light", setTheme: () => undefined }),
-        }));
+                  <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
+                  <button
+                    type="button"
+                    data-testid="pierre-selection-start"
+                    onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
+                  >
+                    Selection start
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="pierre-selection-change"
+                    onClick={() => options?.onLineSelectionChange?.(mockedGutterSelection)}
+                  >
+                    Selection change
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="pierre-gutter-utility"
+                    onClick={() => options?.onGutterUtilityClick?.(mockedGutterSelection)}
+                  >
+                    Gutter utility
+                  </button>
+                </div>
+              );
+            },
+          ),
+          spyOn(actualPierreDiffsReact, "Virtualizer").mockImplementation(({ children }) => (
+            <>{children}</>
+          )),
+          spyOn(actualPierreViewerReact, "useWorkerPool").mockImplementation(() => workerPoolMock),
+          spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
+            theme: "light",
+            setTheme: () => undefined,
+          })),
+        ];
 
         pierreViewerModule = await import("./pierre-diff-viewer");
         pierreViewerModelModule = await import("./pierre-diff-viewer-model");
@@ -164,19 +169,15 @@ beforeEach(async () => {
 
 afterEach(async () => {
   cleanup();
-  workerPoolMock = null;
-
+  workerPoolMock = undefined;
   await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
     await withCapturedConsoleMethods(
       ["debug", "error", "info", "log", "warn"],
       async (consoleCalls) => {
-        await restoreMockedModules([
-          ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
-          [
-            "@/components/layout/theme-provider",
-            () => import("@/components/layout/theme-provider"),
-          ],
-        ]);
+        for (const moduleSpy of moduleSpies) {
+          moduleSpy.mockRestore();
+        }
+        moduleSpies = [];
         for (const calls of Object.values(consoleCalls)) {
           for (const call of calls) {
             expect(call).toEqual([]);
@@ -206,6 +207,7 @@ describe("PierreDiffViewer", () => {
       return unsubscribeFromStats;
     });
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       cleanUpTasks,
       getDiffResultCache,
       highlightDiffAST,
@@ -243,6 +245,7 @@ describe("PierreDiffViewer", () => {
     const highlightDiffAST = mock();
     const cleanUpTasks = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       cleanUpTasks,
       getDiffResultCache: mock(() => undefined),
       highlightDiffAST,
@@ -271,6 +274,7 @@ describe("PierreDiffViewer", () => {
     const subscribeToStatChanges = mock(() => () => undefined);
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       getDiffResultCache: mock(() => ({})),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
@@ -299,6 +303,7 @@ describe("PierreDiffViewer", () => {
     const subscribeToStatChanges = mock(() => () => undefined);
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       getDiffResultCache: mock(() => undefined),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
@@ -336,6 +341,7 @@ describe("PierreDiffViewer", () => {
     const { PierrePreloadedDiffViewer } = pierreViewerModule;
     const subscribeToStatChanges = mock(() => () => undefined);
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       getDiffResultCache: mock(() => undefined),
       isWorkingPool: mock(() => false),
       primeDiffHighlightCache: mock(),
@@ -356,7 +362,8 @@ describe("PierreDiffViewer", () => {
     const { PierreDiffPreloader } = pierreViewerModule;
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
-      getDiffResultCache: mock(() => null),
+      ...createDefaultWorkerPoolMock(),
+      getDiffResultCache: mock(() => undefined),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
     };
@@ -372,7 +379,7 @@ describe("PierreDiffViewer", () => {
     const [fileDiff] = primeDiffHighlightCache.mock.calls[0] ?? [];
     expect(fileDiff).toBeDefined();
     expect(fileDiff?.cacheKey).toBeString();
-    expect(workerPoolMock.getDiffResultCache).toHaveBeenCalledWith(fileDiff);
+    expect(workerPoolMock?.getDiffResultCache).toHaveBeenCalledWith(fileDiff);
   });
 
   test("skips preloading when the worker already cached the parsed diff", async () => {
@@ -381,6 +388,7 @@ describe("PierreDiffViewer", () => {
     const getDiffResultCache = mock(() => cachedHighlightResult);
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       getDiffResultCache,
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache,
@@ -399,9 +407,10 @@ describe("PierreDiffViewer", () => {
 
   test("skips preloading when the worker pool is unavailable", async () => {
     const { PierreDiffPreloader } = pierreViewerModule;
-    const getDiffResultCache = mock(() => null);
+    const getDiffResultCache = mock(() => undefined);
     const primeDiffHighlightCache = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       getDiffResultCache,
       isWorkingPool: mock(() => false),
       primeDiffHighlightCache,
@@ -558,7 +567,8 @@ describe("PierreDiffViewer", () => {
     const subscribeToStatChanges = mock(() => () => undefined);
     const primeFileHighlightCache = mock();
     workerPoolMock = {
-      getDiffResultCache: mock(() => null),
+      ...createDefaultWorkerPoolMock(),
+      getDiffResultCache: mock(() => undefined),
       getFileResultCache: mock(() => ({})),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache: mock(),
@@ -608,8 +618,9 @@ describe("PierreDiffViewer", () => {
       return unsubscribeFromStats;
     });
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       cleanUpTasks,
-      getDiffResultCache: mock(() => null),
+      getDiffResultCache: mock(() => undefined),
       getFileResultCache,
       highlightFileAST,
       isWorkingPool: mock(() => true),
@@ -649,8 +660,9 @@ describe("PierreDiffViewer", () => {
     const highlightFileAST = mock();
     const cleanUpTasks = mock();
     workerPoolMock = {
+      ...createDefaultWorkerPoolMock(),
       cleanUpTasks,
-      getDiffResultCache: mock(() => null),
+      getDiffResultCache: mock(() => undefined),
       getFileResultCache: mock(() => undefined),
       highlightFileAST,
       isWorkingPool: mock(() => true),
@@ -680,7 +692,8 @@ describe("PierreDiffViewer", () => {
     const subscribeToStatChanges = mock(() => () => undefined);
     const primeFileHighlightCache = mock();
     workerPoolMock = {
-      getDiffResultCache: mock(() => null),
+      ...createDefaultWorkerPoolMock(),
+      getDiffResultCache: mock(() => undefined),
       getFileResultCache: mock(() => undefined),
       isWorkingPool: mock(() => true),
       primeDiffHighlightCache: mock(),
@@ -714,7 +727,8 @@ describe("PierreDiffViewer", () => {
     const { PierreFileViewer } = pierreViewerModule;
     const subscribeToStatChanges = mock(() => () => undefined);
     workerPoolMock = {
-      getDiffResultCache: mock(() => null),
+      ...createDefaultWorkerPoolMock(),
+      getDiffResultCache: mock(() => undefined),
       getFileResultCache: mock(() => undefined),
       isWorkingPool: mock(() => false),
       primeDiffHighlightCache: mock(),

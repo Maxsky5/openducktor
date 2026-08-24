@@ -1,14 +1,21 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import type { NamedExoticComponent, ReactElement } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
 let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").AgentChatSettingsProvider;
+const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
+type RestorableSpy = { mockRestore(): void };
+let pierreViewerSpies: RestorableSpy[] = [];
+
+const namedExoticMock = <Props,>(
+  component: (props: Props) => ReactElement | null,
+  original: NamedExoticComponent<Props>,
+): NamedExoticComponent<Props> => Object.assign(component, { $$typeof: original.$$typeof });
 
 const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>
@@ -120,18 +127,28 @@ const renderFileEditCard = (
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
-  mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
-    PierreDiffPreloader: preloaderMock,
-    PierrePreloadedDiffViewer: preloadedViewerMock,
-    PierreDiffViewer: viewerMock,
-    PierreFileViewer: fileViewerMock,
-  }));
+  pierreViewerSpies = [
+    spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
+      namedExoticMock(preloaderMock, pierreDiffViewerModule.PierreDiffPreloader),
+    ),
+    spyOn(pierreDiffViewerModule, "PierrePreloadedDiffViewer").mockImplementation(
+      namedExoticMock(preloadedViewerMock, pierreDiffViewerModule.PierrePreloadedDiffViewer),
+    ),
+    spyOn(pierreDiffViewerModule, "PierreDiffViewer").mockImplementation(
+      namedExoticMock(viewerMock, pierreDiffViewerModule.PierreDiffViewer),
+    ),
+    spyOn(pierreDiffViewerModule, "PierreFileViewer").mockImplementation(
+      namedExoticMock(fileViewerMock, pierreDiffViewerModule.PierreFileViewer),
+    ),
+  ];
 
   ({ AgentChatFileEditCard } = await import("./agent-chat-file-edit-card"));
   ({ AgentChatSettingsProvider } = await import("./agent-chat-settings-context"));
 });
 
 afterEach(() => {
+  for (const pierreViewerSpy of pierreViewerSpies) pierreViewerSpy.mockRestore();
+  pierreViewerSpies = [];
   cleanup();
   preloaderMock.mockClear();
   preloadedViewerMock.mockClear();
@@ -145,15 +162,6 @@ afterAll(() => {
   } else {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironmentValue;
   }
-});
-
-afterEach(async () => {
-  await restoreMockedModules([
-    [
-      "@/components/features/agents/pierre-diff-viewer",
-      () => import("@/components/features/agents/pierre-diff-viewer"),
-    ],
-  ]);
 });
 
 describe("AgentChatFileEditCard", () => {

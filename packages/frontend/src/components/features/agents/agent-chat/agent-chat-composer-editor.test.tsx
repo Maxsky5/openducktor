@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer, useRef } from "react";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
@@ -15,7 +14,9 @@ import {
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
-let actualComposerSelectionModule: typeof import("./agent-chat-composer-selection");
+const actualComposerSelectionModule = await import("./agent-chat-composer-selection");
+type RestorableSpy = { mockRestore(): void };
+let selectionSpies: RestorableSpy[] = [];
 const COMPOSER_WAIT_TIMEOUT_MS = 1000;
 const renderMockEditableTextContent = mock((text: string): string => {
   if (text.length === 0) {
@@ -89,34 +90,35 @@ const getCaretOffsetWithinElementMock = mock(
 );
 
 beforeEach(async () => {
-  actualComposerSelectionModule = await import("./agent-chat-composer-selection");
-
-  mock.module("./agent-chat-composer-selection", () => ({
-    ...actualComposerSelectionModule,
-    EMPTY_TEXT_SEGMENT_SENTINEL: "\u200B",
-    readEditableTextContent: readMockEditableTextContent,
-    renderEditableTextContent: renderMockEditableTextContent,
-    getCaretOffsetWithinElement: getCaretOffsetWithinElementMock,
-    insertTextAtCaretWithinElement: (
-      element: HTMLElement,
-      text: string,
-      fallbackOffset: number,
-    ) => {
-      const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
-      const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
-      element.textContent = nextText;
-      return fallbackOffset + text.length;
-    },
-    setCaretOffsetWithinElement: setCaretOffsetWithinElementMock,
-  }));
+  selectionSpies = [
+    spyOn(actualComposerSelectionModule, "readEditableTextContent").mockImplementation(
+      readMockEditableTextContent,
+    ),
+    spyOn(actualComposerSelectionModule, "renderEditableTextContent").mockImplementation(
+      renderMockEditableTextContent,
+    ),
+    spyOn(actualComposerSelectionModule, "getCaretOffsetWithinElement").mockImplementation(
+      getCaretOffsetWithinElementMock,
+    ),
+    spyOn(actualComposerSelectionModule, "insertTextAtCaretWithinElement").mockImplementation(
+      (element: HTMLElement, text: string, fallbackOffset: number) => {
+        const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
+        const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
+        element.textContent = nextText;
+        return fallbackOffset + text.length;
+      },
+    ),
+    spyOn(actualComposerSelectionModule, "setCaretOffsetWithinElement").mockImplementation(
+      setCaretOffsetWithinElementMock,
+    ),
+  ];
 
   ({ AgentChatComposerEditor } = await import("./agent-chat-composer-editor"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([
-    ["./agent-chat-composer-selection", () => import("./agent-chat-composer-selection")],
-  ]);
+afterEach(() => {
+  for (const selectionSpy of selectionSpies) selectionSpy.mockRestore();
+  selectionSpies = [];
 });
 
 const resetSelectionMocks = (): void => {

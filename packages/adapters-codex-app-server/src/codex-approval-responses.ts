@@ -13,18 +13,11 @@ import type { CodexServerRequestRecord } from "./types";
 
 export type CodexApprovalOutcome = RuntimeApprovalReplyOutcome;
 
-type GenericCodexApprovalResponse = {
-  approved: boolean;
-  outcome: CodexApprovalOutcome;
-  message: string;
-};
-
 export type CodexApprovalResponse =
   | CodexAppServerCommandExecutionApprovalResponse
   | CodexAppServerExecCommandApprovalResponse
   | CodexAppServerMcpServerElicitationRequestResponse
-  | CodexAppServerPermissionsApprovalResponse
-  | GenericCodexApprovalResponse;
+  | CodexAppServerPermissionsApprovalResponse;
 
 const permissionsResponse = (
   request: CodexServerRequestRecord,
@@ -132,10 +125,6 @@ export const codexApprovalResponseForRequest = ({
     case CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL:
       return permissionsResponse(request, outcome);
     default:
-      return {
-        approved,
-        outcome,
-        message: message ?? (approved ? "Approved once." : "Rejected."),
-      };
+      throw new Error(`Unsupported Codex approval request method '${request.method}'.`);
   }
 };

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   DevServerScriptState,
   PullRequest,
@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren } from "react";
+import { createElement, type PropsWithChildren, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -16,7 +16,6 @@ import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import type {
@@ -30,7 +29,7 @@ type TaskExecutionPanelToggleButtonComponent =
 
 let TaskExecutionPanel: TaskExecutionPanelComponent;
 let TaskExecutionPanelToggleButton: TaskExecutionPanelToggleButtonComponent;
-let lastFileTreeOptions: Record<string, unknown> | null = null;
+let lastFileTreeOptions: Parameters<typeof actualPierreTreesReact.useFileTree>[0] | null = null;
 let prepareFileTreeInputCalls: string[][] = [];
 let preparePresortedFileTreeInputCalls: string[][] = [];
 let fileTreeSelectedPaths: string[] = [];
@@ -41,6 +40,9 @@ let fileTreeSubscriber: (() => void) | null = null;
 const actualPierreTrees = await import("@pierre/trees");
 const actualPierreTreesReact = await import("@pierre/trees/react");
 const actualDevServerSettingsAction = await import("./agent-studio-dev-server-settings-action");
+const actualPrepareFileTreeInput = actualPierreTrees.prepareFileTreeInput;
+const actualPreparePresortedFileTreeInput = actualPierreTrees.preparePresortedFileTreeInput;
+let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 beforeEach(async () => {
   lastFileTreeOptions = null;
@@ -51,67 +53,64 @@ beforeEach(async () => {
   selectedOnlyFileTreePaths = [];
   fileTreeSubscriber = null;
 
-  mock.module("@pierre/trees", () => ({
-    prepareFileTreeInput: (paths: string[]) => {
+  moduleSpies = [
+    spyOn(actualPierreTrees, "prepareFileTreeInput").mockImplementation((paths, options) => {
       prepareFileTreeInputCalls.push([...paths]);
-      return { paths };
-    },
-    preparePresortedFileTreeInput: (paths: string[]) => {
+      return actualPrepareFileTreeInput(paths, options);
+    }),
+    spyOn(actualPierreTrees, "preparePresortedFileTreeInput").mockImplementation((paths) => {
       preparePresortedFileTreeInputCalls.push([...paths]);
-      return { paths };
-    },
-    themeToTreeStyles: () => ({}),
-  }));
-
-  mock.module("@pierre/trees/react", () => ({
-    FileTree: () => createElement("div", { "data-testid": "mock-pierre-file-tree" }),
-    useFileTree: (options: Record<string, unknown>) => {
+      return actualPreparePresortedFileTreeInput(paths);
+    }),
+    spyOn(actualPierreTrees, "themeToTreeStyles").mockImplementation(() => ({})),
+    spyOn(actualPierreTreesReact, "FileTree").mockImplementation(() =>
+      createElement("div", { "data-testid": "mock-pierre-file-tree" }),
+    ),
+    spyOn(actualPierreTreesReact, "useFileTree").mockImplementation((options) => {
       lastFileTreeOptions = options;
-      return {
-        model: {
-          getItem: (path: string) => ({
-            deselect: () => {
-              deselectedFileTreePaths.push(path);
-              fileTreeSelectedPaths = fileTreeSelectedPaths.filter(
-                (selectedPath) => selectedPath !== path,
-              );
-            },
-            select: () => {
-              selectedOnlyFileTreePaths.push(path);
-              fileTreeSelectedPaths = [path];
-            },
-          }),
-          getSelectedPaths: () => fileTreeSelectedPaths,
-          resetPaths: () => {},
-          subscribe: (subscriber: () => void) => {
-            fileTreeSubscriber = subscriber;
-            return () => {
-              fileTreeSubscriber = null;
-            };
-          },
-          setGitStatus: () => {},
-          setIcons: () => {},
-          setSearch: () => {},
-        },
-      };
-    },
-  }));
-
-  mock.module("./agent-studio-dev-server-settings-action", () => ({
-    AgentStudioDevServerSettingsAction: () =>
-      createElement("button", { type: "button" }, "Configure dev server commands"),
-  }));
+      const [model] = useState(() => {
+        const fileTree = new actualPierreTrees.FileTree(options);
+        const originalGetItem = fileTree.getItem.bind(fileTree);
+        fileTree.getSelectedPaths = () => fileTreeSelectedPaths;
+        fileTree.subscribe = (subscriber) => {
+          fileTreeSubscriber = subscriber;
+          return () => {
+            fileTreeSubscriber = null;
+          };
+        };
+        fileTree.getItem = (path) => {
+          const item = originalGetItem(path);
+          if (!item) return null;
+          item.deselect = () => {
+            deselectedFileTreePaths.push(path);
+            fileTreeSelectedPaths = fileTreeSelectedPaths.filter(
+              (selectedPath) => selectedPath !== path,
+            );
+          };
+          item.select = () => {
+            selectedOnlyFileTreePaths.push(path);
+            fileTreeSelectedPaths = [path];
+          };
+          return item;
+        };
+        return fileTree;
+      });
+      return { model };
+    }),
+    spyOn(actualDevServerSettingsAction, "AgentStudioDevServerSettingsAction").mockImplementation(
+      () => createElement("button", { type: "button" }, "Configure dev server commands"),
+    ),
+  ];
 
   ({ TaskExecutionPanel, TaskExecutionPanelToggleButton } = await import("./task-execution-panel"));
 });
 
-afterEach(async () => {
+afterEach(() => {
   cleanup();
-  await restoreMockedModules([
-    ["@pierre/trees", async () => actualPierreTrees],
-    ["@pierre/trees/react", async () => actualPierreTreesReact],
-    ["./agent-studio-dev-server-settings-action", async () => actualDevServerSettingsAction],
-  ]);
+  for (const moduleSpy of moduleSpies) {
+    moduleSpy.mockRestore();
+  }
+  moduleSpies = [];
 });
 
 const emptyDoc = {

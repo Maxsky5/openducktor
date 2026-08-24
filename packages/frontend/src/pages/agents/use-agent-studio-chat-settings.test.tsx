@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_CHAT_SETTINGS, type SettingsSnapshot } from "@openducktor/contracts";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-
-const actualHostOperationsModule = await import("@/state/operations/host");
 
 const hostMock = {
   workspaceGetSettingsSnapshot: mock(async (): Promise<SettingsSnapshot> =>
@@ -18,14 +17,16 @@ const hostMock = {
 let useAgentStudioChatSettings: typeof import("./use-agent-studio-chat-settings").useAgentStudioChatSettings;
 
 beforeEach(async () => {
-  mock.module("@/state/operations/host", () => ({
-    host: hostMock,
-  }));
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: hostMock.workspaceGetSettingsSnapshot },
+    }),
+  );
   ({ useAgentStudioChatSettings } = await import("./use-agent-studio-chat-settings"));
 });
 
-afterEach(async () => {
-  await restoreMockedModules([["@/state/operations/host", async () => actualHostOperationsModule]]);
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 enableReactActEnvironment();

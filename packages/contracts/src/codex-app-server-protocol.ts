@@ -9,7 +9,15 @@ import type {
   CodexAppServerRequestReasoningEffort,
 } from "./codex-app-server-request-schemas";
 import { parseCodexAppServerRequestResultValue } from "./codex-app-server-protocol-schemas";
-import type { CodexAppServerRequestResultMap } from "./codex-app-server-protocol-schemas";
+import type {
+  CodexAppServerAdditionalFileSystemPermissions,
+  CodexAppServerAdditionalNetworkPermissions,
+  CodexAppServerCommandExecutionApprovalDecision,
+  CodexAppServerCurrentTimeReadResponse,
+  CodexAppServerNetworkPolicyAmendment,
+  CodexAppServerThreadStatus,
+  CodexAppServerRequestResultMap,
+} from "./codex-app-server-protocol-schemas";
 import type { JsonValue } from "./json-types";
 import type { CodexAppServerWireServerRequest } from "./codex-app-server-runtime-schemas";
 
@@ -20,15 +28,34 @@ export {
 } from "./codex-app-server-request-schemas";
 export { codexAppServerRequestResultSchema } from "./codex-app-server-protocol-schemas";
 export type {
+  CodexAppServerAdditionalFileSystemPermissions,
+  CodexAppServerAdditionalNetworkPermissions,
   CodexAppServerCodexErrorInfo,
+  CodexAppServerCommandAction,
+  CodexAppServerCommandExecutionApprovalDecision,
+  CodexAppServerCommandExecutionRequestApprovalParams,
+  CodexAppServerCurrentTimeReadParams,
+  CodexAppServerCurrentTimeReadResponse,
+  CodexAppServerExecCommandApprovalParams,
+  CodexAppServerFileSystemPath,
+  CodexAppServerFileSystemSandboxEntry,
+  CodexAppServerFileSystemSpecialPath,
+  CodexAppServerLegacyParsedCommand,
+  CodexAppServerMcpElicitationPrimitiveSchema,
+  CodexAppServerMcpServerElicitationRequestParams,
   CodexAppServerModel,
   CodexAppServerModelListResponse,
+  CodexAppServerNetworkApprovalContext,
+  CodexAppServerNetworkPolicyAmendment,
+  CodexAppServerPermissionsRequestApprovalParams,
   CodexAppServerReasoningEffortOption,
+  CodexAppServerRequestPermissionProfile,
   CodexAppServerSkillRecord,
   CodexAppServerSkillCatalogEntry,
   CodexAppServerSkillsListResponse,
   CodexAppServerThread,
   CodexAppServerThreadItem,
+  CodexAppServerThreadStatus,
   CodexAppServerTurn,
   CodexAppServerTurnError,
 } from "./codex-app-server-protocol-schemas";
@@ -42,12 +69,10 @@ export type CodexAppServerReasoningSummary = "auto" | "concise" | "detailed" | "
 export type CodexAppServerPersonality = "friendly" | "none" | "pragmatic";
 export type CodexAppServerSortDirection = "asc" | "desc";
 export type CodexAppServerTurnItemsView = "full" | "notLoaded" | "summary";
-export type CodexAppServerThreadActiveFlag = "waitingOnApproval" | "waitingOnUserInput";
-export type CodexAppServerThreadStatus =
-  | { type: "active"; activeFlags: CodexAppServerThreadActiveFlag[] }
-  | { type: "idle" }
-  | { type: "notLoaded" }
-  | { type: "systemError" };
+export type CodexAppServerThreadActiveFlag = Extract<
+  CodexAppServerThreadStatus,
+  { type: "active" }
+>["activeFlags"][number];
 export type CodexAppServerThreadSource = string;
 export type CodexAppServerThreadStartSource = "clear" | "startup";
 export type CodexAppServerSubAgentThreadSpawnSource = {
@@ -396,15 +421,6 @@ export type CodexAppServerServerNotification = {
   params: CodexAppServerJsonValue;
 };
 
-export type CodexAppServerExecCommandApprovalParams = {
-  approvalId: string | null;
-  callId: string;
-  command: string[];
-  conversationId: string;
-  cwd: string;
-  parsedCmd: CodexAppServerLegacyParsedCommand[];
-  reason: string | null;
-};
 export type CodexAppServerExecCommandApprovalResponse = {
   decision: CodexAppServerReviewDecision;
 };
@@ -417,99 +433,15 @@ export type CodexAppServerReviewDecision =
   | { approved_execpolicy_amendment: { proposed_execpolicy_amendment: string[] } }
   | { network_policy_amendment: { network_policy_amendment: CodexAppServerNetworkPolicyAmendment } }
   | { denied: { rejection: string } };
-export type CodexAppServerCommandAction =
-  | { command: string; name: string; path: CodexAppServerAbsolutePath; type: "read" }
-  | { command: string; path: string | null; type: "listFiles" }
-  | { command: string; path: string | null; query: string | null; type: "search" }
-  | { command: string; type: "unknown" };
-export type CodexAppServerLegacyParsedCommand =
-  | { cmd: string; name: string; path: string; type: "read" }
-  | { cmd: string; path: string | null; type: "list_files" }
-  | { cmd: string; path: string | null; query: string | null; type: "search" }
-  | { cmd: string; type: "unknown" };
-export type CodexAppServerNetworkApprovalContext = {
-  host: string;
-  protocol: "http" | "https" | "socks5Tcp" | "socks5Udp";
-};
-export type CodexAppServerNetworkPolicyAmendment = {
-  host: string;
-  action: "allow" | "deny";
-};
-export type CodexAppServerCommandExecutionRequestApprovalParams = {
-  additionalPermissions?: CodexAppServerRequestPermissionProfile | null;
-  approvalId?: string | null;
-  command?: string | null;
-  commandActions?: CodexAppServerCommandAction[] | null;
-  cwd?: CodexAppServerAbsolutePath | null;
-  environmentId: string | null;
-  itemId: string;
-  networkApprovalContext?: CodexAppServerNetworkApprovalContext | null;
-  reason?: string | null;
-  startedAtMs: number;
-  threadId: string;
-  turnId: string;
-  proposedExecpolicyAmendment?: string[] | null;
-  proposedNetworkPolicyAmendments?: CodexAppServerNetworkPolicyAmendment[] | null;
-  availableDecisions?: CodexAppServerCommandExecutionApprovalDecision[] | null;
-};
-export type CodexAppServerCommandExecutionApprovalDecision =
-  | "accept"
-  | "acceptForSession"
-  | "decline"
-  | "cancel"
-  | { acceptWithExecpolicyAmendment: { execpolicy_amendment: string[] } }
-  | {
-      applyNetworkPolicyAmendment: {
-        network_policy_amendment: CodexAppServerNetworkPolicyAmendment;
-      };
-    };
 export type CodexAppServerCommandExecutionApprovalResponse = {
   decision: CodexAppServerCommandExecutionApprovalDecision;
 };
 export type CodexAppServerFileChangeApprovalResponse = {
   decision: "accept" | "acceptForSession" | "decline" | "cancel";
 };
-export type CodexAppServerAdditionalNetworkPermissions = {
-  enabled: boolean | null;
-};
-export type CodexAppServerFileSystemSpecialPath =
-  | { kind: "root" }
-  | { kind: "minimal" }
-  | { kind: "project_roots"; subpath: string | null }
-  | { kind: "tmpdir" }
-  | { kind: "slash_tmp" }
-  | { kind: "unknown"; path: string; subpath: string | null };
-export type CodexAppServerFileSystemPath =
-  | { type: "path"; path: CodexAppServerAbsolutePath }
-  | { type: "glob_pattern"; pattern: string }
-  | { type: "special"; value: CodexAppServerFileSystemSpecialPath };
-export type CodexAppServerFileSystemSandboxEntry = {
-  path: CodexAppServerFileSystemPath;
-  access: "read" | "write" | "deny";
-};
-export type CodexAppServerAdditionalFileSystemPermissions = {
-  read: CodexAppServerAbsolutePath[] | null;
-  write: CodexAppServerAbsolutePath[] | null;
-  globScanMaxDepth?: number;
-  entries?: CodexAppServerFileSystemSandboxEntry[];
-};
-export type CodexAppServerRequestPermissionProfile = {
-  network: CodexAppServerAdditionalNetworkPermissions | null;
-  fileSystem: CodexAppServerAdditionalFileSystemPermissions | null;
-};
 export type CodexAppServerGrantedPermissionProfile = {
   network?: CodexAppServerAdditionalNetworkPermissions;
   fileSystem?: CodexAppServerAdditionalFileSystemPermissions;
-};
-export type CodexAppServerPermissionsRequestApprovalParams = {
-  threadId: string;
-  turnId: string;
-  itemId: string;
-  environmentId: string | null;
-  startedAtMs: number;
-  cwd: CodexAppServerAbsolutePath;
-  reason: string | null;
-  permissions: CodexAppServerRequestPermissionProfile;
 };
 export type CodexAppServerPermissionsApprovalResponse = {
   permissions: CodexAppServerGrantedPermissionProfile;
@@ -517,82 +449,6 @@ export type CodexAppServerPermissionsApprovalResponse = {
   strictAutoReview?: boolean;
 };
 export type CodexAppServerMcpServerElicitationAction = "accept" | "decline" | "cancel";
-type CodexAppServerMcpElicitationSchemaDescription = {
-  title?: string;
-  description?: string;
-};
-type CodexAppServerMcpElicitationConstOption = {
-  const: string;
-  title: string;
-};
-export type CodexAppServerMcpElicitationPrimitiveSchema =
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "string";
-      minLength?: number;
-      maxLength?: number;
-      format?: "email" | "uri" | "date" | "date-time";
-      default?: string;
-    })
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "number" | "integer";
-      minimum?: number;
-      maximum?: number;
-      default?: number;
-    })
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "boolean";
-      default?: boolean;
-    })
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "string";
-      enum: string[];
-      enumNames?: string[];
-      default?: string;
-    })
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "string";
-      oneOf: CodexAppServerMcpElicitationConstOption[];
-      default?: string;
-    })
-  | (CodexAppServerMcpElicitationSchemaDescription & {
-      type: "array";
-      minItems?: number;
-      maxItems?: number;
-      items:
-        | { type: "string"; enum: string[] }
-        | { anyOf: CodexAppServerMcpElicitationConstOption[] };
-      default?: string[];
-    });
-export type CodexAppServerMcpServerElicitationRequestParams = {
-  threadId: string;
-  turnId: string | null;
-  serverName: string;
-} & (
-  | {
-      mode: "form";
-      _meta: CodexAppServerJsonValue | null;
-      message: string;
-      requestedSchema: {
-        $schema?: string;
-        type: "object";
-        properties: Record<string, CodexAppServerMcpElicitationPrimitiveSchema>;
-        required?: string[];
-      };
-    }
-  | {
-      mode: "openai/form";
-      _meta: CodexAppServerJsonValue | null;
-      message: string;
-      requestedSchema: CodexAppServerJsonValue;
-    }
-  | {
-      mode: "url";
-      _meta: CodexAppServerJsonValue | null;
-      message: string;
-      url: string;
-      elicitationId: string;
-    }
-);
 export type CodexAppServerMcpServerElicitationRequestResponse = {
   action: CodexAppServerMcpServerElicitationAction;
   content: CodexAppServerJsonValue | null;
@@ -613,14 +469,6 @@ export type CodexAppServerChatgptAuthTokensRefreshResponse = {
 export type CodexAppServerAttestationGenerateResponse = {
   token: string;
 };
-export type CodexAppServerCurrentTimeReadParams = {
-  threadId: string;
-};
-export type CodexAppServerCurrentTimeReadResponse = {
-  /** Current time as whole Unix seconds. */
-  currentTimeAt: number;
-};
-
 export {
   codexAppServerCommandActionSchema,
   codexAppServerCommandExecutionRequestApprovalParamsSchema,

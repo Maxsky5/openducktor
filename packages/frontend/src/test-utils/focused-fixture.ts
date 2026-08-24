@@ -1,4 +1,5 @@
 import { createHostClient, type HostClient } from "@openducktor/host-client";
+import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
 
 export const createFocusedFixture =
   <Value extends object>() =>
@@ -14,6 +15,20 @@ export const createHostClientFixture = <Overrides extends Partial<HostClient>>(
     }),
     overrides,
   );
+
+type ShellBridgeFixtureOptions = {
+  client?: Partial<HostClient>;
+  bridge?: Partial<ShellBridge>;
+};
+
+export const createShellBridgeFixture = ({
+  client = {},
+  bridge = {},
+}: ShellBridgeFixtureOptions = {}): ShellBridge => ({
+  ...createUnavailableShellBridge(),
+  client: createHostClientFixture(client),
+  ...bridge,
+});
 
 export const createTimerFixture = (): ReturnType<typeof setTimeout> => {
   const timer = setTimeout(() => {}, 60_000);

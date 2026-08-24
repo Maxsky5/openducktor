@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -75,23 +74,23 @@ const setTaskDocumentsState = (overrides: Partial<TaskDocumentsState> = {}): voi
   };
 };
 
-mock.module("@/components/features/task-details/use-task-documents", () => ({
-  useTaskDocuments: (
-    taskId: string | null,
-    open: boolean,
-    cacheScope = "",
-  ): UseTaskDocumentsReturn => {
-    taskDocumentsHookCalls.push({ taskId, open, cacheScope });
-    return {
-      specDoc: taskDocumentsState.specDoc,
-      planDoc: taskDocumentsState.planDoc,
-      qaDoc: taskDocumentsState.qaDoc,
-      ensureDocumentLoaded: ensureDocumentLoadedMock,
-      reloadDocument: reloadDocumentMock,
-      applyDocumentUpdate: applyDocumentUpdateMock,
-    };
-  },
-}));
+const taskDocumentsModule = await import("@/components/features/task-details/use-task-documents");
+let useTaskDocumentsSpy: { mockRestore(): void };
+const useTaskDocumentsMock = (
+  taskId: string | null,
+  open: boolean,
+  cacheScope = "",
+): UseTaskDocumentsReturn => {
+  taskDocumentsHookCalls.push({ taskId, open, cacheScope });
+  return {
+    specDoc: taskDocumentsState.specDoc,
+    planDoc: taskDocumentsState.planDoc,
+    qaDoc: taskDocumentsState.qaDoc,
+    ensureDocumentLoaded: ensureDocumentLoadedMock,
+    reloadDocument: reloadDocumentMock,
+    applyDocumentUpdate: applyDocumentUpdateMock,
+  };
+};
 
 type UseAgentStudioDocumentsHook =
   (typeof import("./use-agent-studio-documents"))["useAgentStudioDocuments"];
@@ -170,20 +169,18 @@ beforeAll(async () => {
   ({ useAgentStudioDocuments } = await import("./use-agent-studio-documents"));
 });
 
-afterAll(async () => {
-  await restoreMockedModules([
-    [
-      "@/components/features/task-details/use-task-documents",
-      () => import("@/components/features/task-details/use-task-documents"),
-    ],
-  ]);
-});
-
 beforeEach(() => {
+  useTaskDocumentsSpy = spyOn(taskDocumentsModule, "useTaskDocuments").mockImplementation(
+    useTaskDocumentsMock,
+  );
   setTaskDocumentsState();
   taskDocumentsHookCalls.length = 0;
   reloadDocumentMock.mockClear();
   applyDocumentUpdateMock.mockClear();
+});
+
+afterEach(() => {
+  useTaskDocumentsSpy.mockRestore();
 });
 
 describe("useAgentStudioDocuments", () => {

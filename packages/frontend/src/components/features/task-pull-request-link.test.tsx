@@ -1,43 +1,27 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import type { Mock } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import * as sonnerActual from "sonner";
 import * as externalUrlActual from "@/lib/open-external-url";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 enableReactActEnvironment();
 
-const openExternalUrlMock = mock(async () => {});
-const toastErrorMock = mock(() => {});
-const actualOpenExternalUrl = externalUrlActual.openExternalUrl;
-const actualToast = sonnerActual.toast;
+let openExternalUrlMock: Mock<typeof externalUrlActual.openExternalUrl>;
+let toastErrorMock: Mock<typeof sonnerActual.toast.error>;
 
 describe("TaskPullRequestLink", () => {
   beforeEach(() => {
-    mock.module("@/lib/open-external-url", () => ({
-      openExternalUrl: openExternalUrlMock,
-    }));
-    mock.module("sonner", () => ({
-      toast: {
-        error: toastErrorMock,
-        success: () => {},
-        loading: () => "",
-        dismiss: () => {},
-      },
-    }));
+    openExternalUrlMock = spyOn(externalUrlActual, "openExternalUrl").mockImplementation(
+      async () => {},
+    );
+    toastErrorMock = spyOn(sonnerActual.toast, "error").mockImplementation(() => "toast-error");
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/lib/open-external-url", async () => ({ openExternalUrl: actualOpenExternalUrl })],
-      ["sonner", async () => ({ ...sonnerActual, toast: actualToast })],
-    ]);
-  });
-
-  beforeEach(() => {
-    openExternalUrlMock.mockClear();
-    toastErrorMock.mockClear();
+  afterEach(() => {
+    openExternalUrlMock.mockRestore();
+    toastErrorMock.mockRestore();
   });
 
   test("opens the pull request URL when clicked", async () => {

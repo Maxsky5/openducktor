@@ -1,5 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   fireEvent,
   type RenderResult,
@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 
 enableReactActEnvironment();
@@ -18,6 +17,10 @@ type AgentStudioGitPanelModel = import("./agent-studio-git-panel").AgentStudioGi
 type DiffScopeState = import("@/features/agent-studio-git/contracts").DiffScopeState;
 
 let AgentStudioGitPanel: AgentStudioGitPanelComponent;
+const actualThemeProvider = await import("@/components/layout/theme-provider");
+const actualBranchSelector = await import("@/components/features/repository/branch-selector");
+const actualPierreDiffsReact = await import("@pierre/diffs/react");
+let moduleSpies: Array<{ mockRestore: () => void }> = [];
 
 const toScopeState = (overrides: Partial<DiffScopeState> = {}): DiffScopeState => ({
   branch: "feature/task-11",
@@ -290,60 +293,63 @@ const findButtonByText = (root: DomTestNode, text: string): DomTestNode => {
 
 describe("AgentStudioGitPanel", () => {
   beforeEach(async () => {
-    mock.module("@/components/layout/theme-provider", () => ({
-      useTheme: () => ({ theme: "light", setTheme: () => {} }),
-    }));
-    mock.module("@/components/features/repository/branch-selector", () => ({
-      BranchSelector: ({
-        value,
-        options,
-        onValueChange,
-        disabled,
-        className,
-        popoverClassName,
-      }: {
-        value: string;
-        options: { value: string; label: string }[];
-        onValueChange: (value: string) => void;
-        disabled?: boolean;
-        className?: string;
-        popoverClassName?: string;
-      }) =>
-        createElement(
-          "button",
-          {
-            type: "button",
-            disabled,
-            className,
-            "data-testid": "mock-branch-selector",
-            "data-popover-class": popoverClassName,
-            onClick: () => {
-              const fallback = options.find((option) => option.value !== value)?.value ?? value;
-              onValueChange(fallback);
-            },
-          },
+    moduleSpies = [
+      spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
+        theme: "light",
+        setTheme: () => {},
+      })),
+      spyOn(actualBranchSelector, "BranchSelector").mockImplementation(
+        ({
           value,
-        ),
-    }));
-    mock.module("@pierre/diffs/react", () => ({
-      File: () => createElement("div", { "data-testid": "mock-pierre-file-viewer" }),
-      FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
-      Virtualizer: ({ children }: { children: React.ReactNode }) =>
-        createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
-      useWorkerPool: () => null,
-    }));
+          options,
+          onValueChange,
+          disabled,
+          className,
+          popoverClassName,
+        }: {
+          value: string;
+          options: { value: string; label: string }[];
+          onValueChange: (value: string) => void;
+          disabled?: boolean;
+          className?: string;
+          popoverClassName?: string;
+        }) =>
+          createElement(
+            "button",
+            {
+              type: "button",
+              disabled,
+              className,
+              "data-testid": "mock-branch-selector",
+              "data-popover-class": popoverClassName,
+              onClick: () => {
+                const fallback = options.find((option) => option.value !== value)?.value ?? value;
+                onValueChange(fallback);
+              },
+            },
+            value,
+          ),
+      ),
+      spyOn(actualPierreDiffsReact, "File").mockImplementation(() =>
+        createElement("div", { "data-testid": "mock-pierre-file-viewer" }),
+      ),
+      spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(() =>
+        createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
+      ),
+      spyOn(actualPierreDiffsReact, "Virtualizer").mockImplementation(
+        ({ children }: { children: React.ReactNode }) =>
+          createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
+      ),
+      spyOn(actualPierreDiffsReact, "useWorkerPool").mockImplementation(() => undefined),
+    ];
     ({ AgentStudioGitPanel } = await import("./agent-studio-git-panel"));
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      ["@/components/layout/theme-provider", () => import("@/components/layout/theme-provider")],
-      [
-        "@/components/features/repository/branch-selector",
-        () => import("@/components/features/repository/branch-selector"),
-      ],
-      ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
-    ]);
+  afterEach(() => {
+    for (const moduleSpy of moduleSpies) {
+      moduleSpy.mockRestore();
+    }
+    moduleSpies = [];
   });
 
   test("renders branch context labels and git action controls", async () => {

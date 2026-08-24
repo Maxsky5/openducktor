@@ -1,5 +1,6 @@
 import { mock } from "bun:test";
 import type {
+  Query,
   SDKControlGetContextUsageResponse,
   SDKControlInitializeResponse,
   SDKMessage,
@@ -12,9 +13,7 @@ import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
 
-export const createClaudeQueryFixture = (
-  query: Partial<ClaudeSessionQuery>,
-): ClaudeSessionQuery => {
+export const createClaudeQueryFixture = (query: Partial<ClaudeSessionQuery>): Query => {
   const overrides = { ...query };
   const stream = isClaudeMessageStream(query) ? query : emptyClaudeMessageStream();
   return Object.assign(stream, defaultQueryControls(), overrides);
@@ -102,21 +101,69 @@ const defaultInitializationResponse = (): SDKControlInitializeResponse => ({
   account: {},
 });
 
-const defaultQueryControls = (): Pick<
-  ClaudeSessionQuery,
+type ClaudeQueryControlMethods = Pick<
+  Query,
+  | "accountInfo"
   | "applyFlagSettings"
+  | "backgroundTasks"
   | "close"
   | "getContextUsage"
   | "initializationResult"
+  | "interrupt"
   | "mcpServerStatus"
+  | "readFile"
+  | "reconnectMcpServer"
+  | "reinitialize"
+  | "reloadPlugins"
+  | "reloadSkills"
+  | "rewindFiles"
+  | "seedReadState"
+  | "setMaxThinkingTokens"
+  | "setMcpPermissionModeOverride"
+  | "setMcpServers"
   | "setModel"
-> => ({
+  | "setPermissionMode"
+  | "stopTask"
+  | "streamInput"
+  | "supportedAgents"
+  | "supportedCommands"
+  | "supportedModels"
+  | "toggleMcpServer"
+  | "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"
+>;
+
+const unusedQueryControl = async (): Promise<never> => {
+  throw new Error("Claude query control is not configured for this test.");
+};
+
+const defaultQueryControls = (): ClaudeQueryControlMethods => ({
+  accountInfo: mock(unusedQueryControl),
   applyFlagSettings: mock(async () => {}),
+  backgroundTasks: mock(unusedQueryControl),
   close: mock(() => {}),
   getContextUsage: mock(async () => createClaudeContextUsageResponse(0, 0)),
   initializationResult: mock(async () => defaultInitializationResponse()),
+  interrupt: mock(unusedQueryControl),
   mcpServerStatus: mock(async () => []),
+  readFile: mock(unusedQueryControl),
+  reconnectMcpServer: mock(unusedQueryControl),
+  reinitialize: mock(unusedQueryControl),
+  reloadPlugins: mock(unusedQueryControl),
+  reloadSkills: mock(unusedQueryControl),
+  rewindFiles: mock(unusedQueryControl),
+  seedReadState: mock(unusedQueryControl),
+  setMaxThinkingTokens: mock(unusedQueryControl),
+  setMcpPermissionModeOverride: mock(unusedQueryControl),
+  setMcpServers: mock(unusedQueryControl),
   setModel: mock(async () => {}),
+  setPermissionMode: mock(unusedQueryControl),
+  stopTask: mock(unusedQueryControl),
+  streamInput: mock(unusedQueryControl),
+  supportedAgents: mock(unusedQueryControl),
+  supportedCommands: mock(unusedQueryControl),
+  supportedModels: mock(unusedQueryControl),
+  toggleMcpServer: mock(unusedQueryControl),
+  usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: mock(unusedQueryControl),
 });
 
 export const emptyClaudeQuery = (): ClaudeSession["query"] =>

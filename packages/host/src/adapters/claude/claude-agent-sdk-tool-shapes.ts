@@ -1,4 +1,5 @@
 import { hasRuntimeType, jsonValueSchema } from "@openducktor/contracts";
+import type { JsonValue } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
 import {
@@ -137,31 +138,34 @@ export const timestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringifyToolResultContent = (value: unknown): string => {
+const stringifyToolResultContent = (value: JsonValue | undefined): string => {
   if (value === undefined) {
     return "";
   }
-  const parsed = jsonValueSchema.parse(value);
-  if (parsed === null) {
+  if (value === null) {
     return "";
   }
-  if (hasRuntimeType(parsed, "number") || hasRuntimeType(parsed, "boolean")) {
-    return String(parsed);
+  if (hasRuntimeType(value, "number") || hasRuntimeType(value, "boolean")) {
+    return String(value);
   }
-  return JSON.stringify(parsed, null, 2);
+  return JSON.stringify(value, null, 2);
 };
 
 const toolResultBlockText = (block: unknown): string => {
-  if (hasRuntimeType(block, "string")) {
-    return block;
-  }
-  if (!isRecord(block)) {
+  if (block === undefined) {
     return stringifyToolResultContent(block);
   }
+  const parsed = jsonValueSchema.parse(block);
+  if (hasRuntimeType(parsed, "string")) {
+    return parsed;
+  }
+  if (!isRecord(parsed)) {
+    return stringifyToolResultContent(parsed);
+  }
   return (
-    readStringProp(block, "text") ??
-    readStringProp(block, "message") ??
-    stringifyToolResultContent(block)
+    readStringProp(parsed, "text") ??
+    readStringProp(parsed, "message") ??
+    stringifyToolResultContent(parsed)
   );
 };
 
@@ -182,7 +186,7 @@ const claudeToolResultContentText = (value: Record<string, unknown>): string => 
       .join("\n");
   }
   if (content !== undefined && content !== null) {
-    return stringifyToolResultContent(content);
+    return stringifyToolResultContent(jsonValueSchema.parse(content));
   }
   return "";
 };

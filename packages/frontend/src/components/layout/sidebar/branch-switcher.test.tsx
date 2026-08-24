@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, type PropsWithChildren, useSyncExternalStore } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { WorkspaceBranchStateContextValue } from "@/types/state-slices";
 
 const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
+let branchSelectorSpy: { mockRestore(): void };
 
 let branchSyncDegraded = false;
 let isSwitchingBranch = false;
@@ -82,17 +82,10 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const restoreBranchSwitcherMocks = async (): Promise<void> => {
-  await restoreMockedModules([
-    ["@/components/features/repository/branch-selector", async () => actualBranchSelectorModule],
-  ]);
-};
-
 const importBranchSwitcher = async (): Promise<
   typeof import("./branch-switcher").BranchSwitcher
 > => {
   const { BranchSwitcher } = await import("./branch-switcher");
-  await restoreBranchSwitcherMocks();
   return BranchSwitcher;
 };
 
@@ -124,8 +117,8 @@ const renderBranchSwitcherMarkup = (
 
 describe("BranchSwitcher", () => {
   beforeEach(() => {
-    mock.module("@/components/features/repository/branch-selector", () => ({
-      BranchSelector: ({
+    branchSelectorSpy = spyOn(actualBranchSelectorModule, "BranchSelector").mockImplementation(
+      ({
         value,
         disabled,
         placeholder,
@@ -145,7 +138,7 @@ describe("BranchSwitcher", () => {
           />
         );
       },
-    }));
+    );
   });
 
   beforeEach(() => {
@@ -159,8 +152,8 @@ describe("BranchSwitcher", () => {
     resetBranchState();
   });
 
-  afterEach(async () => {
-    await restoreBranchSwitcherMocks();
+  afterEach(() => {
+    branchSelectorSpy.mockRestore();
   });
 
   test("shows degraded sync status when branch probe failures are active", async () => {

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type AppPlatform,
   DEFAULT_AGENT_RUNTIMES,
@@ -37,7 +37,6 @@ import {
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { systemQueryKeys } from "@/state/queries/system";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createRepoRuntimeHealthFixture,
   createSettingsSnapshotFixture,
@@ -83,10 +82,10 @@ const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
 const resetTaskMock = mock(async () => {});
-const toastSuccessMock = mock(
-  (_message: string, _options?: { description?: unknown; duration?: number }) => {},
-);
-const toastErrorMock = mock(() => {});
+const sonnerModule = await import("sonner");
+const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
+const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
+let toastSpies: Array<{ mockRestore(): void }> = [];
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
@@ -746,12 +745,10 @@ const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
 
 describe("KanbanPage session start modal flow", () => {
   beforeEach(() => {
-    mock.module("sonner", () => ({
-      toast: {
-        success: toastSuccessMock,
-        error: toastErrorMock,
-      },
-    }));
+    toastSpies = [
+      spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
+      spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
+    ];
   });
 
   beforeEach(async () => {
@@ -802,8 +799,9 @@ describe("KanbanPage session start modal flow", () => {
     loadRepoRuntimeCatalogMock.mockClear();
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([["sonner", () => import("sonner")]]);
+  afterEach(() => {
+    for (const toastSpy of toastSpies) toastSpy.mockRestore();
+    toastSpies = [];
   });
 
   afterAll(async () => {

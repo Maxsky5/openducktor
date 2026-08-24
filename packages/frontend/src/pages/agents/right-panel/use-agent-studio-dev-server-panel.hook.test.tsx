@@ -1,14 +1,15 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import type { DevServerEventListener } from "@/lib/shell-bridge";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   buildScript,
   buildState,
@@ -16,8 +17,6 @@ import {
   repoSettings,
 } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
-
-const actualHostClientModule = await import("@/lib/host-client");
 
 if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
@@ -48,16 +47,6 @@ let subscribeDevServerEventsMock = async (
 };
 
 beforeEach(() => {
-  mock.module("@/lib/host-client", () => ({
-    hostClient: {
-      devServerGetState: (...args: [string, string]) => devServerGetState(...args),
-      devServerStart: (...args: [string, string]) => devServerStart(...args),
-      devServerStop: (...args: [string, string]) => devServerStop(...args),
-      devServerRestart: (...args: [string, string]) => devServerRestart(...args),
-    },
-    subscribeDevServerEvents: (listener: DevServerEventListener) =>
-      subscribeDevServerEventsMock(listener),
-  }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerStart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
@@ -79,10 +68,23 @@ beforeEach(() => {
       },
     };
   };
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        devServerGetState: (...args) => devServerGetState(...args),
+        devServerStart: (...args) => devServerStart(...args),
+        devServerStop: (...args) => devServerStop(...args),
+        devServerRestart: (...args) => devServerRestart(...args),
+      },
+      bridge: {
+        subscribeDevServerEvents: (listener) => subscribeDevServerEventsMock(listener),
+      },
+    }),
+  );
 });
 
-afterEach(async () => {
-  await restoreMockedModules([["@/lib/host-client", async () => actualHostClientModule]]);
+afterEach(() => {
+  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("useAgentStudioDevServerPanel", () => {

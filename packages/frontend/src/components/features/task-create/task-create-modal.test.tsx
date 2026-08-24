@@ -1,21 +1,35 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@/types/task-composer";
 import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
 enableReactActEnvironment();
 
-const realTaskCreateModalControllerModule = { ...taskCreateModalControllerModule };
+const taskCreateDiscardDialogModule = await import("./task-create-discard-dialog");
+const taskDocumentEditorModule =
+  await import("@/components/features/task-composer/task-document-editor");
+let testSpies: Array<{ mockRestore(): void }> = [];
 
 const noDocumentSaveInProgress = (): "spec" | "plan" | null => null;
 const noFooterError = (): string | null => null;
 
-const controllerMock = {
+const emptyDocument = {
+  serverMarkdown: "",
+  draftMarkdown: "",
+  updatedAt: null,
+  isLoading: false,
+  loaded: true,
+  error: null,
+};
+
+const controllerMock: ReturnType<
+  typeof taskCreateModalControllerModule.useTaskCreateModalController
+> = {
   mode: "edit",
+  workspaceId: "workspace-1",
   onDialogOpenChange: (_open: boolean) => {},
   isBusy: false,
   isFormDisabled: false,
@@ -37,25 +51,29 @@ const controllerMock = {
     plan: "split",
   },
   setDocumentView: (_section: "spec" | "plan", _view: "write" | "split" | "preview") => {},
-  activeDocument: {
-    updatedAt: null,
-    isLoading: false,
-    error: null,
-    loaded: true,
+  activeDocument: { ...emptyDocument },
+  documents: {
+    spec: { ...emptyDocument },
+    plan: { ...emptyDocument },
   },
   isSavingDocument: noDocumentSaveInProgress(),
   isActiveDocumentDirty: false,
   updateDocumentDraft: (_section: "spec" | "plan", _value: string) => {},
   loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
   state: {
+    issueType: "task",
+    aiReviewEnabled: false,
     title: "Task",
+    priority: 2,
+    description: "",
+    labels: [],
   },
   priorityComboboxOptions: [],
   knownLabels: [],
   updateState: (_patch: Partial<ComposerState>) => {},
   footerError: noFooterError(),
   isEditingDocument: true,
-  close: () => {},
+  close: async () => {},
   discardCurrentDocumentDraft: () => {},
   taskId: "TASK-123",
   saveActiveDocument: async () => {},
@@ -63,40 +81,35 @@ const controllerMock = {
   submit: async () => {},
   pendingDiscardIntent: null,
   clearPendingDiscardIntent: () => {},
-  confirmDiscard: () => {},
+  confirmDiscard: async () => {},
+  stageDescriptionImage: async () => {
+    throw new Error("Image staging is not used in this test.");
+  },
+  descriptionAssetUploads: [],
+  descriptionAssetPreviews: new Map(),
 };
 
 describe("TaskCreateModal", () => {
   let TaskCreateModal: typeof import("./task-create-modal").TaskCreateModal;
 
   beforeEach(async () => {
-    mock.module("@/components/features/task-create/task-create-discard-dialog", () => ({
-      TaskCreateDiscardDialog: () => null,
-    }));
-    mock.module("@/components/features/task-create/use-task-create-modal-controller", () => ({
-      useTaskCreateModalController: () => controllerMock,
-    }));
-    mock.module("@/components/features/task-composer/task-document-editor", () => ({
-      TaskDocumentEditor: () => createElement("div", null, "Mock task document editor"),
-    }));
+    testSpies = [
+      spyOn(taskCreateDiscardDialogModule, "TaskCreateDiscardDialog").mockImplementation(() =>
+        createElement("div", { "data-testid": "mock-task-create-discard-dialog" }),
+      ),
+      spyOn(taskCreateModalControllerModule, "useTaskCreateModalController").mockImplementation(
+        () => controllerMock,
+      ),
+      spyOn(taskDocumentEditorModule, "TaskDocumentEditor").mockImplementation(() =>
+        createElement("div", null, "Mock task document editor"),
+      ),
+    ];
     ({ TaskCreateModal } = await import("./task-create-modal"));
   });
 
-  afterEach(async () => {
-    await restoreMockedModules([
-      [
-        "@/components/features/task-create/task-create-discard-dialog",
-        () => import("./task-create-discard-dialog"),
-      ],
-      [
-        "@/components/features/task-create/use-task-create-modal-controller",
-        async () => realTaskCreateModalControllerModule,
-      ],
-      [
-        "@/components/features/task-composer/task-document-editor",
-        () => import("@/components/features/task-composer/task-document-editor"),
-      ],
-    ]);
+  afterEach(() => {
+    for (const testSpy of testSpies) testSpy.mockRestore();
+    testSpies = [];
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
