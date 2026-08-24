@@ -3,15 +3,18 @@ import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
-import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
 import { createRuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
 const paths = {
+  bun: "",
   opencode: "/tools/opencode",
   codex: "/tools/codex",
   claude: "/tools/claude",
-} satisfies Record<RuntimeKind, string>;
+  git: "",
+  githubCli: "",
+} satisfies Record<ToolDiscoveryId, string>;
 
 const toolDiscovery: ToolDiscoveryPort = {
   discoverTool(toolId) {
@@ -20,10 +23,9 @@ const toolDiscovery: ToolDiscoveryPort = {
         new HostDependencyError({ dependency: "codex", message: "codex is not installed" }),
       );
     }
-    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     return Effect.succeed({
       displayLabel: "System PATH",
-      path: paths[toolId as RuntimeKind],
+      path: paths[toolId],
       sourceCategory: "system_path",
     });
   },
@@ -162,10 +164,9 @@ describe("runtime executable check service", () => {
           toolDiscovery: {
             ...toolDiscovery,
             discoverTool(toolId) {
-              // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
               return Effect.succeed({
                 displayLabel: "System PATH",
-                path: paths[toolId as RuntimeKind],
+                path: paths[toolId],
                 sourceCategory: "system_path",
               });
             },

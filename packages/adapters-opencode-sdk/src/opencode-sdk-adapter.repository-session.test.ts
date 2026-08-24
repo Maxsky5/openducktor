@@ -88,12 +88,10 @@ describe("OpencodeSdkAdapter repository sessions", () => {
         }),
       ]),
     );
-    // SAFETY: This test controls the fixture and supplies `{ tools: Record<string, boolean>; }` used by this case.
-    const promptTools = (
-      mock.session.promptAsyncCalls[0] as {
-        tools: Record<string, boolean>;
-      }
-    ).tools;
+    const promptTools = mock.session.promptAsyncCalls[0]?.tools;
+    if (!promptTools) {
+      throw new Error("Expected repository session prompt tools.");
+    }
     const missingToolIds = ODT_MCP_TOOL_NAMES.flatMap((toolName) =>
       toOpencodeExposedOdtToolIds(toolName),
     ).filter((toolId) => promptTools[toolId] !== true);

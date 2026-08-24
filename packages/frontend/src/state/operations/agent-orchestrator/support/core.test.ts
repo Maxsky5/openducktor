@@ -4,8 +4,7 @@ import { createRepoStaleGuard, throwIfRepoStale } from "./core";
 describe("agent-orchestrator/support/core", () => {
   test("creates a stale-repo guard bound to initial repo epoch", () => {
     const repoEpochRef = { current: 3 };
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/repo/a" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/repo/a" };
     const isStale = createRepoStaleGuard({
       repoPath: "/repo/a",
       repoEpochRef,
@@ -19,8 +18,7 @@ describe("agent-orchestrator/support/core", () => {
 
   test("uses only the stable current workspace repo path ref", () => {
     const repoEpochRef = { current: 1 };
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/repo/a" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/repo/a" };
     const isStale = createRepoStaleGuard({
       repoPath: "/repo/a",
       repoEpochRef,

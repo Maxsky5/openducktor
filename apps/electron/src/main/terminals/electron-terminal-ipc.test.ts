@@ -14,13 +14,12 @@ import {
 describe("Electron terminal IPC", () => {
   test("validates frames and scopes attachments to the sender", async () => {
     const calls: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: { attachmentId: string; terminalId: string }) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
       detach: (_terminalId: string, attachmentId: string) =>
         Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = encodeTerminalProtocolFrame({
@@ -45,13 +44,12 @@ describe("Electron terminal IPC", () => {
 
   test("disconnects one logical renderer client without waiting for WebContents teardown", async () => {
     const calls: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => calls.push(`attach:${input.attachmentId}`)),
       detach: (_terminalId: string, attachmentId: string) =>
         Effect.sync(() => calls.push(`detach:${attachmentId}`)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = encodeTerminalProtocolFrame({
@@ -75,8 +73,7 @@ describe("Electron terminal IPC", () => {
 
   test("keeps live attachments during same-document main-frame navigation", async () => {
     const attachments = new Set<string>();
-    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => attachments.add(input.attachmentId)),
       detach: (_terminalId: string, attachmentId: string) =>
@@ -92,7 +89,7 @@ describe("Electron terminal IPC", () => {
                 terminalId,
               }),
             ),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     await Effect.runPromise(
@@ -145,8 +142,7 @@ describe("Electron terminal IPC", () => {
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {
     const detached: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: ({ terminalId }: Parameters<TerminalService["attach"]>[0]) =>
         Effect.fail(
           new TerminalServiceError({
@@ -157,7 +153,7 @@ describe("Electron terminal IPC", () => {
           }),
         ),
       detach: (terminalId: string) => Effect.sync(() => detached.push(terminalId)),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sent: Uint8Array[] = [];
     const sender = {
@@ -208,8 +204,7 @@ describe("Electron terminal IPC", () => {
     });
     const attachments = new Set<string>();
     const operations: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `TerminalService` used by this case.
-    const terminalService = {
+    const terminalService: TerminalService = {
       attach: (input: Parameters<TerminalService["attach"]>[0]) =>
         Effect.sync(() => {
           operations.push("attach");
@@ -234,7 +229,7 @@ describe("Electron terminal IPC", () => {
                 terminalId,
               }),
             ),
-    } as TerminalService;
+    };
     const controller = createElectronTerminalIpcController(terminalService);
     const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
     const frame = (

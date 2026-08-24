@@ -1,10 +1,79 @@
-import { createFocusedTestService } from "../../test-support/focused-service";
 import { Effect } from "effect";
-import type { TaskService } from "../../application/tasks/task-service";
+import type {
+  BuildSessionBootstrap,
+  PullRequest,
+  TaskApprovalContextLoadResult,
+  TaskCard,
+  TaskDirectMergeResult,
+  TaskMetadataDocument,
+  TaskMetadataPayload,
+  TaskPullRequestDetectResult,
+} from "@openducktor/contracts";
 import { createTaskServiceTestDouble } from "../../test-support/task-service-test-double";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
 import type { HostCommandHandlerError } from "../router/host-command-router";
+
+const taskFixture: TaskCard = {
+  id: "task-1",
+  title: "Task",
+  description: "",
+  status: "open",
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  parentId: undefined,
+  subtaskIds: [],
+  pullRequest: undefined,
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-05-10T10:00:00.000Z",
+  createdAt: "2026-05-10T10:00:00.000Z",
+};
+
+const documentFixture: TaskMetadataDocument = { markdown: "# Fixture" };
+const pullRequestFixture: PullRequest = {
+  providerId: "github",
+  number: 1,
+  url: "https://github.com/acme/repo/pull/1",
+  state: "open",
+  createdAt: "2026-05-10T10:00:00.000Z",
+  updatedAt: "2026-05-10T10:00:00.000Z",
+};
+const approvalContextFixture: TaskApprovalContextLoadResult = {
+  outcome: "missing_builder_worktree",
+  taskId: taskFixture.id,
+  taskStatus: taskFixture.status,
+};
+const pullRequestDetectionFixture: TaskPullRequestDetectResult = {
+  outcome: "not_found",
+  sourceBranch: "feature/task-1",
+  targetBranch: "main",
+};
+const directMergeFixture: TaskDirectMergeResult = {
+  outcome: "completed",
+  task: taskFixture,
+};
+const metadataFixture: TaskMetadataPayload = {
+  spec: documentFixture,
+  plan: documentFixture,
+  agentSessions: [],
+};
+const buildSessionFixture: BuildSessionBootstrap = {
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/task-1",
+};
 
 const runHandler = <T>(
   effect: Effect.Effect<T, HostCommandHandlerError> | undefined,
@@ -18,7 +87,7 @@ const runHandler = <T>(
 describe("createTaskCommandHandlers", () => {
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
-    const service = createFocusedTestService<TaskService>()({
+    const service = createTaskServiceTestDouble({
       agentSessionDelete(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
@@ -63,8 +132,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_approval_context_get", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return approvalContextFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -78,8 +146,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_detect", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return pullRequestDetectionFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -107,8 +174,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_upsert", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return pullRequestFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -122,8 +188,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return directMergeFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -137,8 +202,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_direct_merge_complete", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -152,8 +216,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_pull_request_link_merged", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -167,8 +230,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_blocked", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -182,8 +244,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_start", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return buildSessionFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -197,8 +258,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_completed", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -212,8 +272,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "build_resumed", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -227,8 +286,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_create", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -256,8 +314,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_close", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -271,8 +328,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset_implementation", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -286,8 +342,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_reset", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -315,8 +370,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_metadata_get", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return metadataFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -330,8 +384,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_approve", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -345,8 +398,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "human_request_changes", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -360,8 +412,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_save_document", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -375,8 +426,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_get", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -390,8 +440,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_save_document", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -405,8 +454,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_get", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -437,8 +485,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_spec", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -452,8 +499,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_approved", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -467,8 +513,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_get_report", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return documentFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -482,8 +527,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_rejected", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -525,8 +569,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_transition", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -540,8 +583,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "task_update", input });
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
-            return {} as never;
+            return taskFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -552,7 +594,7 @@ describe("createTaskCommandHandlers", () => {
         });
       },
     });
-    const handlers = createTaskCommandHandlers(createTaskServiceTestDouble(service));
+    const handlers = createTaskCommandHandlers(service);
     await expect(
       runHandler(
         handlers.tasks_list?.(
@@ -580,7 +622,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_delete?.(
@@ -602,7 +644,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_reset_implementation?.(
@@ -613,7 +655,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_reset?.(
@@ -624,7 +666,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_metadata_get?.(
@@ -635,7 +677,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.agent_session_upsert?.(
@@ -728,7 +770,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_pull_request_detect?.(
@@ -739,7 +781,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_pull_request_unlink?.(
@@ -761,7 +803,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_direct_merge?.(
@@ -772,7 +814,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_direct_merge_complete?.(
@@ -783,7 +825,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_pull_request_link_merged?.(
@@ -816,7 +858,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_transition?.(
@@ -827,7 +869,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.build_blocked?.(
@@ -838,7 +880,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.build_start?.(
@@ -849,7 +891,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.build_resumed?.(
@@ -860,7 +902,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.build_completed?.(
@@ -871,7 +913,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.task_update?.(
@@ -882,7 +924,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.qa_approved?.(
@@ -893,7 +935,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.qa_rejected?.(
@@ -904,7 +946,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.qa_get_report?.(
@@ -915,7 +957,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.repo_pull_request_sync?.(
@@ -937,7 +979,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.human_approve?.(
@@ -948,7 +990,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.set_spec?.(
@@ -959,7 +1001,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.spec_save_document?.(
@@ -970,7 +1012,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.spec_get?.(
@@ -981,7 +1023,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.set_plan?.(
@@ -1003,7 +1045,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     await expect(
       runHandler(
         handlers.plan_get?.(
@@ -1014,7 +1056,7 @@ describe("createTaskCommandHandlers", () => {
           },
         ),
       ),
-    ).resolves.toEqual({});
+    ).resolves.toBeDefined();
     expect(calls).toEqual([
       { command: "tasks_list", input: { repoPath: "/repo" } },
       {

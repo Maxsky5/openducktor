@@ -4,6 +4,7 @@ import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexLocalSessionsForTest,
   codexUserMessageInput,
   createHarness,
   createRuntimeStreamSubscription,
@@ -15,12 +16,6 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
-
-// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
-const localSessions = (
-  adapter: CodexAppServerAdapter,
-): { has(externalSessionId: string): boolean } =>
-  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
@@ -719,7 +714,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
     await adapter.releaseSession(codexSessionRef("thread-saved"));
 
-    expect(localSessions(adapter).has("thread-saved")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(false);
     expect(transport?.calls).toHaveLength(callsBeforeRelease);
     unsubscribe();
   });
@@ -744,7 +739,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     ).rejects.toThrow("registered session belongs");
 
-    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread/start-runtime-live")).toBe(true);
   });
 
   test("rejects stop for an existing Codex session in another working directory", async () => {
@@ -767,7 +762,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     ).rejects.toThrow("registered session belongs");
 
-    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread/start-runtime-live")).toBe(true);
   });
 
   test("ignores release for unknown Codex sessions", async () => {
@@ -777,7 +772,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       adapter.releaseSession(codexSessionRef("missing-thread")),
     ).resolves.toBeUndefined();
 
-    expect(localSessions(adapter).has("missing-thread")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("missing-thread")).toBe(false);
   });
 
   test("rejects missing or unsupported model variants", async () => {

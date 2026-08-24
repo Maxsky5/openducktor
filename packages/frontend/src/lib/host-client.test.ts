@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
-import type { HostClient } from "@openducktor/host-client";
 import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import {
   configureShellBridge,
@@ -145,8 +144,7 @@ describe("host-client", () => {
     const { hostClient } = await import("./host-client");
     const originalRuntimeEnsure = hostClient.runtimeEnsure;
 
-    // SAFETY: This test controls the fixture and supplies `HostClient["runtimeEnsure"]` used by this case.
-    hostClient.runtimeEnsure = overrideRuntimeEnsure as HostClient["runtimeEnsure"];
+    hostClient.runtimeEnsure = overrideRuntimeEnsure;
     try {
       await expect(hostClient.runtimeEnsure("/repo", "opencode")).resolves.toMatchObject({
         runtimeId: "runtime-override",

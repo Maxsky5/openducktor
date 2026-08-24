@@ -150,6 +150,13 @@ type ControllerHarnessOptions = {
   sessionDiffs?: FileDiff[];
 };
 
+type AgentControlInputs = {
+  starts: StartAgentSessionInput[];
+  resumes: ResumeAgentSessionInput[];
+  forks: ForkAgentSessionInput[];
+  sends: SendAgentUserMessageInput[];
+};
+
 const createControllerHarness = ({
   initialSnapshots = [liveSnapshot()],
   releaseRuntime = () => undefined,
@@ -163,12 +170,11 @@ const createControllerHarness = ({
   const liveContextLoads: unknown[] = [];
   const policyBoundContextLoads: unknown[] = [];
   const sessionDiffLoads: unknown[] = [];
-  // SAFETY: This test controls the fixture and supplies `unknown[]` used by this case.
-  const controlInputs = {
-    starts: [] as unknown[],
-    resumes: [] as unknown[],
-    forks: [] as unknown[],
-    sends: [] as unknown[],
+  const controlInputs: AgentControlInputs = {
+    starts: [],
+    resumes: [],
+    forks: [],
+    sends: [],
   };
   const controlSummary = {
     externalSessionId: "thread-1",
@@ -480,13 +486,13 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       })(runtime),
     );
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       Effect.runPromise(
+        // @ts-expect-error Deliberately omit sessionScope to verify the adapter boundary.
         prepared.adapter.sendUserMessage({
           ...ref,
           parts: [{ kind: "text", text: "Hello" }],
-        } as never),
+        }),
       ),
     ).rejects.toThrow("Codex live-session control 'send-user-message' requires session scope.");
     await Effect.runPromise(
@@ -720,12 +726,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       harness.getOptions().onLiveSessionMutation?.({
         runtimeId: "runtime-1",
         snapshots: [liveSnapshot()],
-        transcriptEvents: [{ type: "session_status" } as never],
+        transcriptEvents: [
+          // @ts-expect-error This malformed event verifies contract validation before commit.
+          { type: "session_status" },
+        ],
         catalogInvalidated: false,
       }),
     ).rejects.toThrow("externalSessionId");

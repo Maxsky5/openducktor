@@ -260,7 +260,6 @@ describe("build Electron release artifact", () => {
       }).catch((cause: unknown) => cause);
 
       expect(error).toBeInstanceOf(Error);
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
       expect((error as Error).message).not.toContain("Electron release directory is missing");
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
@@ -284,10 +283,10 @@ describe("build Electron release artifact", () => {
         operation: "electron.package.read-release-directory",
         path: releaseDirectory,
       });
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe(
-        `Electron release directory is missing: ${releaseDirectory}`,
-      );
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(`Electron release directory is missing: ${releaseDirectory}`);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
@@ -313,8 +312,10 @@ describe("build Electron release artifact", () => {
         path: releaseDirectory,
         platform: "macos",
       });
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe(
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(
         "No Electron installable release artifacts were produced for macos.",
       );
     } finally {
@@ -343,8 +344,10 @@ describe("build Electron release artifact", () => {
         path: releaseDirectory,
         platform: "windows",
       });
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe(
+      if (!(error instanceof Error)) {
+        throw new TypeError("Expected an Error instance.");
+      }
+      expect(error.message).toBe(
         "Electron update metadata is missing for windows; expected latest.yml.",
       );
     } finally {

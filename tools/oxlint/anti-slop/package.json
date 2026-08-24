@@ -1,4 +1,10 @@
 {
+  "name": "@openducktor/anti-slop-oxlint",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "build": "bun run typecheck",
+    "test": "node --test src/rules/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  }
 }

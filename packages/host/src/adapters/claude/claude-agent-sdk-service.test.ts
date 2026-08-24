@@ -13,11 +13,7 @@ import {
   createClaudeQueryFixture,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type {
-  ClaudeAgentSdkEventEmitter,
-  ClaudeSession,
-  CreateClaudeAgentSdkServiceInput,
-} from "./claude-agent-sdk-types";
+import type { ClaudeAgentSdkEventEmitter, ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   acceptedUserMessages: [],
@@ -89,7 +85,6 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
   if (session) {
     sessionStore.set(session);
   }
-  // SAFETY: This test drives the failure path that supplies `CreateClaudeAgentSdkServiceInput["toolDiscovery"]` before this assertion.
   return createClaudeAgentSdkService({
     ...(emit ? { emit } : undefined),
     now: () => "2026-06-25T20:00:00.000Z",
@@ -105,7 +100,12 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
     }),
     sessionStore,
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-    toolDiscovery: {} as CreateClaudeAgentSdkServiceInput["toolDiscovery"],
+    toolDiscovery: {
+      discoverTool: () => Effect.die("unused"),
+      resolveTool: () => Effect.die("unused"),
+      resolveToolPath: () => Effect.die("unused"),
+      validateToolPath: () => Effect.die("unused"),
+    },
   });
 };
 

@@ -446,16 +446,15 @@ describe("createClaudeAgentSdkSessionStore", () => {
     const aborted = new Promise<string>((resolve) => {
       resolveAbort = resolve;
     });
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const session = createSession({
       activeSdkUserTurnCount: 1,
       activity: "running",
       pendingUserTurnCount: 1,
       queuedSdkMessages: [
-        {
+        claudeSdkMessageFixture({
           type: "user",
           message: { role: "user", content: "queued" },
-        } as never,
+        }),
       ],
     });
     session.abortController.signal.addEventListener(

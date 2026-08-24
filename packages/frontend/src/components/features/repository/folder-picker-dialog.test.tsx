@@ -130,7 +130,7 @@ describe("FolderPickerDialog", () => {
       await screen.findByText("repo-one");
       expect(screen.getByText("Git repo")).toBeTruthy();
 
-      fireEvent.change(screen.getByLabelText("Filter directories"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Filter directories"), {
         target: { value: "repo" },
       });
 
@@ -138,16 +138,15 @@ describe("FolderPickerDialog", () => {
         expect(screen.queryByText("apps")).toBeNull();
       });
 
-      fireEvent.change(screen.getByLabelText("Filter directories"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Filter directories"), {
         target: { value: "" },
       });
 
-      fireEvent.click(screen.getByRole("button", { name: /^apps$/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /^apps$/i }));
 
       await waitFor(() => {
         expect(screen.getByText("/Users/dev/apps")).toBeTruthy();
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-        expect((screen.getByLabelText("Filter directories") as HTMLInputElement).value).toBe("");
+        expect(screen.getByLabelText<HTMLInputElement>("Filter directories").value).toBe("");
       });
     } finally {
       rendered.unmount();
@@ -173,7 +172,7 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
-      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
 
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
     } finally {
@@ -212,8 +211,8 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
-      fireEvent.click(screen.getByRole("button", { name: "next" }));
-      fireEvent.click(screen.getByRole("button", { name: "old-cli" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "next" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "old-cli" }));
 
       await act(async () => {
         resolveNextDirectory(
@@ -222,9 +221,10 @@ describe("FolderPickerDialog", () => {
       });
       await screen.findByText("/Users/dev/next");
 
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -262,20 +262,20 @@ describe("FolderPickerDialog", () => {
     try {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
       expect(requestCount).toBe(1);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
-        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => expect(requestCount).toBe(2));
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
@@ -283,12 +283,11 @@ describe("FolderPickerDialog", () => {
 
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
         expect(
-          (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
         ).toBe(true);
       });
-      fireEvent.click(screen.getByRole("button", { name: "Select Folder" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
@@ -309,20 +308,20 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
-        (screen.getByRole("button", { name: "Select Folder" }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory no longer exists: /Users/dev");
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -358,24 +357,24 @@ describe("FolderPickerDialog", () => {
 
     try {
       fireEvent.click(await screen.findByRole("button", { name: "codex" }));
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Failed to refresh /Users/dev");
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
         expect(requestCount).toBe(3);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-        expect((confirmButton as HTMLButtonElement).disabled).toBe(false);
+        expect(confirmButton.disabled).toBe(false);
       });
       fireEvent.click(confirmButton);
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
@@ -417,10 +416,10 @@ describe("FolderPickerDialog", () => {
 
     try {
       const nextButton = await screen.findByRole("button", { name: "next" });
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
       await waitFor(() => expect(rootRequestCount).toBe(2));
 
       fireEvent.click(nextButton);
@@ -429,9 +428,10 @@ describe("FolderPickerDialog", () => {
 
       await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
 
-      const confirmButton = screen.getByRole("button", { name: "Select Folder" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Select Folder",
+      });
+      expect(confirmButton.disabled).toBe(true);
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
     } finally {
@@ -483,38 +483,39 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev/projects");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
+      );
       await screen.findByText("/Users/dev");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.click(screen.getByRole("button", { name: /go to home folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to home folder/i }),
+      );
       await screen.findByText("/Users/home");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/Users/dev/repo-one" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("/Users/dev/repo-one");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
 
-      fireEvent.click(screen.getByRole("button", { name: /go to parent folder/i }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
+      );
       await screen.findByText("/Users/dev");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe(
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
 
       await waitFor(() => {
         expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
@@ -565,12 +566,13 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText(/only git repositories can be opened/i);
-      const confirmButton = screen.getByRole("button", { name: /open repository/i });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((confirmButton as HTMLButtonElement).disabled).toBe(true);
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+        name: /open repository/i,
+      });
+      expect(confirmButton.disabled).toBe(true);
 
       const explorerWarning = screen.getByText(/only git repositories can be opened/i);
-      const repoButton = screen.getByRole("button", { name: /repo-one/i });
+      const repoButton = screen.getByRole<HTMLButtonElement>("button", { name: /repo-one/i });
       expect(repoButton.compareDocumentPosition(explorerWarning)).toBe(
         Node.DOCUMENT_POSITION_FOLLOWING,
       );
@@ -579,9 +581,8 @@ describe("FolderPickerDialog", () => {
 
       await waitFor(() => {
         expect(screen.getByText("/Users/dev/repo-one")).toBeTruthy();
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
         expect(
-          (screen.getByRole("button", { name: /open repository/i }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: /open repository/i }).disabled,
         ).toBe(false);
       });
     } finally {
@@ -609,36 +610,32 @@ describe("FolderPickerDialog", () => {
 
     try {
       await screen.findByText("/Users/dev");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      expect((screen.getByLabelText("Open path") as HTMLInputElement).value).toBe("");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
+      expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
       expect(
-        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(false);
 
-      fireEvent.change(screen.getByLabelText("Open path"), {
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
         target: { value: "/missing" },
       });
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory does not exist: /missing");
       expect(screen.getByText("/Users/dev")).toBeTruthy();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
-        (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+        screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(true);
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
       expect(onConfirm).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: /load path/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
         expect(missingPathAttempts).toBe(2);
         expect(screen.getByText("/missing")).toBeTruthy();
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
         expect(
-          (screen.getByRole("button", { name: /select folder/i }) as HTMLButtonElement).disabled,
+          screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(false);
       });
     } finally {
@@ -672,18 +669,17 @@ describe("FolderPickerDialog", () => {
     try {
       await screen.findByText("/Users/dev");
 
-      fireEvent.click(screen.getByRole("button", { name: /select folder/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }));
 
       await waitFor(() => {
         expect(onConfirm).toHaveBeenCalledWith("/Users/dev");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-        expect(
-          (screen.getByRole("button", { name: /cancel/i }) as HTMLButtonElement).disabled,
-        ).toBe(true);
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /cancel/i }).disabled).toBe(
+          true,
+        );
         expect(screen.queryByRole("button", { name: /close/i })).toBeNull();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /cancel/i }));
       expect(onOpenChange).not.toHaveBeenCalled();
 
       if (!resolveConfirm) {

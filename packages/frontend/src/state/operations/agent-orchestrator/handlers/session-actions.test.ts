@@ -19,8 +19,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("uses live workspace refs for session start stale checks", async () => {
     const adapter = new OpencodeSdkAdapter();
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const actions = createSessionActions({
       adapter,
       currentWorkspaceRepoPathRef,

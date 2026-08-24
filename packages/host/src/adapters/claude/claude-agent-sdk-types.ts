@@ -1,6 +1,7 @@
 import type {
   PermissionResult,
   Query,
+  SDKMessage,
   SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -84,6 +85,17 @@ export type ClaudeManualCompactionState = {
   messageId: string;
 };
 
+export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
+  Pick<
+    Query,
+    | "applyFlagSettings"
+    | "close"
+    | "getContextUsage"
+    | "initializationResult"
+    | "mcpServerStatus"
+    | "setModel"
+  >;
+
 export type ClaudeSession = {
   acceptedUserMessages: ClaudeAcceptedUserMessage[];
   activeBackgroundSubagentTaskIds?: Set<string>;
@@ -105,7 +117,7 @@ export type ClaudeSession = {
   sdkState?: "idle" | "requires_action" | "running";
   queuedSdkMessages: SDKUserMessage[];
   pendingUserTurnCount: number;
-  query: Query;
+  query: ClaudeSessionQuery;
   queue: AsyncInputQueue<SDKUserMessage>;
   runtimeId: string;
   startedAt: string;

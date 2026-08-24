@@ -4,6 +4,10 @@ import type { WorkspaceSettingsService } from "../application/workspaces/workspa
 import type { GitPort } from "../ports/git-port";
 import type { SettingsConfigPort } from "../ports/settings-config-port";
 import type { WorktreeFilePort } from "../ports/worktree-file-port";
+import type {
+  AgentSessionLiveAdapterBinding,
+  AgentSessionRuntimeAdapterPort,
+} from "../ports/agent-session-live-adapter-port";
 
 const unexpectedEffectCall = (service: string, method: string) => () =>
   Effect.dieMessage(`Unexpected ${service} call: ${method}`);
@@ -11,6 +15,30 @@ const unexpectedEffectCall = (service: string, method: string) => () =>
 const unexpectedSyncCall = (service: string, method: string): never => {
   throw new Error(`Unexpected ${service} call: ${method}`);
 };
+
+export const createAgentSessionRuntimeAdapterTestDouble = <
+  Overrides extends Partial<Omit<AgentSessionRuntimeAdapterPort, "binding">>,
+>(
+  binding: AgentSessionLiveAdapterBinding,
+  overrides: Overrides,
+): AgentSessionRuntimeAdapterPort => ({
+  binding,
+  forkSession: unexpectedEffectCall("live session adapter", "forkSession"),
+  listRetainedSnapshots: unexpectedEffectCall("live session adapter", "listRetainedSnapshots"),
+  loadContext: unexpectedEffectCall("live session adapter", "loadContext"),
+  matches: () => false,
+  readRetainedSnapshot: unexpectedEffectCall("live session adapter", "readRetainedSnapshot"),
+  releaseRuntime: unexpectedEffectCall("live session adapter", "releaseRuntime"),
+  releaseSession: unexpectedEffectCall("live session adapter", "releaseSession"),
+  replyApproval: unexpectedEffectCall("live session adapter", "replyApproval"),
+  replyQuestion: unexpectedEffectCall("live session adapter", "replyQuestion"),
+  resumeSession: unexpectedEffectCall("live session adapter", "resumeSession"),
+  sendUserMessage: unexpectedEffectCall("live session adapter", "sendUserMessage"),
+  startSession: unexpectedEffectCall("live session adapter", "startSession"),
+  stopSession: unexpectedEffectCall("live session adapter", "stopSession"),
+  updateSessionModel: unexpectedEffectCall("live session adapter", "updateSessionModel"),
+  ...overrides,
+});
 
 export const createDevServerServiceTestDouble = <Overrides extends Partial<DevServerService>>(
   overrides: Overrides,

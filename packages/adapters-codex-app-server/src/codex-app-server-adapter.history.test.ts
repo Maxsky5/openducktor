@@ -9,6 +9,7 @@ import {
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
+  requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 import {
@@ -181,8 +182,7 @@ describe("CodexAppServerAdapter history loading", () => {
           return paginatedThreadReadResponse(thread);
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
-          const { threadId } = request.params as { threadId: string };
+          const threadId = requestThreadId(request.params);
           if (threadId === "root-thread") {
             return paginatedTurnsResponse([{ id: "root-turn", items: [], status: "completed" }]);
           }
@@ -288,10 +288,8 @@ describe("CodexAppServerAdapter history loading", () => {
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
     const byId = new Map(history.map((message) => [message.messageId, message]));
-    // SAFETY: This test controls the fixture and supplies `{ timestampIsApproximate?: boolean } | undefined` used by this case.
     const hasApproximateTimestamp = (messageId: string): boolean | undefined =>
-      (byId.get(messageId) as { timestampIsApproximate?: boolean } | undefined)
-        ?.timestampIsApproximate;
+      byId.get(messageId)?.timestampIsApproximate;
 
     expect(byId.get("child-user")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
     expect(hasApproximateTimestamp("child-user")).toBeUndefined();
@@ -301,19 +299,13 @@ describe("CodexAppServerAdapter history loading", () => {
     expect(hasApproximateTimestamp("child-command")).toBe(true);
     expect(byId.get("child-tool")?.timestamp).toBe("2026-07-10T20:33:01.000Z");
     expect(hasApproximateTimestamp("child-tool")).toBe(true);
-    // SAFETY: This test controls the fixture and supplies `| { startedAtMs?: number; endedAtMs?: number } | undefined` used by this case.
-    expect(
-      (
-        byId.get("child-command")?.parts[0] as
-          | { startedAtMs?: number; endedAtMs?: number }
-          | undefined
-      )?.startedAtMs,
-    ).toBeUndefined();
-    // SAFETY: This test controls the fixture and supplies `{ startedAtMs?: number; endedAtMs?: number } | undefined` used by this case.
-    expect(
-      (byId.get("child-tool")?.parts[0] as { startedAtMs?: number; endedAtMs?: number } | undefined)
-        ?.endedAtMs,
-    ).toBeUndefined();
+    const childCommandPart = byId.get("child-command")?.parts[0];
+    const childToolPart = byId.get("child-tool")?.parts[0];
+    if (childCommandPart?.kind !== "tool" || childToolPart?.kind !== "tool") {
+      throw new Error("Expected child command and tool history parts.");
+    }
+    expect(childCommandPart.startedAtMs).toBeUndefined();
+    expect(childToolPart.endedAtMs).toBeUndefined();
   });
 
   test("loads child history when its fork parent is no longer readable", async () => {
@@ -332,8 +324,7 @@ describe("CodexAppServerAdapter history loading", () => {
           });
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
-          const params = request.params as { threadId: string };
+          const params: { threadId: string } = request.params;
           if (params.threadId === "missing-parent") {
             throw new Error(parentReadError);
           }
@@ -388,8 +379,7 @@ describe("CodexAppServerAdapter history loading", () => {
           });
         }
         if (request.method === "thread/turns/list") {
-          // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
-          const params = request.params as { threadId: string };
+          const params: { threadId: string } = request.params;
           if (params.threadId === "missing-parent") {
             throw new Error("thread not loaded: missing-parent");
           }
@@ -1359,7 +1349,6 @@ describe("CodexAppServerAdapter history loading", () => {
     });
     calls.length = 0;
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       adapter.loadSessionTodos({
         repoPath: "/repo",
@@ -1367,8 +1356,9 @@ describe("CodexAppServerAdapter history loading", () => {
         workingDirectory: "/repo",
         externalSessionId: "thread-history-todos",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        // @ts-expect-error -- This test verifies rejection of a runtime policy from another adapter.
         runtimePolicy: { kind: "opencode" },
-      } as never),
+      }),
     ).rejects.toThrow(
       "Cannot load Codex session todos with runtime 'codex' and 'opencode' runtime policy.",
     );

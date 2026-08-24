@@ -4,12 +4,5 @@
   "tabWidth": 2,
   "useTabs": false,
   "sortPackageJson": true,
-  "ignorePatterns": [
-    "**/*.md",
-    "**/*.mdx",
-    "**/*.toml",
-    "**/*.yaml",
-    "**/*.yml",
-    "tools/oxlint/anti-slop/**"
-  ]
+  "ignorePatterns": ["**/*.md", "**/*.mdx", "**/*.toml", "**/*.yaml", "**/*.yml"]
 }

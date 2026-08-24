@@ -45,12 +45,10 @@ describe("AppRuntimeProvider", () => {
   test("keeps settings snapshot failures separate from runtime definition errors", async () => {
     const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    // SAFETY: This test drives the failure path that supplies `never` before this assertion.
+    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
     host.workspaceGetSettingsSnapshot = mock(async () => {
       throw new Error("settings unavailable");
-    }) as never;
+    });
 
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
       wrapper: createWrapper,
@@ -74,10 +72,8 @@ describe("AppRuntimeProvider", () => {
   test("publishes available runtime definitions from runtime settings", async () => {
     const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot()) as never;
+    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
       wrapper: createWrapper,
@@ -101,10 +97,8 @@ describe("AppRuntimeProvider", () => {
   test("keeps runtime availability stable when only the theme setting changes", async () => {
     const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
     const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot()) as never;
+    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
 
     const harness = createHookHarness(
       () => ({

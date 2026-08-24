@@ -1,24 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-type WorkflowContractFixture = {
-  tools: string[];
-  statuses: string[];
-};
-
-const loadFixture = (): WorkflowContractFixture => {
-  const fixturePath = join(
-    import.meta.dir,
-    "../../../../docs/contracts/workflow-contract-fixture.json",
-  );
-  // SAFETY: This test controls the fixture and supplies `WorkflowContractFixture` used by this case.
-  return JSON.parse(readFileSync(fixturePath, "utf8")) as WorkflowContractFixture;
-};
+import { loadWorkflowContractFixture } from "./workflow-contract-fixture.test-support";
 
 describe("workflow docs contract", () => {
   test("transition matrix references canonical workflow tools and statuses", () => {
-    const fixture = loadFixture();
+    const fixture = loadWorkflowContractFixture();
     const transitionDocPath = join(
       import.meta.dir,
       "../../../../docs/task-workflow-transition-matrix.md",

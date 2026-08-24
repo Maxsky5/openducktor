@@ -90,8 +90,16 @@ const createLiveSessionDependencies = ({
 } = {}) => {
   const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
   let remainingReleaseFailures = releaseFailures;
-  // SAFETY: This test controls the fixture and supplies `AgentSessionLiveAdapterPort` used by this case.
-  const adapter = {} as AgentSessionLiveAdapterPort;
+  const adapter: AgentSessionLiveAdapterPort = {
+    binding: { runtimeId: "runtime-1", runtimeKind: "claude", repoPath: "/repo" },
+    matches: () => false,
+    listRetainedSnapshots: () => Effect.succeed([]),
+    readRetainedSnapshot: () => Effect.die("unused"),
+    loadContext: () => Effect.die("unused"),
+    replyApproval: () => Effect.die("unused"),
+    replyQuestion: () => Effect.die("unused"),
+    releaseRuntime: () => Effect.succeed([]),
+  };
   const liveSessionLifecycle: RuntimeLiveSessionLifecyclePort = {
     registerRuntimeAdapter: () =>
       Effect.sync(() => {

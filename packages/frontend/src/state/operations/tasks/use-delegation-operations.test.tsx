@@ -18,21 +18,22 @@ const original = {
 describe("useDelegationOperations", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
-    // SAFETY: This test controls the fixture and supplies `typeof host.workspaceGetRepoConfig` used by this case.
-    host.workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    })) as typeof host.workspaceGetRepoConfig;
+    host.workspaceGetRepoConfig = mock(
+      async (): ReturnType<typeof host.workspaceGetRepoConfig> => ({
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "obp",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      }),
+    );
   });
 
   afterEach(async () => {

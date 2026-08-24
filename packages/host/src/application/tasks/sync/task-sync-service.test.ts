@@ -46,14 +46,12 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
-// SAFETY: This test controls the fixture and supplies `TaskService` used by this case.
 const createTaskServiceFake = (
   service: Pick<TaskService, "repoPullRequestSyncDetailed">,
-): TaskService => service as TaskService;
-// SAFETY: This test controls the fixture and supplies `WorkspaceSettingsService` used by this case.
+): Pick<TaskService, "repoPullRequestSyncDetailed"> => service;
 const createWorkspaceSettingsServiceFake = (
   service: Pick<WorkspaceSettingsService, "listWorkspaces">,
-): WorkspaceSettingsService => service as WorkspaceSettingsService;
+): Pick<WorkspaceSettingsService, "listWorkspaces"> => service;
 describe("createTaskSyncService", () => {
   test("reports task publication acceptance failures without rejecting committed work", async () => {
     const reports: unknown[] = [];

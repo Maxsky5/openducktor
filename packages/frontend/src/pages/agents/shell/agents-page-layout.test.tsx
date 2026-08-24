@@ -118,8 +118,10 @@ describe("AgentsPageWorkspace terminal visibility", () => {
         terminalPanel,
       }),
     );
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
-    const draft = view.getByRole("textbox", { name: "Draft preview" }) as HTMLTextAreaElement;
+    const draft = view.getByRole("textbox", { name: "Draft preview" });
+    if (!(draft instanceof HTMLTextAreaElement)) {
+      throw new TypeError("Expected draft preview to be a textarea.");
+    }
     fireEvent.change(draft, { target: { value: "unsaved draft" } });
 
     isNarrow = true;
@@ -136,8 +138,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("keeps the terminal panel mounted while hiding and reopening it", () => {
-    // SAFETY: This test controls the fixture and supplies `typeof window.matchMedia` used by this case.
-    window.matchMedia = ((query: string) => ({
+    window.matchMedia = (query: string) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -146,7 +147,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
-    })) as typeof window.matchMedia;
+    });
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",
       isAvailable: true,
@@ -214,8 +215,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
   });
 
   test("uses terminal mode at 767px and keeps a path back to the workspace", () => {
-    // SAFETY: This test controls the fixture and supplies `typeof window.matchMedia` used by this case.
-    window.matchMedia = ((query: string) => ({
+    window.matchMedia = (query: string) => ({
       matches: query === "(max-width: 767px)",
       media: query,
       onchange: null,
@@ -224,7 +224,7 @@ describe("AgentsPageWorkspace terminal visibility", () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
       dispatchEvent: () => true,
-    })) as typeof window.matchMedia;
+    });
     const onHide = () => undefined;
     const terminalPanel: AgentStudioTerminalPanelModel = {
       scopeKey: "repo:task-1",

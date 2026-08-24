@@ -4,6 +4,7 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
+  runtimeKindSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -159,9 +160,8 @@ export const createRegistry = (
           return existingRuntime;
         }
 
-        // SAFETY: This test controls the fixture and supplies `RuntimeInstanceSummary["kind"]` used by this case.
         const runtime = createRuntime({
-          kind: input.runtimeKind as RuntimeInstanceSummary["kind"],
+          kind: runtimeKindSchema.parse(input.runtimeKind),
           runtimeId: `${input.runtimeKind}-runtime-${runtimeStore.length + 1}`,
           repoPath: input.repoPath,
           workingDirectory: input.workingDirectory,

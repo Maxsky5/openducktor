@@ -11,7 +11,11 @@ import type {
   ElectronUpdaterUpdateInfo,
 } from "./electron-app-updater-adapter";
 
-type FakeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEventMap];
+type FakeUpdaterListeners = {
+  [EventName in keyof ElectronUpdaterEventMap]: Set<
+    (payload: ElectronUpdaterEventMap[EventName]) => void
+  >;
+};
 
 export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   checkCalls = 0;
@@ -31,7 +35,10 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
   };
   nextDownloadResult: Promise<ElectronUpdaterUpdateInfo> = Promise.resolve({ version: "0.4.3" });
 
-  private readonly listeners = new Map<string, Set<(payload: FakeUpdaterEventPayload) => void>>();
+  private readonly listeners: FakeUpdaterListeners = {
+    error: new Set(),
+    "download-progress": new Set(),
+  };
 
   async checkForUpdates() {
     this.checkCalls += 1;
@@ -59,7 +66,7 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     eventName: EventName,
     payload: ElectronUpdaterEventMap[EventName],
   ): void {
-    for (const listener of this.listeners.get(eventName) ?? []) {
+    for (const listener of this.listeners[eventName]) {
       listener(payload);
     }
   }
@@ -68,14 +75,10 @@ export class FakeUpdaterAdapter implements ElectronAppUpdaterAdapter {
     eventName: EventName,
     listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
   ): () => void {
-    const listeners =
-      this.listeners.get(eventName) ?? new Set<(payload: FakeUpdaterEventPayload) => void>();
-    // SAFETY: This test controls the fixture and supplies `(payload: FakeUpdaterEventPayload) => void` used by this case.
-    listeners.add(listener as (payload: FakeUpdaterEventPayload) => void);
-    this.listeners.set(eventName, listeners);
+    const listeners = this.listeners[eventName];
+    listeners.add(listener);
     return () => {
-      // SAFETY: This test controls the fixture and supplies `(payload: FakeUpdaterEventPayload) => void` used by this case.
-      listeners.delete(listener as (payload: FakeUpdaterEventPayload) => void);
+      listeners.delete(listener);
     };
   }
 

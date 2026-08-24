@@ -22,44 +22,84 @@ function isConstAssertion(node: TypeAssertion): boolean {
   );
 }
 
-function hasSafetyComment(sourceCode: SourceCode, node: TypeAssertion): boolean {
+function assertionCommentOwner(node: TypeAssertion): ESTree.Node | null {
   let current: ESTree.Node = node;
   while (true) {
-    if (
-      sourceCode
-        .getCommentsBefore(current)
-        .some((comment) => comment.end <= node.start && /\bSAFETY\s*:/u.test(comment.value))
-    ) {
-      return true;
-    }
     if (commentOwnerKinds.has(current.type)) {
-      if (exportedDeclarationKinds.has(current.parent.type)) {
-        current = current.parent;
-        continue;
+      const parent: ESTree.Node | null = current.parent;
+      if (parent !== null && exportedDeclarationKinds.has(parent.type)) {
+        return parent;
       }
-      return false;
+      return current;
     }
-    if (current.parent.type === "Program") return false;
-    current = current.parent;
+    const parent: ESTree.Node | null = current.parent;
+    if (parent === null || parent.type === "Program") return null;
+    current = parent;
   }
 }
 
-/** Require every non-const type assertion to state the invariant TypeScript cannot express. */
+function hasSafetyComment(sourceCode: SourceCode, node: ESTree.Node): boolean {
+  return sourceCode.getCommentsBefore(node).some((comment) => {
+    if (!/\bSAFETY\s*:/u.test(comment.value)) return false;
+    return !/\bThis test (?:controls|creates|drives)\b/u.test(comment.value);
+  });
+}
+
+function compactSource(text: string): string {
+  return text.replace(/\s+/gu, "");
+}
+
+function hasRuntimeTypeProof(
+  sourceCode: SourceCode,
+  owner: ESTree.Node,
+  node: TypeAssertion,
+): boolean {
+  const proofWindow = compactSource(
+    sourceCode.text.slice(Math.max(0, owner.start - 600), owner.start),
+  );
+  const expression = compactSource(sourceCode.getText(node.expression));
+  const targetType = compactSource(sourceCode.getText(node.typeAnnotation));
+  return (
+    proofWindow.includes(`expect(${expression}).toBeInstanceOf(${targetType})`) ||
+    proofWindow.includes(`${expression}instanceof${targetType}`)
+  );
+}
+
+/** Require every non-const type assertion to have a local runtime proof or state its invariant. */
 export const requireSafetyCommentForTypeAssertionRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Require a nearby SAFETY comment for every TypeScript type assertion except const assertions.",
+        "Require a local runtime type proof or specific nearby SAFETY comment for every TypeScript type assertion except const assertions.",
     },
     messages: {
       missingSafetyComment:
-        "This type assertion has no `SAFETY:` justification. State the checked invariant immediately before the assertion or its containing statement.",
+        "This type assertion has no local runtime proof or specific `SAFETY:` justification. Check the asserted type at runtime or state the checked invariant immediately before the assertion; stock test-fixture wording does not count.",
     },
   },
   createOnce(context) {
+    const ownerAssertion = new WeakMap<ESTree.Node, TypeAssertion>();
+    const ambiguousOwners = new WeakSet<ESTree.Node>();
+
     const checkAssertion = (node: TypeAssertion) => {
       if (isConstAssertion(node) || hasSafetyComment(context.sourceCode, node)) return;
+      const owner = assertionCommentOwner(node);
+      if (owner !== null && hasRuntimeTypeProof(context.sourceCode, owner, node)) return;
+      if (owner === null || !hasSafetyComment(context.sourceCode, owner)) {
+        context.report({ node, messageId: "missingSafetyComment" });
+        return;
+      }
+
+      const firstAssertion = ownerAssertion.get(owner);
+      if (firstAssertion === undefined) {
+        ownerAssertion.set(owner, node);
+        return;
+      }
+      if (!ambiguousOwners.has(owner)) {
+        context.report({ node: firstAssertion, messageId: "missingSafetyComment" });
+        ambiguousOwners.add(owner);
+      }
       context.report({ node, messageId: "missingSafetyComment" });
     };
 

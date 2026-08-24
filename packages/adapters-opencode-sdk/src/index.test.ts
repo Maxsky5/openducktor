@@ -8,14 +8,7 @@ describe("OpencodeSdkAdapter index", () => {
     const mock = makeMockClient({ sessionIds: ["session-opencode-1", "session-2"] });
     let listCalls = 0;
     const abortSignals: AbortSignal[] = [];
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (
-      mock.client.global as {
-        event: (options?: {
-          signal?: AbortSignal;
-        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
-      }
-    ).event = async (options?: { signal?: AbortSignal }) => {
+    mock.client.global.event = async (options?: { signal?: AbortSignal }) => {
       listCalls += 1;
       abortSignals.push(options?.signal ?? AbortSignal.abort());
 
@@ -111,10 +104,9 @@ describe("OpencodeSdkAdapter index", () => {
       directory: "/repo",
       title: "PLANNER task-1",
     });
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const createInput = mock.session.createCalls[0] as {
+    const createInput: {
       permission?: Array<{ permission: string; pattern: string; action: string }>;
-    };
+    } = mock.session.createCalls[0];
     const permissionRules = createInput.permission ?? [];
     const deniedNativeTools = [
       "edit",

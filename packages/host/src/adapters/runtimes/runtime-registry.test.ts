@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  codexAppServerClientRequestSchema,
   parseCodexAppServerRequestResult,
   type CodexAppServerRequestMethod,
   type JsonValue,
@@ -997,21 +998,36 @@ describe("createRuntimeRegistry", () => {
       codexAppServer: {
         request(input) {
           calls.push(input);
-          // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-          const params = input.params as {
-            threadId: "session-1" | "session-2" | "session-3" | "session-4" | "session-5";
-          };
-          const statusByThreadId = {
-            "session-1": { type: "active", activeFlags: [] },
-            "session-2": { type: "idle" },
-            "session-3": { type: "systemError" },
-            "session-4": { type: "notLoaded" },
-            "session-5": { type: "active", activeFlags: [] },
-          } satisfies Record<typeof params.threadId, Parameters<typeof codexThreadReadResult>[2]>;
+          const request = codexAppServerClientRequestSchema.parse({
+            method: input.method,
+            params: input.params,
+          });
+          if (request.method !== "thread/read") {
+            throw new Error(`Expected thread/read, received ${request.method}.`);
+          }
+          const threadId = request.params.threadId;
+          let status: Parameters<typeof codexThreadReadResult>[2];
+          switch (threadId) {
+            case "session-1":
+            case "session-5":
+              status = { type: "active", activeFlags: [] };
+              break;
+            case "session-2":
+              status = { type: "idle" };
+              break;
+            case "session-3":
+              status = { type: "systemError" };
+              break;
+            case "session-4":
+              status = { type: "notLoaded" };
+              break;
+            default:
+              throw new Error(`Unexpected test thread '${threadId}'.`);
+          }
           return codexThreadReadResult(
-            params.threadId,
-            params.threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
-            statusByThreadId[params.threadId],
+            threadId,
+            threadId === "session-5" ? "/repo/other-worktree" : "/repo/worktree",
+            status,
           );
         },
       },

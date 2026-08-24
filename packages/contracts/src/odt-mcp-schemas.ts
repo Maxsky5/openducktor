@@ -6,7 +6,6 @@ import {
   workspaceRecordSchema,
 } from "./git-schemas";
 import {
-  type ODT_MCP_TOOL_NAMES,
   ODT_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
@@ -344,7 +343,8 @@ const pickToolSchemas = <
   >;
 };
 
-export type OdtToolName = (typeof ODT_MCP_TOOL_NAMES)[number];
+export const odtToolNameSchema = z.enum(ODT_TOOL_NAMES);
+export type OdtToolName = z.infer<typeof odtToolNameSchema>;
 
 export const ODT_TOOL_SCHEMAS = {
   odt_get_workspaces: GetWorkspacesInputSchema,

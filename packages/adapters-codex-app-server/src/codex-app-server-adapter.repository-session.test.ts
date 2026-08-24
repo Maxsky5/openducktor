@@ -4,6 +4,7 @@ import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexUserMessageInput,
+  codexLocalSessionsForTest,
   createAdapterWithTransport,
   createHarness,
   defaultCodexEffectivePolicy,
@@ -33,21 +34,8 @@ class ResumeFailingTransport extends RecordingTransport {
   }
 }
 
-// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
-const localSessions = (
-  adapter: CodexAppServerAdapter,
-): { has(externalSessionId: string): boolean } =>
-  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
-
 const markSessionUnbound = (adapter: CodexAppServerAdapter, externalSessionId: string): void => {
-  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-  const session = (
-    adapter as {
-      localSessions: {
-        get(id: string): { summary: { sessionAssociation: { kind: string } } } | undefined;
-      };
-    }
-  ).localSessions.get(externalSessionId);
+  const session = codexLocalSessionsForTest(adapter).get(externalSessionId);
   if (!session) {
     throw new Error(`Expected retained session '${externalSessionId}'.`);
   }
@@ -443,7 +431,6 @@ describe("CodexAppServerAdapter repository sessions", () => {
   test("rejects a start without session scope before runtime side effects", async () => {
     const { adapter, requireRepoRuntime, transportFactory } = createHarness();
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
       adapter.startSession({
         repoPath: "/repo",
@@ -452,7 +439,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         systemPrompt: "Use the repo rules.",
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      } as never),
+      } satisfies never),
     ).rejects.toThrow("Cannot start Codex session without session context.");
     expect(requireRepoRuntime).toHaveBeenCalledTimes(0);
     expect(transportFactory).toHaveBeenCalledTimes(0);
@@ -474,7 +461,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
       }),
     ).rejects.toThrow("name failed");
 
-    expect(localSessions(adapter).has("thread/start-runtime-live")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread/start-runtime-live")).toBe(true);
     expect(transport.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
@@ -499,7 +486,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     ).rejects.toThrow("name failed");
-    expect(localSessions(resumedAdapter).has("thread-resume")).toBe(true);
+    expect(codexLocalSessionsForTest(resumedAdapter).has("thread-resume")).toBe(true);
     expect(resumedTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       expect.objectContaining({ config: repositoryThreadConfig }),
     );
@@ -516,7 +503,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         }),
       ),
     ).rejects.toThrow("name failed");
-    expect(localSessions(restoredAdapter).has("thread-history")).toBe(true);
+    expect(codexLocalSessionsForTest(restoredAdapter).has("thread-history")).toBe(true);
     expect(restoredTransport.calls.find((call) => call.method === "thread/resume")?.params).toEqual(
       expect.objectContaining({ config: repositoryThreadConfig }),
     );

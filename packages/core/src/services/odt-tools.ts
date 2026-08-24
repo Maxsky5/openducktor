@@ -1,6 +1,7 @@
 import {
   ODT_MCP_TOOL_NAMES,
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
+  odtToolNameSchema,
   type OdtToolName,
 } from "@openducktor/contracts";
 import { ODT_WORKFLOW_READ_TOOL_NAMES } from "./odt-workflow-tools";
@@ -13,18 +14,16 @@ export const ODT_READ_TOOL_NAMES = [
   ...ODT_WORKFLOW_READ_TOOL_NAMES,
 ] as const satisfies readonly OdtToolName[];
 
-const ODT_TOOL_NAME_SET = new Set<OdtToolName>(ODT_MCP_TOOL_NAMES);
 const ODT_READ_TOOL_NAME_SET = new Set<OdtToolName>(ODT_READ_TOOL_NAMES);
 
-// SAFETY: The preceding runtime guard establishes `OdtToolName` before this assertion.
 export const normalizeOdtToolName = (
   toolName: string,
   aliasesForTool?: OdtToolAliasResolver,
 ): OdtToolName | null => {
   const trimmedToolName = toolName.trim();
-  if (ODT_TOOL_NAME_SET.has(trimmedToolName as OdtToolName)) {
-    // SAFETY: The preceding runtime guard establishes `OdtToolName` before this assertion.
-    return trimmedToolName as OdtToolName;
+  const parsedToolName = odtToolNameSchema.safeParse(trimmedToolName);
+  if (parsedToolName.success) {
+    return parsedToolName.data;
   }
   if (!aliasesForTool) {
     return null;

@@ -5,6 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { RegisteredToolName } from "./listed-tool-schema";
+import { ODT_TOOL_SCHEMAS } from "./lib";
 import { createMcpServer } from "./mcp-server";
 import {
   hasRuntimeType,
@@ -88,7 +89,6 @@ const taskSummaryPayload = {
 
 const startMockBridge = async (): Promise<{ url: string; requests: RecordedRequest[] }> => {
   const requests: RecordedRequest[] = [];
-  // SAFETY: This test controls the fixture and supplies `{ taskId?: unknown }` used by this case.
   const server = createServer(async (request, response) => {
     const url = request.url ?? "/";
 
@@ -154,11 +154,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     if (url === "/invoke/odt_read_task") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
-      if (
-        hasRuntimeType(body, "object") &&
-        body !== null &&
-        (body as { taskId?: unknown }).taskId === "missing-task"
-      ) {
+      if (hasRuntimeType(body, "object") && body !== null && body.taskId === "missing-task") {
         writeJson(
           response,
           {
@@ -172,11 +168,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         );
         return;
       }
-      if (
-        hasRuntimeType(body, "object") &&
-        body !== null &&
-        (body as { taskId?: unknown }).taskId === "bad-response"
-      ) {
+      if (hasRuntimeType(body, "object") && body !== null && body.taskId === "bad-response") {
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
@@ -253,11 +245,13 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
 };
 
 const parseAllowedToolNames = (allowedTools?: string): RegisteredToolName[] | undefined => {
-  // SAFETY: This test controls the fixture and supplies `RegisteredToolName[] | undefined` used by this case.
   return allowedTools
     ?.split(",")
     .map((toolName) => toolName.trim())
-    .filter((toolName) => toolName.length > 0) as RegisteredToolName[] | undefined;
+    .filter(
+      (toolName): toolName is RegisteredToolName =>
+        toolName.length > 0 && Object.hasOwn(ODT_TOOL_SCHEMAS, toolName),
+    );
 };
 
 const createTransport = async (
@@ -762,10 +756,7 @@ describe("MCP server tool results", () => {
       await client.connect(transport);
       const tools = await client.listTools();
 
-      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-      const setPlanTool = (
-        tools as { tools?: Array<{ name?: string; description?: string; inputSchema?: JsonValue }> }
-      ).tools?.find((entry) => entry.name === "odt_set_plan");
+      const setPlanTool = tools.tools.find((entry) => entry.name === "odt_set_plan");
       expect(setPlanTool).toBeTruthy();
 
       expect(setPlanTool?.description).not.toContain("subtask");

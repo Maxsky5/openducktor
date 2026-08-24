@@ -47,8 +47,7 @@ const makeSocket = (
     },
     close: (code: number, reason: string) => closed.push([code, reason]),
   };
-  // SAFETY: This test controls the fixture and supplies `never` used by this case.
-  return { socket: socket as never, sent, closed, data: socket.data };
+  return { socket, sent, closed, data: socket.data };
 };
 
 describe("terminalWebSocketHandler", () => {
@@ -264,11 +263,14 @@ describe("terminalWebSocketHandler", () => {
   });
 
   test("reports a stale attach from the real terminal service as forgotten", async () => {
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
+    // SAFETY: A stale attach exits before the terminal service reads the filesystem dependency.
+    const unusedFilesystem = {} as FilesystemPort;
+    // SAFETY: A stale attach exits before the terminal service starts a PTY.
+    const unusedPtyPort = {} as TerminalPtyPort;
     const service = await Effect.runPromise(
       createTerminalService({
-        filesystem: {} as FilesystemPort,
-        ptyPort: {} as TerminalPtyPort,
+        filesystem: unusedFilesystem,
+        ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>
           Effect.succeed({ shell: "/bin/sh", args: [], env: { PATH: "/usr/bin" } }),
         hostInstanceIdFactory: () => "host-1",
@@ -386,7 +388,7 @@ describe("terminalWebSocketHandler", () => {
       );
     }
     await Bun.sleep(0);
-    terminalWebSocketHandler.close?.(harness.socket, 1000, "done");
+    terminalWebSocketHandler.close?.(harness.socket);
     await Bun.sleep(0);
     expect(detached.sort()).toEqual(["terminal-1", "terminal-2"]);
     expect(harness.data.clientSession).toBeNull();

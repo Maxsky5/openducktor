@@ -278,6 +278,14 @@ const getLastTextSegment = (container: HTMLElement): HTMLElement => {
   return editable;
 };
 
+const requireClosestHTMLElement = (element: Element, selector: string): HTMLElement => {
+  const closest = element.closest(selector);
+  if (!(closest instanceof HTMLElement)) {
+    throw new Error(`Expected an HTMLElement matching ${selector}`);
+  }
+  return closest;
+};
+
 const collapseSelectionOnEditorRoot = (container: HTMLElement): HTMLElement => {
   const editorRoot = getEditorRoot(container);
   const collapsedRange = document.createRange();
@@ -425,6 +433,10 @@ const createClipboardFileItem = (file: File) => ({
   getAsFile: () => file,
 });
 
+type FileSearchResolution = {
+  resolve?: (results: AgentFileSearchResult[]) => void;
+};
+
 describe("AgentChatComposerEditor", () => {
   test("exposes the rich editor as a collapsed named combobox", () => {
     render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
@@ -440,11 +452,11 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("owns reference popup state while focus stays on the editor", async () => {
-    let resolveSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const pendingSearch: FileSearchResolution = {};
     const searchFiles = mock(
       () =>
         new Promise<AgentFileSearchResult[]>((resolve) => {
-          resolveSearch = resolve;
+          pendingSearch.resolve = resolve;
         }),
     );
     const onSend = mock(() => {});
@@ -471,16 +483,15 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        expect(resolveSearch).not.toBeNull();
+        expect(pendingSearch.resolve).toBeDefined();
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    if (!resolveSearch) {
+    const finishSearch = pendingSearch.resolve;
+    if (!finishSearch) {
       throw new Error("Expected file search to be pending");
     }
-    // SAFETY: This test controls the fixture and supplies `(results: AgentFileSearchResult[]) => void` used by this case.
-    const finishSearch = resolveSearch as (results: AgentFileSearchResult[]) => void;
     finishSearch([
       buildFileSearchResult({ id: "alpha", path: "src/alpha.ts", name: "alpha.ts" }),
       buildFileSearchResult({ id: "beta", path: "src/beta.ts", name: "beta.ts" }),
@@ -1304,14 +1315,14 @@ describe("AgentChatComposerEditor", () => {
   });
 
   test("keeps previous file-search results visible while the next query loads", async () => {
-    let resolveSecondSearch: ((results: AgentFileSearchResult[]) => void) | null = null;
+    const pendingSecondSearch: FileSearchResolution = {};
     const searchFiles = mock((query: string) => {
       if (query === "a") {
         return Promise.resolve([buildFileSearchResult({ path: "src/alpha.ts", name: "alpha.ts" })]);
       }
       if (query === "ab") {
         return new Promise<AgentFileSearchResult[]>((resolve) => {
-          resolveSecondSearch = resolve;
+          pendingSecondSearch.resolve = resolve;
         });
       }
       return Promise.resolve([]);
@@ -1335,13 +1346,12 @@ describe("AgentChatComposerEditor", () => {
     expect(screen.queryByText("Searching files...")).toBeNull();
 
     await waitFor(() => {
-      expect(resolveSecondSearch).not.toBeNull();
+      expect(pendingSecondSearch.resolve).toBeDefined();
     });
-    if (!resolveSecondSearch) {
+    const finishSecondSearch = pendingSecondSearch.resolve;
+    if (!finishSecondSearch) {
       throw new Error("Expected second file search to be pending");
     }
-    // SAFETY: This test controls the fixture and supplies `(results: AgentFileSearchResult[]) => void` used by this case.
-    const finishSecondSearch = resolveSecondSearch as (results: AgentFileSearchResult[]) => void;
     finishSecondSearch([buildFileSearchResult({ path: "src/ab.ts", name: "ab.ts" })]);
 
     await waitFor(() => {
@@ -1528,8 +1538,7 @@ describe("AgentChatComposerEditor", () => {
         selection?.removeAllRanges();
         selection?.addRange(range);
       }
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      fireEvent.input(leadingEditable.closest('[contenteditable="true"]') as HTMLElement);
+      fireEvent.input(requireClosestHTMLElement(leadingEditable, '[contenteditable="true"]'));
 
       await waitFor(
         () => {
@@ -1691,12 +1700,9 @@ describe("AgentChatComposerEditor", () => {
       if (!draftState) {
         throw new Error("Expected draft state output");
       }
-      // SAFETY: This test controls the fixture and supplies `AgentChatComposerDraft` used by this case.
-      const parsed = JSON.parse(draftState) as AgentChatComposerDraft;
-      expect(parsed.attachments).toHaveLength(1);
-      expect(parsed.attachments?.[0]?.name).toBe("screenshot.png");
-      expect(parsed.segments).toHaveLength(1);
-      expect(parsed.segments[0]).toMatchObject({ kind: "text", text: "" });
+      expect(draftState).toContain('"attachments":[{"id":"attachment-1"');
+      expect(draftState).toContain('"name":"screenshot.png"');
+      expect(draftState).toMatch(/"segments":\[\{"id":"[^"]+","kind":"text","text":""\}\]/);
     });
   });
 
@@ -2185,10 +2191,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        const classNames = (updatedTrailingEditable as HTMLElement).className.split(/\s+/);
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        const classNames = updatedTrailingEditable.className.split(/\s+/);
         expect(classNames).toContain("inline");
         expect(classNames).not.toContain("inline-block");
         expect(classNames).not.toContain("min-w-[1px]");
@@ -2235,8 +2239,7 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2252,12 +2255,9 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).className).not.toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("");
+        expect(updatedTrailingEditable.className).toContain("inline-block");
+        expect(updatedTrailingEditable.className).not.toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2298,10 +2298,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.className).toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2375,10 +2373,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-        expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
+        expect(updatedTrailingEditable.textContent).toBe("\n\u200B");
+        expect(updatedTrailingEditable.className).toContain("after:w-px");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -2448,18 +2444,14 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     await waitFor(() => {
       const updatedTrailingEditable = getLastTextSegment(rendered.container);
       expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      expect((updatedTrailingEditable as HTMLElement).className).toContain("inline");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("inline-block");
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      expect((updatedTrailingEditable as HTMLElement).className).not.toContain("min-w-[1px]");
+      expect(updatedTrailingEditable.className).toContain("inline");
+      expect(updatedTrailingEditable.className).not.toContain("inline-block");
+      expect(updatedTrailingEditable.className).not.toContain("min-w-[1px]");
     });
   });
 
@@ -2500,8 +2492,7 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     await waitFor(() => {
       const editorRoot = rendered.container.querySelector("[data-composer-content-root]");
@@ -2549,19 +2540,18 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(
+      requireClosestHTMLElement(originalTrailingEditable, '[contenteditable="true"]'),
+    );
 
     await waitFor(() => {
       const updatedTrailingEditable =
         rendered.container.querySelectorAll("[data-text-segment-id]")[1];
-      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
-        trailingSegmentId,
-      );
-      expect(updatedTrailingEditable?.textContent).toBe(" ");
+      if (!(updatedTrailingEditable instanceof HTMLElement)) {
+        throw new Error("Expected the trailing file-chip text segment");
+      }
+      expect(updatedTrailingEditable.dataset.textSegmentId).toBe(trailingSegmentId);
+      expect(updatedTrailingEditable.textContent).toBe(" ");
     });
   });
 
@@ -2604,19 +2594,18 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(
+      requireClosestHTMLElement(originalTrailingEditable, '[contenteditable="true"]'),
+    );
 
     await waitFor(() => {
       const updatedTrailingEditable =
         rendered.container.querySelectorAll("[data-text-segment-id]")[1];
-      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
-        trailingSegmentId,
-      );
-      expect(updatedTrailingEditable?.textContent).toBe(" ");
+      if (!(updatedTrailingEditable instanceof HTMLElement)) {
+        throw new Error("Expected the trailing skill-chip text segment");
+      }
+      expect(updatedTrailingEditable.dataset.textSegmentId).toBe(trailingSegmentId);
+      expect(updatedTrailingEditable.textContent).toBe(" ");
     });
   });
 
@@ -2656,8 +2645,7 @@ describe("AgentChatComposerEditor", () => {
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+    fireEvent.input(requireClosestHTMLElement(trailingEditable, '[contenteditable="true"]'));
 
     const editorRoot = rendered.container.querySelector('[contenteditable="true"]');
     if (!(editorRoot instanceof HTMLElement)) {

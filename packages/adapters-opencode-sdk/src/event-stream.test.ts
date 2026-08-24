@@ -1321,21 +1321,20 @@ describe("event-stream", () => {
         }),
       ],
       (nextSessionRecord) => {
-        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-attachment-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
               IMAGE_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
               IMAGE_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
@@ -1409,21 +1408,20 @@ describe("event-stream", () => {
       ],
       (nextSessionRecord) => {
         nextSessionRecord.messageRoleById.set("msg-attachment-partial-1", "user");
-        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-attachment-partial-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
               IMAGE_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
             [
               { kind: "text", text: "Describe what is in this screenshot" },
               IMAGE_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART],
@@ -1496,21 +1494,20 @@ describe("event-stream", () => {
         }),
       ],
       (nextSessionRecord) => {
-        // SAFETY: This test controls the fixture and supplies `AgentUserMessagePart[]` used by this case.
         nextSessionRecord.pendingQueuedUserMessages.push({
           messageId: "msg-pdf-1",
           signature: buildQueuedRequestSignature(
             [
               { kind: "text", text: "Summarize this PDF" },
               PDF_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
             [
               { kind: "text", text: "Summarize this PDF" },
               PDF_ATTACHMENT_DISPLAY_PART,
-            ] as AgentUserMessagePart[],
+            ] satisfies AgentUserMessagePart[],
             undefined,
           ),
           attachmentParts: [PDF_ATTACHMENT_DISPLAY_PART],

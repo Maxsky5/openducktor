@@ -19,11 +19,12 @@ import type {
   SessionStatus,
   SyncEventSessionCreated,
 } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { JsonObject } from "@openducktor/contracts";
 import type { AgentEvent } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import { subscribeSessionToRuntimeEvents } from "./session-registry";
-import { asUnknownRecord } from "./guards";
+import { asUnknownRecord, type UnknownRecord } from "./guards";
 import { createOpencodeEventFixtures } from "./opencode-protocol-test-fixtures";
 import type {
   OpencodeEventLogger,
@@ -371,30 +372,24 @@ export const malformedControlEvent = (
   properties: ControlEventProperties,
 ): MalformedControlEvent => ({ id: `malformed-${type}`, type, properties });
 
-export const makeClientWithEvents = (events: TestGlobalEventPayload[]): OpencodeClient => {
-  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
-  return {
-    global: {
-      event: async () => {
-        async function* iterator() {
-          for (const [index, event] of events.entries()) {
-            const properties = "properties" in event ? event.properties : undefined;
-            const directoryValue =
-              properties && "directory" in properties ? properties.directory : undefined;
-            const directory = hasRuntimeType(directoryValue, "string") ? directoryValue : "/repo";
-            const eventRecord = asUnknownRecord(event);
-            if (!eventRecord) {
-              throw new Error("Expected an OpenCode event fixture object.");
-            }
-            for (const payload of createOpencodeEventFixtures(eventRecord, index)) {
-              yield { directory, payload };
-            }
-          }
+export const makeClientWithEvents = (events: UnknownRecord[]): OpencodeClient => {
+  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
+  const event = async () => {
+    async function* iterator() {
+      for (const [index, rawEvent] of events.entries()) {
+        const properties = asUnknownRecord(rawEvent.properties);
+        const directoryValue = properties?.directory;
+        const directory = hasRuntimeType(directoryValue, "string") ? directoryValue : "/repo";
+        for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
+          yield { directory, payload };
         }
-        return { stream: iterator() };
-      },
-    },
-  } as OpencodeClient;
+      }
+    }
+    return { stream: iterator() };
+  };
+  // SAFETY: createOpencodeEventFixtures validates each raw payload before this deliberate malformed-ingress test stream yields it.
+  baseClient.global.event = event as OpencodeClient["global"]["event"];
+  return baseClient;
 };
 
 export const makeSessionInput = (): SessionInput => ({

@@ -168,8 +168,10 @@ describe("verifyPackagedElectronSidecars", () => {
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged",
     });
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toContain("openducktor-mcp.exe");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("openducktor-mcp.exe");
   });
 
   test("rejects an empty required Windows MCP sidecar", async () => {
@@ -216,8 +218,10 @@ describe("verifyPackagedElectronSidecars", () => {
       _tag: "ElectronOperationError",
       operation: "electron.sidecar.verify-packaged-executable",
     });
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toContain("expected an executable file");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("expected an executable file");
   });
 
   test("accepts non-empty executable macOS MCP sidecar", async () => {

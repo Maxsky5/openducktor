@@ -3,6 +3,7 @@ import {
   type AgentRole,
   type AgentToolName,
   agentSessionStartModeSchema,
+  agentToolNameSchema,
 } from "./agent-workflow-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
 
@@ -648,10 +649,9 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
-// SAFETY: runtimeCapabilityClasses satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>; Object.entries only erases those key and value types.
-const runtimeCapabilityClassEntries = Object.entries(runtimeCapabilityClasses).sort(
-  ([left], [right]) => right.length - left.length,
-) as Array<[RuntimeCapabilityKey, RuntimeCapabilityClass]>;
+const runtimeCapabilityClassEntries = runtimeCapabilityKeyValues
+  .map((key) => [key, runtimeCapabilityClasses[key]] as const)
+  .sort(([left], [right]) => right.length - left.length);
 
 const runtimeDescriptorLaunchScopedConstraintPaths = new Set([
   "sessionLifecycle.forkTargets",
@@ -765,25 +765,16 @@ const runtimeWorkflowToolAliasesSchema = z
     message: "Workflow tool aliases for a canonical tool must be unique.",
   });
 
-// SAFETY: The map visits every canonical AgentToolName once and assigns the same optional alias schema.
-const runtimeWorkflowToolAliasesByCanonical = Object.fromEntries(
-  ODT_WORKFLOW_AGENT_TOOL_NAMES.map((toolName) => [
-    toolName,
-    runtimeWorkflowToolAliasesSchema.optional(),
-  ]),
-) as Record<AgentToolName, z.ZodOptional<typeof runtimeWorkflowToolAliasesSchema>>;
-
-// SAFETY: The map keys come from the canonical AgentToolName list above.
+const canonicalWorkflowToolNames = new Set<string>(ODT_WORKFLOW_AGENT_TOOL_NAMES);
 const runtimeWorkflowToolAliasesByCanonicalSchema = z
-  .object(runtimeWorkflowToolAliasesByCanonical)
-  .strict()
+  .partialRecord(agentToolNameSchema, runtimeWorkflowToolAliasesSchema)
   .superRefine((aliasesByCanonical, context) => {
     const canonicalByAlias = new Map<string, AgentToolName>();
 
     for (const canonicalTool of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
       const aliases = aliasesByCanonical[canonicalTool] ?? [];
       for (const [index, alias] of aliases.entries()) {
-        if (ODT_WORKFLOW_AGENT_TOOL_NAMES.includes(alias as AgentToolName)) {
+        if (canonicalWorkflowToolNames.has(alias)) {
           context.addIssue({
             code: "custom",
             path: [canonicalTool, index],

@@ -3,6 +3,7 @@ import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
+  createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -100,11 +101,10 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       workingDirectory: "/repo/worktree",
     });
-    // SAFETY: This test controls the fixture and supplies `HookArgs["selectedView"]["selectedTask"]` used by this case.
     const harness = createHookHarness(
       createBaseArgs({
         selectedView: createSelectedView({
-          selectedTask: { id: "task-1" } as HookArgs["selectedView"]["selectedTask"],
+          selectedTask: createTaskCardFixture({ id: "task-1" }),
           selectedSession: createSelectedSession({
             identity: toAgentSessionIdentity(loadedSession),
             activityState: "running",

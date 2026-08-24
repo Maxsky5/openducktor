@@ -59,7 +59,6 @@ type FakeGitPortInput = {
   removeWorktreeErrors?: Record<string, Error>;
   ancestorResults?: Record<string, boolean>;
 };
-// SAFETY: This test drives the failure path that supplies `GitPort` before this assertion.
 const createFakeGitPort = ({
   canonicalPaths = {},
   gitRepositories = [],
@@ -518,7 +517,7 @@ const createFakeGitPort = ({
           }),
       });
     },
-  }) as GitPort;
+  }) satisfies GitPort;
 const createFakeSettingsConfig = (
   config: GlobalConfig | null,
   existingPaths?: Set<string>,

@@ -41,7 +41,9 @@ describe("useOnboardingRuntimeSetup", () => {
 
     try {
       renderOnboarding({ runtimes });
-      fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+      );
 
       await screen.findByRole("heading", { name: "Configure coding agents" });
       expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
@@ -99,7 +101,9 @@ describe("useOnboardingRuntimeSetup", () => {
       expect(opencodeSection().textContent).not.toContain("OC");
 
       await act(async () => {
-        fireEvent.click(within(opencodeSection()).getByRole("button", { name: "Browse" }));
+        fireEvent.click(
+          within(opencodeSection()).getByRole<HTMLButtonElement>("button", { name: "Browse" }),
+        );
         await Promise.resolve();
       });
 
@@ -110,7 +114,7 @@ describe("useOnboardingRuntimeSetup", () => {
         }),
       );
       await screen.findByText("/Users/dev/.local/bin");
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
     } finally {
       host.filesystemListDirectory = original.filesystemListDirectory;
       host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
@@ -137,24 +141,25 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+        );
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       await screen.findByText("Settings snapshot failed");
       expect(screen.queryByLabelText("Loading coding agent settings")).toBeNull();
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       await waitFor(() => expect(attempts).toBe(2));
       await screen.findByRole("heading", { name: "OpenCode" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
     } finally {
       host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
@@ -183,23 +188,24 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+        );
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       await screen.findByText("Runtime definitions failed");
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+        fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       await waitFor(() => expect(attempts).toBe(2));
       await screen.findByRole("heading", { name: "OpenCode" });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
     } finally {
       host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
@@ -232,22 +238,20 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+        );
         await Promise.resolve();
       });
       await screen.findByText("Runtime validation failed");
       expect(screen.queryByText("Coding agent setup could not load")).toBeNull();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
-        (
-          within(opencodeSection()).getByRole("textbox", {
-            name: "Executable path",
-          }) as HTMLInputElement
-        ).disabled,
+        within(opencodeSection()).getByRole<HTMLInputElement>("textbox", {
+          name: "Executable path",
+        }).disabled,
       ).toBe(false);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
-        (within(opencodeSection()).getByRole("switch", { name: "Enabled" }) as HTMLButtonElement)
+        within(opencodeSection()).getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
           .disabled,
       ).toBe(false);
     } finally {
@@ -281,7 +285,9 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+        );
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -353,11 +359,10 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
       expect(screen.queryByText("Disabled Claude validation failed")).toBeNull();
     } finally {
@@ -400,11 +405,10 @@ describe("useOnboardingRuntimeSetup", () => {
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
       fireEvent.change(
         within(opencodeSection()).getByRole("textbox", { name: "Executable path" }),
@@ -440,15 +444,16 @@ describe("useOnboardingRuntimeSetup", () => {
       await within(opencodeSection()).findByText("Available");
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+        );
       });
       await screen.findByText("Runtime discovery failed");
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
         false,
       );
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
       await screen.findByRole("heading", { name: "Open your first workspace" });
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
@@ -473,7 +478,9 @@ describe("useOnboardingRuntimeSetup", () => {
       const queryClient = renderOnboarding({ runtimes });
       await enterRuntimeStage();
 
-      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+      );
       await waitFor(() =>
         expect(
           queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus,
@@ -518,23 +525,21 @@ describe("useOnboardingRuntimeSetup", () => {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
 
-      fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+      );
       await screen.findByRole("button", { name: "Scanning..." });
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      const pathInput = screen.getByLabelText("Executable path", {
+      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
         selector: "#runtime-executable-opencode",
-      }) as HTMLInputElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const enabledSwitch = within(opencodeSection()).getByRole("switch", {
+      });
+      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
         name: "Enabled",
-      }) as HTMLButtonElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const browseButton = within(opencodeSection()).getByRole("button", {
+      });
+      const browseButton = within(opencodeSection()).getByRole<HTMLButtonElement>("button", {
         name: "Browse",
-      }) as HTMLButtonElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const backButton = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
+      });
+      const backButton = screen.getByRole<HTMLButtonElement>("button", { name: "Back" });
 
       expect(pathInput.disabled).toBe(true);
       expect(enabledSwitch.disabled).toBe(true);
@@ -584,17 +589,16 @@ describe("useOnboardingRuntimeSetup", () => {
       requests.length = 0;
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+        );
       });
 
       await waitFor(() => expect(requests).toEqual(["discover"]));
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
-        (
-          screen.getByLabelText("Executable path", {
-            selector: "#runtime-executable-opencode",
-          }) as HTMLInputElement
-        ).value,
+        screen.getByLabelText<HTMLInputElement>("Executable path", {
+          selector: "#runtime-executable-opencode",
+        }).value,
       ).toBe("/discovered/opencode");
       await within(opencodeSection()).findByText("Available");
     } finally {
@@ -616,13 +620,17 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Configure coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+        );
       });
 
       await screen.findByRole("heading", { name: "Configure coding agents" });
       await within(opencodeSection()).findByText("Needs attention");
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Scan for coding agents" }));
+        fireEvent.click(
+          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+        );
       });
 
       await within(opencodeSection()).findByText("Available");
@@ -655,14 +663,15 @@ describe("useOnboardingRuntimeSetup", () => {
       await within(opencodeSection()).findByText("Available");
 
       fireEvent.change(
-        screen.getByLabelText("Executable path", { selector: "#runtime-executable-opencode" }),
+        screen.getByLabelText<HTMLInputElement>("Executable path", {
+          selector: "#runtime-executable-opencode",
+        }),
         {
           target: { value: "/invalid/opencode" },
         },
       );
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
         true,
       );
       expect(within(opencodeSection()).queryByText("Available")).toBeNull();
@@ -677,18 +686,19 @@ describe("useOnboardingRuntimeSetup", () => {
           ),
         );
       });
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
 
       expect(screen.getAllByText("OpenCode executable is invalid.").length).toBeGreaterThan(0);
       expect(saveSettingsSnapshot).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(
-        screen.getByLabelText("Executable path", { selector: "#runtime-executable-opencode" }),
+        screen.getByLabelText<HTMLInputElement>("Executable path", {
+          selector: "#runtime-executable-opencode",
+        }),
       );
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
@@ -706,8 +716,9 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes, true);
-      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
-      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      const kinds = runtimeDefinitions
+        .map((definition) => definition.kind)
+        .filter((kind) => kind in input.paths);
       requests.push(kinds);
       if (input.paths.opencode === "/changed/opencode") return changedCheck.promise;
       return {
@@ -727,7 +738,9 @@ describe("useOnboardingRuntimeSetup", () => {
       requests.length = 0;
 
       fireEvent.change(
-        screen.getByLabelText("Executable path", { selector: "#runtime-executable-opencode" }),
+        screen.getByLabelText<HTMLInputElement>("Executable path", {
+          selector: "#runtime-executable-opencode",
+        }),
         { target: { value: "/changed/opencode" } },
       );
 
@@ -766,8 +779,9 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
-      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
-      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      const kinds = runtimeDefinitions
+        .map((definition) => definition.kind)
+        .filter((kind) => kind in input.paths);
       return {
         runtimes: kinds.map((kind) => {
           const path = input.paths[kind] ?? "";
@@ -786,10 +800,12 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
-      const pathInput = screen.getByLabelText("Executable path", {
+      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
         selector: "#runtime-executable-opencode",
       });
-      const enabledSwitch = within(opencodeSection()).getByRole("switch", { name: "Enabled" });
+      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
+        name: "Enabled",
+      });
 
       fireEvent.change(pathInput, { target: { value: "/custom/opencode" } });
       await waitFor(() => expect(enabledSwitch.getAttribute("aria-checked")).toBe("true"));
@@ -813,8 +829,9 @@ describe("useOnboardingRuntimeSetup", () => {
     const originalCheck = host.runtimeExecutablesCheck;
     host.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
-      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
-      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      const kinds = runtimeDefinitions
+        .map((definition) => definition.kind)
+        .filter((kind) => kind in input.paths);
       return {
         runtimes: kinds.map((kind) => {
           const requestedPath = input.paths[kind] ?? "";
@@ -833,10 +850,9 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      const pathInput = screen.getByLabelText("Executable path", {
+      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
         selector: "#runtime-executable-opencode",
-      }) as HTMLInputElement;
+      });
 
       fireEvent.change(pathInput, { target: { value: "~/.local/bin/opencode" } });
 
@@ -844,7 +860,7 @@ describe("useOnboardingRuntimeSetup", () => {
       expect(pathInput.value).toBe("~/.local/bin/opencode");
       expect(
         within(opencodeSection())
-          .getByRole("switch", { name: "Enabled" })
+          .getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
           .getAttribute("aria-checked"),
       ).toBe("true");
     } finally {
@@ -870,26 +886,29 @@ describe("useOnboardingRuntimeSetup", () => {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
       expect(screen.queryByText("Agent tools")).toBeNull();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       await waitFor(() =>
-        expect(
-          (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled,
-        ).toBe(false),
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          false,
+        ),
       );
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
       await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
-      fireEvent.click(screen.getByRole("button", { name: "Continue without a coding agent" }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
+      );
       const saveError = await screen.findByText("Settings write failed");
       expect(screen.getByText("Configure coding agents")).toBeTruthy();
       expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
       expect(document.activeElement).toBe(saveError);
 
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
       await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
-      fireEvent.click(screen.getByRole("button", { name: "Continue without a coding agent" }));
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
+      );
       await screen.findByRole("heading", { name: "Open your first workspace" });
       expect(screen.queryByText("Repository boundary")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
       expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
     } finally {
@@ -924,22 +943,18 @@ describe("useOnboardingRuntimeSetup", () => {
 
       const heading = screen.getByRole("heading", { name: "Configure coding agents" });
       const stage = heading.closest('[data-slot="card"]');
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
-      const pathInput = screen.getByLabelText("Executable path", {
+      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
         selector: "#runtime-executable-opencode",
-      }) as HTMLInputElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const enabledSwitch = within(opencodeSection()).getByRole("switch", {
+      });
+      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
         name: "Enabled",
-      }) as HTMLButtonElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const scanButton = screen.getByRole("button", {
+      });
+      const scanButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Scan for coding agents",
-      }) as HTMLButtonElement;
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const continueButton = screen.getByRole("button", {
+      });
+      const continueButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Continue to workspace",
-      }) as HTMLButtonElement;
+      });
 
       await act(async () => {
         fireEvent.click(continueButton);
@@ -954,7 +969,9 @@ describe("useOnboardingRuntimeSetup", () => {
       expect(enabledSwitch.disabled).toBe(false);
       expect(scanButton.disabled).toBe(false);
       expect(continueButton.disabled).toBe(true);
-      expect(screen.getByRole("button", { name: "Saving coding agents..." })).toBe(continueButton);
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Saving coding agents..." }),
+      ).toBe(continueButton);
 
       await act(async () => save.resolve());
       await screen.findByRole("heading", { name: "Open your first workspace" });
@@ -973,24 +990,20 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes, saveSettingsSnapshot });
       await enterRuntimeStage();
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
       await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-      const confirmButton = screen.getByRole("button", {
+      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Continue without a coding agent",
       });
       fireEvent.click(confirmButton);
       fireEvent.click(confirmButton);
 
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect(
-        (screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled,
-      ).toBe(true);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving..." }).disabled).toBe(
         true,
       );
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
 
       await act(async () => save.resolve());
       await screen.findByRole("heading", { name: "Open your first workspace" });
@@ -1007,10 +1020,10 @@ describe("useOnboardingRuntimeSetup", () => {
     try {
       renderOnboarding({ runtimes });
       await enterRuntimeStage();
-      fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
       await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
 
       expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
       expect(

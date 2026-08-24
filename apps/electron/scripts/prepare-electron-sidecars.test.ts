@@ -120,8 +120,10 @@ describe("prepareElectronSidecars", () => {
       operation: "electron.sidecar.assert-file-exists",
       path: mcpEntrypoint,
     });
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toContain("OpenDucktor MCP entrypoint is missing");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("OpenDucktor MCP entrypoint is missing");
     expect(sideEffects).toEqual([]);
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });

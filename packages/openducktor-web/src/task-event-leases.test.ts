@@ -65,6 +65,12 @@ const createController = () => {
   };
 };
 
+const createInactiveTimer = (): ReturnType<typeof setTimeout> => {
+  const timer = setTimeout(() => {}, 0);
+  clearTimeout(timer);
+  return timer;
+};
+
 test("expires a created lease that never attaches and unsubscribes exactly once", () => {
   const fake = createFakeStream();
   const expiryCallbacks: Array<() => void> = [];
@@ -73,8 +79,7 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
-      // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
-      return {} as ReturnType<typeof setTimeout>;
+      return createInactiveTimer();
     },
     taskEventStream: fake.stream,
   });
@@ -93,12 +98,11 @@ test("expires a created lease that never attaches and unsubscribes exactly once"
 test("cancels the creation expiry timer when an SSE connection attaches", () => {
   const fake = createFakeStream();
   const clearExpiryTimer = mock(() => {});
-  // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
-    scheduleExpiry: () => ({}) as ReturnType<typeof setTimeout>,
+    scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
   });
   const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
@@ -113,12 +117,11 @@ test("cancels the creation expiry timer when an SSE connection attaches", () => 
 test("clears the creation timer and unsubscribes once on explicit delete or shutdown", () => {
   const fake = createFakeStream();
   const clearExpiryTimer = mock(() => {});
-  // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
   const manager = createTaskEventLeaseManager({
     clearExpiryTimer,
     encodeFrame: () => new Uint8Array(),
     reportDeliveryFailure: () => {},
-    scheduleExpiry: () => ({}) as ReturnType<typeof setTimeout>,
+    scheduleExpiry: createInactiveTimer,
     taskEventStream: fake.stream,
   });
   const deletedLease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
@@ -229,8 +232,7 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
     reportDeliveryFailure: () => {},
     scheduleExpiry: (callback) => {
       expiryCallbacks.push(callback);
-      // SAFETY: This test controls the fixture and supplies `ReturnType<typeof setTimeout>` used by this case.
-      return {} as ReturnType<typeof setTimeout>;
+      return createInactiveTimer();
     },
     taskEventStream: fake.stream,
   });

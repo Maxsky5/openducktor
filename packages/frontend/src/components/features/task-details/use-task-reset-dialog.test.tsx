@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { act } from "react";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { installReactActEnvironment } from "@/test-utils/react-act-environment";
 import { useTaskResetDialog } from "./use-task-reset-dialog";
 
 type HarnessProps = {
@@ -11,11 +12,7 @@ type HarnessProps = {
   onResetTask: ((taskId: string) => Promise<void>) | undefined;
 };
 
-// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironment = globalThis as {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-let originalIsReactActEnvironment: boolean | undefined;
+let restoreReactActEnvironment: (() => void) | null = null;
 
 const makeTask = (id: string): TaskCard => ({
   id,
@@ -69,8 +66,7 @@ describe("use-task-reset-dialog", () => {
   };
 
   beforeEach(() => {
-    originalIsReactActEnvironment = reactActEnvironment.IS_REACT_ACT_ENVIRONMENT;
-    reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    restoreReactActEnvironment = installReactActEnvironment();
     latest = null;
     harness = null;
   });
@@ -79,11 +75,8 @@ describe("use-task-reset-dialog", () => {
     await harness?.unmount();
     harness = null;
     latest = null;
-    if (originalIsReactActEnvironment === undefined) {
-      delete reactActEnvironment.IS_REACT_ACT_ENVIRONMENT;
-    } else {
-      reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = originalIsReactActEnvironment;
-    }
+    restoreReactActEnvironment?.();
+    restoreReactActEnvironment = null;
   });
 
   test("closes the sheet after a successful reset", async () => {

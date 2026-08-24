@@ -12,6 +12,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { createDiscoveredRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
@@ -71,7 +72,6 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
       ...(processEnv === undefined ? undefined : { env: processEnv }),
       systemCommands: systemCommands ?? createSystemCommands(),
     });
-  // SAFETY: This test controls the fixture and supplies `never` used by this case.
   return createEffectCodexWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery: effectiveToolDiscovery,
@@ -83,13 +83,14 @@ const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterT
       prepareLiveSessionAdapter ??
       ((runtime) =>
         Effect.succeed({
-          adapter: {
-            binding: {
+          adapter: createAgentSessionRuntimeAdapterTestDouble(
+            {
               runtimeId: runtime.runtimeId,
               runtimeKind: runtime.kind,
               repoPath: runtime.repoPath,
             },
-          } as never,
+            {},
+          ),
           emitRuntimeEvent: () => {},
           startForwarding: () => Effect.void,
           discard: () => Effect.void,
@@ -495,8 +496,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
-      // SAFETY: This test controls the fixture and supplies `number` used by this case.
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
@@ -651,22 +652,31 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
       );
 
-      // SAFETY: This test controls the fixture and supplies `typeof setTimeout` used by this case.
-      globalThis.setTimeout = ((handler: (...args: unknown[]) => void, timeout?: number) => {
-        const timer = originalSetTimeout(handler, timeout);
+      const replacementSetTimeout = (
+        handler: (...args: unknown[]) => void,
+        timeout?: number,
+        ...args: unknown[]
+      ) => {
+        const timer = originalSetTimeout(handler, timeout, ...args);
         if (timeout === 4_000) {
           requestTimeout = timer;
         }
         return timer;
-      }) as typeof setTimeout;
-      // SAFETY: This test controls the fixture and supplies `typeof clearTimeout` used by this case.
-      globalThis.clearTimeout = ((timer) => {
+      };
+      const replacementClearTimeout = (timer: NodeJS.Timeout | undefined) => {
         if (timer === requestTimeout) {
           requestTimeoutCleared = true;
         }
-        // SAFETY: This test controls the fixture and supplies `Parameters<typeof originalClearTimeout>[0]` used by this case.
-        return originalClearTimeout(timer as Parameters<typeof originalClearTimeout>[0]);
-      }) as typeof clearTimeout;
+        return originalClearTimeout(timer);
+      };
+      Object.defineProperty(globalThis, "setTimeout", {
+        configurable: true,
+        value: replacementSetTimeout,
+      });
+      Object.defineProperty(globalThis, "clearTimeout", {
+        configurable: true,
+        value: replacementClearTimeout,
+      });
 
       const requestPromise = Effect.runPromise(
         codexAppServer.request({
@@ -791,15 +801,15 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         prepareLiveSessionAdapter: (runtime) =>
           Effect.sync(() => {
             order.push("prepare");
-            // SAFETY: This test controls the fixture and supplies `never` used by this case.
             return {
-              adapter: {
-                binding: {
+              adapter: createAgentSessionRuntimeAdapterTestDouble(
+                {
                   runtimeId: runtime.runtimeId,
                   runtimeKind: "codex",
                   repoPath: runtime.repoPath,
                 },
-              } as never,
+                {},
+              ),
               emitRuntimeEvent: (event: CodexAppServerStreamEvent) => {
                 order.push("event");
                 events.push(event);
@@ -913,7 +923,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           }),
         runAdapterMutation: (mutation) => mutation.pipe(Effect.map((result) => result.value)),
       } satisfies RuntimeLiveSessionLifecyclePort;
-      // SAFETY: This test controls the fixture and supplies `never` used by this case.
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
@@ -921,13 +930,14 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         liveSessionLifecycle,
         prepareLiveSessionAdapter: (runtime) =>
           Effect.succeed({
-            adapter: {
-              binding: {
+            adapter: createAgentSessionRuntimeAdapterTestDouble(
+              {
                 runtimeId: runtime.runtimeId,
                 runtimeKind: runtime.kind,
                 repoPath: runtime.repoPath,
               },
-            } as never,
+              {},
+            ),
             emitRuntimeEvent: () => {},
             startForwarding: () =>
               Effect.fail(
@@ -961,10 +971,10 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       );
       await registrationStarted;
       await waitFor(() => existsSync(runtimePidPath));
-      runtimePid = Number(await readFile(runtimePidPath, "utf8"));
-      process.kill(runtimePid, "SIGTERM");
-      // SAFETY: This test controls the fixture and supplies `number` used by this case.
-      await waitFor(() => !processIsAlive(runtimePid as number), 2_000);
+      const startedRuntimePid = Number(await readFile(runtimePidPath, "utf8"));
+      runtimePid = startedRuntimePid;
+      process.kill(startedRuntimePid, "SIGTERM");
+      await waitFor(() => !processIsAlive(startedRuntimePid), 2_000);
       await expect(
         Effect.runPromise(
           codexAppServer.request({

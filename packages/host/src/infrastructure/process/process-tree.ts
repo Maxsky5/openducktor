@@ -1,5 +1,6 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import { type ChildProcess, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
+import type { EventEmitter } from "node:events";
 import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 
@@ -399,7 +400,7 @@ export const terminateProcessTree = ({
   });
 
 export const waitForChildProcessClose = (
-  child: Pick<ChildProcess, "once" | "off">,
+  child: Pick<EventEmitter, "once" | "off">,
   isClosed: () => boolean,
   timeoutMs: number,
 ): Effect.Effect<boolean> =>

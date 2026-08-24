@@ -1,15 +1,4 @@
 import { z } from "zod";
-import type {
-  CodexAppServerClientRequestMap,
-  CodexAppServerModelListResponse,
-  CodexAppServerReasoningEffortOption,
-  CodexAppServerRequestMethod,
-  CodexAppServerSkillRecord,
-  CodexAppServerSkillsListResponse,
-  CodexAppServerThread,
-  CodexAppServerThreadItem,
-  CodexAppServerTurnError,
-} from "./codex-app-server-protocol";
 import {
   codexAppServerMultiAgentModeSchema,
   codexAppServerReasoningEffortSchema,
@@ -96,7 +85,7 @@ export const codexAppServerFileSystemSandboxEntrySchema = z.object({
 export const codexAppServerAdditionalFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()).nullable(),
   write: z.array(z.string()).nullable(),
-  globScanMaxDepth: z.number().finite().optional(),
+  globScanMaxDepth: z.number().int().positive().optional(),
   entries: z.array(codexAppServerFileSystemSandboxEntrySchema).optional(),
 });
 
@@ -545,7 +534,9 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("enteredReviewMode"), id: z.string(), review: z.string() }),
   z.object({ type: z.literal("exitedReviewMode"), id: z.string(), review: z.string() }),
   z.object({ type: z.literal("contextCompaction"), id: z.string() }),
-]) satisfies z.ZodType<CodexAppServerThreadItem>;
+]);
+
+export type CodexAppServerThreadItem = z.output<typeof codexAppServerThreadItemSchema>;
 
 const codexAppServerCodexErrorInfoSchema = z.union([
   z.enum([
@@ -569,11 +560,15 @@ const codexAppServerCodexErrorInfoSchema = z.union([
   z.object({ activeTurnNotSteerable: z.object({ turnKind: z.enum(["review", "compact"]) }) }),
 ]);
 
+export type CodexAppServerCodexErrorInfo = z.output<typeof codexAppServerCodexErrorInfoSchema>;
+
 const codexAppServerTurnErrorSchema = z.object({
   message: z.string(),
   codexErrorInfo: codexAppServerCodexErrorInfoSchema.nullable(),
   additionalDetails: z.string().nullable(),
-}) satisfies z.ZodType<CodexAppServerTurnError>;
+});
+
+export type CodexAppServerTurnError = z.output<typeof codexAppServerTurnErrorSchema>;
 
 export const codexAppServerTurnSchema = z.object({
   completedAt: z.number().nullable(),
@@ -585,6 +580,8 @@ export const codexAppServerTurnSchema = z.object({
   startedAt: z.number().nullable(),
   status: z.enum(["completed", "interrupted", "failed", "inProgress"]),
 });
+
+export type CodexAppServerTurn = z.output<typeof codexAppServerTurnSchema>;
 
 const codexAppServerThreadSchema = z.object({
   id: z.string(),
@@ -614,7 +611,9 @@ const codexAppServerThreadSchema = z.object({
   gitInfo: codexAppServerGitInfoSchema.nullable(),
   name: z.string().nullable(),
   turns: z.array(codexAppServerTurnSchema),
-}) satisfies z.ZodType<CodexAppServerThread>;
+});
+
+export type CodexAppServerThread = z.output<typeof codexAppServerThreadSchema>;
 
 const codexAppServerActivePermissionProfileSchema = z.object({
   id: z.string(),
@@ -652,43 +651,51 @@ const codexAppServerThreadResumeResultSchema = codexAppServerThreadLaunchResultS
 const codexAppServerReasoningEffortOptionSchema = z.object({
   description: z.string(),
   reasoningEffort: codexAppServerReasoningEffortSchema,
-}) satisfies z.ZodType<CodexAppServerReasoningEffortOption>;
+});
+
+export type CodexAppServerReasoningEffortOption = z.output<
+  typeof codexAppServerReasoningEffortOptionSchema
+>;
+
+const codexAppServerModelSchema = z.object({
+  additionalSpeedTiers: z.array(z.string()),
+  availabilityNux: z.object({ message: z.string() }).nullable(),
+  defaultReasoningEffort: codexAppServerReasoningEffortSchema,
+  defaultServiceTier: z.string().nullable(),
+  description: z.string(),
+  displayName: z.string(),
+  hidden: z.boolean(),
+  id: z.string(),
+  inputModalities: z.array(z.enum(["text", "image", "audio"])),
+  isDefault: z.boolean(),
+  model: z.string(),
+  modelSpecialty: z.string().nullable(),
+  multiAgentVersion: z.enum(["disabled", "v1", "v2"]).nullable(),
+  serviceTiers: z.array(z.object({ id: z.string(), name: z.string(), description: z.string() })),
+  supportedReasoningEfforts: z.array(codexAppServerReasoningEffortOptionSchema),
+  supportsPersonality: z.boolean(),
+  upgrade: z.string().nullable(),
+  upgradeInfo: z
+    .object({
+      model: z.string(),
+      upgradeCopy: z.string().nullable(),
+      modelLink: z.string().nullable(),
+      migrationMarkdown: z.string().nullable(),
+      retirementAt: z.number().nullable(),
+    })
+    .nullable(),
+});
+
+export type CodexAppServerModel = z.output<typeof codexAppServerModelSchema>;
 
 const codexAppServerModelListResponseSchema = z.object({
-  data: z.array(
-    z.object({
-      additionalSpeedTiers: z.array(z.string()),
-      availabilityNux: z.object({ message: z.string() }).nullable(),
-      defaultReasoningEffort: codexAppServerReasoningEffortSchema,
-      defaultServiceTier: z.string().nullable(),
-      description: z.string(),
-      displayName: z.string(),
-      hidden: z.boolean(),
-      id: z.string(),
-      inputModalities: z.array(z.enum(["text", "image", "audio"])),
-      isDefault: z.boolean(),
-      model: z.string(),
-      modelSpecialty: z.string().nullable(),
-      multiAgentVersion: z.enum(["disabled", "v1", "v2"]).nullable(),
-      serviceTiers: z.array(
-        z.object({ id: z.string(), name: z.string(), description: z.string() }),
-      ),
-      supportedReasoningEfforts: z.array(codexAppServerReasoningEffortOptionSchema),
-      supportsPersonality: z.boolean(),
-      upgrade: z.string().nullable(),
-      upgradeInfo: z
-        .object({
-          model: z.string(),
-          upgradeCopy: z.string().nullable(),
-          modelLink: z.string().nullable(),
-          migrationMarkdown: z.string().nullable(),
-          retirementAt: z.number().nullable(),
-        })
-        .nullable(),
-    }),
-  ),
+  data: z.array(codexAppServerModelSchema),
   nextCursor: z.string().nullable(),
-}) satisfies z.ZodType<CodexAppServerModelListResponse>;
+});
+
+export type CodexAppServerModelListResponse = z.output<
+  typeof codexAppServerModelListResponseSchema
+>;
 
 const codexAppServerSkillRecordSchema = z.object({
   name: z.string(),
@@ -723,23 +730,27 @@ const codexAppServerSkillRecordSchema = z.object({
     })
     .optional(),
   enabled: z.boolean(),
-}) satisfies z.ZodType<CodexAppServerSkillRecord>;
+});
+
+export type CodexAppServerSkillRecord = z.output<typeof codexAppServerSkillRecordSchema>;
+
+const codexAppServerSkillCatalogEntrySchema = z.object({
+  cwd: z.string(),
+  skills: z.array(codexAppServerSkillRecordSchema),
+  errors: z.array(z.object({ path: z.string(), message: z.string() })),
+});
+
+export type CodexAppServerSkillCatalogEntry = z.output<
+  typeof codexAppServerSkillCatalogEntrySchema
+>;
 
 const codexAppServerSkillsListResponseSchema = z.object({
-  data: z.array(
-    z.object({
-      cwd: z.string(),
-      skills: z.array(codexAppServerSkillRecordSchema),
-      errors: z.array(z.object({ path: z.string(), message: z.string() })),
-    }),
-  ),
-}) satisfies z.ZodType<CodexAppServerSkillsListResponse>;
+  data: z.array(codexAppServerSkillCatalogEntrySchema),
+});
 
-type CodexAppServerRequestResultSchemaMap = {
-  [Method in CodexAppServerRequestMethod]: z.ZodType<
-    CodexAppServerClientRequestMap[Method]["result"]
-  >;
-};
+export type CodexAppServerSkillsListResponse = z.output<
+  typeof codexAppServerSkillsListResponseSchema
+>;
 
 const codexAppServerRequestResultSchemas = {
   initialize: z.object({
@@ -786,7 +797,13 @@ const codexAppServerRequestResultSchemas = {
       }),
     ),
   }),
-} satisfies CodexAppServerRequestResultSchemaMap;
+};
+
+export type CodexAppServerRequestResultMap = {
+  [Method in keyof typeof codexAppServerRequestResultSchemas]: z.output<
+    (typeof codexAppServerRequestResultSchemas)[Method]
+  >;
+};
 
 export const codexAppServerRequestResultSchema = z.union([
   codexAppServerRequestResultSchemas.initialize,
@@ -809,10 +826,11 @@ export const codexAppServerRequestResultSchema = z.union([
 ]);
 
 export const parseCodexAppServerRequestResultValue = <
-  Method extends CodexAppServerRequestMethod,
+  Method extends keyof CodexAppServerRequestResultMap,
   Input,
 >(
   method: Method,
   value: Input,
-): CodexAppServerClientRequestMap[Method]["result"] =>
-  codexAppServerRequestResultSchemas[method].parse(value);
+): CodexAppServerRequestResultMap[Method] =>
+  // SAFETY: The method key selects one schema, and Zod returns that same key's inferred output.
+  codexAppServerRequestResultSchemas[method].parse(value) as CodexAppServerRequestResultMap[Method];

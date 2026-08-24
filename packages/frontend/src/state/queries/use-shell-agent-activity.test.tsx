@@ -123,13 +123,12 @@ const createActivityStore = (
   };
 };
 
-let currentVisibleTasks: Array<{ id: string; title: string }> = [];
+let currentVisibleTasks: TasksStateContextValue["tasks"] = [];
 
-// SAFETY: This test controls the fixture and supplies `TasksStateContextValue["tasks"]` used by this case.
 const createTasksStateValue = (): TasksStateContextValue => ({
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
-  tasks: currentVisibleTasks as TasksStateContextValue["tasks"],
+  tasks: currentVisibleTasks,
   isLoadingTasks: false,
   createTask: async () => undefined,
   updateTask: async () => undefined,

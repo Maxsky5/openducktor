@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -5,10 +6,7 @@ import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-t
 import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentSessionApprovalActions>[0];
 

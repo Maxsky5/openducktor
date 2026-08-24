@@ -140,13 +140,12 @@ describe("OdtHostBridgeClient", () => {
       await client.getWorkspaces();
       throw new Error("Expected getWorkspaces() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toContain("host odt_get_workspaces failed: fetch failed");
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).details).toMatchObject({
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect(error.message).toContain("host odt_get_workspaces failed: fetch failed");
+      expect(error.details).toMatchObject({
         action: "host odt_get_workspaces",
         causeName: "TypeError",
       });
@@ -176,15 +175,14 @@ describe("OdtHostBridgeClient", () => {
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe(
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+      expect(error.message).toBe(
         "Transition not allowed for task-1 (bug): human_review -> blocked",
       );
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).details).toBeUndefined();
+      expect(error.details).toBeUndefined();
     }
   });
 
@@ -212,13 +210,12 @@ describe("OdtHostBridgeClient", () => {
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe("Task not found: task-1");
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).details).toEqual({
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect(error.message).toBe("Task not found: task-1");
+      expect(error.details).toEqual({
         repoPath: "/repo",
         taskId: "task-1",
       });
@@ -255,13 +252,12 @@ describe("OdtHostBridgeClient", () => {
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe("workspaceId is not allowed");
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).issues).toEqual(issues);
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
+      expect(error.message).toBe("workspaceId is not allowed");
+      expect(error.issues).toEqual(issues);
     }
   });
 
@@ -282,15 +278,12 @@ describe("OdtHostBridgeClient", () => {
       });
       throw new Error("Expected call() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toBe(
-        "host odt_build_blocked failed with HTTP 400 Bad Request",
-      );
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).details).toEqual({
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect(error.message).toBe("host odt_build_blocked failed with HTTP 400 Bad Request");
+      expect(error.details).toEqual({
         action: "host odt_build_blocked",
         status: 400,
         statusText: "Bad Request",
@@ -312,15 +305,12 @@ describe("OdtHostBridgeClient", () => {
       await client.getWorkspaces();
       throw new Error("Expected getWorkspaces() to reject.");
     } catch (error) {
-      expect(error).toBeInstanceOf(OdtToolError);
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).code).toBe("ODT_HOST_RESPONSE_INVALID");
-      // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-      expect((error as Error).message).toContain(
-        "Invalid JSON response from host odt_get_workspaces",
-      );
-      // SAFETY: This test controls the fixture and supplies `OdtToolError` used by this case.
-      expect((error as OdtToolError).details).toMatchObject({
+      if (!(error instanceof OdtToolError)) {
+        throw error;
+      }
+      expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
+      expect(error.message).toContain("Invalid JSON response from host odt_get_workspaces");
+      expect(error.details).toMatchObject({
         action: "host odt_get_workspaces",
         causeName: "SyntaxError",
       });
@@ -328,13 +318,12 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("getWorkspaces forwards a workspace-free request and validates the response", async () => {
-    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        body: JSON.parse(String(init?.body ?? "{}")),
       });
       return jsonResponse({
         workspaces: [
@@ -378,13 +367,12 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("call forwards workspace-scoped payloads and validates the response", async () => {
-    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        body: JSON.parse(String(init?.body ?? "{}")),
       });
       return jsonResponse(summaryPayload);
     };
@@ -406,13 +394,12 @@ describe("OdtHostBridgeClient", () => {
 
   test("call validates the private task asset bridge payload before MCP formatting", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
-    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
       requests.push({
         url,
-        body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        body: JSON.parse(String(init?.body ?? "{}")),
       });
       return jsonResponse({
         assets: [
@@ -455,11 +442,10 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("odt_create_task and odt_search_tasks keep the flat public tool payload shape", async () => {
-    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; body: unknown }> = [];
     const fetchImpl: typeof fetch = async (input, init) => {
       const url = String(input);
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      const body = JSON.parse(String(init?.body ?? "{}"));
       requests.push({ url, body });
 
       if (url.endsWith("/invoke/odt_create_task")) {

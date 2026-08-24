@@ -32,10 +32,12 @@ describe("runtime distribution factories", () => {
   });
 
   test("preserves bundled directory values when normalizing raw tool ids", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(
       createArtifactRuntimeDistribution({
-        bundledToolBinDirs: { " opencode ": " /app/resources/bin " } as never,
+        bundledToolBinDirs: {
+          // @ts-expect-error -- This test verifies normalization before tool-id validation.
+          " opencode ": " /app/resources/bin ",
+        },
         mcpLauncher: {
           kind: "executable",
           executablePath: "/app/resources/openducktor-mcp",
@@ -48,64 +50,68 @@ describe("runtime distribution factories", () => {
   });
 
   test("rejects unsupported artifact launcher kinds with a typed validation error", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
+          // @ts-expect-error -- This test verifies rejection of an unsupported launcher kind.
           kind: "shellScript",
           scriptPath: "/app/openducktor-mcp.sh",
-        } as never,
+        },
       }),
     ).toThrow(HostValidationError);
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
+          // @ts-expect-error -- This test verifies rejection of an unsupported launcher kind.
           kind: "shellScript",
           scriptPath: "/app/openducktor-mcp.sh",
-        } as never,
+        },
       }),
     ).toThrow("Unsupported MCP launcher kind: shellScript");
   });
 
   test("rejects unsupported artifact tool script launcher ids with a typed validation error", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
           kind: "toolScript",
           scriptPath: "/app/openducktor-mcp.js",
+          // @ts-expect-error -- This test verifies rejection of an unsupported bundled tool id.
           toolId: "node",
-        } as never,
+        },
       }),
     ).toThrow(HostValidationError);
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
         mcpLauncher: {
           kind: "toolScript",
           scriptPath: "/app/openducktor-mcp.js",
+          // @ts-expect-error -- This test verifies rejection of an unsupported bundled tool id.
           toolId: "node",
-        } as never,
+        },
       }),
     ).toThrow("mcpLauncher.toolId must be one of:");
   });
 
   test("rejects unsupported bundled tool directory ids with a typed validation error", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
-        bundledToolBinDirs: { node: "/app/resources/bin" } as never,
+        bundledToolBinDirs: {
+          // @ts-expect-error -- This test verifies rejection of an unsupported bundled tool id.
+          node: "/app/resources/bin",
+        },
         mcpLauncher: {
           kind: "executable",
           executablePath: "/app/resources/openducktor-mcp",
         },
       }),
     ).toThrow(HostValidationError);
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       createArtifactRuntimeDistribution({
-        bundledToolBinDirs: { node: "/app/resources/bin" } as never,
+        bundledToolBinDirs: {
+          // @ts-expect-error -- This test verifies rejection of an unsupported bundled tool id.
+          node: "/app/resources/bin",
+        },
         mcpLauncher: {
           kind: "executable",
           executablePath: "/app/resources/openducktor-mcp",

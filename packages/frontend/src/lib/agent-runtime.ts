@@ -1,5 +1,6 @@
 import {
   type AgentRuntimes,
+  agentRoleValues,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
   getMissingRequiredRuntimeSupportedScopes,
@@ -18,8 +19,7 @@ import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
-// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `AgentRole[]`.
-const agentRoles = Object.keys(runtimeRequiredScopesByRole) as AgentRole[];
+const agentRoles: readonly AgentRole[] = agentRoleValues;
 
 export const toAgentRuntimeOptions = (
   runtimeDefinitions: RuntimeDescriptor[],
@@ -314,9 +314,7 @@ export const getRuntimeDescriptorLaunchConfigErrors = (
   });
 };
 
-export const validateRuntimeDefinitionForOpenDucktor = (
-  runtimeDescriptor: RuntimeDescriptor,
-): string[] => {
+export const validateRuntimeDefinitionForOpenDucktor = (runtimeDescriptor: unknown): string[] => {
   const descriptorParseResult = runtimeDescriptorSchema.safeParse(runtimeDescriptor);
   if (!descriptorParseResult.success) {
     // Intentionally stop after schema validation: capability policy checks assume a parsed

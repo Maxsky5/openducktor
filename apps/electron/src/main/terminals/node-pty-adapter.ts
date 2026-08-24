@@ -15,7 +15,19 @@ import {
 import { Effect } from "effect";
 import type * as NodePty from "node-pty";
 
-type NodePtyModule = Pick<typeof NodePty, "spawn">;
+type NodePtyProcess = {
+  readonly pid: number;
+  onData(listener: (data: string | Buffer) => void): { dispose(): void };
+  onExit(listener: (event: { exitCode: number; signal?: number }) => void): { dispose(): void };
+  write(data: string | Buffer): void;
+  resize(columns: number, rows: number): void;
+  pause(): void;
+  resume(): void;
+};
+
+type NodePtyModule = {
+  spawn(...args: Parameters<typeof NodePty.spawn>): NodePtyProcess;
+};
 
 type CreateNodePtyPortInput = {
   nodePty?: NodePtyModule;

@@ -1,14 +1,10 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
 import { ForcePushDialog } from "./force-push-dialog";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 describe("ForcePushDialog", () => {
   let rendered: ReturnType<typeof render> | null = null;

@@ -8,6 +8,7 @@ import type {
   SyncEventSessionDeleted,
   SyncEventSessionUpdated,
 } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import {
   childSessionCreatedEvent,
@@ -21,89 +22,83 @@ import {
   runtimeSourceSyncChildSessionCreatedEvent,
   runtimeSourceSyncChildSessionCreatedEventWithParentAlias,
   syncChildSessionCreatedEvent,
-  type TestGlobalEventPayload,
 } from "./event-stream.test-support";
+import type { UnknownRecord } from "./guards";
 import { observeRuntimeEvents, registerSession, releaseSessionRuntime } from "./session-registry";
 import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionRecord } from "./types";
 import { waitForUserMessageAdmission } from "./user-message-admission";
 
-type GlobalEventPayload = TestGlobalEventPayload;
+type GlobalEventPayload = UnknownRecord;
 type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
+type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
 
-// SAFETY: This test controls the fixture and supplies `SubagentPart` used by this case.
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
     .filter(
-      (event): event is AssistantPartEvent =>
+      (event): event is SubagentPartEvent =>
         event.type === "assistant_part" && event.part.kind === "subagent",
     )
-    .map((event) => event.part as SubagentPart);
+    .map((event) => event.part);
 
-// SAFETY: This test controls the fixture and supplies `Event` used by this case.
-const assistantRoleEvent = (messageId: string): Event =>
-  ({
-    type: "message.updated",
-    properties: {
-      info: {
-        id: messageId,
-        role: "assistant",
-        sessionID: "external-session-1",
-      },
+const assistantRoleEvent = (messageId: string): UnknownRecord => ({
+  type: "message.updated",
+  properties: {
+    info: {
+      id: messageId,
+      role: "assistant",
+      sessionID: "external-session-1",
     },
-  }) as Event;
+  },
+});
 
-// SAFETY: This test controls the fixture and supplies `Event` used by this case.
 const assistantSubtaskEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
-}): Event =>
-  ({
-    type: "message.part.updated",
-    properties: {
-      part: {
-        id: input.partId,
-        sessionID: "external-session-1",
-        messageID: input.messageId,
-        type: "subtask",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: input.description,
-      },
+}): UnknownRecord => ({
+  type: "message.part.updated",
+  properties: {
+    part: {
+      id: input.partId,
+      sessionID: "external-session-1",
+      messageID: input.messageId,
+      type: "subtask",
+      agent: "build",
+      prompt: "Inspect repo",
+      description: input.description,
     },
-  }) as Event;
+  },
+});
 
-// SAFETY: This test controls the fixture and supplies `Event` used by this case.
 const assistantTaskToolEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
-}): Event =>
-  ({
-    type: "message.part.updated",
-    properties: {
-      part: {
-        id: input.partId,
-        sessionID: "external-session-1",
-        messageID: input.messageId,
-        type: "tool",
-        callID: `call-${input.partId}`,
-        tool: "task",
-        state: {
-          status: "running",
-          input: {
-            description: input.description,
-            prompt: "Inspect repo",
-            subagent_type: "explorer",
-          },
-          time: {
-            start: Date.parse("2026-02-22T12:00:10.000Z"),
-          },
+}): UnknownRecord => ({
+  type: "message.part.updated",
+  properties: {
+    part: {
+      id: input.partId,
+      sessionID: "external-session-1",
+      messageID: input.messageId,
+      type: "tool",
+      callID: `call-${input.partId}`,
+      tool: "task",
+      state: {
+        status: "running",
+        input: {
+          description: input.description,
+          prompt: "Inspect repo",
+          subagent_type: "explorer",
+        },
+        time: {
+          start: Date.parse("2026-02-22T12:00:10.000Z"),
         },
       },
     },
-  }) as Event;
+  },
+});
 
 const childPermissionEvent = (childSessionId: string): Event =>
   permissionAskedEvent({
@@ -156,7 +151,6 @@ const syncAssistantSubtaskEvent = (input: {
   }) satisfies SyncEventMessagePartUpdated;
 
 const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): GlobalEventPayload => {
-  // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
   return {
     type: "sync",
     id: `sync-${childSessionId}`,
@@ -182,7 +176,7 @@ const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): Glob
         },
       },
     },
-  } as GlobalEventPayload;
+  };
 };
 
 const syncChildSessionUpdatedEvent = (childSessionId: string): SyncEventSessionUpdated =>
@@ -220,19 +214,17 @@ const syncChildSessionDeletedEvent = (
     },
   }) satisfies SyncEventSessionDeleted;
 
-// SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
-const malformedSyncLifecycleDataEvent = (): GlobalEventPayload =>
-  ({
-    type: "sync",
-    id: "sync-malformed-session-created",
-    syncEvent: {
-      type: "session.created.1",
-      id: "sync-event-malformed-session-created",
-      seq: 1,
-      aggregateID: "external-child-session",
-      data: null,
-    },
-  }) as GlobalEventPayload;
+const malformedSyncLifecycleDataEvent = (): GlobalEventPayload => ({
+  type: "sync",
+  id: "sync-malformed-session-created",
+  syncEvent: {
+    type: "session.created.1",
+    id: "sync-event-malformed-session-created",
+    seq: 1,
+    aggregateID: "external-child-session",
+    data: null,
+  },
+});
 
 const childSessionDeletedEvent = (childSessionId: string): EventSessionDeleted =>
   ({
@@ -261,9 +253,11 @@ const makeLiveClient = (): OpencodeClient => {
     properties: {},
   } satisfies Extract<GlobalEventPayload, { type: "server.connected" }>;
 
-  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
+  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
   return {
+    ...baseClient,
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
         async function* iterator(): AsyncGenerator<GlobalEvent> {
           yield {
@@ -280,7 +274,7 @@ const makeLiveClient = (): OpencodeClient => {
         return { stream: iterator() };
       },
     },
-  } as OpencodeClient;
+  };
 };
 
 const runRuntimeEventTransport = async (
@@ -345,7 +339,6 @@ describe("session registry runtime event transport", () => {
   });
 
   test("keeps other sessions live after one session receives an unsupported status", async () => {
-    // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
     const emitted = await runRuntimeEventTransport(
       [
         {
@@ -355,7 +348,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-1",
             status: { type: "reconnect" },
           },
-        } as GlobalEventPayload,
+        },
         {
           id: "event-status-external-session-2",
           type: "session.status",
@@ -363,7 +356,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-2",
             status: { type: "busy" },
           },
-        } as GlobalEventPayload,
+        },
       ],
       { externalSessionIds: ["external-session-1", "external-session-2"] },
     );
@@ -384,7 +377,6 @@ describe("session registry runtime event transport", () => {
   });
 
   test("attributes a subscriber projection failure to that subscriber", async () => {
-    // SAFETY: This test drives the failure path that supplies `GlobalEventPayload` before this assertion.
     const emitted = await runRuntimeEventTransport(
       [
         {
@@ -394,7 +386,7 @@ describe("session registry runtime event transport", () => {
             sessionID: "external-session-1",
             status: { type: "busy" },
           },
-        } as GlobalEventPayload,
+        },
       ],
       {
         externalSessionIds: ["external-session-1", "external-session-2"],
@@ -417,14 +409,13 @@ describe("session registry runtime event transport", () => {
   test("terminates runtime observation when an event failure has no safe session owner", async () => {
     const terminalFailures: Error[] = [];
 
-    // SAFETY: This test controls the fixture and supplies `GlobalEventPayload` used by this case.
     await expect(
       runRuntimeEventTransport(
         [
           {
             type: "session.created",
             properties: { info: {} },
-          } as GlobalEventPayload,
+          },
         ],
         {
           externalSessionIds: ["external-session-1", "external-session-2"],

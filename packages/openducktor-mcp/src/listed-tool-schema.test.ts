@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 import { ODT_TOOL_SCHEMAS } from "./lib";
 import { getListedToolInputSchema } from "./listed-tool-schema";
 
 const propertiesOf = (jsonSchema: Record<string, unknown>): Record<string, unknown> => {
-  // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-  return jsonSchema.properties as Record<string, unknown>;
+  return z.record(z.string(), z.unknown()).parse(jsonSchema.properties);
 };
 
 const requiredOf = (jsonSchema: Record<string, unknown>): string[] => {
-  // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
-  return Array.isArray(jsonSchema.required) ? (jsonSchema.required as string[]) : [];
+  return z.array(z.string()).optional().parse(jsonSchema.required) ?? [];
 };
 
 describe("listed MCP tool input schema", () => {

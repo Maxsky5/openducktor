@@ -33,10 +33,7 @@ const testLogger: WebLogger = {
   success: () => Effect.void,
 };
 
-const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
-  // SAFETY: This test controls the fixture and supplies `Bun.Subprocess` used by this case.
-  return { exited } as Bun.Subprocess;
-};
+const createHostProcess = (exited: Promise<number>): Pick<Bun.Subprocess, "exited"> => ({ exited });
 
 describe("launcher internals", () => {
   test("uses development discovery for workspace source launches", () => {

@@ -20,10 +20,9 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DiagnosticsToastApi } from "./use-check-diagnostics-effects";
 import { useChecks } from "./use-checks";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironment = globalThis as typeof globalThis & {
+const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
@@ -157,12 +156,12 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
       await sharedHarness.update({ args: currentArgs });
     },
     run: async (fn: (value: HookResult) => Promise<void> | void) => {
-      if (!latest) {
+      const hook = latest;
+      if (!hook) {
         throw new Error("Hook not mounted");
       }
       await sharedHarness.run(async () => {
-        // SAFETY: This test controls the fixture and supplies `HookResult` used by this case.
-        await fn(latest as HookResult);
+        await fn(hook);
       });
     },
     getLatest: () => {

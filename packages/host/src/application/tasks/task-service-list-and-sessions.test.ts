@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { TaskService } from "./task-service";
 import {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,
@@ -359,8 +358,7 @@ describe("createTaskService list and session reads", () => {
     const { createTaskCommandHandlers } =
       await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
-    // SAFETY: This test controls the fixture and supplies `TaskService` used by this case.
-    const handlers = createTaskCommandHandlers(service as TaskService);
+    const handlers = createTaskCommandHandlers(service);
     expect(() =>
       handlers.tasks_list?.(
         { repoPath: "/repo", doneVisibleDays: -1 },
@@ -861,15 +859,14 @@ describe("createTaskService list and session reads", () => {
   });
   test("deletes one exact durable agent session identity", async () => {
     const calls: Array<Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]> = [];
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
-    const taskStore = {
+    const taskStore: TaskStorePort = {
       deleteAgentSession(input: Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]) {
         return Effect.sync(() => {
           calls.push(input);
           return true;
         });
       },
-    } as TaskStorePort;
+    };
     const service = createTaskService({ taskStore });
     const identity = {
       externalSessionId: "session-1",

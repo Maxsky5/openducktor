@@ -238,9 +238,10 @@ describe("buildClaudeAgentSdkOptions", () => {
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
     const hostTokenFile = openducktorEnv?.ODT_HOST_TOKEN_FILE;
-    expect(runtimeTypeName(hostTokenFile)).toBe("string");
-    // SAFETY: This test controls the fixture and supplies `string` used by this case.
-    expect(await readFile(hostTokenFile as string, "utf8")).toBe("bridge-secret-value");
+    if (!hasRuntimeType(hostTokenFile, "string")) {
+      throw new Error("Expected Claude MCP setup to create a host token file.");
+    }
+    expect(await readFile(hostTokenFile, "utf8")).toBe("bridge-secret-value");
     expect(JSON.stringify(options.mcpServers)).not.toContain("bridge-secret-value");
     session.abortController.abort();
     expect(options).not.toHaveProperty("managedSettings");
@@ -309,8 +310,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       repoPath: "/repo/fairnest",
       workingDirectory: "/repo/fairnest-task-worktree",
     };
-    // SAFETY: This test controls the fixture and supplies `string[]` used by this case.
-    const events = { resolvedBridgeRepoPaths: [] as string[] };
+    const events = { resolvedBridgeRepoPaths: new Array<string>() };
 
     const options = await buildOptions(session, events);
 
@@ -505,15 +505,15 @@ describe("buildClaudeAgentSdkOptions", () => {
           },
         },
       });
-      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-      const hookSpecificOutput = (
-        hookOutput as {
-          hookSpecificOutput?: {
-            permissionDecision?: unknown;
-            updatedInput?: Record<string, unknown>;
-          };
-        }
-      ).hookSpecificOutput;
+      if (!("hookSpecificOutput" in hookOutput)) {
+        throw new Error("Expected synchronous PreToolUse hook output.");
+      }
+      const hookSpecificOutput = hookOutput.hookSpecificOutput;
+      if (hookSpecificOutput.hookEventName !== "PreToolUse") {
+        throw new Error(
+          `Expected PreToolUse output, received ${hookSpecificOutput.hookEventName}.`,
+        );
+      }
       expect(hookSpecificOutput).not.toHaveProperty("permissionDecision");
       const updatedInput = hookSpecificOutput?.updatedInput;
       expect(normalizePathForComparison(String(updatedInput?.file_path))).toBe(

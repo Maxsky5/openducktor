@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import { useLayoutEffect } from "react";
@@ -156,10 +156,8 @@ describe("use-workspace-branch-probe", () => {
     const queryClientCapture: QueryClientCaptureContract = { current: null };
     workspaceHost.gitGetCurrentBranch = mock(async () => currentBranchDeferred.promise);
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    toastError.mockClear();
 
     const rendered = render(
       <ProbeHarness
@@ -195,8 +193,7 @@ describe("use-workspace-branch-probe", () => {
     } finally {
       currentBranchDeferred.resolve({ name: "main", detached: false });
       rendered.unmount();
-      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });
@@ -213,10 +210,8 @@ describe("use-workspace-branch-probe", () => {
     }));
     workspaceHost.gitGetBranches = gitGetBranches;
 
-    const originalToastError = toast.error;
-    const toastError = mock((_message: string, _options?: { description?: string }) => "");
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    toastError.mockClear();
 
     const rendered = render(
       <ProbeHarness
@@ -237,8 +232,7 @@ describe("use-workspace-branch-probe", () => {
       expect(toastError).not.toHaveBeenCalled();
     } finally {
       rendered.unmount();
-      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       restoreBrowserGlobals();
     }
   });

@@ -551,8 +551,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     if (!persistedRecord) {
       throw new Error("Expected persisted record to be captured.");
     }
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRecord` used by this case.
-    const persistedSessionRecord = persistedRecord as AgentSessionRecord;
+    const persistedSessionRecord: AgentSessionRecord = persistedRecord;
 
     expect(persistedSessionRecord.externalSessionId).toBe("external-1");
     expect("status" in persistedSessionRecord).toBe(false);

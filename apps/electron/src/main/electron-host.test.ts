@@ -666,16 +666,14 @@ describe("createElectronHostCommandRouter", () => {
           });
           const failureReported = yield* Deferred.make<unknown>();
           let settingsReadFails = false;
-          // SAFETY: This test controls the fixture and supplies `GlobalConfig` used by this case.
           const settingsConfig: SettingsConfigPort = {
             ...createSettingsConfig(),
             readConfig: () =>
               settingsReadFails
-                ? Effect.succeed({ workspaces: null } as GlobalConfig)
+                ? Effect.succeed({ workspaces: null } satisfies GlobalConfig)
                 : Effect.succeed(null),
           };
           const { eventBus } = createEventBus();
-          // SAFETY: This test controls the fixture and supplies `NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>` used by this case.
           const router = createElectronEffectHostCommandRouter({
             eventBus,
             filesystem: createFilesystem(),
@@ -687,7 +685,7 @@ describe("createElectronHostCommandRouter", () => {
               ensureExternalDiscoveryReady: () =>
                 Effect.succeed({ baseUrl: "http://127.0.0.1:5000" }),
               close: () => Effect.succeed({ baseUrl: null, closed: false }),
-            } as NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>,
+            } satisfies NonNullable<ElectronHostCommandRouterInput["mcpHostBridge"]>,
             onBackgroundFailure: (failure) =>
               Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
             openInTools: createOpenInTools(),
@@ -1097,6 +1095,9 @@ describe("createElectronHostCommandRouter", () => {
       fileDiffs: [{ file: "src/main.ts" }],
       snapshot: { targetBranch: "origin/main", diffScope: "uncommitted" },
     });
+    if (!("snapshot" in worktreeStatus)) {
+      throw new Error("Expected git worktree status to include a reset snapshot.");
+    }
     await expect(
       router.invoke("git_get_worktree_status_summary", {
         repoPath: "/repo",
@@ -1123,12 +1124,11 @@ describe("createElectronHostCommandRouter", () => {
       detached: false,
       revision: "def456",
     });
-    // SAFETY: This test controls the fixture and supplies `{ snapshot: unknown }` used by this case.
     await expect(
       router.invoke("git_reset_worktree_selection", {
         repoPath: "/repo",
         targetBranch: "origin/main",
-        snapshot: (worktreeStatus as { snapshot: unknown }).snapshot,
+        snapshot: worktreeStatus.snapshot,
         selection: {
           kind: "file",
           filePath: "src/main.ts",

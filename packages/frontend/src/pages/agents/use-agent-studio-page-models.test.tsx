@@ -4,7 +4,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   hasRuntimeType,
 } from "@openducktor/contracts";
-import { act, createElement } from "react";
+import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
@@ -586,8 +586,7 @@ describe("useAgentStudioPageModels", () => {
   });
 
   test("scrolls to bottom immediately when sending a message", async () => {
-    // SAFETY: This test controls the fixture and supplies `((value: boolean) => void) | null` used by this case.
-    const sendResolver = { current: null as ((value: boolean) => void) | null };
+    const sendResolver = createRef<(value: boolean) => void>();
     const onSend = mock(
       () =>
         new Promise<boolean>((resolve) => {

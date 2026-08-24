@@ -1,4 +1,5 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import {
   type AgentSessionCollection,
@@ -62,11 +63,10 @@ export const createSessionDependenciesFixture = (
   };
 };
 
-// SAFETY: This test drives the failure path that supplies `RuntimeDependencies["adapter"]` before this assertion.
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({
-  adapter: {} as RuntimeDependencies["adapter"],
+  adapter: new OpencodeSdkAdapter(),
   canonicalizePath: async (path) => path,
   prepareTaskSessionStartupLease: async () => "lease-1",
   completeTaskSessionStartupLease: async () => {},

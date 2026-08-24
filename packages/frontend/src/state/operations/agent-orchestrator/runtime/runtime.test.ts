@@ -3,6 +3,7 @@ import {
   agentPromptTemplateIdValues,
   type RepoConfig,
   type SettingsSnapshot,
+  taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -73,16 +74,18 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("loads startup documents from one fresh task metadata read", async () => {
-    const taskMetadataGetFresh = mock(async () => ({
+    const taskMetadata = taskMetadataPayloadSchema.parse({
       spec: { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" },
       plan: { markdown: "# Plan", updatedAt: "2026-04-10T13:10:00.000Z" },
-      qaReport: { markdown: "# QA", updatedAt: "2026-04-10T13:10:00.000Z" },
-    }));
+      qaReport: {
+        markdown: "# QA",
+        verdict: "approved",
+        updatedAt: "2026-04-10T13:10:00.000Z",
+      },
+    });
+    const taskMetadataGetFresh = mock(async () => taskMetadata);
 
-    // SAFETY: This test creates the DOM fixture that supplies `never` before this lookup.
-    await expect(
-      loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh as never),
-    ).resolves.toEqual({
+    await expect(loadTaskDocuments("/tmp/repo", "task-1", taskMetadataGetFresh)).resolves.toEqual({
       specMarkdown: "# Spec",
       planMarkdown: "# Plan",
       qaMarkdown: "# QA",
@@ -183,12 +186,10 @@ describe("agent-orchestrator-runtime", () => {
   });
 
   test("fails before build start when repo and role runtime defaults are missing", async () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    repoConfigLoader = async () =>
-      createRepoConfig({
-        defaultRuntimeKind: undefined as never,
-        agentDefaults: {},
-      });
+    const malformedConfig = createRepoConfig({ agentDefaults: {} });
+    // @ts-expect-error This malformed fixture verifies the missing-runtime error path.
+    delete malformedConfig.defaultRuntimeKind;
+    repoConfigLoader = async () => malformedConfig;
     runtimeHost.taskSessionBootstrapPrepare = mock(async () => taskBootstrapFixture);
 
     const ensureRuntime = createEnsureRuntime({

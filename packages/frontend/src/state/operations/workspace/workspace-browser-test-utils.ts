@@ -1,13 +1,23 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { mock } from "bun:test";
 import { act } from "react";
 import { flush } from "./workspace-hook-test-fixtures";
 
+const dispatchEventListener = (
+  listener: EventListenerOrEventListenerObject,
+  event: Event,
+): void => {
+  if ("handleEvent" in listener) {
+    listener.handleEvent(event);
+    return;
+  }
+  listener(event);
+};
+
 export const createBrowserListenerHarness = (
   visibilityState: DocumentVisibilityState = "visible",
 ) => {
-  let focusHandler: (() => void) | null = null;
-  let visibilityChangeHandler: (() => void) | null = null;
+  let focusHandler: EventListenerOrEventListenerObject | null = null;
+  let visibilityChangeHandler: EventListenerOrEventListenerObject | null = null;
   let currentVisibilityState = visibilityState;
   const originalWindowAddEventListener = window.addEventListener.bind(window);
   const originalWindowRemoveEventListener = window.removeEventListener.bind(window);
@@ -17,31 +27,25 @@ export const createBrowserListenerHarness = (
 
   const addWindowEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "focus" && hasRuntimeType(handler, "function")) {
-        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
-        focusHandler = handler as () => void;
+      if (event === "focus") {
+        focusHandler = handler;
       }
     },
   );
   const removeWindowEventListener = mock(() => {});
   const addDocumentEventListener = mock(
     (event: string, handler: EventListenerOrEventListenerObject) => {
-      if (event === "visibilitychange" && hasRuntimeType(handler, "function")) {
-        // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
-        visibilityChangeHandler = handler as () => void;
+      if (event === "visibilitychange") {
+        visibilityChangeHandler = handler;
       }
     },
   );
   const removeDocumentEventListener = mock(() => {});
 
-  // SAFETY: This test creates the DOM fixture that supplies `typeof window.addEventListener` before this lookup.
-  window.addEventListener = addWindowEventListener as typeof window.addEventListener;
-  // SAFETY: This test creates the DOM fixture that supplies `typeof window.removeEventListener` before this lookup.
-  window.removeEventListener = removeWindowEventListener as typeof window.removeEventListener;
-  // SAFETY: This test creates the DOM fixture that supplies `typeof document.addEventListener` before this lookup.
-  document.addEventListener = addDocumentEventListener as typeof document.addEventListener;
-  // SAFETY: This test creates the DOM fixture that supplies `typeof document.removeEventListener` before this lookup.
-  document.removeEventListener = removeDocumentEventListener as typeof document.removeEventListener;
+  window.addEventListener = addWindowEventListener;
+  window.removeEventListener = removeWindowEventListener;
+  document.addEventListener = addDocumentEventListener;
+  document.removeEventListener = removeDocumentEventListener;
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
     get() {
@@ -68,23 +72,25 @@ export const createBrowserListenerHarness = (
     addDocumentEventListener,
     removeDocumentEventListener,
     triggerFocus: async () => {
-      if (!focusHandler) {
+      const handler = focusHandler;
+      if (!handler) {
         throw new Error("Expected focus handler to be registered");
       }
 
       await act(async () => {
-        focusHandler?.();
+        dispatchEventListener(handler, new Event("focus"));
       });
       await flush();
     },
     triggerVisibilityChange: async (nextVisibilityState = "visible") => {
       currentVisibilityState = nextVisibilityState;
-      if (!visibilityChangeHandler) {
+      const handler = visibilityChangeHandler;
+      if (!handler) {
         throw new Error("Expected visibilitychange handler to be registered");
       }
 
       await act(async () => {
-        visibilityChangeHandler?.();
+        dispatchEventListener(handler, new Event("visibilitychange"));
       });
       await flush();
     },

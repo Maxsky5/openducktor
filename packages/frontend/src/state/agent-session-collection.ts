@@ -16,13 +16,22 @@ export const areAgentSessionStatesEquivalent = (
   current: AgentSessionState,
   nextSession: AgentSessionState,
 ): boolean => {
-  // SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Array<keyof AgentSessionState>`.
-  const keys = new Set<keyof AgentSessionState>([
-    ...(Object.keys(current) as Array<keyof AgentSessionState>),
-    ...(Object.keys(nextSession) as Array<keyof AgentSessionState>),
-  ]);
-  for (const key of keys) {
-    if (current[key] !== nextSession[key]) {
+  const currentEntries = Object.entries(current).toSorted(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const nextEntries = Object.entries(nextSession).toSorted(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  if (currentEntries.length !== nextEntries.length) {
+    return false;
+  }
+  for (const [index, currentEntry] of currentEntries.entries()) {
+    const nextEntry = nextEntries[index];
+    if (
+      nextEntry === undefined ||
+      currentEntry[0] !== nextEntry[0] ||
+      currentEntry[1] !== nextEntry[1]
+    ) {
       return false;
     }
   }

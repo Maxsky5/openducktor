@@ -382,6 +382,7 @@ export const createCodexAppServerTransport = (
     stderrClosed = true;
   });
   child.stderr.on("error", (error) => failFast(error));
+  child.stdin.on("error", (error) => failFast(error));
   child.once("error", (error) => failFast(error));
   child.once("close", (exitCode, signal) => {
     clearUnexpectedStdoutCloseTimer();

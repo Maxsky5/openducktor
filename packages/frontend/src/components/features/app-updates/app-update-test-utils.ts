@@ -1,6 +1,5 @@
 import { mock } from "bun:test";
 import type { AppUpdateCommandResult, AppUpdateState } from "@openducktor/contracts";
-import type { HostClient } from "@openducktor/host-client";
 import {
   type AppUpdateBridge,
   createUnavailableShellBridge,
@@ -48,20 +47,8 @@ export const createFakeAppUpdateBridge = (initialState: AppUpdateState): FakeApp
   return bridge;
 };
 
-// SAFETY: This test controls the fixture and supplies `HostClient` used by this case.
 export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge => ({
-  client: {} as HostClient,
-  subscribeRunEvents: async () => () => {},
-  subscribeDevServerEvents: async () => ({
-    transportEpoch: "test:0",
-    unsubscribe: () => {},
-  }),
-  observeAgentSessionLive: async () => () => {},
-  subscribeTaskStream: async () => ({
-    subscriptionId: "test-subscription",
-    acknowledge: async () => {},
-    unsubscribe: () => {},
-  }),
+  ...createUnavailableShellBridge(),
   appUpdates,
   capabilities: {
     canOpenExternalUrls: true,
@@ -70,5 +57,4 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
   openExternalUrl: async () => {},
   resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
   resolveTaskAssetSrc: async () => "asset://task-preview",
-  terminals: createUnavailableShellBridge().terminals,
 });

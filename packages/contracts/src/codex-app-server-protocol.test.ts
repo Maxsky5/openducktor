@@ -280,6 +280,14 @@ describe("Codex app-server protocol", () => {
         },
       }).success,
     ).toBe(false);
+    for (const globScanMaxDepth of [0, -1, 1.5]) {
+      expect(
+        codexAppServerRequestPermissionProfileSchema.safeParse({
+          network: null,
+          fileSystem: { read: null, write: null, globScanMaxDepth },
+        }).success,
+      ).toBe(false);
+    }
   });
 
   test("requires the upstream v2 permission approval fields", () => {

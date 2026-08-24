@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, Part } from "@opencode-ai/sdk/v2";
+
 import type { AgentEvent } from "@openducktor/core";
 import {
   defaultRepoRuntimeInput,
@@ -15,7 +15,6 @@ import type { SessionRecord } from "./types";
 
 describe("OpencodeSdkAdapter session history", () => {
   test("loadSessionHistory keeps the assistant compaction summary and hides its marker", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -33,7 +32,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-summary",
               type: "text",
               text: "Internal compaction summary",
-            } as Part,
+            },
           ],
         },
         {
@@ -49,7 +48,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-marker",
               type: "compaction",
               auto: false,
-            } as Part,
+            },
           ],
         },
         {
@@ -65,7 +64,7 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-visible",
               type: "text",
               text: "Visible answer",
-            } as Part,
+            },
           ],
         },
       ],
@@ -95,7 +94,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory maps Opencode user message system prompts to system history once", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -113,7 +111,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Start work",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -131,7 +129,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Continue",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
       ],
@@ -155,7 +153,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -178,7 +175,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Use the selected agent",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -203,7 +200,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "reasoning",
               text: "Reasoning block",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
             {
               id: "text-1",
               sessionID: "session-opencode-1",
@@ -211,7 +208,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Final answer",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
       ],
@@ -259,13 +256,11 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory attaches OpenCode patch diffs to edit tool parts", async () => {
     const originalFetch = globalThis.fetch;
-    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
+    };
 
     try {
-      // SAFETY: This test controls the fixture and supplies `Part` used by this case.
       const mock = makeMockClient({
         messagesResponse: [
           {
@@ -295,14 +290,14 @@ describe("OpencodeSdkAdapter session history", () => {
                     },
                   },
                 },
-              } as Part,
+              },
               {
                 id: "patch-1",
                 sessionID: "session-opencode-1",
                 messageID: "msg-200",
                 type: "patch",
                 files: ["/repo/src/main.ts"],
-              } as Part,
+              },
             ],
           },
         ],
@@ -346,13 +341,11 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory rejects malformed patch parts at ingress", async () => {
     const originalFetch = globalThis.fetch;
-    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error("Diff endpoint should not be called without a patch message id.");
-    }) as typeof fetch;
+    };
 
     try {
-      // SAFETY: This test controls the fixture and supplies `Part` used by this case.
       const mock = makeMockClient({
         messagesResponse: [
           {
@@ -374,13 +367,13 @@ describe("OpencodeSdkAdapter session history", () => {
                   input: { filePath: "/repo/src/main.ts" },
                   output: "Edited src/main.ts",
                 },
-              } as Part,
+              },
               {
                 id: "patch-1",
                 sessionID: "session-opencode-1",
                 type: "patch",
                 files: ["/repo/src/main.ts"],
-              } as Part,
+              },
             ],
           },
         ],
@@ -404,13 +397,11 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory uses only tool metadata when patch parts are present", async () => {
     const originalFetch = globalThis.fetch;
-    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
+    };
 
     try {
-      // SAFETY: This test controls the fixture and supplies `Part` used by this case.
       const mock = makeMockClient({
         messagesResponse: [
           {
@@ -432,14 +423,14 @@ describe("OpencodeSdkAdapter session history", () => {
                   input: { filePath: "/repo/src/fail.ts" },
                   output: "Edited src/fail.ts",
                 },
-              } as Part,
+              },
               {
                 id: "patch-1",
                 sessionID: "session-opencode-1",
                 messageID: "msg-200",
                 type: "patch",
                 files: ["/repo/src/fail.ts"],
-              } as Part,
+              },
             ],
           },
           {
@@ -469,14 +460,14 @@ describe("OpencodeSdkAdapter session history", () => {
                     },
                   },
                 },
-              } as Part,
+              },
               {
                 id: "patch-2",
                 sessionID: "session-opencode-1",
                 messageID: "msg-201",
                 type: "patch",
                 files: ["/repo/src/ok.ts"],
-              } as Part,
+              },
             ],
           },
         ],
@@ -517,13 +508,11 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory scopes OpenCode tool diffs to their tool metadata", async () => {
     const originalFetch = globalThis.fetch;
-    // SAFETY: This test drives the failure path that supplies `typeof fetch` before this assertion.
-    globalThis.fetch = (async () => {
+    globalThis.fetch = async () => {
       throw new Error("Transcript history must not call the session diff endpoint.");
-    }) as typeof fetch;
+    };
 
     try {
-      // SAFETY: This test controls the fixture and supplies `Part` used by this case.
       const mock = makeMockClient({
         messagesResponse: [
           {
@@ -553,14 +542,14 @@ describe("OpencodeSdkAdapter session history", () => {
                     },
                   },
                 },
-              } as Part,
+              },
               {
                 id: "patch-1",
                 sessionID: "session-opencode-1",
                 messageID: "msg-200",
                 type: "patch",
                 files: ["/repo/src/main.ts"],
-              } as Part,
+              },
             ],
           },
           {
@@ -590,14 +579,14 @@ describe("OpencodeSdkAdapter session history", () => {
                     },
                   },
                 },
-              } as Part,
+              },
               {
                 id: "patch-2",
                 sessionID: "session-opencode-1",
                 messageID: "msg-201",
                 type: "patch",
                 files: ["/repo/src/main.ts"],
-              } as Part,
+              },
             ],
           },
         ],
@@ -640,7 +629,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory normalizes subagent correlation keys like the live stream", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -658,7 +646,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
             {
               id: "tool-a",
               sessionID: "session-opencode-1",
@@ -685,7 +673,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 },
                 title: "Task",
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -722,7 +710,6 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory links task tool parts to OpenCode child sessions", async () => {
     const taskStartedAtMs = Date.parse("2026-02-17T12:00:03.000Z");
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       childrenResponse: [
         {
@@ -759,7 +746,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   start: taskStartedAtMs,
                 },
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -797,7 +784,6 @@ describe("OpencodeSdkAdapter session history", () => {
   test("loadSessionHistory maps synthetic background task completion prompts to subagent updates", async () => {
     const taskStartedAtMs = Date.parse("2026-02-17T12:00:03.000Z");
     const taskCompletedAtMs = Date.parse("2026-02-17T12:00:45.000Z");
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -815,7 +801,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Run tests",
               description: "Run tests",
-            } as Part,
+            },
             {
               id: "tool-task-a",
               sessionID: "session-opencode-1",
@@ -848,7 +834,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   end: taskStartedAtMs + 10,
                 },
               },
-            } as Part,
+            },
           ],
         },
         {
@@ -872,7 +858,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 "</task_result>",
                 "</task>",
               ].join("\n"),
-            } as Part,
+            },
           ],
         },
       ],
@@ -920,7 +906,6 @@ describe("OpencodeSdkAdapter session history", () => {
   test("loadSessionHistory queues early synthetic background task completions until the parent binding exists", async () => {
     const taskStartedAtMs = Date.parse("2026-02-17T12:00:03.000Z");
     const taskCompletedAtMs = Date.parse("2026-02-17T12:00:01.000Z");
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -944,7 +929,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 "</task_result>",
                 "</task>",
               ].join("\n"),
-            } as Part,
+            },
           ],
         },
         {
@@ -962,7 +947,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Run tests",
               description: "Run tests",
-            } as Part,
+            },
             {
               id: "tool-task-a",
               sessionID: "session-opencode-1",
@@ -995,7 +980,7 @@ describe("OpencodeSdkAdapter session history", () => {
                   end: taskStartedAtMs + 10,
                 },
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1041,7 +1026,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory does not seed live subagent correlation for later task-tool updates", async () => {
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -1055,7 +1039,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as Event,
+      },
       {
         type: "message.part.updated",
         properties: {
@@ -1083,9 +1067,8 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as Event,
+      },
     ];
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       streamEvents,
       messagesResponse: [
@@ -1104,21 +1087,14 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
       ],
     });
 
     let releaseStream: (() => void) | null = null;
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (
-      mock.client.global as {
-        event: (options?: {
-          signal?: AbortSignal;
-        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
-      }
-    ).event = async (options?: { signal?: AbortSignal }) => {
+    mock.client.global.event = async (options?: { signal?: AbortSignal }) => {
       async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
@@ -1156,8 +1132,7 @@ describe("OpencodeSdkAdapter session history", () => {
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const finishStream = releaseStream as (() => void) | null;
+    const finishStream: (() => void) | null = releaseStream;
     if (finishStream) {
       finishStream();
     }
@@ -1178,7 +1153,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory does not seed live correlation across assistant message boundaries", async () => {
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     const streamEvents: Event[] = [
       {
         type: "message.updated",
@@ -1192,7 +1166,7 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as Event,
+      },
       {
         type: "message.part.updated",
         properties: {
@@ -1224,9 +1198,8 @@ describe("OpencodeSdkAdapter session history", () => {
             },
           },
         },
-      } as Event,
+      },
     ];
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       streamEvents,
       messagesResponse: [
@@ -1245,21 +1218,14 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
       ],
     });
 
     let releaseStream: (() => void) | null = null;
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (
-      mock.client.global as {
-        event: (options?: {
-          signal?: AbortSignal;
-        }) => Promise<{ stream: AsyncIterable<{ directory: string; payload: Event }> }>;
-      }
-    ).event = async (options?: { signal?: AbortSignal }) => {
+    mock.client.global.event = async (options?: { signal?: AbortSignal }) => {
       async function* iterator() {
         await new Promise<void>((resolve) => {
           releaseStream = resolve;
@@ -1297,8 +1263,7 @@ describe("OpencodeSdkAdapter session history", () => {
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       limit: 100,
     });
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const finishStream = releaseStream as (() => void) | null;
+    const finishStream: (() => void) | null = releaseStream;
     if (finishStream) {
       finishStream();
     }
@@ -1319,7 +1284,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory normalizes split-message subagent history to one canonical correlation", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1337,7 +1301,7 @@ describe("OpencodeSdkAdapter session history", () => {
               agent: "build",
               prompt: "Inspect repo",
               description: "Starting A",
-            } as Part,
+            },
           ],
         },
         {
@@ -1373,7 +1337,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 },
                 title: "Task",
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1410,7 +1374,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory marks queued user messages using the last unfinished assistant boundary", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1427,7 +1390,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Original request",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -1445,7 +1408,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "Working on it",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
         {
@@ -1462,7 +1425,7 @@ describe("OpencodeSdkAdapter session history", () => {
               type: "text",
               text: "One more change",
               time: { start: Date.now(), end: Date.now() },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1489,7 +1452,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory preserves user whitespace and reconstructs adjacent file references", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1519,7 +1481,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 path: "src/alpha.ts",
                 text: { value: "@src/alpha.ts", start: 2, end: 15 },
               },
-            } as Part,
+            },
             {
               id: "file-beta",
               sessionID: "session-opencode-1",
@@ -1533,7 +1495,7 @@ describe("OpencodeSdkAdapter session history", () => {
                 path: "src/beta.ts",
                 text: { value: "@src/beta.ts", start: 15, end: 27 },
               },
-            } as Part,
+            },
           ],
         },
       ],
@@ -1592,7 +1554,6 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory collapses redundant slash-command echo text parts", async () => {
     const slashEnvelope = `<auto-slash-command>\n# /test-command Command\n\n**Description**: A command for testing slash commands\n\n**User Arguments**: pouet\n\n**Scope**: opencode\n\n---\n\n## Command Instructions\n\nI just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet\n\n\n---\n\n## User Request\n\npouet\n</auto-slash-command>`;
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1608,14 +1569,14 @@ describe("OpencodeSdkAdapter session history", () => {
               messageID: "msg-user-slash-1",
               type: "text",
               text: slashEnvelope,
-            } as Part,
+            },
             {
               id: "text-user-echo",
               sessionID: "session-opencode-1",
               messageID: "msg-user-slash-1",
               type: "text",
               text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1640,7 +1601,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory preserves local attachment preview paths from the live session metadata", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1659,7 +1619,7 @@ describe("OpencodeSdkAdapter session history", () => {
               mime: "image/png",
               filename: "Screenshot-2026-03-16-at-23.48.30.png",
               url: "https://files.example.invalid/uploaded-image",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1714,7 +1674,6 @@ describe("OpencodeSdkAdapter session history", () => {
   });
 
   test("loadSessionHistory only reuses preserved attachment parts from the matching runtime", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -1733,7 +1692,7 @@ describe("OpencodeSdkAdapter session history", () => {
               mime: "image/png",
               filename: "Screenshot-2026-03-16-at-23.48.30.png",
               url: "https://files.example.invalid/uploaded-image",
-            } as Part,
+            },
           ],
         },
       ],
@@ -1764,7 +1723,6 @@ describe("OpencodeSdkAdapter session history", () => {
         },
       ],
     });
-    // SAFETY: This test controls the fixture and supplies `SessionRecord` used by this case.
     sessions.set("session-runtime-b", {
       ...matchingSession,
       runtimeId: "runtime-opencode-2",
@@ -1788,7 +1746,7 @@ describe("OpencodeSdkAdapter session history", () => {
           },
         ],
       ]),
-    } as SessionRecord);
+    } satisfies SessionRecord);
 
     const history = await adapter.loadSessionHistory({
       ...defaultRepoRuntimeInput,

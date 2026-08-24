@@ -12,10 +12,11 @@ if (hasRuntimeType(globalThis.document, "undefined")) {
   GlobalRegistrator.register();
 }
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  configurable: true,
+  value: true,
+  writable: true,
+});
 
 const { afterEach } = await import("bun:test");
 const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));

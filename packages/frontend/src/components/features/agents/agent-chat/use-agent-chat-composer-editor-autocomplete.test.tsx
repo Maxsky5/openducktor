@@ -1,15 +1,11 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createTextSegment } from "./agent-chat-composer-draft";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import { useAgentChatComposerEditorAutocomplete } from "./use-agent-chat-composer-editor-autocomplete";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const slashCommands = [
   {

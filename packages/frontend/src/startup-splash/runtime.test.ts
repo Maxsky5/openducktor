@@ -9,6 +9,17 @@ if (hasRuntimeType(globalThis.document, "undefined")) {
 
 const originalMatchMedia = window.matchMedia;
 
+const createMediaQueryList = (media: string, matches: boolean): MediaQueryList => ({
+  matches,
+  media,
+  onchange: null,
+  addListener: () => {},
+  removeListener: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  dispatchEvent: () => true,
+});
+
 const renderStartupSplash = (): HTMLElement => {
   document.body.innerHTML = `
     <div id="openducktor-startup" class="odt-startup" role="status" aria-live="polite">
@@ -25,15 +36,18 @@ const renderStartupSplash = (): HTMLElement => {
 const captureScheduledTimeout = () => {
   const scheduled: Array<{ callback: () => void; delayMs: number | undefined }> = [];
   const cleared = new Set<unknown>();
-  // SAFETY: This test controls the fixture and supplies `typeof window.setTimeout` used by this case.
-  const setTimeoutImplementation = ((handler: TimerHandler, timeout?: number) => {
-    if (!hasRuntimeType(handler, "function")) {
-      throw new TypeError("Expected a timeout callback.");
-    }
-    scheduled.push({ callback: () => handler(), delayMs: timeout });
-    return scheduled.length;
-  }) as typeof window.setTimeout;
-  const timeoutSpy = spyOn(window, "setTimeout").mockImplementation(setTimeoutImplementation);
+  const originalSetTimeout = window.setTimeout;
+  Object.defineProperty(window, "setTimeout", {
+    configurable: true,
+    value: (handler: TimerHandler, timeout?: number) => {
+      if (!hasRuntimeType(handler, "function")) {
+        throw new TypeError("Expected a timeout callback.");
+      }
+      scheduled.push({ callback: () => handler(), delayMs: timeout });
+      return scheduled.length;
+    },
+    writable: true,
+  });
   const clearTimeoutSpy = spyOn(window, "clearTimeout").mockImplementation((timeoutId) => {
     if (timeoutId !== undefined) {
       cleared.add(timeoutId);
@@ -55,18 +69,17 @@ const captureScheduledTimeout = () => {
     },
     restore: () => {
       clearTimeoutSpy.mockRestore();
-      timeoutSpy.mockRestore();
+      Object.defineProperty(window, "setTimeout", {
+        configurable: true,
+        value: originalSetTimeout,
+        writable: true,
+      });
     },
   };
 };
 
 beforeEach(() => {
-  // SAFETY: This test controls the fixture and supplies `MediaQueryList` used by this case.
-  window.matchMedia = (query: string) =>
-    ({
-      matches: false,
-      media: query,
-    }) as MediaQueryList;
+  window.matchMedia = (query: string) => createMediaQueryList(query, false);
 });
 
 afterEach(() => {
@@ -96,8 +109,7 @@ describe("startup splash", () => {
       scheduledTimeout.restore();
     }
 
-    // SAFETY: This test controls the fixture and supplies `TransitionEvent` used by this case.
-    const transitionEvent = new Event("transitionend") as TransitionEvent;
+    const transitionEvent = new Event("transitionend");
     Object.defineProperty(transitionEvent, "propertyName", { value: "opacity" });
     splash.dispatchEvent(transitionEvent);
 
@@ -147,12 +159,7 @@ describe("startup splash", () => {
   test("removes without a fade after the one-second hold when reduced motion is enabled", () => {
     const splash = renderStartupSplash();
     const scheduledTimeout = captureScheduledTimeout();
-    // SAFETY: This test controls the fixture and supplies `MediaQueryList` used by this case.
-    window.matchMedia = (query: string) =>
-      ({
-        matches: true,
-        media: query,
-      }) as MediaQueryList;
+    window.matchMedia = (query: string) => createMediaQueryList(query, true);
 
     try {
       dismissOpenDucktorStartupSplash();
@@ -210,8 +217,7 @@ describe("startup splash", () => {
       expect(splash.classList.contains("odt-startup--failed")).toBe(true);
       expect(splash.getAttribute("aria-hidden")).toBeNull();
 
-      // SAFETY: This test controls the fixture and supplies `TransitionEvent` used by this case.
-      const transitionEvent = new Event("transitionend") as TransitionEvent;
+      const transitionEvent = new Event("transitionend");
       Object.defineProperty(transitionEvent, "propertyName", { value: "opacity" });
       splash.dispatchEvent(transitionEvent);
       scheduledTimeout.run();

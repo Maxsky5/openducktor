@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { hasRuntimeType } from "@openducktor/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render, waitFor } from "@testing-library/react";
@@ -5,11 +6,7 @@ import { createElement, type ReactElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { JsonValue } from "@openducktor/contracts";
 
-// SAFETY: This test controls the fixture and supplies `{ IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironment = globalThis as {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type Theme = "dark" | "light";
 

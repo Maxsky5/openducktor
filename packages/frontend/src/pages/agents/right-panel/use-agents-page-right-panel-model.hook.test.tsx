@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { PullRequest } from "@openducktor/contracts";
+import type { GitConflict, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -102,17 +102,16 @@ const createSnapshot = (gitConflictId: string | null) => ({
   gitConflictId,
 });
 
-// SAFETY: This test controls the fixture and supplies `never` used by this case.
-const createGitActions = (gitConflictId: string | null) => ({
+const createGitActions = (gitConflictId: GitConflict["operation"] | null) => ({
   gitConflict: gitConflictId
-    ? ({
+    ? {
         operation: gitConflictId,
         currentBranch: null,
         targetBranch: "origin/main",
         conflictedFiles: [],
         output: "",
         workingDir: null,
-      } as never)
+      }
     : null,
   askBuilderToResolveGitConflict: async () => {},
   isHandlingGitConflict: false,
@@ -233,8 +232,8 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 beforeEach(async () => {
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
-  buildToolsSnapshotState.current = createSnapshot("A");
-  gitActionsState.current = createGitActions("A");
+  buildToolsSnapshotState.current = createSnapshot("rebase");
+  gitActionsState.current = createGitActions("rebase");
 
   realBuildToolsSnapshot =
     await import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
@@ -278,9 +277,12 @@ afterEach(async () => {
   ]);
 });
 
-// SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: { repoPath: "/repo" } as never,
+  activeWorkspace: {
+    workspaceId: "workspace-repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+  },
   branches: [],
   activeBranch: null,
   selectedView: createSelectedView(),
@@ -296,10 +298,20 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedFile: null,
   onSelectFile: () => {},
   onClearSelectedFile: () => {},
-  repoSettings: { defaultTargetBranch: null } as never,
+  repoSettings: {
+    defaultRuntimeKind: "opencode",
+    worktreeBasePath: "",
+    branchPrefix: "codex/",
+    defaultTargetBranch: { remote: "origin", branch: "main" },
+    preStartHooks: [],
+    postCompleteHooks: [],
+    devServers: [],
+    worktreeCopyPaths: [],
+    agentDefaults: { spec: null, planner: null, build: null, qa: null },
+  },
   detectingPullRequestTaskId: null,
   onDetectPullRequest: () => {},
-  onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
+  onResolveGitConflict: undefined,
   onGitConflictQuickActionContextChange: () => {},
   ...overrides,
 });
@@ -312,33 +324,31 @@ describe("useAgentsPageRightPanelModel", () => {
       useAgentsPageRightPanelModel,
       createHookArgs({
         onGitConflictQuickActionContextChange: (context) => {
-          // SAFETY: This test controls the fixture and supplies `string` used by this case.
-          events.push(context ? (context.conflict.operation as string) : null);
+          events.push(context ? context.conflict.operation : null);
         },
       }),
     );
 
     await harness.mount();
 
-    expect(events).toEqual(["A"]);
+    expect(events).toEqual(["rebase"]);
 
-    buildToolsSnapshotState.current = createSnapshot("B");
-    gitActionsState.current = createGitActions("B");
+    buildToolsSnapshotState.current = createSnapshot("pull_rebase");
+    gitActionsState.current = createGitActions("pull_rebase");
 
     await harness.update(
       createHookArgs({
         onGitConflictQuickActionContextChange: (context) => {
-          // SAFETY: This test controls the fixture and supplies `string` used by this case.
-          events.push(context ? (context.conflict.operation as string) : null);
+          events.push(context ? context.conflict.operation : null);
         },
       }),
     );
 
-    expect(events).toEqual(["A", "B"]);
+    expect(events).toEqual(["rebase", "pull_rebase"]);
 
     await harness.unmount();
 
-    expect(events).toEqual(["A", "B", null]);
+    expect(events).toEqual(["rebase", "pull_rebase", null]);
   });
 
   test("prefetches CI review data in the background for linked pull requests", async () => {

@@ -21,8 +21,15 @@ const summary = (): TerminalSummary => ({
   exit: null,
 });
 
-// SAFETY: This test controls the fixture and supplies `TerminalPtyHandle` used by this case.
-const handle = {} as TerminalPtyHandle;
+const handle: TerminalPtyHandle = {
+  supportsOutputPause: false,
+  hasChildProcesses: () => Effect.succeed(false),
+  write: () => Effect.void,
+  resize: () => Effect.void,
+  pauseOutput: () => Effect.void,
+  resumeOutput: () => Effect.void,
+  terminate: () => Effect.void,
+};
 
 const makeSession = async () => {
   let disposeCalls = 0;

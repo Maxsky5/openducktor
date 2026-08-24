@@ -1,4 +1,8 @@
-import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeDescriptor } from "@openducktor/contracts";
+import {
+  agentToolNameSchema,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import {
   AGENT_ROLE_TOOL_POLICY,
   type AgentRole,
@@ -15,7 +19,6 @@ export const ODT_WORKFLOW_READ_TOOL_NAMES = [
 ] as const satisfies readonly AgentToolName[];
 type WorkflowToolAliasesByCanonical = RuntimeDescriptor["workflowToolAliasesByCanonical"];
 
-const ODT_WORKFLOW_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_TOOL_NAMES);
 const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_READ_TOOL_NAMES);
 
 export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
@@ -23,14 +26,9 @@ export const ODT_WORKFLOW_MUTATION_TOOL_NAMES = ODT_WORKFLOW_TOOL_NAMES.filter(
 );
 const ODT_WORKFLOW_MUTATION_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_MUTATION_TOOL_NAMES);
 
-// SAFETY: The preceding runtime guard establishes `AgentToolName` before this assertion.
 const resolveCanonicalOdtWorkflowToolName = (toolId: string): AgentToolName | null => {
-  if (!ODT_WORKFLOW_TOOL_SET.has(toolId as AgentToolName)) {
-    return null;
-  }
-
-  // SAFETY: The preceding runtime guard establishes `AgentToolName` before this assertion.
-  return toolId as AgentToolName;
+  const parsed = agentToolNameSchema.safeParse(toolId);
+  return parsed.success ? parsed.data : null;
 };
 
 const resolveAliasedOdtWorkflowToolName = (

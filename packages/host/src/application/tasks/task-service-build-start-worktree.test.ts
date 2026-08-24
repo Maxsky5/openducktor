@@ -52,11 +52,10 @@ describe("createTaskService build start worktree handling", () => {
     for (const role of ["planner", "qa"] as const) {
       const calls: unknown[] = [];
       const status = role === "qa" ? "blocked" : "ready_for_dev";
-      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(task({ status })),
-        } as TaskStorePort,
+        } satisfies TaskStorePort,
         gitPort: createBuildStartGitPort({ calls }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
         runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -94,11 +93,10 @@ describe("createTaskService build start worktree handling", () => {
     { role: "qa", task: task({ status: "ready_for_dev" }) },
   ] as const)("rejects unavailable $role bootstrap before creating a worktree", async (entry) => {
     const calls: unknown[] = [];
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       gitPort: createBuildStartGitPort({ calls }),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -140,11 +138,10 @@ describe("createTaskService build start worktree handling", () => {
       const calls: unknown[] = [];
       const coordinator = createTaskSessionBootstrapCoordinator();
       let currentTask = entry.before;
-      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
-        } as TaskStorePort,
+        } satisfies TaskStorePort,
         taskSessionBootstrapCoordinator: coordinator,
         gitPort: createBuildStartGitPort({ calls }),
         runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -203,11 +200,10 @@ describe("createTaskService build start worktree handling", () => {
     let updatedAt = "2026-01-01T00:00:00.000Z";
     const calls: unknown[] = [];
     const coordinator = createTaskSessionBootstrapCoordinator();
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
-    const taskStore = {
+    const taskStore: TaskStorePort = {
       getTask: () => Effect.succeed(task({ status, updatedAt })),
       transitionTask: () => Effect.succeed(task({ status: "in_progress" })),
-    } as TaskStorePort;
+    };
     const service = createTaskService({
       taskStore,
       taskSessionBootstrapCoordinator: coordinator,
@@ -300,11 +296,10 @@ describe("createTaskService build start worktree handling", () => {
   test("coordinates fork startup leases with destructive task lifecycle operations", async () => {
     const calls: unknown[] = [];
     const coordinator = createTaskSessionBootstrapCoordinator();
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ai_review" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: coordinator,
       gitPort: createBuildStartGitPort({ calls }),
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
@@ -363,11 +358,10 @@ describe("createTaskService build start worktree handling", () => {
     { role: "qa", task: task({ status: "ready_for_dev" }) },
   ] as const)("rejects an unavailable $role fork lease before locking the task", async (entry) => {
     const coordinator = createTaskSessionBootstrapCoordinator();
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(entry.task),
-      } as TaskStorePort,
+      },
       taskSessionBootstrapCoordinator: coordinator,
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -400,11 +394,10 @@ describe("createTaskService build start worktree handling", () => {
     async (entry) => {
       const coordinator = createTaskSessionBootstrapCoordinator();
       let currentTask = entry.before;
-      // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
       const service = createTaskService({
         taskStore: {
           getTask: () => Effect.succeed(currentTask),
-        } as TaskStorePort,
+        },
         taskSessionBootstrapCoordinator: coordinator,
         gitPort: createBuildStartGitPort({ calls: [] }),
       });
@@ -449,11 +442,10 @@ describe("createTaskService build start worktree handling", () => {
 
   test("completes a QA fork lease across available statuses and replays completion", async () => {
     let currentTask = task({ status: "blocked" });
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(currentTask),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -489,11 +481,10 @@ describe("createTaskService build start worktree handling", () => {
   });
 
   test("rejects completing an aborted fork lease while replaying abort", async () => {
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "blocked" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
       gitPort: createBuildStartGitPort({ calls: [] }),
     });
@@ -619,11 +610,10 @@ describe("createTaskService build start worktree handling", () => {
         );
       },
     };
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-      } as TaskStorePort,
+      } satisfies TaskStorePort,
       gitPort,
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),
@@ -1016,11 +1006,10 @@ describe("createTaskService build start worktree handling", () => {
         });
       },
     };
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       taskStore: {
         getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
-      } as TaskStorePort,
+      },
       gitPort,
       runtimeDefinitionsService: createRuntimeDefinitionsService(),
       runtimeRegistry: createBuildStartRuntimeRegistry(calls),

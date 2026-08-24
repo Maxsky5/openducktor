@@ -1,15 +1,12 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { Part } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentModelSelection,
   AgentSubagentReference,
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
-  AgentUserMessageSourceText,
 } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
-import { asUnknownRecord, readNumberProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
 import {
   opencodeMessageInfoPayloadSchema,
@@ -20,11 +17,9 @@ import {
 const AUTO_SLASH_COMMAND_OPEN = "<auto-slash-command>";
 const AUTO_SLASH_COMMAND_CLOSE = "</auto-slash-command>";
 
-type NormalizablePart = Part | ParsedOpencodePart;
-
-export const readTextFromParts = (parts: NormalizablePart[]): string => {
+export const readTextFromParts = (parts: ParsedOpencodePart[]): string => {
   return parts
-    .filter((part): part is Extract<NormalizablePart, { type: "text" }> => part.type === "text")
+    .filter((part): part is Extract<ParsedOpencodePart, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n")
     .trim();
@@ -54,31 +49,8 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
-const normalizeSourceText = (value: unknown): AgentUserMessageSourceText | undefined => {
-  const record = asUnknownRecord(value);
-  if (!record) {
-    return undefined;
-  }
-
-  const textValue = readUnknownProp(record, "value");
-  const start = readNumberProp(record, ["start"]);
-  const end = readNumberProp(record, ["end"]);
-  if (
-    !hasRuntimeType(textValue, "string") ||
-    !hasRuntimeType(start, "number") ||
-    !hasRuntimeType(end, "number")
-  ) {
-    return undefined;
-  }
-  return {
-    value: textValue,
-    start,
-    end,
-  };
-};
-
 const normalizeAttachmentPart = (
-  part: Extract<NormalizablePart, { type: "file" }>,
+  part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
   const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
@@ -140,7 +112,7 @@ const normalizeAttachmentPart = (
 };
 
 const normalizeFileReferencePart = (
-  part: Extract<NormalizablePart, { type: "file" }>,
+  part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const source = part.source;
   const sourceTextValue = source?.type === "file" ? (source.text?.value?.trim() ?? "") : "";
@@ -158,7 +130,6 @@ const normalizeFileReferencePart = (
   }
 
   const name = part.filename?.trim() || basenameForPath(filePath);
-  const sourceText = normalizeSourceText(source.text);
   return {
     kind: "file_reference",
     file: {
@@ -167,16 +138,16 @@ const normalizeFileReferencePart = (
       name,
       kind: detectAgentFileReferenceKind({ filePath, mime: part.mime }),
     },
-    ...(sourceText ? { sourceText } : undefined),
+    sourceText: source.text,
   };
 };
 
-type OpenCodeAgentPart = Extract<NormalizablePart, { type: "agent" }>;
+type OpenCodeAgentPart = Extract<ParsedOpencodePart, { type: "agent" }>;
 
 const normalizeSubagentReferencePart = (
   part: OpenCodeAgentPart,
 ): AgentUserMessageDisplayPart | null => {
-  const name = hasRuntimeType(part.name, "string") ? part.name.trim() : "";
+  const name = part.name.trim();
   if (name.length === 0) {
     return null;
   }
@@ -185,11 +156,10 @@ const normalizeSubagentReferencePart = (
     name,
     label: name,
   };
-  const sourceText = normalizeSourceText(part.source);
   return {
     kind: "subagent_reference",
     subagent,
-    ...(sourceText ? { sourceText } : undefined),
+    ...(part.source ? { sourceText: part.source } : undefined),
   };
 };
 
@@ -198,7 +168,7 @@ const isAutoSlashCommandEnvelopeText = (text: string): boolean => {
 };
 
 export const normalizeUserMessageDisplayParts = (
-  parts: NormalizablePart[],
+  parts: ParsedOpencodePart[],
 ): AgentUserMessageDisplayPart[] => {
   const normalizedParts: AgentUserMessageDisplayPart[] = [];
   let hasAutoSlashCommandEnvelope = false;

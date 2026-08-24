@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type RepoConfig, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createArtifactRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostDependencyError } from "../../effect/host-errors";
@@ -50,7 +50,6 @@ const createToolDiscovery = (): ToolDiscoveryPort => ({
   },
 });
 
-// SAFETY: This test controls the fixture and supplies `RepoConfig` used by this case.
 const workingDirectoryDependencies = {
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),
@@ -60,10 +59,12 @@ const workingDirectoryDependencies = {
   },
   workspaceSettingsService: {
     getRepoConfigByRepoPath: () =>
-      Effect.succeed({
-        workspaceId: "repo",
-        worktreeBasePath: "/worktrees/repo",
-      } as RepoConfig),
+      Effect.succeed(
+        repoConfigSchema.parse({
+          workspaceId: "repo",
+          worktreeBasePath: "/worktrees/repo",
+        }),
+      ),
   },
 };
 

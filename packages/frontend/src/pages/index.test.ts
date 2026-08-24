@@ -2,8 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { ComponentType } from "react";
 import { createCachedPageLoader } from "./index";
 
-// SAFETY: This test controls the fixture and supplies `ComponentType` used by this case.
-const TestPage = (() => null) as ComponentType;
+const TestPage: ComponentType = () => null;
 
 describe("createCachedPageLoader", () => {
   test("retries after a rejected load instead of returning a poisoned cached promise", async () => {

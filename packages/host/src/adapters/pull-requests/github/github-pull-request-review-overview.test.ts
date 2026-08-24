@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { loadGithubPullRequestReviewOverview } from "./github-pull-request-review-overview";
+import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
 const isResponseFactory = <Response>(
   value: Response | ((args: string[]) => Response),
 ): value is (args: string[]) => Response => typeof value === "function";
@@ -15,32 +15,19 @@ const createDependencies = <Response>({
   commands?: string[][];
   response: Response | ((args: string[]) => Response);
 }): GithubCommandDependencies => {
-  const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
-    runCommandAllowFailure: (_command, args) => {
-      commands.push(args);
-      if (!args.join(" ").includes("PullRequestReviewOverview")) {
-        return Effect.fail(
-          new HostOperationError({
-            operation: "gh",
-            message: `Unexpected gh command: ${args.join(" ")}`,
-          }),
-        );
-      }
-      const payload = isResponseFactory(response) ? response(args) : response;
-      return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
-    },
-  };
-
-  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-  return {
-    resolveGithubCommand: () =>
-      Effect.succeed({
-        ghCommand: "gh",
-        systemCommands: systemCommands as SystemCommandPort,
-      }),
-    systemCommands: systemCommands as SystemCommandPort,
-    toolDiscovery: {} as GithubCommandDependencies["toolDiscovery"],
-  };
+  return createGithubReviewTestDependencies((_command, args) => {
+    commands.push(args);
+    if (!args.join(" ").includes("PullRequestReviewOverview")) {
+      return Effect.fail(
+        new HostOperationError({
+          operation: "gh",
+          message: `Unexpected gh command: ${args.join(" ")}`,
+        }),
+      );
+    }
+    const payload = isResponseFactory(response) ? response(args) : response;
+    return Effect.succeed({ ok: true, stdout: JSON.stringify(payload), stderr: "" });
+  });
 };
 
 const input = (dependencies: GithubCommandDependencies) => ({

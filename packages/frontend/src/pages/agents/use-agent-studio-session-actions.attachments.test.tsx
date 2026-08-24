@@ -42,9 +42,8 @@ const originalWorkspaceStageLocalAttachment = hostClient.workspaceStageLocalAtta
 beforeEach(async () => {
   await clearAppQueryClient();
   stageLocalAttachmentFileMock.mockClear();
-  // SAFETY: This test controls the fixture and supplies `never` used by this case.
   hostClient.workspaceStageLocalAttachment = async (args) => ({
-    path: await stageLocalAttachmentFileMock(args as never),
+    path: await stageLocalAttachmentFileMock(args),
   });
 });
 

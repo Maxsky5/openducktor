@@ -14,6 +14,8 @@ const submenuItems = (submenu: MenuSubmenu): MenuItemConstructorOptions[] =>
 const rolesFromSubmenu = (submenu: MenuSubmenu): string[] =>
   submenuItems(submenu).flatMap((item) => (item.role ? [item.role] : []));
 
+const isZeroArgumentClickHandler = (click: Function): click is () => void => click.length === 0;
+
 describe("main menu template", () => {
   test("adds devtools but not reload roles to the dev View menu", () => {
     const viewMenu = createViewMenu(true);
@@ -68,11 +70,10 @@ describe("main menu template", () => {
     });
 
     const click = updateItem?.click;
-    if (!click) {
-      throw new Error("Expected Check for Updates menu item click handler.");
+    if (!click || !isZeroArgumentClickHandler(click)) {
+      throw new Error("Expected a zero-argument Check for Updates menu item click handler.");
     }
-    // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
-    (click as () => void)();
+    click();
     expect(onCheckForUpdates).toHaveBeenCalled();
   });
 });

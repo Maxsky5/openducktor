@@ -126,17 +126,12 @@ describe("RepositoryScriptsSection", () => {
 
     try {
       expect(screen.getByText("Tab label is required.")).toBeTruthy();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Add server" }).disabled).toBe(
+        true,
+      );
       expect(
-        (screen.getByRole("button", { name: "Add server" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
-      expect(
-        (
-          screen.getByLabelText(
-            "Worktree setup script (one command per line)",
-          ) as HTMLTextAreaElement
-        ).disabled,
+        screen.getByLabelText<HTMLTextAreaElement>("Worktree setup script (one command per line)")
+          .disabled,
       ).toBe(true);
     } finally {
       rendered.unmount();

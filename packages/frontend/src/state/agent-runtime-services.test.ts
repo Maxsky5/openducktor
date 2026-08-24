@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { RuntimeKind } from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentSessionSummary } from "@openducktor/core";
 import { createAgentRuntimeServices } from "./agent-runtime-services";
 import { host } from "./operations/shared/host";
@@ -38,36 +37,37 @@ describe("agent runtime services", () => {
   test("rejects unsupported runtime kinds at the service boundary", async () => {
     const { runtimeCatalogOperations } = createAgentRuntimeServices();
 
-    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
     await expect(
       runtimeCatalogOperations.loadRepoRuntimeCatalog({
         repoPath: "/repo",
-        runtimeKind: "test-runtime" as RuntimeKind,
+        // @ts-expect-error This negative test verifies rejection of an unknown runtime kind.
+        runtimeKind: "test-runtime",
       }),
     ).rejects.toThrow("Unsupported agent runtime 'test-runtime'.");
   });
 
   test("rejects mismatched runtime policy bindings before dispatching a pure adapter read", () => {
     const { agentEngine } = createAgentRuntimeServices();
+    const runtimePolicy = {
+      kind: "codex",
+      policy: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        commandNetworkAccess: false,
+        approvalsReviewerApplies: true,
+      },
+    } satisfies NonNullable<Parameters<typeof agentEngine.loadSessionTodos>[0]["runtimePolicy"]>;
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
+      // @ts-expect-error This negative test verifies rejection of a mismatched runtime-policy discriminator.
       agentEngine.loadSessionTodos({
         runtimeKind: "opencode",
         repoPath: "/repo",
         workingDirectory: "/tmp/repo",
         externalSessionId: "external-1",
-        runtimePolicy: {
-          kind: "codex",
-          policy: {
-            sandboxMode: "workspace-write",
-            approvalPolicy: "on-request",
-            approvalsReviewer: "user",
-            commandNetworkAccess: false,
-            approvalsReviewerApplies: true,
-          },
-        },
-      } as never),
+        runtimePolicy,
+      }),
     ).toThrow(
       "Cannot load OpenCode session todos with runtime 'opencode' and 'codex' runtime policy.",
     );

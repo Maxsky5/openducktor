@@ -7,21 +7,22 @@ describe("createOpenCodeRuntimeAdapter", () => {
   test("requires live repo runtimes through the host runtimeRequire boundary", async () => {
     const originalRuntimeRequire = host.runtimeRequire;
     const runtimeRequireCalls: unknown[] = [];
-    // SAFETY: This test controls the fixture and supplies `typeof host.runtimeRequire` used by this case.
-    host.runtimeRequire = mock(async (...args: unknown[]) => {
-      runtimeRequireCalls.push(args);
-      return {
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
-        runtimeRoute: { type: "stdio" as const, identity: "runtime-stdio" },
-        startedAt: "2026-02-22T09:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      };
-    }) as typeof host.runtimeRequire;
+    host.runtimeRequire = mock(
+      async (...args: unknown[]): ReturnType<typeof host.runtimeRequire> => {
+        runtimeRequireCalls.push(args);
+        return {
+          kind: "opencode",
+          runtimeId: "runtime-1",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+          startedAt: "2026-02-22T09:00:00.000Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        };
+      },
+    );
 
     try {
       await expect(

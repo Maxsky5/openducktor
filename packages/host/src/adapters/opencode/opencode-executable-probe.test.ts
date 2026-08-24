@@ -15,7 +15,6 @@ describe("createOpenCodeExecutableProbe", () => {
     const stoppedPids: number[] = [];
     const child = Object.assign(new EventEmitter(), {
       pid: 42,
-      stdin: null,
       stdout: new PassThrough(),
       stderr: new PassThrough(),
     });
@@ -33,8 +32,7 @@ describe("createOpenCodeExecutableProbe", () => {
       },
       spawnProcess(command, args) {
         spawnCalls.push({ command, args });
-        // SAFETY: This test controls the fixture and supplies `never` used by this case.
-        return child as never;
+        return child;
       },
     });
 
@@ -53,14 +51,12 @@ describe("createOpenCodeExecutableProbe", () => {
   test("handles a spawn error after a child is returned without a pid", async () => {
     const child = Object.assign(new EventEmitter(), {
       pid: undefined,
-      stdin: null,
       stdout: new PassThrough(),
       stderr: new PassThrough(),
     });
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const probe = createOpenCodeExecutableProbe({
       portAllocator: () => Effect.succeed(4567),
-      spawnProcess: () => child as never,
+      spawnProcess: () => child,
     });
 
     const exit = await Effect.runPromiseExit(probe.probeExecutable("/missing/opencode"));
@@ -73,11 +69,9 @@ describe("createOpenCodeExecutableProbe", () => {
   test("preserves an operational failure when the server exits before readiness", async () => {
     const child = Object.assign(new EventEmitter(), {
       pid: 42,
-      stdin: null,
       stdout: new PassThrough(),
       stderr: new PassThrough(),
     });
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const probe = createOpenCodeExecutableProbe({
       portAllocator: () => Effect.succeed(4567),
       processTreeTerminator: () => Effect.void,
@@ -86,7 +80,7 @@ describe("createOpenCodeExecutableProbe", () => {
         return Effect.succeed(false);
       },
       retryDelayMs: 1,
-      spawnProcess: () => child as never,
+      spawnProcess: () => child,
     });
 
     const failure = await Effect.runPromise(

@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type {
-  AgentSessionLiveEnvelope,
-  ExternalTaskSyncEvent,
-  TaskEventCursor,
-} from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
 import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
@@ -56,6 +52,9 @@ const createElectronApi = () => {
   const unsubscribe = mock(() => {});
   const unsubscribeAppUpdates = mock(() => {});
   const unsubscribeTaskStream = mock(() => {});
+  let appUpdateListener:
+    | Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]
+    | undefined;
   return {
     electronApi: {
       platform: "darwin",
@@ -89,7 +88,10 @@ const createElectronApi = () => {
             progressPercent: 100,
           },
         })),
-        subscribe: mock(() => unsubscribeAppUpdates),
+        subscribe: mock((listener) => {
+          appUpdateListener = listener;
+          return unsubscribeAppUpdates;
+        }),
       },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
@@ -109,11 +111,18 @@ const createElectronApi = () => {
         subscribe: mock(() => unsubscribe),
       },
     },
+    emitAppUpdate(state: Parameters<NonNullable<typeof appUpdateListener>>[0]) {
+      if (!appUpdateListener) {
+        throw new Error("Expected an app-update subscription before emitting state.");
+      }
+      appUpdateListener(state);
+    },
     unsubscribeAppUpdates,
     unsubscribe,
     unsubscribeTaskStream,
   } satisfies {
     electronApi: OpenDucktorElectronApi;
+    emitAppUpdate(state: Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]): void;
     unsubscribeAppUpdates: ReturnType<typeof mock>;
     unsubscribe: ReturnType<typeof mock>;
     unsubscribeTaskStream: ReturnType<typeof mock>;
@@ -141,10 +150,10 @@ describe("electron shell bridge", () => {
     })();
 
     expect(error).toBeInstanceOf(ElectronPreloadBridgeUnavailableError);
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toContain(
-      "OpenDucktor Electron preload bridge is unavailable.",
-    );
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("OpenDucktor Electron preload bridge is unavailable.");
   });
 
   test("uses the preload bridge for event subscriptions and shell capabilities", async () => {
@@ -297,10 +306,9 @@ describe("electron shell bridge", () => {
     const listener = mock(() => {});
 
     await bridge.observeAgentSessionLive({ repoPath: "/repo" }, listener);
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const subscription = (electronApi.subscribe as ReturnType<typeof mock>).mock.calls.find(
+    const subscription = electronApi.subscribe.mock.calls.find(
       ([channel]) => channel === "openducktor://agent-session-live-event",
-    )?.[1] as ((payload: AgentSessionLiveEnvelope) => void) | undefined;
+    )?.[1];
     if (!subscription) {
       throw new Error("Expected live-session subscription.");
     }
@@ -330,7 +338,7 @@ describe("electron shell bridge", () => {
   });
 
   test("uses the preload bridge for app update state and actions", async () => {
-    const { electronApi, unsubscribeAppUpdates } = createElectronApi();
+    const { electronApi, emitAppUpdate, unsubscribeAppUpdates } = createElectronApi();
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
@@ -344,10 +352,7 @@ describe("electron shell bridge", () => {
     await bridge.appUpdates.check({ initiator: "settings" });
     await bridge.appUpdates.download();
     await bridge.appUpdates.install();
-    // SAFETY: This test controls the fixture and supplies `ReturnType<typeof mock>` used by this case.
-    const appUpdateListener = (electronApi.appUpdates.subscribe as ReturnType<typeof mock>).mock
-      .calls[0]?.[0];
-    appUpdateListener?.({
+    emitAppUpdate({
       status: "available",
       currentVersion: "0.4.2",
       availableVersion: "0.4.3",

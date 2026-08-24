@@ -17,7 +17,6 @@ import {
   type WorktreeFilePort,
 } from "./test-support/task-workflow-harness";
 
-// SAFETY: This test drives the failure path that supplies `WorktreeFilePort` before this assertion.
 const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
   ({
     ensureDirectory() {
@@ -76,7 +75,7 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
           }),
       });
     },
-  }) satisfies WorktreeFilePort as WorktreeFilePort;
+  }) satisfies WorktreeFilePort satisfies WorktreeFilePort;
 const metadataWithSessions = (
   agentSessions: ReturnType<typeof createAgentSessionRecord>[] = [],
 ) => ({
@@ -462,9 +461,7 @@ describe("createTaskService task mutations and reset", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).message).toBe("Only epics can have subtasks.");
   });
   test("deletes a task without subtasks and stops task-scoped dev servers", async () => {
@@ -2302,9 +2299,7 @@ describe("createTaskService task mutations and reset", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).message).toBe("Tasks with subtasks cannot become subtasks.");
   });
   test("transitions a task after validating workflow rules and enriches the result", async () => {

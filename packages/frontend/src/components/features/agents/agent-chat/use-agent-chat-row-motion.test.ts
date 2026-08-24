@@ -2,14 +2,10 @@ import { hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { act, createElement, Fragment } from "react";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { useAgentChatRowMotion } from "./use-agent-chat-row-motion";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type HarnessProps = {
   rowKeys: string[];
@@ -21,8 +17,7 @@ const flush = async (): Promise<void> => {
 };
 
 describe("useAgentChatRowMotion", () => {
-  // SAFETY: This test creates the DOM fixture that supplies `{ window?: unknown }` before this lookup.
-  const originalWindow = (globalThis as { window?: unknown }).window;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
   const originalAnimate = HTMLElement.prototype.animate;
 
   const Harness = ({ rowKeys }: HarnessProps) => {
@@ -42,20 +37,21 @@ describe("useAgentChatRowMotion", () => {
   };
 
   beforeEach(() => {
-    // SAFETY: This test controls the fixture and supplies `{ window?: unknown }` used by this case.
-    (globalThis as { window?: unknown }).window = globalThis;
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: globalThis,
+      writable: true,
+    });
     HTMLElement.prototype.animate = mock(() => {
       throw new Error("animate should not be called");
     });
   });
 
   afterEach(() => {
-    if (hasRuntimeType(originalWindow, "undefined")) {
-      // SAFETY: This test controls the fixture and supplies `{ window?: unknown }` used by this case.
-      delete (globalThis as { window?: unknown }).window;
+    if (hasRuntimeType(originalWindowDescriptor, "undefined")) {
+      Reflect.deleteProperty(globalThis, "window");
     } else {
-      // SAFETY: This test creates the DOM fixture that supplies `{ window?: unknown }` before this lookup.
-      (globalThis as { window?: unknown }).window = originalWindow;
+      Object.defineProperty(globalThis, "window", originalWindowDescriptor);
     }
     HTMLElement.prototype.animate = originalAnimate;
   });

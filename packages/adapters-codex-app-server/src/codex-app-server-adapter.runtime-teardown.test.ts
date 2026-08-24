@@ -77,7 +77,6 @@ class DeferredSteerTransport extends RecordingTransport {
   }
 }
 
-// SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
 const freshInventoryClient = (
   threadId: string,
   status: { type: "active"; activeFlags: string[] } | { type: "idle" },
@@ -100,7 +99,7 @@ const freshInventoryClient = (
       ],
       nextCursor: null,
     }),
-  }) as CodexAppServerClient;
+  }) satisfies CodexAppServerClient;
 
 describe("CodexAppServerAdapter runtime teardown", () => {
   test("attempts every runtime-state cleanup when one component fails", () => {
@@ -132,8 +131,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     const { adapter } = createHarness();
     const threadInventory = codexThreadInventoryForTest(adapter);
     const inventoryCalls: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `CodexAppServerClient` used by this case.
-    const client = {
+    const client: CodexAppServerClient = {
       threadLoadedList: async () => {
         inventoryCalls.push("thread/loaded/list");
         return { data: ["thread-1", "thread-2"], nextCursor: null };
@@ -162,7 +160,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
           nextCursor: null,
         };
       },
-    } as CodexAppServerClient;
+    };
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
       threadInventory.updateThreadStatus(
@@ -213,10 +211,9 @@ describe("CodexAppServerAdapter runtime teardown", () => {
 
   test("ignores terminal turn completion from a disposed runtime owner", async () => {
     const { adapter, transports } = createHarness({}, { deferTurnStart: true });
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const internals = adapter as {
+    const internals: {
       localSessions: { get(externalSessionId: string): object | undefined };
-    };
+    } = adapter;
     const threadInventory = codexThreadInventoryForTest(adapter);
 
     await adapter.startSession(codexStartSessionInput());
@@ -299,8 +296,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
 
   test("does not send a turn after ownership is lost during model validation", async () => {
     const { adapter, transports } = createHarness();
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const internals = adapter as {
+    const internals: {
       models: {
         validate: (
           client: CodexAppServerClient,
@@ -308,7 +304,7 @@ describe("CodexAppServerAdapter runtime teardown", () => {
           model: { providerId: string; modelId: string; variant: string },
         ) => Promise<void>;
       };
-    };
+    } = adapter;
     const validationStarted = createDeferred<void>();
     const allowValidation = createDeferred<void>();
 

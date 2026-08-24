@@ -99,8 +99,7 @@ const createDraft = (text = "hello", segmentId = "segment-1"): AgentChatComposer
 });
 
 const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
-  // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
-  const root = document.createElement("div") as HTMLDivElement;
+  const root: HTMLDivElement = document.createElement("div");
   const event = {
     key: overrides.key ?? "Enter",
     shiftKey: overrides.shiftKey ?? false,

@@ -6,6 +6,7 @@ import { createEventPublishingTaskService } from "./event-publishing-task-servic
 import type { TaskSyncService } from "./sync/task-sync-service";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import type { TaskServiceWithMutationProgress } from "./task-service";
+import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 
 const taskCard = (): TaskCard => ({
   id: "task-1",
@@ -32,15 +33,9 @@ const taskCard = (): TaskCard => ({
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
 });
-// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
 const fakeTaskService = (
   overrides: Partial<TaskServiceWithMutationProgress>,
-): TaskServiceWithMutationProgress =>
-  new Proxy(overrides, {
-    get: (target, property) =>
-      target[property as keyof TaskServiceWithMutationProgress] ??
-      (() => Effect.die(`Unexpected call: ${String(property)}`)),
-  }) as TaskServiceWithMutationProgress;
+): TaskServiceWithMutationProgress => createTaskServiceWithMutationProgressTestDouble(overrides);
 const sync = (
   events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }>,
 ): Pick<

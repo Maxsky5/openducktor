@@ -22,13 +22,12 @@ import {
 describe("createTaskService direct merge", () => {
   test("requires worktree files before starting a local direct merge", async () => {
     const calls: unknown[] = [];
-    // SAFETY: This test controls the fixture and supplies `TaskStorePort` used by this case.
     const service = createTaskService({
       devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       systemCommands: createApprovalSystemCommands(),
-      taskStore: {} as TaskStorePort,
+      taskStore: {} satisfies TaskStorePort,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
         workspaceId: "repo",

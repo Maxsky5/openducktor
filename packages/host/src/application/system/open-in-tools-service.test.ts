@@ -95,14 +95,13 @@ const createFakeOpenInToolsPort = ({
       });
     },
   };
-  // SAFETY: This test controls the fixture and supplies `OpenInToolsPort` used by this case.
   return {
     get discoveryCount() {
       return discoveryCount;
     },
     launches,
     externalUrls,
-    port: port as OpenInToolsPort,
+    port,
   };
 };
 describe("createOpenInToolsService", () => {

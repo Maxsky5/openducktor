@@ -41,7 +41,6 @@ describe("task validation effects", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
   });
 
@@ -58,7 +57,6 @@ describe("task validation effects", () => {
     );
 
     expect(error).toBeInstanceOf(TaskPolicyError);
-    // SAFETY: This test controls the fixture and supplies `TaskPolicyError` used by this case.
     expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 });

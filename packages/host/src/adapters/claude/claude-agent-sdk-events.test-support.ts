@@ -1,13 +1,31 @@
-// SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-export const createEventTestSession = (activity: "idle" | "running" = "running") => ({
-  acceptedUserMessages: [] as unknown[],
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import type { ClaudeLifecycleSession } from "./claude-agent-sdk-lifecycle";
+
+type EventTestSession = Omit<
+  ClaudeEventSession,
+  | "acceptedUserMessages"
+  | "activeBackgroundSubagentTaskIds"
+  | "pendingApprovals"
+  | "pendingQuestions"
+> &
+  ClaudeLifecycleSession & {
+    acceptedUserMessages: unknown[];
+    activeBackgroundSubagentTaskIds: Set<string>;
+    pendingApprovals: Map<string, unknown>;
+    pendingQuestions: Map<string, unknown>;
+    queuedSdkMessages: unknown[];
+  };
+
+export const createEventTestSession = (
+  activity: "idle" | "running" = "running",
+): EventTestSession => ({
+  acceptedUserMessages: [],
   activeBackgroundSubagentTaskIds: new Set<string>(),
   activeSdkUserTurnCount: 0,
   activity,
   externalSessionId: "session-1",
   pendingApprovals: new Map<string, unknown>(),
   pendingQuestions: new Map<string, unknown>(),
-  sdkState: undefined as "idle" | "requires_action" | "running" | undefined,
   pendingUserTurnCount: 0,
   queuedSdkMessages: [],
   streamAssistantMessageOrdinal: 0,

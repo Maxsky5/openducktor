@@ -1,20 +1,15 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import {
+  agentSessionTodoPrioritySchema,
+  agentSessionTodoStatusSchema,
+  hasRuntimeType,
+} from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "../types/agent-orchestrator";
 
-const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
-const TODO_PRIORITIES = ["high", "medium", "low"] as const;
-const TODO_STATUS_SET = new Set<AgentSessionTodoItem["status"]>(TODO_STATUSES);
-const TODO_PRIORITY_SET = new Set<AgentSessionTodoItem["priority"]>(TODO_PRIORITIES);
+const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] =>
+  agentSessionTodoStatusSchema.safeParse(value).success;
 
-const isAgentSessionTodoStatus = (value: string): value is AgentSessionTodoItem["status"] => {
-  // SAFETY: The preceding runtime guard establishes `AgentSessionTodoItem["status"]` before this assertion.
-  return TODO_STATUS_SET.has(value as AgentSessionTodoItem["status"]);
-};
-
-const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] => {
-  // SAFETY: The preceding runtime guard establishes `AgentSessionTodoItem["priority"]` before this assertion.
-  return TODO_PRIORITY_SET.has(value as AgentSessionTodoItem["priority"]);
-};
+const isAgentSessionTodoPriority = (value: string): value is AgentSessionTodoItem["priority"] =>
+  agentSessionTodoPrioritySchema.safeParse(value).success;
 
 export type NormalizeAgentSessionTodoInput = {
   id: string;

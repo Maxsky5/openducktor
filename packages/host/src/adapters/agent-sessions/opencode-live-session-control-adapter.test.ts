@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import type {
-  AgentSessionLiveAdapterChange,
-  AgentSessionRuntimeAdapterPort,
-} from "../../ports/agent-session-live-adapter-port";
+import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import {
@@ -26,8 +23,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     const controlRef = { ...ref, externalSessionId: "controlled-session" };
     const startInput = {
       repoPath: "/repo",
@@ -139,8 +135,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
@@ -269,8 +264,7 @@ describe("OpenCode live session controls", () => {
         prepareRuntime: harness.prepareRuntime,
       })(runtime),
     );
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
     const send = (externalSessionId: string) =>
       Effect.runPromise(
@@ -306,11 +300,10 @@ describe("OpenCode live session controls", () => {
       releaseSends();
       await Promise.all([first, queued, other]);
       await thirdSendStarted;
-      // SAFETY: This test controls the fixture and supplies `{ externalSessionId: string }` used by this case.
       expect(
         harness.controlCalls
           .filter((call) => call.operation === "send")
-          .map((call) => (call.input as { externalSessionId: string }).externalSessionId),
+          .map((call) => call.input.externalSessionId),
       ).toEqual(["session-1", "session-2", "session-1"]);
     } finally {
       releaseSends();
@@ -340,8 +333,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
@@ -381,8 +373,7 @@ describe("OpenCode live session controls", () => {
         })(runtime),
       );
       await Effect.runPromise(prepared.startForwarding());
-      // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-      const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+      const adapter = prepared.adapter;
       const controlRef = { ...ref, externalSessionId: "controlled-session" };
       const sessionScope = {
         kind: "workflow" as const,
@@ -491,8 +482,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
     harness.setSources([
       nativeSource({
         runtimeActivity: "running",
@@ -542,8 +532,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
 
     await harness.emit({
       type: "transcript_event",
@@ -606,8 +595,7 @@ describe("OpenCode live session controls", () => {
       })(runtime),
     );
     await Effect.runPromise(prepared.startForwarding());
-    // SAFETY: This test controls the fixture and supplies `AgentSessionRuntimeAdapterPort` used by this case.
-    const adapter = prepared.adapter as AgentSessionRuntimeAdapterPort;
+    const adapter = prepared.adapter;
 
     try {
       await harness.emit({

@@ -4,7 +4,6 @@ import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-
 
 describe("claude-agent-sdk-history subagents", () => {
   test("places a completed subagent response after tool work that followed its forwarded text", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -67,7 +66,7 @@ describe("claude-agent-sdk-history subagents", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       { includeNestedEntries: true },
@@ -165,7 +164,6 @@ describe("claude-agent-sdk-history subagents", () => {
   });
 
   test("hydrates Claude task system entries as anchored subagent parts", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -207,7 +205,7 @@ describe("claude-agent-sdk-history subagents", () => {
           status: "completed",
           summary: "Tests passed",
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -229,7 +227,6 @@ describe("claude-agent-sdk-history subagents", () => {
 
   test("anchors nested Claude task system entries to the selected subagent transcript", () => {
     const parentExternalSessionId = "session-1::claude-subagent::parent-agent";
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -272,7 +269,7 @@ describe("claude-agent-sdk-history subagents", () => {
           output_file: "/tmp/child-agent.output",
           summary: "Nested inspection complete",
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       {
@@ -564,7 +561,6 @@ describe("claude-agent-sdk-history subagents", () => {
   });
 
   test("settles every background Agent in a grouped stopped notification", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
       [
         ...["agent-1", "agent-2"].flatMap((_agentId, index) => {
@@ -618,7 +614,7 @@ describe("claude-agent-sdk-history subagents", () => {
 </task-notification>`,
           },
         }),
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
       () => "2026-06-26T12:00:00.000Z",
       [],
       {

@@ -1,4 +1,3 @@
-import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { Effect, Fiber } from "effect";
@@ -6,16 +5,22 @@ import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server
 import type { CodexAppServerServerNotificationMethod } from "../../ports/codex-app-server-protocol";
 import { HostValidationError } from "../../effect/host-errors";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
+import type { CodexChildProcess } from "./codex-app-server-transport-types";
 
-const createChild = (
-  stdin: Writable = new PassThrough(),
-): ChildProcessByStdio<Writable, PassThrough, PassThrough> => {
-  // SAFETY: This test controls the fixture and supplies `ChildProcessByStdio<Writable, PassThrough, PassThrough>` used by this case.
-  const child = new EventEmitter() as ChildProcessByStdio<Writable, PassThrough, PassThrough>;
-  child.stdin = stdin;
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  return child;
+type TestCodexChildProcess = CodexChildProcess & {
+  readonly stdout: PassThrough;
+  readonly stderr: PassThrough;
+  emit(event: "close", exitCode: number | null, signal: NodeJS.Signals | null): boolean;
+};
+
+type PendingWriteState = {
+  complete?: () => void;
+};
+
+const createChild = (stdin: Writable = new PassThrough()): TestCodexChildProcess => {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  return Object.assign(new EventEmitter(), { stdin, stdout, stderr });
 };
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -40,7 +45,7 @@ const recordClearTimeouts = () => {
   const originalClearTimeout = globalThis.clearTimeout;
   const clearedTimeouts: ReturnType<typeof globalThis.setTimeout>[] = [];
 
-  // SAFETY: This test controls the fixture and supplies `typeof globalThis.clearTimeout` used by this case.
+  // SAFETY: Bun and Node declare incompatible `clearTimeout` overload sets, while this wrapper receives and forwards only handles returned by `globalThis.setTimeout` in the transport under test.
   globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
     clearedTimeouts.push(timeoutId);
     originalClearTimeout(timeoutId);
@@ -564,17 +569,17 @@ describe("createCodexAppServerTransport", () => {
 
   test("keeps the transport usable after a late response to an interrupted sent request", async () => {
     let writeCount = 0;
-    // SAFETY: This test drives the failure path that supplies `Writable` before this assertion.
-    const stdin = {
-      write(_chunk: string, callback: (error?: Error | null) => void) {
+    const firstWriteState: PendingWriteState = {};
+    const stdin = new Writable({
+      write(_chunk, _encoding, callback) {
         writeCount += 1;
-        if (writeCount > 1) {
-          callback();
+        if (writeCount === 1) {
+          firstWriteState.complete = callback;
+          return;
         }
-        return true;
+        callback();
       },
-      destroy() {},
-    } as Writable;
+    });
     const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
 
@@ -590,6 +595,11 @@ describe("createCodexAppServerTransport", () => {
       expect(writeCount).toBe(1);
 
       await Effect.runPromise(Fiber.interrupt(interruptedFiber));
+      const completeFirstWrite = firstWriteState.complete;
+      if (!completeFirstWrite) {
+        throw new Error("Expected the interrupted request write to remain pending.");
+      }
+      completeFirstWrite();
       child.stdout.write(
         `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: null } })}\n`,
       );
@@ -636,14 +646,11 @@ describe("createCodexAppServerTransport", () => {
   });
 
   test("clears the pending request timeout when send fails", async () => {
-    // SAFETY: This test drives the failure path that supplies `Writable` before this assertion.
-    const stdin = {
-      write(_chunk: string, callback: (error?: Error | null) => void) {
+    const stdin = new Writable({
+      write(_chunk, _encoding, callback) {
         callback(new Error("write failed"));
-        return false;
       },
-      destroy() {},
-    } as Writable;
+    });
     const child = createChild(stdin);
     const transport = createCodexAppServerTransport("runtime-1", child, 1_000, () => {});
     const clearTimeoutRecorder = recordClearTimeouts();
@@ -673,12 +680,11 @@ describe("createCodexAppServerTransport", () => {
     circularParams.self = circularParams;
 
     try {
-      // SAFETY: This test controls the fixture and supplies `never` used by this case.
       await expect(
         Effect.runPromise(
           transport.request({
             method: "model/list",
-            params: circularParams as never,
+            params: circularParams,
           }),
         ),
       ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");

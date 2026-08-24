@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { type AgentRole, agentRoleValues } from "./agent-workflow-schemas";
+import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 
@@ -130,24 +130,7 @@ const codexRoleOverrideSchema = z
     commandNetworkAccess: z.boolean().optional(),
   })
   .strict();
-// SAFETY: Object.keys reads the own keys of this typed object, so each key belongs to `Partial<Record<AgentRole, z.infer<typeof codexRoleOverrideSchema>>>`.
-const codexRoleOverridesSchema = z
-  .record(z.string(), codexRoleOverrideSchema)
-  .superRefine((overrides, context) => {
-    const supportedRoles = new Set<string>(agentRoleValues);
-    for (const role of Object.keys(overrides)) {
-      if (!supportedRoles.has(role)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Unsupported Codex role override: ${role}`,
-          path: [role],
-        });
-      }
-    }
-  })
-  .transform(
-    (overrides) => overrides as Partial<Record<AgentRole, z.infer<typeof codexRoleOverrideSchema>>>,
-  );
+const codexRoleOverridesSchema = z.partialRecord(agentRoleSchema, codexRoleOverrideSchema);
 
 const persistedCodexRuntimeConfigV2Schema = persistedAgentRuntimeEnabledConfigV2Schema
   .extend({

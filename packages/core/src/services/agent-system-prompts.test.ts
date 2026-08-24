@@ -535,11 +535,11 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("rejects unknown kickoff prompt templates", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       buildAgentKickoffPrompt({
         role: "build",
-        templateId: "kickoff.build_rebase_conflict_resolution" as never,
+        // @ts-expect-error This negative test verifies rejection of an unknown template ID.
+        templateId: "kickoff.build_rebase_conflict_resolution",
         task: {
           taskId: "task-2",
         },

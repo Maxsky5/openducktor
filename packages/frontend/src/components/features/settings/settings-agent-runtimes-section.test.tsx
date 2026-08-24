@@ -257,26 +257,21 @@ describe("AgentRuntimesSection", () => {
     );
 
     try {
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("tab", { name: /OpenCode/i }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("tab", { name: /OpenCode/i }).disabled).toBe(
         false,
       );
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("switch", { name: "Enabled" }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("switch", { name: "Enabled" }).disabled).toBe(
         false,
       );
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLInputElement` before this lookup.
       expect(
-        (screen.getByRole("textbox", { name: "Executable path" }) as HTMLInputElement).disabled,
+        screen.getByRole<HTMLInputElement>("textbox", { name: "Executable path" }).disabled,
       ).toBe(false);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect((screen.getByRole("button", { name: "Browse" }) as HTMLButtonElement).disabled).toBe(
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Browse" }).disabled).toBe(
         false,
       );
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect(
-        (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+        true,
+      );
     } finally {
       renderer.unmount();
     }

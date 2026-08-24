@@ -93,8 +93,7 @@ describe("useAppLifecycle task stream", () => {
     const factory = mock<TaskStreamControllerFactory>(() => ({ start, stop }));
     const toastError = mock(() => "task-stream-toast");
     const originalToastError = toast.error;
-    // SAFETY: This test controls the fixture and supplies `typeof toast.error` used by this case.
-    toast.error = toastError as typeof toast.error;
+    toast.error = toastError;
     const args = { ...lifecycleArgs, taskStreamControllerFactory: factory };
     const Harness = () => {
       useAppLifecycle(args);

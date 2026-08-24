@@ -100,12 +100,20 @@ export type AgentTranscriptUserMessageDisplayPart = z.infer<
   typeof agentUserMessageDisplayPartSchema
 >;
 
+export const agentSessionTodoStatusSchema = z.enum([
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+export const agentSessionTodoPrioritySchema = z.enum(["high", "medium", "low"]);
+
 export const agentSessionTodoItemSchema = z
   .object({
     id: z.string(),
     content: z.string(),
-    status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
-    priority: z.enum(["high", "medium", "low"]),
+    status: agentSessionTodoStatusSchema,
+    priority: agentSessionTodoPrioritySchema,
   })
   .strict();
 export type AgentTranscriptSessionTodoItem = z.infer<typeof agentSessionTodoItemSchema>;
@@ -436,7 +444,7 @@ export type AgentSessionTranscriptEventType =
   | "session_idle"
   | "session_finished";
 
-const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventType> = new Set([
+const agentSessionTranscriptEventTypes: ReadonlySet<string> = new Set([
   "session_started",
   "assistant_delta",
   "assistant_message",
@@ -454,11 +462,9 @@ const agentSessionTranscriptEventTypes: ReadonlySet<AgentSessionTranscriptEventT
   "session_finished",
 ]);
 
-// SAFETY: The preceding runtime guard establishes `AgentSessionTranscriptEventType` before this assertion.
 export const isAgentSessionTranscriptEventType = (
   type: AgentRuntimeEvent["type"] | string,
-): type is AgentSessionTranscriptEventType =>
-  agentSessionTranscriptEventTypes.has(type as AgentSessionTranscriptEventType);
+): type is AgentSessionTranscriptEventType => agentSessionTranscriptEventTypes.has(type);
 
 export type AgentSessionTranscriptEvent = Extract<
   AgentRuntimeEvent,

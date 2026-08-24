@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type AgentPromptTemplateId,
   agentPromptTemplateIdValues,
   type RepoConfig,
   type RepoPromptOverrides,
@@ -125,8 +124,7 @@ describe("settings save transforms", () => {
   });
 
   test("preserves every known prompt override key when preparing save payloads", () => {
-    // SAFETY: This test controls the fixture and supplies `RepoPromptOverrides` used by this case.
-    const source = Object.fromEntries(
+    const source: RepoPromptOverrides = Object.fromEntries(
       agentPromptTemplateIdValues.map((templateId, index) => [
         templateId,
         {
@@ -135,15 +133,14 @@ describe("settings save transforms", () => {
           enabled: index % 2 === 0,
         },
       ]),
-    ) as RepoPromptOverrides;
+    );
 
     const saveReady = preparePromptOverridesForSave(source);
     const saveReadyKeys = Object.keys(saveReady).sort();
     expect(saveReadyKeys).toEqual(agentPromptTemplateIdValues.toSorted());
 
     for (const [index, templateId] of agentPromptTemplateIdValues.entries()) {
-      // SAFETY: This test controls the fixture and supplies `AgentPromptTemplateId` used by this case.
-      const entry = saveReady[templateId as AgentPromptTemplateId];
+      const entry = saveReady[templateId];
       expect(entry).toEqual({
         template: `${templateId} template`,
         baseVersion: index + 1,
@@ -195,18 +192,18 @@ describe("settings save transforms", () => {
   });
 
   test("rejects configured agent defaults without runtime kind", () => {
-    // SAFETY: This test controls the fixture and supplies `RepoConfig["agentDefaults"]["spec"]` used by this case.
     expect(() =>
       prepareRepoConfigForSave({
         ...createRepoConfig(),
         agentDefaults: {
           ...createRepoConfig().agentDefaults,
+          // @ts-expect-error This negative test verifies that configured defaults require a runtime kind.
           spec: {
             providerId: "openai",
             modelId: "gpt-5",
             variant: "high",
             profileId: "spec",
-          } as RepoConfig["agentDefaults"]["spec"],
+          },
         },
       }),
     ).toThrow(

@@ -13,14 +13,13 @@ type AssistantPartEvent = Extract<AgentEvent, { type: "assistant_part" }>;
 type SubagentPart = Extract<AssistantPartEvent["part"], { kind: "subagent" }>;
 type SubagentPartEvent = AssistantPartEvent & { part: SubagentPart };
 
-// SAFETY: This test controls the fixture and supplies `SubagentPart` used by this case.
 const readSubagentParts = (events: AgentEvent[]): SubagentPart[] =>
   events
     .filter(
-      (event): event is AssistantPartEvent =>
+      (event): event is SubagentPartEvent =>
         event.type === "assistant_part" && event.part.kind === "subagent",
     )
-    .map((event) => event.part as SubagentPart);
+    .map((event) => event.part);
 
 const readSubagentEvents = (events: AgentEvent[]): SubagentPartEvent[] =>
   events.filter(

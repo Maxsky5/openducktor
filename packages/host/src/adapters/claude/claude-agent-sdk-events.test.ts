@@ -502,10 +502,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         message: "Spec persisted.",
       }),
     ]);
-    // SAFETY: This test controls the fixture and supplies `typeof session & { lastAssistantText?: string }` used by this case.
-    expect((session as typeof session & { lastAssistantText?: string }).lastAssistantText).toBe(
-      "Spec persisted.",
-    );
+    expect(session.lastAssistantText).toBe("Spec persisted.");
   });
 
   test("emits assistant snapshots without a stop reason as intermediate responses", () => {

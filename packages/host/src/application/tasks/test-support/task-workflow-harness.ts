@@ -147,11 +147,6 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-// SAFETY: This test controls the fixture and supplies `RealTaskActivityGuardPort` used by this case.
-const createTaskActivityGuardPort = (
-  guard: TaskActivityGuardPort | undefined,
-): RealTaskActivityGuardPort | undefined =>
-  guard ? (guard as RealTaskActivityGuardPort) : undefined;
 const createTaskService = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
     taskActivityGuard?: TaskActivityGuardPort;
@@ -159,8 +154,10 @@ const createTaskService = (
   },
 ) => {
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
-  // SAFETY: This test controls the fixture and supplies `CreateTaskServiceInput` used by this case.
-  return createRealTaskService({
+  const workspaceSettingsService = createWorkspaceSettingsServicePort(
+    rest.workspaceSettingsService,
+  );
+  const taskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -170,12 +167,11 @@ const createTaskService = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : undefined),
+    ...(workspaceSettingsService ? { workspaceSettingsService } : undefined),
+    ...(taskActivityGuard ? { taskActivityGuard } : undefined),
     taskStore: createTaskStorePort(taskStore),
-  } as CreateTaskServiceInput);
+  } satisfies CreateTaskServiceInput;
+  return createRealTaskService(taskServiceInput);
 };
 const createTaskServiceWithMutationProgress = (
   input: Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
@@ -184,8 +180,10 @@ const createTaskServiceWithMutationProgress = (
   },
 ) => {
   const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
-  // SAFETY: This test controls the fixture and supplies `CreateTaskServiceInput` used by this case.
-  return createRealTaskServiceWithMutationProgress({
+  const workspaceSettingsService = createWorkspaceSettingsServicePort(
+    rest.workspaceSettingsService,
+  );
+  const taskServiceInput = {
     ...rest,
     terminalService:
       rest.terminalService ??
@@ -195,12 +193,11 @@ const createTaskServiceWithMutationProgress = (
     toolDiscovery:
       toolDiscovery ??
       createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
-    workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
-    ...(taskActivityGuard
-      ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
-      : undefined),
+    ...(workspaceSettingsService ? { workspaceSettingsService } : undefined),
+    ...(taskActivityGuard ? { taskActivityGuard } : undefined),
     taskStore: createTaskStorePort(taskStore),
-  } as CreateTaskServiceInput);
+  } satisfies CreateTaskServiceInput;
+  return createRealTaskServiceWithMutationProgress(taskServiceInput);
 };
 const createAgentSessionTaskStore = (calls: unknown[]): TaskStorePort => ({
   upsertAgentSession(input) {
@@ -397,9 +394,8 @@ const createBuildStartRuntimeRegistry = (calls: unknown[]): RuntimeRegistryPort 
     ensureWorkspaceRuntime(input) {
       return Effect.sync(() => {
         calls.push({ type: "ensureRuntime", input });
-        // SAFETY: This test controls the fixture and supplies `"opencode" | "codex"` used by this case.
         return {
-          kind: input.runtimeKind as "opencode" | "codex",
+          kind: input.descriptor.kind,
           runtimeId: "runtime-1",
           repoPath: input.repoPath,
           taskId: null,

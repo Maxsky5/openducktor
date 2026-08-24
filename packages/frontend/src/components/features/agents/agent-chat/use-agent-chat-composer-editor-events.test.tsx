@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -13,12 +14,7 @@ import type {
   TextSelectionTarget,
 } from "./use-agent-chat-composer-editor-selection";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type EventsHookArgs = Parameters<typeof useAgentChatComposerEditorEvents>[0];
 
@@ -80,8 +76,7 @@ const createPasteEvent = (root: HTMLDivElement, file: File) => {
 };
 
 const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
-  // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement` before this lookup.
-  const root = document.createElement("div") as HTMLDivElement;
+  const root: HTMLDivElement = document.createElement("div");
   const sourceDraft = overrides.draft ?? createDraft();
   const activeSelection = overrides.activeSelection ?? createActiveSelection();
   const lineBreakTarget = overrides.lineBreakTarget ?? { segmentId: "segment-1", offset: 5 };

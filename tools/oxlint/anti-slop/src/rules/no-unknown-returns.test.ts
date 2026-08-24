@@ -35,7 +35,13 @@ tester.run("anti-slop/no-unknown-returns", noUnknownReturnsRule, {
       code: "function load(): Promise<Parameters<typeof schema.parse>[0]> { return promise; }",
       errors: [error],
     },
-    { code: "type UnknownValue = unknown; function load(): UnknownValue { return input; }", errors: [error] },
-    { code: "type Item = unknown; type Fallback<Input> = Input extends infer Item ? string : () => Item;", errors: [error] },
+    {
+      code: "type UnknownValue = unknown; function load(): UnknownValue { return input; }",
+      errors: [error],
+    },
+    {
+      code: "type Item = unknown; type Fallback<Input> = Input extends infer Item ? string : () => Item;",
+      errors: [error],
+    },
   ],
 });

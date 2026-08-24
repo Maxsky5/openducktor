@@ -51,8 +51,7 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
     if (isInstalled) {
       throw new Error("Animation frame test driver is already installed.");
     }
-    // SAFETY: This test controls the fixture and supplies `AnimationFrameGlobals` used by this case.
-    const target = globalThis as AnimationFrameGlobals;
+    const target: AnimationFrameGlobals = globalThis;
     isInstalled = true;
     restoreRequestAnimationFrame = restoreGlobal(
       target,
@@ -76,33 +75,28 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
   };
 
   const install = (): void => {
-    // SAFETY: This test controls the fixture and supplies `AnimationFrameGlobals` used by this case.
-    const target = globalThis as AnimationFrameGlobals;
+    const target = globalThis;
     clear();
     rememberCurrentGlobals();
 
-    // SAFETY: This test controls the fixture and supplies `typeof requestAnimationFrame` used by this case.
-    target.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
+    target.requestAnimationFrame = (callback: FrameRequestCallback): number => {
       const frameId = nextFrameId;
       nextFrameId += 1;
       callbacks.set(frameId, callback);
       return frameId;
-    }) as typeof requestAnimationFrame;
+    };
 
-    // SAFETY: This test controls the fixture and supplies `typeof cancelAnimationFrame` used by this case.
-    target.cancelAnimationFrame = ((frameId: number): void => {
+    target.cancelAnimationFrame = (frameId: number): void => {
       callbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    };
   };
 
   const installAutoFlush = (): void => {
-    // SAFETY: This test controls the fixture and supplies `AnimationFrameGlobals` used by this case.
-    const target = globalThis as AnimationFrameGlobals;
+    const target = globalThis;
     clear();
     rememberCurrentGlobals();
 
-    // SAFETY: This test controls the fixture and supplies `typeof requestAnimationFrame` used by this case.
-    target.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
+    target.requestAnimationFrame = (callback: FrameRequestCallback): number => {
       const frameId = nextFrameId;
       const frameTime = nextFrameTime;
       nextFrameId += 1;
@@ -115,11 +109,10 @@ export const createAnimationFrameTestDriver = (): AnimationFrameTestDriver => {
         callback(frameTime);
       });
       return frameId;
-    }) as typeof requestAnimationFrame;
-    // SAFETY: This test controls the fixture and supplies `typeof cancelAnimationFrame` used by this case.
-    target.cancelAnimationFrame = ((frameId: number): void => {
+    };
+    target.cancelAnimationFrame = (frameId: number): void => {
       autoFlushFrameIds.delete(frameId);
-    }) as typeof cancelAnimationFrame;
+    };
   };
 
   const restore = (): void => {

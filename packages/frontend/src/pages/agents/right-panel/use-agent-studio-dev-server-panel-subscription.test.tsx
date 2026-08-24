@@ -1,4 +1,4 @@
-import { hasRuntimeType } from "@openducktor/contracts";
+import { devServerGroupStateSchema, hasRuntimeType } from "@openducktor/contracts";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState } from "@openducktor/contracts";
@@ -1376,11 +1376,11 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
           .getMutationCache()
           .getAll()
           .some((mutation) => {
-            // SAFETY: This test controls the fixture and supplies `DevServerGroupState | undefined` used by this case.
-            const data = mutation.state.data as DevServerGroupState | undefined;
+            const data = devServerGroupStateSchema.safeParse(mutation.state.data);
             return (
               mutation.state.status === "success" &&
-              data?.scripts[0]?.runIdentity?.runId === "host-stale-run"
+              data.success &&
+              data.data.scripts[0]?.runIdentity?.runId === "host-stale-run"
             );
           });
         expect(staleQuery?.state.status).toBe("success");

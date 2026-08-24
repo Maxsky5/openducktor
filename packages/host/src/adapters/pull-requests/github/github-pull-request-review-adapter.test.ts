@@ -1,12 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { type PullRequestReviewContext, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
-import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import { createGithubPullRequestReviewAdapter } from "./github-pull-request-review-adapter";
 import type { GithubPullRequestReviewReader } from "./github-pull-request-review-reader";
+import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
 
 const loadedContext: PullRequestReviewContext = {
   status: "loaded",
@@ -55,40 +53,7 @@ const createGithubDependencies = () => {
     expect(args).toEqual(["auth", "status", "--hostname", "github.com"]);
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   });
-  const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
-    runCommandAllowFailure,
-  };
-  const toolDiscovery: ToolDiscoveryPort = {
-    discoverTool: () =>
-      Effect.succeed({
-        displayLabel: "GitHub CLI",
-        path: "gh",
-        sourceCategory: "system_path",
-      }),
-    resolveTool: () =>
-      Effect.succeed({
-        displayLabel: "GitHub CLI",
-        path: "gh",
-        sourceCategory: "system_path",
-      }),
-    resolveToolPath: () => Effect.succeed("gh"),
-    validateToolPath: (_toolId, executablePath) =>
-      Effect.succeed({
-        displayLabel: "Saved path",
-        path: executablePath,
-        sourceCategory: "provided_path",
-      }),
-  };
-  // SAFETY: This test controls the fixture and supplies `SystemCommandPort` used by this case.
-  const dependencies: GithubCommandDependencies = {
-    resolveGithubCommand: () =>
-      Effect.succeed({
-        ghCommand: "gh",
-        systemCommands: systemCommands as SystemCommandPort,
-      }),
-    systemCommands: systemCommands as SystemCommandPort,
-    toolDiscovery,
-  };
+  const dependencies = createGithubReviewTestDependencies(runCommandAllowFailure);
   return { dependencies, runCommandAllowFailure };
 };
 

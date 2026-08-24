@@ -42,7 +42,7 @@ import {
   createRepoRuntimeHealthFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type {
   AgentOperationsContextValue,
@@ -69,9 +69,9 @@ enableReactActEnvironment();
 
 const originalConsoleError = console.error;
 
-const sessionIdentity = (externalSessionId: string) => ({
+const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({
   externalSessionId,
-  runtimeKind: "opencode" as const,
+  runtimeKind: "opencode",
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 
@@ -83,7 +83,9 @@ const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
 const resetTaskMock = mock(async () => {});
-const toastSuccessMock = mock(() => {});
+const toastSuccessMock = mock(
+  (_message: string, _options?: { description?: unknown; duration?: number }) => {},
+);
 const toastErrorMock = mock(() => {});
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -169,9 +171,19 @@ type KanbanPageHarness = RenderResult & {
   getLocation: () => string;
 };
 
+const requireCallback = <Callback extends (...args: never[]) => void>(
+  callback: Callback | undefined,
+  name: string,
+): Callback => {
+  if (!callback) {
+    throw new Error(`Expected ${name} callback`);
+  }
+  return callback;
+};
+
 let currentPendingMergedPullRequest: PendingMergedPullRequestFixture | null = null;
 let currentLinkingMergedPullRequestTaskId: string | null = null;
-const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
+const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR];
 
 let currentTaskFixture = createTaskCardFixture({
   id: "TASK-123",
@@ -207,7 +219,7 @@ let currentSessionsFixture: AgentSessionState[] = [
 ];
 
 const createRepoSettingsFixture = (): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode" as const,
+  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -656,12 +668,7 @@ const confirmSessionStartModal = async (
 
   if (profileId) {
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `| ((value: string) => void) | undefined` used by this case.
-      (
-        page.getSessionStartModalModel()?.onSelectRuntimeProfile as
-          | ((value: string) => void)
-          | undefined
-      )?.(profileId);
+      page.getSessionStartModalModel()?.onSelectRuntimeProfile?.(profileId);
       await Promise.resolve();
     });
   }
@@ -688,11 +695,7 @@ const confirmSessionStartModal = async (
       await Promise.resolve();
     });
     await waitFor(() => {
-      // SAFETY: This test controls the fixture and supplies `| { modelId?: string; profileId?: string } | null | undefined` used by this case.
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { modelId?: string; profileId?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.modelId).toBe(expectedStoredModelId);
       if (profileId) {
         expect(selection?.profileId).toBe(profileId);
@@ -700,54 +703,33 @@ const confirmSessionStartModal = async (
     });
   } else if (profileId) {
     await waitFor(() => {
-      // SAFETY: This test controls the fixture and supplies `| { profileId?: string } | null | undefined` used by this case.
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { profileId?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.profileId).toBe(profileId);
     });
   }
 
   if (variant) {
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `((value: string) => void) | undefined` used by this case.
-      (
-        page.getSessionStartModalModel()?.onSelectVariant as ((value: string) => void) | undefined
-      )?.(variant);
+      page.getSessionStartModalModel()?.onSelectVariant?.(variant);
       await Promise.resolve();
     });
     await waitFor(() => {
-      // SAFETY: This test controls the fixture and supplies `| { variant?: string } | null | undefined` used by this case.
-      const selection = page.getSessionStartModalModel()?.selectedModelSelection as
-        | { variant?: string }
-        | null
-        | undefined;
+      const selection = page.getSessionStartModalModel()?.selectedModelSelection;
       expect(selection?.variant).toBe(variant);
     });
   }
 
   await act(async () => {
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const existingSessionOptions =
-      (page.getSessionStartModalModel()?.existingSessionOptions as
-        | Array<{ value: string; sourceSession: { externalSessionId: string } }>
-        | undefined) ?? [];
+    const existingSessionOptions = page.getSessionStartModalModel()?.existingSessionOptions ?? [];
     const sourceSessionOptionValue = input?.sourceExternalSessionId
       ? (existingSessionOptions.find(
           (option) => option.sourceSession.externalSessionId === input.sourceExternalSessionId,
         )?.value ?? null)
       : null;
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    await (
-      page.getSessionStartModalModel()?.onConfirm as
-        | ((value: {
-            runInBackground?: boolean;
-            startMode?: "fresh" | "reuse" | "fork";
-            sourceSessionOptionValue?: string | null;
-          }) => Promise<void> | void)
-        | undefined
-    )?.({
+    await requireCallback(
+      page.getSessionStartModalModel()?.onConfirm,
+      "session start confirmation",
+    )({
       runInBackground: input?.runInBackground ?? false,
       startMode: input?.startMode ?? "fresh",
       sourceSessionOptionValue,
@@ -986,10 +968,7 @@ describe("KanbanPage session start modal flow", () => {
           duration: 10000,
         }),
       );
-      // SAFETY: This test controls the fixture and supplies `| [string, { description?: unknown }?] | undefined` used by this case.
-      const toastCall = toastSuccessMock.mock.calls.at(0) as
-        | [string, { description?: unknown }?]
-        | undefined;
+      const toastCall = toastSuccessMock.mock.calls.at(0);
       const toastDescription = toastCall?.[1]?.description;
       expect(isValidElement(toastDescription)).toBe(true);
       if (!isValidElement(toastDescription)) {
@@ -1018,8 +997,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1028,17 +1006,10 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-      (
-        sessionStartModal.onConfirm as (input: {
-          runInBackground?: boolean;
-          startMode?: "fresh" | "reuse" | "fork";
-          sourceSessionOptionValue?: string | null;
-        }) => void
-      )({
+      sessionStartModal.onConfirm({
+        runInBackground: false,
         startMode: "reuse",
-        sourceSessionOptionValue:
-          (sessionStartModal.selectedSourceSessionValue as string | undefined) ?? null,
+        sourceSessionOptionValue: sessionStartModal.selectedSourceSessionValue ?? null,
       });
       await Promise.resolve();
     });
@@ -1091,8 +1062,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1126,8 +1096,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1160,8 +1129,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1188,8 +1156,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onDelegate as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
     });
 
     const sessionStartModal = renderer.getSessionStartModalModel();
@@ -1203,10 +1170,8 @@ describe("KanbanPage session start modal flow", () => {
         providerId: "openai",
         modelId: "gpt-5",
       });
-      // SAFETY: This test controls the fixture and supplies `(value: string) => void` used by this case.
-      (sessionStartModal.onSelectRuntimeProfile as (value: string) => void)("build-agent");
-      // SAFETY: This test controls the fixture and supplies `(value: string) => void` used by this case.
-      (sessionStartModal.onSelectVariant as (value: string) => void)("default");
+      sessionStartModal.onSelectRuntimeProfile("build-agent");
+      sessionStartModal.onSelectVariant("default");
     });
 
     await confirmSessionStartModal(renderer, {
@@ -1242,8 +1207,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string, action: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onPlan as (taskId: string, action: string) => void)(
+        requireCallback(renderer.getKanbanColumnProps().onPlan, "plan task")(
           "TASK-123",
           "set_spec",
         );
@@ -1288,9 +1252,9 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => Promise<void>` used by this case.
-      await (
-        renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+      await requireCallback(
+        renderer.getKanbanColumnProps().onHumanRequestChanges,
+        "request human-review changes",
       )("TASK-123");
     });
 
@@ -1314,9 +1278,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => Promise<void>` used by this case.
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1326,19 +1290,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(message: string) => void` used by this case.
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Apply the requested human review changes.",
-        );
+        feedbackModal.onMessageChange("Apply the requested human review changes.");
       });
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `| (() => Promise<void>) | undefined` used by this case.
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1349,9 +1305,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(sendAgentMessageMock).not.toHaveBeenCalled();
       expect(renderer.getSessionStartModalModel()?.open).toBe(true);
       expect(renderer.getSessionStartModalModel()?.selectedStartMode).toBe("reuse");
-      // SAFETY: This test controls the fixture and supplies `Array<{ value: string }> | undefined` used by this case.
-      const existingSessionOptions = renderer.getSessionStartModalModel()
-        ?.existingSessionOptions as Array<{ value: string }> | undefined;
+      const existingSessionOptions = renderer.getSessionStartModalModel()?.existingSessionOptions;
       const selectedSourceOption = existingSessionOptions?.[0];
       if (!selectedSourceOption) {
         throw new Error("Expected a reusable builder session option.");
@@ -1391,9 +1345,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => Promise<void>` used by this case.
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1405,19 +1359,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(message: string) => void` used by this case.
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Use a fresh builder session for these changes.",
-        );
+        feedbackModal.onMessageChange("Use a fresh builder session for these changes.");
       });
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `| (() => Promise<void>) | undefined` used by this case.
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1443,9 +1389,9 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => Promise<void>` used by this case.
-        await (
-          renderer.getKanbanColumnProps().onHumanRequestChanges as (taskId: string) => Promise<void>
+        await requireCallback(
+          renderer.getKanbanColumnProps().onHumanRequestChanges,
+          "request human-review changes",
         )("TASK-123");
       });
 
@@ -1455,19 +1401,11 @@ describe("KanbanPage session start modal flow", () => {
       }
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(message: string) => void` used by this case.
-        (feedbackModal.onMessageChange as (message: string) => void)(
-          "Keep this request-changes draft.",
-        );
+        feedbackModal.onMessageChange("Keep this request-changes draft.");
       });
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `| (() => Promise<void>) | undefined` used by this case.
-        void (
-          renderer.getHumanReviewFeedbackModalModel()?.onConfirm as
-            | (() => Promise<void>)
-            | undefined
-        )?.();
+        void renderer.getHumanReviewFeedbackModalModel()?.onConfirm?.();
         await Promise.resolve();
       });
 
@@ -1480,8 +1418,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(sessionStartModal.open).toBe(true);
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(open: boolean) => void` used by this case.
-        (sessionStartModal.onOpenChange as (open: boolean) => void)(false);
+        sessionStartModal.onOpenChange(false);
       });
 
       await waitFor(() => {
@@ -1525,10 +1462,10 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-        "TASK-123",
-      );
+      requireCallback(
+        renderer.getKanbanColumnProps().onResetImplementation,
+        "reset implementation",
+      )("TASK-123");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1541,8 +1478,7 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
-      (resetModal.onConfirm as () => void)();
+      resetModal.onConfirm();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1592,10 +1528,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "TASK-123",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("TASK-123");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1646,10 +1582,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "TASK-123",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("TASK-123");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1682,10 +1618,10 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-        "TASK-123",
-      );
+      requireCallback(
+        renderer.getKanbanColumnProps().onResetImplementation,
+        "reset implementation",
+      )("TASK-123");
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1700,8 +1636,7 @@ describe("KanbanPage session start modal flow", () => {
     }
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `() => void` used by this case.
-      (resetModal.onConfirm as () => void)();
+      resetModal.onConfirm();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -1722,10 +1657,10 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onResetImplementation as (taskId: string) => void)(
-          "MISSING-1",
-        );
+        requireCallback(
+          renderer.getKanbanColumnProps().onResetImplementation,
+          "reset implementation",
+        )("MISSING-1");
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -1745,8 +1680,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+      renderer.getKanbanColumnProps().onBuild("TASK-123");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1804,8 +1738,10 @@ describe("KanbanPage session start modal flow", () => {
         const page = await renderPage();
         renderer = page;
         await act(async () => {
-          // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-          (page.getKanbanColumnProps().onHumanApprove as (taskId: string) => void)("TASK-123");
+          requireCallback(
+            page.getKanbanColumnProps().onHumanApprove,
+            "approve human review",
+          )("TASK-123");
           await Promise.resolve();
         });
         await waitFor(() => {
@@ -1870,8 +1806,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1896,8 +1831,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -1920,8 +1854,7 @@ describe("KanbanPage session start modal flow", () => {
     const renderer = await renderPage();
 
     await act(async () => {
-      // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-      (renderer.getKanbanColumnProps().onQaOpen as (taskId: string) => void)("TASK-123");
+      requireCallback(renderer.getKanbanColumnProps().onQaOpen, "open QA")("TASK-123");
     });
 
     expect(renderer.getSessionStartModalModel()).toBeNull();
@@ -2000,8 +1933,7 @@ describe("KanbanPage session start modal flow", () => {
       const renderer = await renderPage();
 
       await act(async () => {
-        // SAFETY: This test controls the fixture and supplies `(taskId: string) => void` used by this case.
-        (renderer.getKanbanColumnProps().onBuild as (taskId: string) => void)("TASK-123");
+        renderer.getKanbanColumnProps().onBuild("TASK-123");
       });
 
       expect(renderer.getSessionStartModalModel()).toBeNull();

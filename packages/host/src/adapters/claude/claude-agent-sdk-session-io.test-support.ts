@@ -1,21 +1,23 @@
 import { mock } from "bun:test";
 import type {
   SDKControlGetContextUsageResponse,
+  SDKControlInitializeResponse,
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
 import type { HostOperationError } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import type { ClaudeSession } from "./claude-agent-sdk-types";
+import type { ClaudeSession, ClaudeSessionQuery } from "./claude-agent-sdk-types";
 
 export const ignoreClaudeBackgroundFailure = (_failure: HostOperationError) => Effect.void;
 
 export const createClaudeQueryFixture = (
-  query: Partial<ClaudeSession["query"]>,
-): ClaudeSession["query"] => {
-  // SAFETY: focused tests supply every Query member used by the production path under test.
-  return query as ClaudeSession["query"];
+  query: Partial<ClaudeSessionQuery>,
+): ClaudeSessionQuery => {
+  const overrides = { ...query };
+  const stream = isClaudeMessageStream(query) ? query : emptyClaudeMessageStream();
+  return Object.assign(stream, defaultQueryControls(), overrides);
 };
 
 export const createClaudeContextUsageResponse = (
@@ -82,9 +84,39 @@ export const createClaudeSession = (overrides: Partial<ClaudeSession> = {}): Cla
 
 const emptySdkMessages: SDKMessage[] = [];
 
-const defaultQueryControls = () => ({
+const emptyClaudeMessageStream = async function* (): AsyncGenerator<SDKMessage, void> {
+  yield* emptySdkMessages;
+};
+
+const isClaudeMessageStream = (
+  query: Partial<ClaudeSessionQuery>,
+): query is Partial<ClaudeSessionQuery> & AsyncGenerator<SDKMessage, void> =>
+  Symbol.asyncIterator in query;
+
+const defaultInitializationResponse = (): SDKControlInitializeResponse => ({
+  commands: [],
+  agents: [],
+  output_style: "default",
+  available_output_styles: [],
+  models: [],
+  account: {},
+});
+
+const defaultQueryControls = (): Pick<
+  ClaudeSessionQuery,
+  | "applyFlagSettings"
+  | "close"
+  | "getContextUsage"
+  | "initializationResult"
+  | "mcpServerStatus"
+  | "setModel"
+> => ({
+  applyFlagSettings: mock(async () => {}),
   close: mock(() => {}),
   getContextUsage: mock(async () => createClaudeContextUsageResponse(0, 0)),
+  initializationResult: mock(async () => defaultInitializationResponse()),
+  mcpServerStatus: mock(async () => []),
+  setModel: mock(async () => {}),
 });
 
 export const emptyClaudeQuery = (): ClaudeSession["query"] =>

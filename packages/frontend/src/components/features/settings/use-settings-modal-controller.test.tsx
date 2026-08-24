@@ -364,8 +364,7 @@ describe("useSettingsModalController", () => {
       if (input.mode === "discover") {
         return { runtimes: [] };
       }
-      // SAFETY: This test controls the fixture and supplies `RuntimeKind[]` used by this case.
-      const kinds = Object.keys(input.paths) as RuntimeKind[];
+      const kinds = knownRuntimeKindValues.filter((kind) => kind in input.paths);
       requests.push(kinds);
       return {
         runtimes: kinds.map((kind) => ({
@@ -1088,17 +1087,17 @@ describe("useSettingsModalController", () => {
       await harness.waitFor((state) => state.snapshotDraft !== null);
 
       await harness.run((state) => {
-        // SAFETY: This test controls the fixture and supplies `NonNullable<typeof repoConfig.agentDefaults.spec>` used by this case.
         state.updateSelectedRepoConfig((repoConfig) => ({
           ...repoConfig,
           agentDefaults: {
             ...repoConfig.agentDefaults,
+            // @ts-expect-error This negative test verifies that configured defaults require a runtime kind.
             spec: {
               providerId: "openai",
               modelId: "gpt-5",
               variant: "",
               profileId: "",
-            } as NonNullable<typeof repoConfig.agentDefaults.spec>,
+            },
           },
         }));
       });

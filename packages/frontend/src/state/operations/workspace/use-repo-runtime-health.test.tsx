@@ -8,10 +8,9 @@ import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeHealth } from "./use-repo-runtime-health";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironment = globalThis as typeof globalThis & {
+const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 type HookArgs = Parameters<typeof useRepoRuntimeHealth>[0];

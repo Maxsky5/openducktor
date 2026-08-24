@@ -13,10 +13,9 @@ import { createRuntimeOrchestratorCommandHandlers } from "./runtime-orchestrator
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
-// SAFETY: This test controls the fixture and supplies `RuntimeOrchestratorService` used by this case.
 const createRuntimeOrchestratorServiceFake = (
   service: RuntimeOrchestratorService,
-): RuntimeOrchestratorService => service as RuntimeOrchestratorService;
+): RuntimeOrchestratorService => service;
 const createRecordingService = () => {
   const calls: Array<{
     method: keyof RuntimeOrchestratorService;

@@ -1,5 +1,5 @@
 import { hasRuntimeType } from "@openducktor/contracts";
-import type { Event, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { ODT_MCP_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole, PolicyBoundSessionRef, SessionRef } from "@openducktor/core";
@@ -31,29 +31,19 @@ type MockSessionMessage = {
     time: { created: number };
     [key: string]: unknown;
   };
-  parts: Part[];
+  parts: UnknownRecord[];
 };
 
 const completeMockMessage = (message: MockSessionMessage): ParsedOpencodeMessage => ({
   info: createOpencodeMessageInfoFixture(message.info),
-  parts: message.parts.map((part) => {
-    const partRecord = asUnknownRecord(part);
-    if (!partRecord) {
-      throw new Error("Expected an OpenCode part fixture object.");
-    }
-    return createOpencodePartFixture(partRecord);
-  }),
+  parts: message.parts.map(createOpencodePartFixture),
 });
 
 export const completeMockEvent = (
-  event: Event,
+  event: UnknownRecord,
   index: number,
 ): ParsedOpencodeGlobalEventPayload => {
-  const eventRecord = asUnknownRecord(event);
-  if (!eventRecord) {
-    throw new Error("Expected an OpenCode event fixture object.");
-  }
-  const fixtures = createOpencodeEventFixtures(eventRecord, index);
+  const fixtures = createOpencodeEventFixtures(event, index);
   if (fixtures.length !== 1) {
     throw new Error("Expected one OpenCode event fixture.");
   }
@@ -203,7 +193,7 @@ export type MockQuestion = {
 };
 
 export type MockEventStream = {
-  events: Event[];
+  events: UnknownRecord[];
 };
 
 export type TodoMockResult =
@@ -268,7 +258,7 @@ export type MakeMockClientInput = {
   sessionUpdateResult?: SessionUpdateMockResult;
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
-  streamEvents?: Event[];
+  streamEvents?: UnknownRecord[];
   messagesResponse?: MockSessionMessage[];
   childrenResponse?: MockChildSession[];
   todoResult?: TodoMockResult;
@@ -332,10 +322,12 @@ export const makeMockClient = ({
     events: [...streamEvents],
   };
   const queuedSessionIds = [...(sessionIds ?? [sessionId])];
+  const baseClient = createOpencodeClient({ baseUrl: defaultRuntimeConnection.endpoint });
 
-  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
-  const client = {
+  const client: OpencodeClient = {
+    ...baseClient,
     session: {
+      ...baseClient.session,
       create: async (input: ClientMethodInput<"session", "create">) => {
         session.createCalls.push(input);
         return { data: { id: queuedSessionIds.shift() ?? sessionId }, error: undefined };
@@ -446,18 +438,21 @@ export const makeMockClient = ({
       },
     },
     permission: {
+      ...baseClient.permission,
       reply: async (input: ClientMethodInput<"permission", "reply">) => {
         permission.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     question: {
+      ...baseClient.question,
       reply: async (input: ClientMethodInput<"question", "reply">) => {
         question.replyCalls.push(input);
         return { data: true, error: undefined };
       },
     },
     config: {
+      ...baseClient.config,
       providers: async () => {
         return {
           data: {
@@ -509,6 +504,7 @@ export const makeMockClient = ({
       },
     },
     app: {
+      ...baseClient.app,
       agents: async () => {
         if (agentsResult?.mode === "throw") {
           throw agentsResult.error;
@@ -527,6 +523,7 @@ export const makeMockClient = ({
       },
     },
     tool: {
+      ...baseClient.tool,
       ids: async (input: ClientMethodInput<"tool", "ids">) => {
         tool.idsCalls.push(input);
         return {
@@ -543,6 +540,7 @@ export const makeMockClient = ({
       },
     },
     mcp: {
+      ...baseClient.mcp,
       status: async (input: ClientMethodInput<"mcp", "status">) => {
         mcp.statusCalls.push(input);
         return {
@@ -559,21 +557,18 @@ export const makeMockClient = ({
       },
     },
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
         async function* iterator() {
           for (const [index, rawEvent] of stream.events.entries()) {
             if (options?.signal?.aborted) {
               return;
             }
-            const eventRecord = asUnknownRecord(rawEvent);
-            if (!eventRecord) {
-              throw new Error("Expected an OpenCode event fixture object.");
-            }
-            const properties = asUnknownRecord(eventRecord.properties);
+            const properties = asUnknownRecord(rawEvent.properties);
             const directory =
               readStringProp(properties, ["directory"]) ??
               defaultRuntimeConnection.workingDirectory;
-            for (const payload of createOpencodeEventFixtures(eventRecord, index)) {
+            for (const payload of createOpencodeEventFixtures(rawEvent, index)) {
               yield { directory, payload };
             }
           }
@@ -581,7 +576,7 @@ export const makeMockClient = ({
         return { stream: iterator() };
       },
     },
-  } as OpencodeClient;
+  };
 
   return { client, session, tool, mcp, permission, question, stream } satisfies {
     client: OpencodeClient;

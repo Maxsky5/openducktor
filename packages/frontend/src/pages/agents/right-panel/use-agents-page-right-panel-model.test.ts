@@ -15,7 +15,11 @@ import {
   resolveTaskExecutionFileExplorerTargetBranch,
 } from "./use-agents-page-right-panel-model";
 
-type BuildDiffModelArgs = Parameters<typeof buildAgentsPageDiffModel>[0];
+type TestGitActions = {
+  isGitActionsLocked: boolean;
+  gitActionsLockReason: string | null;
+  showLockReasonBanner: boolean;
+};
 
 const refreshDiff = async (_mode?: string): Promise<void> => {};
 
@@ -61,16 +65,12 @@ const createDiffData = (): DiffDataState => ({
   setDiffScope: () => {},
 });
 
-// SAFETY: This test controls the fixture and supplies `BuildDiffModelArgs["gitActions"]` used by this case.
-const createGitActions = (
-  overrides: Partial<BuildDiffModelArgs["gitActions"]> = {},
-): BuildDiffModelArgs["gitActions"] =>
-  ({
-    isGitActionsLocked: false,
-    gitActionsLockReason: null,
-    showLockReasonBanner: false,
-    ...overrides,
-  }) as BuildDiffModelArgs["gitActions"];
+const createGitActions = (overrides: Partial<TestGitActions> = {}): TestGitActions => ({
+  isGitActionsLocked: false,
+  gitActionsLockReason: null,
+  showLockReasonBanner: false,
+  ...overrides,
+});
 
 describe("resolveBuildToolsSelectedTaskId", () => {
   test("uses the stable tab task id while selected task hydration is still pending", () => {

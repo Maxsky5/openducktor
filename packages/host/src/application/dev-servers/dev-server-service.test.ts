@@ -11,6 +11,7 @@ import { DevServerProcessStartExitError } from "../../ports/dev-server-process-p
 import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import { createDevServerService as createEffectDevServerService } from "./dev-server-service";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 
 const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
   createEffectDevServerService(input);
@@ -36,9 +37,8 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   agentDefaults: {},
   ...overrides,
 });
-// SAFETY: This test drives the failure path that supplies `WorkspaceSettingsService` before this assertion.
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>
-  ({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
@@ -51,12 +51,11 @@ const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsSe
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as WorkspaceSettingsService;
-// SAFETY: This test drives the failure path that supplies `WorkspaceSettingsService` before this assertion.
+  });
 const createWorkspaceSettingsServiceByRepoPath = (
   configs: Record<string, RepoConfig>,
 ): WorkspaceSettingsService =>
-  ({
+  createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath(repoPath: string) {
       return Effect.try({
         try: () => {
@@ -70,7 +69,7 @@ const createWorkspaceSettingsServiceByRepoPath = (
           toHostOperationError(cause, "test.workspaceSettings.getRepoConfigByRepoPath"),
       });
     },
-  }) as WorkspaceSettingsService;
+  });
 const createTaskWorktreeService = (worktree: TaskWorktreeSummary | null): TaskWorktreeService => ({
   getTaskWorktree() {
     return Effect.succeed(worktree);
@@ -384,10 +383,7 @@ describe("createDevServerService", () => {
       start(input) {
         starts.push(input.command);
         if (input.command === "exit 42") {
-          // SAFETY: This test controls the fixture and supplies `ReturnType< DevServerProcessPort["start"] >` used by this case.
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as ReturnType<
-            DevServerProcessPort["start"]
-          >;
+          return Effect.fail(new DevServerProcessStartExitError(42, null));
         }
         return Effect.succeed({
           pid: 501,
@@ -459,10 +455,7 @@ describe("createDevServerService", () => {
     const processPort: DevServerProcessPort = {
       start(input) {
         if (input.command === "exit 42") {
-          // SAFETY: This test controls the fixture and supplies `ReturnType< DevServerProcessPort["start"] >` used by this case.
-          return Effect.fail(new DevServerProcessStartExitError(42, null)) as ReturnType<
-            DevServerProcessPort["start"]
-          >;
+          return Effect.fail(new DevServerProcessStartExitError(42, null));
         }
         return Effect.succeed({
           pid: 501,

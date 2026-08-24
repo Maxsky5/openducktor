@@ -1,5 +1,6 @@
 import {
   DEFAULT_AGENT_RUNTIMES,
+  ODT_WORKFLOW_AGENT_TOOL_NAMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
   type TaskCard,
@@ -24,6 +25,7 @@ import {
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+export { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import {
   type AgentSessionFixtureOverrides,
   createSettingsSnapshotFixture,
@@ -34,10 +36,6 @@ import {
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-
-type ReactActEnvironment = typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
 
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
@@ -59,11 +57,6 @@ type HookHarnessOptions = {
   repoRuntimeHealthContextRef?: { current: RepoRuntimeHealthContextValue };
   seedSettingsSnapshot?: boolean;
   wrapper?: (props: PropsWithChildren) => ReactElement;
-};
-
-export const enableReactActEnvironment = (): void => {
-  // SAFETY: This test controls the fixture and supplies `ReactActEnvironment` used by this case.
-  (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
 };
 
 const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
@@ -93,54 +86,58 @@ export const createSelectedSessionTranscriptStateFixture = (
       }
     : transcriptState;
 
-// SAFETY: This test controls the fixture and supplies `RuntimeDescriptor["workflowToolAliasesByCanonical"]` used by this case.
-const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
-  ...descriptor,
-  readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
-  workflowToolAliasesByCanonical: Object.fromEntries(
-    Object.entries(descriptor.workflowToolAliasesByCanonical).map(([toolName, aliases]) => [
-      toolName,
-      aliases ? [...aliases] : aliases,
-    ]),
-  ) as RuntimeDescriptor["workflowToolAliasesByCanonical"],
-  capabilities: {
-    ...descriptor.capabilities,
-    workflow: {
-      ...descriptor.capabilities.workflow,
-      supportedScopes: [...descriptor.capabilities.workflow.supportedScopes],
+const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => {
+  const workflowToolAliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
+  for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
+    const aliases = descriptor.workflowToolAliasesByCanonical[toolName];
+    if (aliases) {
+      workflowToolAliasesByCanonical[toolName] = [...aliases];
+    }
+  }
+
+  return {
+    ...descriptor,
+    readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
+    workflowToolAliasesByCanonical,
+    capabilities: {
+      ...descriptor.capabilities,
+      workflow: {
+        ...descriptor.capabilities.workflow,
+        supportedScopes: [...descriptor.capabilities.workflow.supportedScopes],
+      },
+      sessionLifecycle: {
+        ...descriptor.capabilities.sessionLifecycle,
+        supportedStartModes: [...descriptor.capabilities.sessionLifecycle.supportedStartModes],
+        forkTargets: [...descriptor.capabilities.sessionLifecycle.forkTargets],
+      },
+      history: {
+        ...descriptor.capabilities.history,
+        limitations: [...descriptor.capabilities.history.limitations],
+      },
+      approvals: {
+        ...descriptor.capabilities.approvals,
+        supportedRequestTypes: [...descriptor.capabilities.approvals.supportedRequestTypes],
+        supportedReplyOutcomes: [...descriptor.capabilities.approvals.supportedReplyOutcomes],
+        pendingVisibility: [...descriptor.capabilities.approvals.pendingVisibility],
+      },
+      structuredInput: {
+        ...descriptor.capabilities.structuredInput,
+        supportedAnswerModes: [...descriptor.capabilities.structuredInput.supportedAnswerModes],
+        pendingVisibility: [...descriptor.capabilities.structuredInput.pendingVisibility],
+      },
+      promptInput: {
+        ...descriptor.capabilities.promptInput,
+        supportedParts: [...descriptor.capabilities.promptInput.supportedParts],
+      },
+      optionalSurfaces: {
+        ...descriptor.capabilities.optionalSurfaces,
+        supportedSubagentExecutionModes: [
+          ...descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes,
+        ],
+      },
     },
-    sessionLifecycle: {
-      ...descriptor.capabilities.sessionLifecycle,
-      supportedStartModes: [...descriptor.capabilities.sessionLifecycle.supportedStartModes],
-      forkTargets: [...descriptor.capabilities.sessionLifecycle.forkTargets],
-    },
-    history: {
-      ...descriptor.capabilities.history,
-      limitations: [...descriptor.capabilities.history.limitations],
-    },
-    approvals: {
-      ...descriptor.capabilities.approvals,
-      supportedRequestTypes: [...descriptor.capabilities.approvals.supportedRequestTypes],
-      supportedReplyOutcomes: [...descriptor.capabilities.approvals.supportedReplyOutcomes],
-      pendingVisibility: [...descriptor.capabilities.approvals.pendingVisibility],
-    },
-    structuredInput: {
-      ...descriptor.capabilities.structuredInput,
-      supportedAnswerModes: [...descriptor.capabilities.structuredInput.supportedAnswerModes],
-      pendingVisibility: [...descriptor.capabilities.structuredInput.pendingVisibility],
-    },
-    promptInput: {
-      ...descriptor.capabilities.promptInput,
-      supportedParts: [...descriptor.capabilities.promptInput.supportedParts],
-    },
-    optionalSurfaces: {
-      ...descriptor.capabilities.optionalSurfaces,
-      supportedSubagentExecutionModes: [
-        ...descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes,
-      ],
-    },
-  },
-});
+  };
+};
 
 export const createDefaultRuntimeDefinitions = (): RuntimeDescriptor[] => [
   cloneRuntimeDescriptor(OPENCODE_RUNTIME_DESCRIPTOR),

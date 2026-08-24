@@ -1,4 +1,4 @@
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, JsonValue } from "@openducktor/contracts";
 import type {} from "./bun-test";
 import { HostTaskClient } from "./task-client";
 import { TaskMetadataCache } from "./task-metadata-cache";
@@ -7,8 +7,6 @@ type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
 };
-
-type TestHostResult = object | string | number | boolean | null | undefined;
 
 const createDeferred = <T>(): Deferred<T> => {
   let resolve: (value: T) => void = () => {};
@@ -30,10 +28,9 @@ const metadata = (version: string) => ({
   agentSessions: [],
 });
 
-// SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createTaskClient = (
-  invoke: (command: string, args?: Record<string, unknown>) => Promise<TestHostResult>,
-) => new HostTaskClient(invoke as never, new TaskMetadataCache());
+  invoke: (command: string, args?: Record<string, unknown>) => Promise<JsonValue>,
+) => new HostTaskClient(invoke, new TaskMetadataCache());
 
 const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEvent => ({
   eventId: `update-${repoPath}-${taskIds.join("-")}`,
@@ -64,7 +61,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
   });
 
   test("does not let a pre-event in-flight read overwrite a post-event read", async () => {
-    const stale = createDeferred<TestHostResult>();
+    const stale = createDeferred<JsonValue>();
     let reads = 0;
     const client = createTaskClient((command) => {
       if (command !== "task_metadata_get") {
@@ -114,8 +111,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
       if (command !== "task_metadata_get") {
         throw new Error(`Unexpected command: ${command}`);
       }
-      // SAFETY: This test controls the fixture and supplies `string` used by this case.
-      const taskId = args?.taskId as string;
+      const taskId: string = args?.taskId;
       const nextRead = (readsByTaskId.get(taskId) ?? 0) + 1;
       readsByTaskId.set(taskId, nextRead);
       return metadata(`${taskId}-V${nextRead}`);

@@ -947,9 +947,9 @@ describe("HostClient", () => {
   test("taskTransition validates status before invoking host", async () => {
     const { client, calls } = createClient(() => makeTaskCardPayload());
 
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     await expect(
-      client.taskTransition("/repo", "task-1", "not_a_status" as never),
+      // @ts-expect-error This negative test verifies runtime validation of an invalid task status.
+      client.taskTransition("/repo", "task-1", "not_a_status"),
     ).rejects.toThrow();
     expect(calls).toHaveLength(0);
   });

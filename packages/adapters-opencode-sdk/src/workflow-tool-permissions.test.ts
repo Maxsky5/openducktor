@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   ODT_MCP_TOOL_NAMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  agentRoleValues,
   toOpencodeExposedOdtToolIds,
 } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
 import {
   buildRepositoryScopedPermissionRules,
   buildRoleScopedPermissionRules,
@@ -59,9 +59,8 @@ describe("workflow-tool-permissions", () => {
     expect(findFinalExactAction(rules, "runtime_plan_alias")).toBe("ask");
   });
 
-  // SAFETY: This test controls the fixture and supplies `AgentRole[]` used by this case.
   test("keeps approval prompts out of every workflow role policy", () => {
-    for (const role of Object.keys(AGENT_ROLE_TOOL_POLICY) as AgentRole[]) {
+    for (const role of agentRoleValues) {
       const rules = buildRoleScopedPermissionRules({
         role,
         runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,

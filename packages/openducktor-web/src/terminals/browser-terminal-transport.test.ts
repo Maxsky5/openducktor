@@ -45,8 +45,7 @@ class FakeWebSocket {
 
   emitClose(code: number, reason: string): void {
     this.readyState = 3;
-    // SAFETY: This test controls the fixture and supplies `CloseEvent` used by this case.
-    this.emit("close", { code, reason } as CloseEvent);
+    this.emit("close", Object.assign(new Event("close"), { code, reason }));
   }
 
   private emit(type: string, event: Event): void {
@@ -86,12 +85,11 @@ describe("createBrowserTerminalBridge", () => {
     const failures: TerminalFailure[] = [];
     const states: string[] = [];
     const bridge = createBrowserTerminalBridge();
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const connectWithFailure = bridge.connect as (
+    const connectWithFailure: (
       onFrame: (frame: Uint8Array) => void,
       onStateChange: (state: "connected" | "disconnected") => void,
       onFailure: (failure: TerminalFailure) => void,
-    ) => ReturnType<typeof bridge.connect>;
+    ) => ReturnType<typeof bridge.connect> = bridge.connect;
 
     const connecting = connectWithFailure(
       () => undefined,

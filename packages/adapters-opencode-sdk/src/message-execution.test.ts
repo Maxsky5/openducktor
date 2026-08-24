@@ -60,8 +60,7 @@ const createSession = (overrides?: {
   const promptAsync = mock(async () => overrides?.promptAsyncResult ?? { error: null });
   const summarize = mock(async () => overrides?.summarizeResult ?? { data: true, error: null });
 
-  // SAFETY: This test controls the fixture and supplies `SessionRecord` used by this case.
-  const session = {
+  const session: SessionRecord = {
     externalSessionId: "session-opencode-1",
     input: {
       externalSessionId: "session-1",
@@ -84,7 +83,7 @@ const createSession = (overrides?: {
     streamTurnStatus: "idle",
     isSendingUserMessage: false,
     isAwaitingRuntimeTurnStart: false,
-  } as SessionRecord;
+  };
 
   return { session, command, promptAsync, summarize };
 };
@@ -174,8 +173,7 @@ describe("message-execution", () => {
 
     const { session } = createSession();
     const sdkSessionClient = new SdkSessionClient();
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    session.client.session = sdkSessionClient as never;
+    session.client.session = sdkSessionClient;
 
     await sendUserMessage({
       session,
@@ -241,10 +239,9 @@ describe("message-execution", () => {
 
   test("preserves compact-session context when summarization rejects", async () => {
     const { session } = createSession();
-    // SAFETY: This test drives the failure path that supplies `never` before this assertion.
     session.client.session.summarize = mock(async () => {
       throw new Error("connection closed");
-    }) as never;
+    });
 
     await expect(
       sendUserMessage({
@@ -618,10 +615,8 @@ describe("message-execution", () => {
       tools: {},
     });
 
-    // SAFETY: This test controls the fixture and supplies `| { parts?: Array<{ type: string; source?: unknown }> } | undefined` used by this case.
-    const promptRequest = promptAsync.mock.calls[0]?.[0] as
-      | { parts?: Array<{ type: string; source?: unknown }> }
-      | undefined;
+    const promptRequest: { parts?: Array<{ type: string; source?: unknown }> } | undefined =
+      promptAsync.mock.calls[0]?.[0];
     const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
     expect(attachmentPart).toBeDefined();
     expect(attachmentPart?.source).toBeUndefined();

@@ -69,7 +69,7 @@ const opencodeSessionStatusSchema = exactOptionalSchema(
     z.object({ type: z.literal("idle") }),
     z.object({
       type: z.literal("retry"),
-      attempt: z.number(),
+      attempt: z.number().int().nonnegative(),
       message: z.string(),
       action: z
         .object({
@@ -81,7 +81,7 @@ const opencodeSessionStatusSchema = exactOptionalSchema(
           link: z.string().optional(),
         })
         .optional(),
-      next: z.number(),
+      next: z.number().int().nonnegative(),
     }),
     z.object({ type: z.literal("busy") }),
   ]),

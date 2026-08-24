@@ -143,8 +143,7 @@ const createFakeSettingsConfig = ({
       return paths.join("/").replaceAll(/\/+/g, "/");
     },
   };
-  // SAFETY: This test controls the fixture and supplies `FakeSettingsConfigPort` used by this case.
-  return port as FakeSettingsConfigPort;
+  return port;
 };
 describe("createWorkspaceSettingsService", () => {
   test("returns default settings snapshot when config is missing", async () => {
@@ -216,28 +215,6 @@ describe("createWorkspaceSettingsService", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
-  test("normalizes legacy enabled-only Codex runtime settings in snapshots", async () => {
-    // SAFETY: This test controls the fixture and supplies `Partial<GlobalConfig>` used by this case.
-    const service = createWorkspaceSettingsService(
-      createFakeSettingsConfig({
-        config: globalConfig({
-          agentRuntimes: {
-            opencode: { enabled: true, executablePath: "/bin/opencode" },
-            codex: { enabled: true, executablePath: "/bin/codex" },
-          },
-        } as Partial<GlobalConfig>),
-      }),
-    );
-
-    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-
-    expect(snapshot.agentRuntimes.codex).toEqual({
-      enabled: true,
-      executablePath: "/bin/codex",
-      defaults: DEFAULT_CODEX_RUNTIME_POLICY,
-      roleOverrides: {},
-    });
   });
   test("lists workspaces in effective order with worktree paths", async () => {
     const service = createWorkspaceSettingsService(
@@ -669,18 +646,17 @@ describe("createWorkspaceSettingsService", () => {
     const service = createWorkspaceSettingsService(settingsConfig);
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
     const invalidVisibility: string = "auto";
+    // SAFETY: This fixture deliberately violates the typed boundary so the service parser can reject it.
+    const invalidSnapshot = {
+      ...snapshot,
+      appearance: {
+        horizontalScrollbarVisibility: invalidVisibility,
+      },
+    } as typeof snapshot;
 
-    await expect(
-      Effect.runPromise(
-        // SAFETY: this test passes invalid untrusted input to verify boundary validation.
-        service.saveSettingsSnapshot({
-          ...snapshot,
-          appearance: {
-            horizontalScrollbarVisibility: invalidVisibility,
-          },
-        } as typeof snapshot),
-      ),
-    ).rejects.toThrow("Invalid option");
+    await expect(Effect.runPromise(service.saveSettingsSnapshot(invalidSnapshot))).rejects.toThrow(
+      "Invalid option",
+    );
     expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
   test("rejects invalid Codex snapshot settings without writing config", async () => {

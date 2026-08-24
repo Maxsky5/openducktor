@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { UnknownRecord } from "./guards";
+import { createOpencodePartFixture } from "./opencode-protocol-test-fixtures";
+import type { ParsedOpencodePart } from "./opencode-ingress";
 import {
   extractMessageTotalTokens,
   normalizeUserMessageDisplayParts,
@@ -9,46 +11,47 @@ import {
   sanitizeAssistantMessage,
 } from "./message-normalizers";
 
+const parseOpencodeParts = (parts: UnknownRecord[]): ParsedOpencodePart[] =>
+  parts.map(createOpencodePartFixture);
+
 describe("message-normalizers", () => {
   test("readTextFromParts joins only text parts", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "First line",
-      } as Part,
+      },
       {
         id: "reason-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "reasoning",
         text: "Should be ignored",
-      } as Part,
+      },
       {
         id: "text-2",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "Second line",
-      } as Part,
+      },
     ];
 
-    expect(readTextFromParts(parts)).toBe("First line\nSecond line");
+    expect(readTextFromParts(parseOpencodeParts(parts))).toBe("First line\nSecond line");
   });
 
   test("normalizes user display parts by filtering synthetic text and preserving file refs", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "check @src/main.ts please",
-      } as Part,
+      },
       {
         id: "text-2",
         sessionID: "session-1",
@@ -56,7 +59,7 @@ describe("message-normalizers", () => {
         type: "text",
         text: 'Called the Read tool with the following input: {"filePath":"src/main.ts"}',
         synthetic: true,
-      } as Part,
+      },
       {
         id: "file-1",
         sessionID: "session-1",
@@ -74,10 +77,10 @@ describe("message-normalizers", () => {
             end: 19,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "check @src/main.ts please",
@@ -99,9 +102,8 @@ describe("message-normalizers", () => {
     ]);
   });
 
-  test("ignores malformed source text payloads when normalizing file references", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+  test("rejects malformed source text payloads before normalizing file references", () => {
+    const parts: UnknownRecord[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -119,32 +121,21 @@ describe("message-normalizers", () => {
             end: 19,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
-      {
-        kind: "file_reference",
-        file: {
-          id: "file-1",
-          path: "src/main.ts",
-          name: "main.ts",
-          kind: "code",
-        },
-      },
-    ]);
+    expect(() => parseOpencodeParts(parts)).toThrow();
   });
 
   test("normalizes OpenCode agent parts into subagent display parts", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "text-1",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "ask @reviewer now",
-      } as Part,
+      },
       {
         id: "agent-1",
         sessionID: "session-1",
@@ -156,10 +147,10 @@ describe("message-normalizers", () => {
           start: 4,
           end: 13,
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "ask @reviewer now",
@@ -181,25 +172,24 @@ describe("message-normalizers", () => {
   });
 
   test("keeps only the slash-command envelope text when OpenCode echoes instruction text separately", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "slash-envelope",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
-      } as Part,
+      },
       {
         id: "slash-echo",
         sessionID: "session-1",
         messageID: "message-1",
         type: "text",
         text: "I just want to test the slash commands mechanism.\nReturn the arguments of this command: pouet",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "text",
         text: "<auto-slash-command>\n# /test-command Command\n\n## User Request\n\npouet\n</auto-slash-command>",
@@ -208,8 +198,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes local multimodal file parts into attachment display parts", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "image-1",
         sessionID: "session-1",
@@ -218,7 +207,7 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "diagram.png",
         url: "file:///tmp/diagram.png",
-      } as Part,
+      },
       {
         id: "audio-1",
         sessionID: "session-1",
@@ -227,7 +216,7 @@ describe("message-normalizers", () => {
         mime: "audio/mpeg",
         filename: "meeting.mp3",
         url: "file:///tmp/meeting.mp3",
-      } as Part,
+      },
       {
         id: "video-1",
         sessionID: "session-1",
@@ -236,7 +225,7 @@ describe("message-normalizers", () => {
         mime: "video/mp4",
         filename: "demo.mp4",
         url: "file:///tmp/demo.mp4",
-      } as Part,
+      },
       {
         id: "pdf-1",
         sessionID: "session-1",
@@ -245,10 +234,10 @@ describe("message-normalizers", () => {
         mime: "application/pdf",
         filename: "spec.pdf",
         url: "file:///tmp/spec.pdf",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -293,8 +282,7 @@ describe("message-normalizers", () => {
   });
 
   test("keeps attachment echoes as attachments when runtime adds non-@ source text", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "pdf-runtime-echo",
         sessionID: "session-1",
@@ -312,10 +300,10 @@ describe("message-normalizers", () => {
             end: 9,
           },
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -330,8 +318,7 @@ describe("message-normalizers", () => {
   });
 
   test("preserves raw filesystem paths returned in attachment urls", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "image-raw-path",
         sessionID: "session-1",
@@ -340,7 +327,7 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "Screenshot 2026-04-01 at 00.33.32.png",
         url: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
-      } as Part,
+      },
       {
         id: "image-windows-path",
         sessionID: "session-1",
@@ -349,10 +336,10 @@ describe("message-normalizers", () => {
         mime: "image/png",
         filename: "",
         url: "C:\\Temp\\Preview.png",
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -377,8 +364,7 @@ describe("message-normalizers", () => {
   });
 
   test("falls back to source file path for attachments when the runtime omits a file url", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "image-source-path",
         sessionID: "session-1",
@@ -391,10 +377,10 @@ describe("message-normalizers", () => {
           type: "file",
           path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -409,8 +395,7 @@ describe("message-normalizers", () => {
   });
 
   test("normalizes only supported media file attachments without inline source text", () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "file-1",
         sessionID: "session-1",
@@ -423,7 +408,7 @@ describe("message-normalizers", () => {
           type: "file",
           path: "src/styles.scss",
         },
-      } as Part,
+      },
       {
         id: "file-2",
         sessionID: "session-1",
@@ -436,7 +421,7 @@ describe("message-normalizers", () => {
           type: "file",
           path: "assets/preview.webp",
         },
-      } as Part,
+      },
       {
         id: "file-3",
         sessionID: "session-1",
@@ -449,10 +434,10 @@ describe("message-normalizers", () => {
           type: "file",
           path: "recordings/demo.webm",
         },
-      } as Part,
+      },
     ];
 
-    expect(normalizeUserMessageDisplayParts(parts)).toEqual([
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
       {
         kind: "attachment",
         attachment: {
@@ -692,7 +677,7 @@ describe("message-normalizers", () => {
   });
 
   test("extractMessageTotalTokens falls back to max part token total", () => {
-    const parts: Part[] = [
+    const parts: UnknownRecord[] = [
       {
         id: "part-1",
         sessionID: "session-1",

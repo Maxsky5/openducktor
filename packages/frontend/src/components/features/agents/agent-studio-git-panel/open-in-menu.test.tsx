@@ -7,12 +7,10 @@ import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { host } from "@/state/operations/host";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { OpenInMenu } from "./open-in-menu";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const REACT_ACT_ENVIRONMENT_WARNING =
   "The current testing environment is not configured to support act";
@@ -30,10 +28,7 @@ describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
   beforeEach(() => {
-    // SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }` used by this case.
-    (
-      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    ).IS_REACT_ACT_ENVIRONMENT = true;
+    enableReactActEnvironment();
   });
 
   afterEach(async () => {
@@ -93,9 +88,8 @@ describe("OpenInMenu", () => {
       expect(screen.queryByText("Terminals")).toBeNull();
       expect(screen.queryByText("Editors & IDEs")).toBeNull();
       expect(screen.queryByTestId("agent-studio-git-open-in-item-finder")).toBeNull();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLImageElement` before this lookup.
       expect(
-        (screen.getByTestId("agent-studio-git-open-in-icon-zed") as HTMLImageElement).tagName,
+        screen.getByTestId<HTMLImageElement>("agent-studio-git-open-in-icon-zed").tagName,
       ).toBe("IMG");
 
       await runWithReactAct(async () => {
@@ -132,8 +126,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
+      const trigger: HTMLButtonElement = screen.getByTestId("agent-studio-git-open-in-trigger");
       const disabledTrigger = screen.getByTestId("agent-studio-git-open-in-disabled-trigger");
 
       expect(trigger.disabled).toBe(true);
@@ -167,8 +160,10 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger") as HTMLButtonElement;
+      const trigger = screen.getByTestId("agent-studio-git-open-in-trigger");
+      if (!(trigger instanceof HTMLButtonElement)) {
+        throw new Error("Expected the open-in trigger to be a button");
+      }
 
       expect(trigger.disabled).toBe(true);
       expect(
@@ -331,10 +326,9 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const defaultButton = screen.getByTestId(
+      const defaultButton: HTMLButtonElement = screen.getByTestId(
         "agent-studio-git-open-in-default-button",
-      ) as HTMLButtonElement;
+      );
       expect(defaultButton.disabled).toBe(true);
 
       await runWithReactAct(async () => {
@@ -383,10 +377,8 @@ describe("OpenInMenu", () => {
       });
 
       expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
       expect(
-        (screen.getByTestId("agent-studio-git-open-in-default-button") as HTMLButtonElement)
-          .disabled,
+        screen.getByTestId<HTMLButtonElement>("agent-studio-git-open-in-default-button").disabled,
       ).toBe(true);
 
       await runWithReactAct(async () => {

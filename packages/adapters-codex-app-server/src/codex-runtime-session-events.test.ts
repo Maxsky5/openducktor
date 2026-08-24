@@ -4,7 +4,7 @@ import {
   hasRuntimeType,
   type CodexAppServerThreadItem,
 } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -77,15 +77,16 @@ const createRuntimeEvents = (
 
 type StartedItemTimestampState = Map<string, Map<string, Map<string, number>>>;
 
-// SAFETY: This test controls the fixture and supplies `{ startedItemTimestampsByRuntimeId: StartedItemTimestampState; }` used by this case.
 const startedItemTimestampState = (
   runtimeEvents: CodexRuntimeSessionEvents,
-): StartedItemTimestampState =>
-  (
+): StartedItemTimestampState => {
+  // SAFETY: CodexRuntimeSessionEvents declares this private field with StartedItemTimestampState; lifecycle tests only inspect its cleanup behavior.
+  return (
     runtimeEvents as {
       startedItemTimestampsByRuntimeId: StartedItemTimestampState;
     }
   ).startedItemTimestampsByRuntimeId;
+};
 
 type ItemLifecycleMethod = "item/started" | "item/completed";
 
@@ -778,8 +779,8 @@ describe("CodexRuntimeSessionEvents", () => {
       [parentTwo.threadId, parentTwo],
     ]);
     const sessionEvents = new CodexSessionEventBus();
-    const parentOneEvents: unknown[] = [];
-    const parentTwoEvents: unknown[] = [];
+    const parentOneEvents: AgentEvent[] = [];
+    const parentTwoEvents: AgentEvent[] = [];
     sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
     sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
     const runtimeEvents = createRuntimeEvents({
@@ -850,8 +851,8 @@ describe("CodexRuntimeSessionEvents", () => {
       [parentTwo.threadId, parentTwo],
     ]);
     const sessionEvents = new CodexSessionEventBus();
-    const parentOneEvents: unknown[] = [];
-    const parentTwoEvents: unknown[] = [];
+    const parentOneEvents: AgentEvent[] = [];
+    const parentTwoEvents: AgentEvent[] = [];
     sessionEvents.subscribe(codexSessionRef(parentOne), (event) => parentOneEvents.push(event));
     sessionEvents.subscribe(codexSessionRef(parentTwo), (event) => parentTwoEvents.push(event));
     const subagents = new CodexSubagentLinkState();
@@ -907,14 +908,11 @@ describe("CodexRuntimeSessionEvents", () => {
     });
     await flushRuntimeEvents();
 
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const parentOneApproval = parentOneEvents.find(
-      (event) => (event as { type?: string }).type === "approval_required",
-    ) as { externalSessionId: string; requestId: string };
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const parentTwoApproval = parentTwoEvents.find(
-      (event) => (event as { type?: string }).type === "approval_required",
-    ) as { externalSessionId: string; requestId: string };
+    const parentOneApproval = parentOneEvents.find((event) => event.type === "approval_required");
+    const parentTwoApproval = parentTwoEvents.find((event) => event.type === "approval_required");
+    if (parentOneApproval === undefined || parentTwoApproval === undefined) {
+      throw new Error("Expected both parent sessions to emit an approval request.");
+    }
     expect(parentOneApproval.externalSessionId).toBe("parent-one");
     expect(parentTwoApproval.externalSessionId).toBe("parent-two");
     expect(parentOneApproval.requestId).not.toBe("0");

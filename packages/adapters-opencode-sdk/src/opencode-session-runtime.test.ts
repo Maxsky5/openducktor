@@ -1,13 +1,13 @@
-import { hasRuntimeType, type JsonObject } from "@openducktor/contracts";
+import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { createPrepareOpencodeSessionRuntime, type OpencodeSessionRuntimeSignal } from "./index";
 import {
   permissionAskedEvent,
   permissionRepliedEvent,
   sessionStatusEvent,
 } from "./event-stream.test-support";
-import { asUnknownRecord } from "./guards";
+import type { UnknownRecord } from "./guards";
 import {
   createOpencodeEventFixtures,
   createOpencodeMessageInfoFixture,
@@ -23,8 +23,8 @@ type LiveClientHarness = {
   questionReplyCalls: unknown[];
   setPermissionReplyError: (error: unknown | null) => void;
   setPendingApproval: (pending: boolean) => void;
-  emit: (event: Event | JsonObject) => void;
-  emitAndWait: (event: Event | JsonObject) => Promise<void>;
+  emit: (event: UnknownRecord) => void;
+  emitAndWait: (event: UnknownRecord) => Promise<void>;
   completeStream: () => Promise<void>;
   failStream: (error: Error) => Promise<void>;
   streamSignal: () => AbortSignal | null;
@@ -36,7 +36,7 @@ type PermissionReplyRequest = Parameters<OpencodeClient["permission"]["reply"]>[
 type QuestionReplyRequest = Parameters<OpencodeClient["question"]["reply"]>[0];
 
 type QueuedStreamEntry =
-  | { type: "event"; event: Event | JsonObject; consumed?: () => void }
+  | { type: "event"; event: UnknownRecord; consumed?: () => void }
   | { type: "complete"; consumed: () => void }
   | { type: "failure"; error: Error; consumed: () => void };
 
@@ -74,7 +74,6 @@ const createLiveClientHarness = (
   let pendingApproval = input.pendingQuestion !== true;
   let pendingQuestion = input.pendingQuestion === true;
   let signal: AbortSignal | null = null;
-  // SAFETY: This test controls the fixture and supplies `Event` used by this case.
   const queuedEvents: QueuedStreamEntry[] =
     input.initiallyConnected === false
       ? []
@@ -84,14 +83,16 @@ const createLiveClientHarness = (
             event: {
               type: "server.connected",
               properties: {},
-            } as Event,
+            },
           },
         ];
   let wakeStream: (() => void) | null = null;
 
-  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
-  const client = {
+  const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
+  const client: OpencodeClient = {
+    ...baseClient,
     session: {
+      ...baseClient.session,
       list: async () => {
         callOrder.push("list");
         input.onList?.();
@@ -155,6 +156,7 @@ const createLiveClientHarness = (
       update: async () => ({ data: { id: externalSessionId }, error: undefined }),
     },
     permission: {
+      ...baseClient.permission,
       list: async () => {
         const data = pendingApproval
           ? externalSessionIds.map((sessionId) => ({
@@ -185,6 +187,7 @@ const createLiveClientHarness = (
       },
     },
     question: {
+      ...baseClient.question,
       list: async () => {
         const data = pendingQuestion
           ? [
@@ -217,6 +220,7 @@ const createLiveClientHarness = (
       },
     },
     global: {
+      ...baseClient.global,
       event: async (options?: { signal?: AbortSignal }) => {
         callOrder.push("subscribe");
         signal = options?.signal ?? null;
@@ -245,11 +249,7 @@ const createLiveClientHarness = (
               if (entry.event.type === "server.connected") {
                 callOrder.push("connected");
               }
-              const eventRecord = asUnknownRecord(entry.event);
-              if (!eventRecord) {
-                throw new Error("Expected an OpenCode event fixture object.");
-              }
-              for (const payload of createOpencodeEventFixtures(eventRecord, eventIndex)) {
+              for (const payload of createOpencodeEventFixtures(entry.event, eventIndex)) {
                 yield { directory: "/repo", payload };
               }
               eventIndex += 1;
@@ -263,15 +263,17 @@ const createLiveClientHarness = (
       },
     },
     mcp: {
+      ...baseClient.mcp,
       status: async () => ({
         data: { openducktor: { status: "connected" } },
         error: undefined,
       }),
     },
     tool: {
+      ...baseClient.tool,
       ids: async () => ({ data: [], error: undefined }),
     },
-  } as OpencodeClient;
+  };
 
   return {
     client,
@@ -355,12 +357,11 @@ describe("OpenCode session runtime connection", () => {
       }
     });
 
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     harness.emit({
       id: "event-heartbeat-1",
       type: "server.heartbeat",
       properties: {},
-    } as Event);
+    });
     harness.emit(sessionStatusEvent({ type: "busy" }, "session-1"));
 
     expect(await observation).toBe("status");
@@ -467,8 +468,7 @@ describe("OpenCode session runtime connection", () => {
     await expect(firstPreparing).rejects.toBeDefined();
     expect(harness.streamSignal()?.aborted).toBe(false);
 
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
-    harness.emit({ type: "server.connected", properties: {} } as Event);
+    harness.emit({ type: "server.connected", properties: {} });
     const secondPrepared = await secondPreparing;
     await secondPrepared.release();
     expect(harness.streamSignal()?.aborted).toBe(true);
@@ -593,7 +593,6 @@ describe("OpenCode session runtime connection", () => {
     });
     const preparing = createPrepareRuntime(harness)(runtimeInput);
     await listStarted;
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     harness.emit({
       type: "message.updated",
       properties: {
@@ -615,7 +614,7 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as Event);
+    });
     releaseList();
     const prepared = await preparing;
 
@@ -640,7 +639,6 @@ describe("OpenCode session runtime connection", () => {
     });
     await firstStarted;
 
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -662,7 +660,7 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as Event);
+    });
     expect(messages).toEqual(["Buffered transcript"]);
 
     releaseFirst();
@@ -719,14 +717,13 @@ describe("OpenCode session runtime connection", () => {
       signals.push(signal);
     });
 
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "session.error",
       properties: {
         sessionID: "session-1",
         error: { data: { message: "Provider failed" } },
       },
-    } as Event);
+    });
 
     expect(signals).toContainEqual({
       type: "transcript_event",
@@ -761,7 +758,6 @@ describe("OpenCode session runtime connection", () => {
       sessionScope: { kind: "repository" },
       parts: [{ kind: "text", text: "Do the work" }],
     });
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await harness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -783,12 +779,11 @@ describe("OpenCode session runtime connection", () => {
           },
         ],
       },
-    } as Event);
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
+    });
     await harness.emitAndWait({
       type: "session.idle",
       properties: { sessionID: "session-1" },
-    } as Event);
+    });
 
     expect(sessionStatuses).toEqual(["busy"]);
     expect(transcriptEventTypes).toContain("session_idle");
@@ -811,7 +806,6 @@ describe("OpenCode session runtime connection", () => {
     });
     const preparing = createPrepareRuntime(retainedHarness)(runtimeInput);
     await listStarted;
-    // SAFETY: This test controls the fixture and supplies `Event` used by this case.
     await retainedHarness.emitAndWait({
       type: "message.updated",
       properties: {
@@ -825,7 +819,7 @@ describe("OpenCode session runtime connection", () => {
         },
         parts: [],
       },
-    } as Event);
+    });
     releaseList();
     const retained = await preparing;
     expect(retained.initialContextUsageBySessionId.get("session-1")).toEqual({

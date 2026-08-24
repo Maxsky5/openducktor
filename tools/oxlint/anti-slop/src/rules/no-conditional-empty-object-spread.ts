@@ -42,9 +42,11 @@ function isEmptyObjectSpreadIife(node: ESTree.Expression): boolean {
   const call = unwrapParentheses(node);
   if (call.type !== "CallExpression" || call.arguments.length !== 0) return false;
   const callee = unwrapParentheses(call.callee);
-  return callee.type === "ArrowFunctionExpression" &&
+  return (
+    callee.type === "ArrowFunctionExpression" &&
     callee.body.type === "BlockStatement" &&
-    callee.body.body.some(isEmptyObjectReturn);
+    callee.body.body.some(isEmptyObjectReturn)
+  );
 }
 
 /** Ban conditional empty-object spreads without changing their omission semantics. */

@@ -24,7 +24,6 @@ const makeClient = (input: {
   onMcpConnect?: (args: { directory: string; name: string }) => void;
 }): OpencodeClient => {
   let statusResponseIndex = 0;
-  // SAFETY: This test drives the failure path that supplies `OpencodeClient` before this assertion.
   return {
     tool: {
       ids: async () => {
@@ -77,7 +76,7 @@ const makeClient = (input: {
         };
       },
     },
-  } as OpencodeClient;
+  } satisfies OpencodeClient;
 };
 
 describe("workflow-tool-selection", () => {
@@ -218,7 +217,6 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selection).toBeInstanceOf(Error);
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selection as Error).message).toBe("boom");
   });
 
@@ -234,13 +232,10 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selectionError as Error).message).toContain('unavailable for "/repo"');
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selectionError as Error).message).toContain(
       'MCP server "openducktor" stayed unavailable after reconnect',
     );
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selectionError as Error).message).toContain("connection closed");
   });
 
@@ -307,7 +302,6 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selectionError as Error).message).toBe("mcp-connect-down");
   });
 
@@ -323,7 +317,6 @@ describe("workflow-tool-selection", () => {
     }).catch((cause: unknown) => cause);
 
     expect(selectionError).toBeInstanceOf(Error);
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
     expect((selectionError as Error).message).toBe("mcp-down");
   });
 

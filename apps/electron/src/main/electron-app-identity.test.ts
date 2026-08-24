@@ -307,8 +307,10 @@ describe("configureElectronAppIdentity", () => {
       operation: "electron.app-identity.prepare-profile-directory",
       path: customProfilePath,
     });
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toBe(
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toBe(
       `Failed to prepare Custom App Electron profile directory at ${customProfilePath}: permission denied`,
     );
   });

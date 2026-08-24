@@ -63,8 +63,7 @@ describe("prepare session send", () => {
   });
 
   test("rejects when the workspace changes during runtime preparation", async () => {
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const { prepareSend } = createPrepareSend({
       currentWorkspaceRepoPathRef,
       ensureExistingSessionRuntime: async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act } from "react";
+import { act, createRef } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createTaskRefreshController } from "./task-refresh-controller";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
@@ -27,13 +27,11 @@ const createDeferred = (): Deferred => {
 const createController = () => {
   const loadingStates: boolean[] = [];
   const errors: Array<{ title: string; description: string }> = [];
-  // SAFETY: This test controls the fixture and supplies `{ repoPath: string; description: string } | null` used by this case.
-  const lastTaskRefreshToastRef = {
-    current: null as { repoPath: string; description: string } | null,
-  };
-  // SAFETY: This test controls the fixture and supplies `{ repoPath: string; description: string } | null` used by this case.
-  const lastTaskLoadErrorToastRef = {
-    current: null as { repoPath: string; description: string } | null,
+  const lastTaskRefreshToastRef = createRef<{ repoPath: string; description: string }>();
+  const lastTaskLoadErrorToastRef: Parameters<
+    typeof createTaskRefreshController
+  >[0]["lastTaskLoadErrorToastRef"] = {
+    current: null,
   };
   const controller = createTaskRefreshController({
     setIsManualLoading: (value) => loadingStates.push(value),

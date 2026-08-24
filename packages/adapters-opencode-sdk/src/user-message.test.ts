@@ -252,10 +252,9 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await startDefaultSession(adapter, "spec");
 
-    const events: Array<{ type: string }> = [];
-    // SAFETY: This test controls the fixture and supplies `{ type: string }` used by this case.
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
-      events.push(event as { type: string }),
+      events.push(event),
     );
 
     await adapter.sendUserMessage({
@@ -357,8 +356,7 @@ describe("OpencodeSdkAdapter user message", () => {
       (event): event is Extract<AgentEvent, { type: "user_message" }> =>
         event.type === "user_message",
     );
-    // SAFETY: This test controls the fixture and supplies `{ messageID?: string } | undefined` used by this case.
-    const promptRequest = mock.session.promptAsyncCalls[0] as { messageID?: string } | undefined;
+    const promptRequest: { messageID?: string } | undefined = mock.session.promptAsyncCalls[0];
     expect(userEvents).toEqual([
       expect.objectContaining({
         messageId: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
@@ -372,7 +370,6 @@ describe("OpencodeSdkAdapter user message", () => {
   });
 
   test("sendUserMessage keeps history loading out of the send path", async () => {
-    // SAFETY: This test controls the fixture and supplies `Part` used by this case.
     const oldUserMessage = {
       info: {
         id: "runtime-user-old",
@@ -387,7 +384,7 @@ describe("OpencodeSdkAdapter user message", () => {
           type: "text",
           text: "Already visible",
           time: { start: Date.parse("2026-02-17T12:00:01Z") },
-        } as Part,
+        } satisfies Part,
       ],
     };
     const mock = makeMockClient({
@@ -933,10 +930,8 @@ describe("OpencodeSdkAdapter user message", () => {
 
     expect(mock.tool.listCalls).toEqual([]);
     expect(mock.session.promptCalls).toHaveLength(0);
-    // SAFETY: This test controls the fixture and supplies `| { tools?: Record<string, boolean> } | undefined` used by this case.
-    const promptAsyncCall = mock.session.promptAsyncCalls[0] as
-      | { tools?: Record<string, boolean> }
-      | undefined;
+    const promptAsyncCall: { tools?: Record<string, boolean> } | undefined =
+      mock.session.promptAsyncCalls[0];
     expect(promptAsyncCall?.tools).toMatchObject({
       edit: false,
       write: false,

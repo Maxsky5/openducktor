@@ -48,9 +48,8 @@ describe("TaskResetConfirmDialog", () => {
       />,
     );
 
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-    expect(
-      (screen.getByRole("button", { name: "Checking..." }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Checking..." }).disabled).toBe(
+      true,
+    );
   });
 });

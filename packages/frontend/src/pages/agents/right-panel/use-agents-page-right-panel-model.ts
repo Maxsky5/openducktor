@@ -61,10 +61,10 @@ type BuildAgentsPageDiffModelSnapshot = Pick<
   | "targetBranchState"
 >;
 
-type BuildAgentsPageDiffModelArgs = {
+type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
-  gitActions: ReturnType<typeof useAgentStudioGitActions>;
+  gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
@@ -89,7 +89,7 @@ function collectUnmergedFilePaths(
   return paths;
 }
 
-export function buildAgentsPageDiffModel({
+export function buildAgentsPageDiffModel<GitActions extends object>({
   branches,
   buildToolsSnapshot,
   gitActions,
@@ -98,7 +98,7 @@ export function buildAgentsPageDiffModel({
   detectingPullRequestTaskId,
   onDetectPullRequest,
   openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
-}: BuildAgentsPageDiffModelArgs) {
+}: BuildAgentsPageDiffModelArgs<GitActions>) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;

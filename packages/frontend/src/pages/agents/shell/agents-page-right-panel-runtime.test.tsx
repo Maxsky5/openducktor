@@ -55,14 +55,14 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  if (!realRefreshModule) {
+  const refreshModule = realRefreshModule;
+  if (!refreshModule) {
     return;
   }
-  // SAFETY: This test controls the fixture and supplies `RefreshModule` used by this case.
   await restoreMockedModules([
     [
       "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh",
-      () => Promise.resolve(realRefreshModule as RefreshModule),
+      () => Promise.resolve(refreshModule),
     ],
   ]);
 });

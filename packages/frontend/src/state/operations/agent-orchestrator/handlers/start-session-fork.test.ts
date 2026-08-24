@@ -249,8 +249,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("rolls back a stale fork after lease completion without aborting the completed lease", async () => {
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const adapter = new OpencodeSdkAdapter();
     const stoppedSessionIds: string[] = [];
     const deletedSessionIds: string[] = [];
@@ -739,8 +738,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
   });
 
   test("stops the forked session when the repo becomes stale after child history load", async () => {
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
+    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;

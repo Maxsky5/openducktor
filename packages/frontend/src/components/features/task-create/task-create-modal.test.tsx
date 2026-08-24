@@ -1,38 +1,40 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ComposerState } from "@/types/task-composer";
-import type { TaskCard } from "@openducktor/contracts";
 import { render, screen } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
 enableReactActEnvironment();
 
 const realTaskCreateModalControllerModule = { ...taskCreateModalControllerModule };
 
-// SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
+const noDocumentSaveInProgress = (): "spec" | "plan" | null => null;
+const noFooterError = (): string | null => null;
+
 const controllerMock = {
-  mode: "edit" as const,
+  mode: "edit",
   onDialogOpenChange: (_open: boolean) => {},
   isBusy: false,
   isFormDisabled: false,
   isRecoveryBlocked: false,
   hasExternalTaskConflict: false,
-  step: "details" as const,
+  step: "details",
   setStep: (_step: "type" | "details") => {},
-  editSection: "spec" as const,
+  editSection: "spec",
   isSpecDirty: false,
   isPlanDirty: false,
   requestSectionChange: (_section: "details" | "spec" | "plan") => {},
   isTypeStepVisible: false,
-  selectedCreateIssueType: "task" as const,
+  selectedCreateIssueType: "task",
   selectCreateIssueType: (_issueType: string) => {},
-  activeDocumentSection: "spec" as const,
+  activeDocumentSection: "spec",
   activeDraft: "# Spec",
   views: {
-    spec: "split" as const,
-    plan: "split" as const,
+    spec: "split",
+    plan: "split",
   },
   setDocumentView: (_section: "spec" | "plan", _view: "write" | "split" | "preview") => {},
   activeDocument: {
@@ -41,7 +43,7 @@ const controllerMock = {
     error: null,
     loaded: true,
   },
-  isSavingDocument: null as "spec" | "plan" | null,
+  isSavingDocument: noDocumentSaveInProgress(),
   isActiveDocumentDirty: false,
   updateDocumentDraft: (_section: "spec" | "plan", _value: string) => {},
   loadDocumentSection: async (_section: "spec" | "plan", _force?: boolean) => {},
@@ -51,7 +53,7 @@ const controllerMock = {
   priorityComboboxOptions: [],
   knownLabels: [],
   updateState: (_patch: Partial<ComposerState>) => {},
-  footerError: null as string | null,
+  footerError: noFooterError(),
   isEditingDocument: true,
   close: () => {},
   discardCurrentDocumentDraft: () => {},
@@ -98,8 +100,7 @@ describe("TaskCreateModal", () => {
   });
 
   test("renders the edit modal shell for the document editor flow", async () => {
-    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
     const rendered = render(
       createElement(TaskCreateModal, {
         open: true,
@@ -125,8 +126,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "Refresh before continuing. Task: created-task · Phase: compensate_create · Durable state: created_partial";
-    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
       const rendered = render(
@@ -139,15 +139,13 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/created-task/)).toBeTruthy();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement | undefined` before this lookup.
       const closeButton = screen
-        .getAllByRole("button", { name: "Close" })
-        .find((button) => button.textContent === "Close") as HTMLButtonElement | undefined;
+        .getAllByRole<HTMLButtonElement>("button", { name: "Close" })
+        .find((button) => button.textContent === "Close");
       expect(closeButton?.disabled).toBe(false);
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect(
-        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+        true,
+      );
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.isRecoveryBlocked = false;
@@ -162,8 +160,7 @@ describe("TaskCreateModal", () => {
     controllerMock.isEditingDocument = false;
     controllerMock.footerError =
       "This task changed while you were editing. Close and reopen it to load the latest version before saving.";
-    // SAFETY: This test controls the fixture and supplies `TaskCard` used by this case.
-    const task = { id: "TASK-123" } as TaskCard;
+    const task = createTaskCardFixture({ id: "TASK-123" });
 
     try {
       const rendered = render(
@@ -176,10 +173,9 @@ describe("TaskCreateModal", () => {
       );
 
       expect(await screen.findByText(/changed while you were editing/)).toBeTruthy();
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      expect(
-        (screen.getByRole("button", { name: "Save Changes" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save Changes" }).disabled).toBe(
+        true,
+      );
       await act(async () => rendered.unmount());
     } finally {
       controllerMock.hasExternalTaskConflict = false;

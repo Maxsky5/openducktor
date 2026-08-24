@@ -28,20 +28,19 @@ const createInventory = (thread: CodexThreadSnapshot): CodexThreadInventory => (
   threadsById: new Map([[thread.id, thread]]),
 });
 
-// SAFETY: This test controls the fixture and supplies `never` used by this case.
 const createDeps = (
   inventory: CodexThreadInventory,
   sessions: CodexSessionState[] = [],
 ): CodexSessionRuntimeSnapshotReaderDeps => ({
   runtimeClients: {
-    clientForRuntime: () => ({}) as never,
-    resolve: async () => ({ runtimeId: "runtime-1", client: {} as never }),
+    clientForRuntime: () => ({}) satisfies never,
+    resolve: async () => ({ runtimeId: "runtime-1", client: {} satisfies never }),
   },
   threadInventory: {
     read: async () => inventory,
     refresh: async () => inventory,
     readForDirectories: async () => inventory,
-  } as never,
+  } satisfies never,
   sessions: {
     get: (threadId) => sessions.find((session) => session.threadId === threadId),
     values: function* () {
@@ -76,7 +75,6 @@ describe("Codex session runtime snapshot reader", () => {
     };
     const deps = createDeps(inventory, [localSession]);
     let inventoryReadCount = 0;
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     deps.threadInventory = {
       read: async () => {
         inventoryReadCount += 1;
@@ -90,7 +88,7 @@ describe("Codex session runtime snapshot reader", () => {
         inventoryReadCount += 1;
         return inventory;
       },
-    } as never;
+    };
 
     await expect(
       listCodexSessionRuntimeSnapshots(deps, {

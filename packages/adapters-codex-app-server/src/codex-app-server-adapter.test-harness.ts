@@ -17,7 +17,8 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import { CodexLocalSessionState } from "./codex-local-session-state";
+import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerStreamEvent } from "./types";
 import {
   CodexAppServerAdapter,
@@ -373,7 +374,7 @@ export const codexThreadStartResultFixture = (
     : undefined),
 });
 
-const requestThreadId = (params: CodexAppServerJsonValue | undefined): string => {
+export const requestThreadId = (params: CodexAppServerJsonValue | undefined): string => {
   if (!isPlainObject(params) || !hasRuntimeType(params.threadId, "string")) {
     throw new Error("Expected request params.threadId.");
   }
@@ -606,11 +607,25 @@ export const createHarness = (
   };
 };
 
-// SAFETY: This test controls the fixture and supplies `{ threadInventory: CodexThreadInventoryReader }` used by this case.
 export const codexThreadInventoryForTest = (
   adapter: CodexAppServerAdapter,
-): CodexThreadInventoryReader =>
-  (adapter as { threadInventory: CodexThreadInventoryReader }).threadInventory;
+): CodexThreadInventoryReader => codexAdapterInternals(adapter).threadInventory;
+
+type CodexAdapterTestInternals = {
+  localSessions: CodexLocalSessionState;
+  runtimeEvents: {
+    runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
+  };
+  threadInventory: CodexThreadInventoryReader;
+};
+
+const codexAdapterInternals = (adapter: CodexAppServerAdapter): CodexAdapterTestInternals => {
+  // SAFETY: CodexAppServerAdapter initializes these three private fields with the exact classes and map shown here; teardown tests only inspect their state.
+  return adapter as CodexAdapterTestInternals;
+};
+
+export const codexLocalSessionsForTest = (adapter: CodexAppServerAdapter): CodexLocalSessionState =>
+  codexAdapterInternals(adapter).localSessions;
 
 type CodexRuntimeTeardownCounts = {
   statusOverrideRuntimeCount: number;
@@ -623,20 +638,14 @@ export const codexRuntimeTeardownCountsForTest = (
   runtimeId: string,
 ): CodexRuntimeTeardownCounts => {
   const threadInventory = codexThreadInventoryForTest(adapter);
-  // SAFETY: This test controls the fixture and supplies `{ statusOverridesByRuntimeId: Map<string, Map<string, unknown>>; }` used by this case.
+  // SAFETY: CodexThreadInventoryReader declares this private field as Map<string, Map<string, CodexAppServerThreadStatus>>; the test reads only map sizes.
   const statusOverridesByRuntimeId = (
     threadInventory as {
       statusOverridesByRuntimeId: Map<string, Map<string, unknown>>;
     }
   ).statusOverridesByRuntimeId;
-  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-  const runtimeEventProcessingByRuntimeId = (
-    adapter as {
-      runtimeEvents: {
-        runtimeEventProcessingByRuntimeId: Map<string, Promise<void>>;
-      };
-    }
-  ).runtimeEvents.runtimeEventProcessingByRuntimeId;
+  const runtimeEventProcessingByRuntimeId =
+    codexAdapterInternals(adapter).runtimeEvents.runtimeEventProcessingByRuntimeId;
 
   return {
     statusOverrideRuntimeCount: statusOverridesByRuntimeId.size,

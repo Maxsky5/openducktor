@@ -101,19 +101,16 @@ describe("useAgentChatComposerModel", () => {
         },
       ],
     });
-    // SAFETY: This test controls the fixture and supplies `string | null` used by this case.
-    const sentDraft = { text: null as string | null };
+    const sentDraftText = createRef<string>();
     const callerDraft = createComposerDraft("Repository-only question");
     const composerFormRef = createRef<HTMLFormElement>();
     const composerEditorRef = createRef<HTMLDivElement>();
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const scrollToBottomOnSendRef = { current: null as (() => void) | null };
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
+    const scrollToBottomOnSendRef = createRef<() => void>();
+    const syncBottomAfterComposerLayoutRef = { current: null };
     const rendered = renderHook(() =>
       useAgentChatComposerModel({
         composer: buildComposerConfig(async (draft) => {
-          sentDraft.text = draftToSerializedText(draft);
+          sentDraftText.current = draftToSerializedText(draft);
           return true;
         }),
         interactionEnabled: true,
@@ -135,7 +132,7 @@ describe("useAgentChatComposerModel", () => {
         await composerModel.onSend(callerDraft);
       });
 
-      expect(sentDraft.text).toBe("Repository-only question");
+      expect(sentDraftText.current).toBe("Repository-only question");
       expect(useInlineCommentDraftStore.getState().drafts).toHaveLength(1);
     } finally {
       rendered.unmount();

@@ -22,13 +22,28 @@ const runtimeDistribution = createSourceRuntimeDistribution(
   path.resolve(import.meta.dir, "../../../../.."),
 );
 
-// SAFETY: This test controls the fixture and supplies `RuntimeRegistryPort` used by this case.
 const createRuntimeRegistry = (
   stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"] = () => Effect.succeed([]),
-): RuntimeRegistryPort =>
-  ({
-    stopAllRuntimes,
-  }) as RuntimeRegistryPort;
+): RuntimeRegistryPort => ({
+  ensureWorkspaceRuntime: () => Effect.die("unused"),
+  findRuntimeById: () => Effect.succeed(null),
+  findWorkspaceRuntime: () => Effect.succeed(null),
+  listRuntimes: () => Effect.succeed([]),
+  listRuntimesByRepo: () => Effect.succeed([]),
+  stopRuntime: () => Effect.succeed(false),
+  stopAllRuntimes,
+  stopSession: () => Effect.void,
+  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
+  probeMcpStatus: () =>
+    Effect.succeed({
+      supported: false,
+      connected: false,
+      serverStatus: null,
+      toolIds: [],
+      detail: null,
+      failureKind: null,
+    }),
+});
 
 const createMcpHostBridge = (): McpHostBridgeServer =>
   createFocusedTestService<McpHostBridgeServer>()({
@@ -110,8 +125,7 @@ describe("createNodeEffectHostCommandRouter", () => {
     try {
       await Effect.runPromise(router.initialize());
 
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-      const payload = JSON.parse(
+      const payload: Record<string, unknown> = JSON.parse(
         await readFile(
           path.join(
             configDir,
@@ -122,7 +136,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           ),
           "utf8",
         ),
-      ) as Record<string, unknown>;
+      );
       expect(payload).toEqual({
         hostToken: expect.any(String),
         hostUrl: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),

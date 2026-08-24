@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexStartSessionInput,
@@ -43,7 +44,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter } = createHarness({ subscribeEvents });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string }> = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -69,7 +70,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness();
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -128,7 +129,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string }> = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -185,7 +186,7 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: Array<{ type?: string; message?: string; totalTokens?: number }> = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -498,7 +499,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -524,10 +525,8 @@ describe("CodexAppServerAdapter streaming", () => {
       }),
     );
 
-    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessages = events.filter(
-      (event): event is { type: "user_message"; message: string } =>
-        (event as { type?: string }).type === "user_message",
+      (event): event is { type: "user_message"; message: string } => event.type === "user_message",
     );
     expect(userMessages.map((event) => event.message)).toEqual([
       "Start now",
@@ -560,10 +559,8 @@ describe("CodexAppServerAdapter streaming", () => {
       },
     });
     await flushCodexAdapterWork();
-    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
     const userMessagesAfterNativeEcho = events.filter(
-      (event): event is { type: "user_message"; message: string } =>
-        (event as { type?: string }).type === "user_message",
+      (event): event is { type: "user_message"; message: string } => event.type === "user_message",
     );
     expect(userMessagesAfterNativeEcho.map((event) => event.message)).toEqual([
       "Start now",
@@ -584,7 +581,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -617,10 +614,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(expect.objectContaining({ message: "Hello streamed Codex" }));
     expect(userMessages).not.toContainEqual(
@@ -641,7 +635,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -683,10 +677,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
@@ -716,7 +707,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -767,10 +758,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await Promise.resolve();
 
-    // SAFETY: This test controls the fixture and supplies `{ type?: string }` used by this case.
-    const userMessages = events.filter(
-      (event) => (event as { type?: string }).type === "user_message",
-    );
+    const userMessages = events.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]).toEqual(
       expect.objectContaining({
@@ -795,7 +783,7 @@ describe("CodexAppServerAdapter streaming", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -853,13 +841,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const grandchildThreadId = "grandchild-thread";
     const itemId = "reused-child-item";
     const grandchildItemId = "grandchild-item";
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const internals = adapter as {
+    const internals: {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
       };
-    };
+    } = adapter;
 
     await observeSessionState(adapter, parentThreadId);
     internals.subagents.upsertLink({
@@ -972,13 +959,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const parentThreadId = "thread-saved";
     const childThreadId = "retained-child-thread";
     const grandchildThreadId = "owned-grandchild-thread";
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const internals = adapter as {
+    const internals: {
       subagents: CodexSubagentLinkState;
       runtimeEvents: {
         startedItemTimestampsByRuntimeId: Map<string, Map<string, Map<string, number>>>;
       };
-    };
+    } = adapter;
 
     await observeSessionState(adapter, parentThreadId);
     await adapter.resumeSession(codexSessionRuntimeRef(childThreadId));
@@ -1099,7 +1085,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     await flushCodexAdapterWork();
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread-saved"),
       (event) => events.push(event),
@@ -1118,7 +1104,7 @@ describe("CodexAppServerAdapter streaming", () => {
       return () => {};
     });
     const { adapter } = createHarness({ subscribeEvents });
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
 
     await observeSessionState(adapter, "thread-saved");
     const unsubscribe = await adapter.subscribeEvents(
@@ -1192,7 +1178,7 @@ describe("CodexAppServerAdapter streaming", () => {
       return () => {};
     });
     const { adapter } = createHarness({ subscribeEvents });
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
 
     const setupUnsubscribe = await observeSessionState(adapter, "thread-saved");
     const unsubscribe = await adapter.subscribeEvents(

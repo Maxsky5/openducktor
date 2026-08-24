@@ -80,12 +80,12 @@ const createHookHarness = (initialArgs: HookArgs) => {
   };
 
   const run = async (callback: (hook: ReturnType<typeof useOrchestratorSessionState>) => void) => {
-    if (!latest) {
+    const hook = latest;
+    if (!hook) {
       throw new Error("Hook state unavailable");
     }
     await sharedHarness.run(() => {
-      // SAFETY: This test controls the fixture and supplies `ReturnType<typeof useOrchestratorSessionState>` used by this case.
-      callback(latest as ReturnType<typeof useOrchestratorSessionState>);
+      callback(hook);
     });
   };
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -50,13 +50,13 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
     run: async (
       fn: (value: ReturnType<typeof useWorkspaceBranchOperations>) => Promise<void> | void,
     ) => {
-      if (!latest) {
+      const hook = latest;
+      if (!hook) {
         throw new Error("Hook not mounted");
       }
 
       await sharedHarness.run(async () => {
-        // SAFETY: This test controls the fixture and supplies `ReturnType<typeof useWorkspaceBranchOperations>` used by this case.
-        await fn(latest as ReturnType<typeof useWorkspaceBranchOperations>);
+        await fn(hook);
       });
     },
     getLatest: () => {
@@ -875,10 +875,7 @@ describe("use-workspace-branch-operations", () => {
 
   test("restores the prior branch snapshot and reports the error when switching fails", async () => {
     const switchError = new Error("branch checkout failed");
-    const originalToastError = toast.error;
-    const toastError = mock(() => "toast-id");
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -925,18 +922,14 @@ describe("use-workspace-branch-operations", () => {
         description: "branch checkout failed",
       });
     } finally {
-      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       await harness.unmount();
     }
   });
 
   test("keeps the switched branch and rejects when branch list refresh fails after checkout", async () => {
     const branchListError = new Error("branch list unavailable");
-    const originalToastError = toast.error;
-    const toastError = mock(() => "toast-id");
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    (toast as { error: typeof toast.error }).error = toastError as typeof toast.error;
+    const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     workspaceHost.gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -1004,8 +997,7 @@ describe("use-workspace-branch-operations", () => {
         },
       );
     } finally {
-      // SAFETY: This test controls the fixture and supplies `{ error: typeof toast.error }` used by this case.
-      (toast as { error: typeof toast.error }).error = originalToastError;
+      toastError.mockRestore();
       await harness.unmount();
     }
   });

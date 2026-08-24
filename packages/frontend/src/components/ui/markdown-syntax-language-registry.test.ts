@@ -61,8 +61,7 @@ describe("createMarkdownSyntaxLanguageRegistry", () => {
       throw new Error("bad grammar module");
     });
 
-    // SAFETY: This test controls the fixture and supplies `typeof console.error` used by this case.
-    console.error = consoleError as typeof console.error;
+    console.error = consoleError;
     try {
       const registry = createMarkdownSyntaxLanguageRegistry({
         languageAliases: {},

@@ -35,6 +35,14 @@ export const claudeSdkMessageFixture = <
     ...message,
   }) as ClaudeSdkMessageFixtureResult<MessageType, ExtraFields>;
 
+/** Builds focused history inputs that include every field read by the history projection. */
+// SAFETY: Each caller supplies the SDK discriminator and the complete field set read by the focused history path.
+export const claudeHistoryMessagesFixture = <
+  Messages extends Array<{ readonly type: ClaudeHistoryMessage["type"] }>,
+>(
+  messages: Messages,
+): ClaudeHistoryMessage[] => messages as ClaudeHistoryMessage[];
+
 type ClaudeSessionMessageFixture = {
   readonly type: SessionMessage["type"];
   readonly uuid: string;

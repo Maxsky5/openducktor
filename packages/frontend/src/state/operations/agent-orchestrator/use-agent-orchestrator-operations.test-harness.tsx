@@ -251,7 +251,6 @@ export const createHookHarness = (args: {
         runtimeEnsure: (...runtimeEnsureArgs) => host.runtimeEnsure(...runtimeEnsureArgs),
       },
     );
-  // SAFETY: This test controls the fixture and supplies `AgentEnginePort` used by this case.
   let currentArgs = {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
@@ -259,7 +258,7 @@ export const createHookHarness = (args: {
     runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
       opencode: createRepoRuntimeHealthFixture(),
     },
-    agentEngine: args.agentEngine ?? (new OpencodeSdkAdapter() as AgentEnginePort),
+    agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
     dependencies,
   };
   const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();

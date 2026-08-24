@@ -1,23 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeKind } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { parsePersistedGlobalConfigV2 } from "../../config/global-config";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
-import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type {
+  ToolDiscoveryError,
+  ToolDiscoveryId,
+  ToolDiscoveryPort,
+} from "../../ports/tool-discovery-port";
 import { createRuntimeConfigInitializer } from "./runtime-config-initializer";
 
 const createToolDiscovery = (
-  paths: Partial<Record<RuntimeKind, string>>,
-  failures: Partial<Record<RuntimeKind, ToolDiscoveryError>> = {},
+  paths: Partial<Record<ToolDiscoveryId, string>>,
+  failures: Partial<Record<ToolDiscoveryId, ToolDiscoveryError>> = {},
 ): ToolDiscoveryPort => {
   const discover: ToolDiscoveryPort["discoverTool"] = (toolId) => {
-    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
-    const failure = failures[toolId as RuntimeKind];
+    const failure = failures[toolId];
     if (failure) {
       return Effect.fail(failure);
     }
-    // SAFETY: This test controls the fixture and supplies `RuntimeKind` used by this case.
-    const path = paths[toolId as RuntimeKind];
+    const path = paths[toolId];
     if (!path) {
       return Effect.fail(
         new HostDependencyError({

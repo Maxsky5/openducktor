@@ -278,8 +278,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
   test("reuses an in-memory session after it has been started", async () => {
     let startCalls = 0;
     let persistedListCalls = 0;
-    // SAFETY: This test controls the fixture and supplies `(typeof persistedSessionFixture)[]` used by this case.
-    let persistedSessions = [] as (typeof persistedSessionFixture)[];
+    let persistedSessions: Array<typeof persistedSessionFixture> = [];
 
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -409,8 +408,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let startCalls = 0;
     let persistedBatchListCalls = 0;
     let persistedSingleListCalls = 0;
-    // SAFETY: This test controls the fixture and supplies `(typeof persistedSessionFixture)[]` used by this case.
-    let persistedSessions = [] as (typeof persistedSessionFixture)[];
+    let persistedSessions: Array<typeof persistedSessionFixture> = [];
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
       workingDirectory: string;

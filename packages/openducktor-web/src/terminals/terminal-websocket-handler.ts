@@ -31,11 +31,16 @@ export type TerminalWebSocketData = {
   onBackgroundFailure(cause: unknown): void;
 };
 
-const closeForQueueOverflow = (socket: Bun.ServerWebSocket<TerminalWebSocketData>): void => {
+type TerminalServerSocket = Pick<
+  Bun.ServerWebSocket<TerminalWebSocketData>,
+  "close" | "data" | "send"
+>;
+
+const closeForQueueOverflow = (socket: TerminalServerSocket): void => {
   socket.close(1013, "Terminal outbound queue limit exceeded.");
 };
 
-const sendFrame = (socket: Bun.ServerWebSocket<TerminalWebSocketData>, frame: Uint8Array): void => {
+const sendFrame = (socket: TerminalServerSocket, frame: Uint8Array): void => {
   const data = socket.data;
   const queuedBytes = data.inFlightBytes + data.pendingBytes;
   if (queuedBytes + frame.byteLength > OUTBOUND_QUEUE_LIMIT) {
@@ -59,13 +64,13 @@ const sendFrame = (socket: Bun.ServerWebSocket<TerminalWebSocketData>, frame: Ui
 };
 
 const sendMessage = (
-  socket: Bun.ServerWebSocket<TerminalWebSocketData>,
+  socket: TerminalServerSocket,
   message: TerminalServerMessage,
   payload: Uint8Array = EMPTY_PAYLOAD,
 ): void => sendFrame(socket, encodeTerminalProtocolFrame({ message, payload }));
 
 const sendProtocolError = (
-  socket: Bun.ServerWebSocket<TerminalWebSocketData>,
+  socket: TerminalServerSocket,
   failure: TerminalFailure,
   terminalId?: string,
 ): void =>
@@ -76,9 +81,7 @@ const sendProtocolError = (
     failure,
   });
 
-const getClientSession = (
-  socket: Bun.ServerWebSocket<TerminalWebSocketData>,
-): TerminalClientSession => {
+const getClientSession = (socket: TerminalServerSocket): TerminalClientSession => {
   const existing = socket.data.clientSession;
   if (existing) return existing;
   const clientSession = createTerminalClientSession({
@@ -90,10 +93,7 @@ const getClientSession = (
   return clientSession;
 };
 
-const runClientMessage = (
-  socket: Bun.ServerWebSocket<TerminalWebSocketData>,
-  raw: string | Buffer,
-): void => {
+const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): void => {
   if (hasRuntimeType(raw, "string")) {
     sendProtocolError(socket, {
       code: "protocol_error",
@@ -132,11 +132,11 @@ const runClientMessage = (
   Effect.runFork(getClientSession(socket).handle(decoded.message, decoded.payload));
 };
 
-export const terminalWebSocketHandler: Bun.WebSocketHandler<TerminalWebSocketData> = {
+export const terminalWebSocketHandler = {
   perMessageDeflate: false,
   maxPayloadLength: TERMINAL_PROTOCOL_MAX_MESSAGE_BYTES,
   message: runClientMessage,
-  drain(socket) {
+  drain(socket: TerminalServerSocket) {
     const data = socket.data;
     data.backpressured = false;
     data.inFlightBytes = 0;
@@ -147,7 +147,7 @@ export const terminalWebSocketHandler: Bun.WebSocketHandler<TerminalWebSocketDat
       sendFrame(socket, frame);
     }
   },
-  close(socket) {
+  close(socket: TerminalServerSocket) {
     const { clientSession, connectionId, logger, onBackgroundFailure } = socket.data;
     socket.data.clientSession = null;
     if (!clientSession) return;

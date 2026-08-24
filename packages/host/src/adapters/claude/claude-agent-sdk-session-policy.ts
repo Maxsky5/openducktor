@@ -64,7 +64,7 @@ export const forkedClaudeSessionLaunch = (
 
 export const requireClaudeOpenDucktorMcpForScope = async (
   scope: AgentSessionScope,
-  query: Query,
+  query: Pick<Query, "mcpServerStatus">,
   input: { externalSessionId: string; runtimeId: string },
 ): Promise<void> => {
   if (scope.kind !== "repository") {

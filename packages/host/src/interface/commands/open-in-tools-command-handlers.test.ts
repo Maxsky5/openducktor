@@ -59,8 +59,7 @@ const createRecordingService = () => {
       });
     },
   };
-  // SAFETY: This test controls the fixture and supplies `OpenInToolsService` used by this case.
-  const service = promiseService as OpenInToolsService;
+  const service: OpenInToolsService = promiseService;
   return { calls, service };
 };
 describe("createOpenInToolsCommandHandlers", () => {

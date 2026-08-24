@@ -866,11 +866,10 @@ describe("createAgentSessionLiveStateService", () => {
 
   test("rejects malformed adapter snapshots before publishing them", async () => {
     const { events, service } = createHarness();
-    // SAFETY: This test controls the fixture and supplies `AgentSessionLiveSnapshot` used by this case.
-    const malformed = {
+    const malformed: AgentSessionLiveSnapshot = {
       ...liveSnapshot("session-1"),
       startedAt: "not-an-iso-timestamp",
-    } as AgentSessionLiveSnapshot;
+    };
 
     await expect(
       Effect.runPromise(

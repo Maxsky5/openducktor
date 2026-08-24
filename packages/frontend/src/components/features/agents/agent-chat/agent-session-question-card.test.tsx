@@ -1,15 +1,11 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 const originalConsoleError = console.error;
 

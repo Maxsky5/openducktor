@@ -8,13 +8,9 @@ import {
 import { act, createElement, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type AgentStudioGitPanelComponent =
   (typeof import("./agent-studio-git-panel"))["AgentStudioGitPanel"];
@@ -159,25 +155,26 @@ const wrapElement = (element: Element): DomTestNode => ({
   element,
   type: element.tagName.toLowerCase(),
   get props() {
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLElement` before this lookup.
-    const htmlElement = element as HTMLElement;
+    if (!(element instanceof HTMLElement)) {
+      throw new Error("Expected an HTML element fixture.");
+    }
+    const htmlElement = element;
     const reactPropsKey = Object.keys(htmlElement).find((key) => key.startsWith("__reactProps$"));
-    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
     const reactProps = reactPropsKey
-      ? (Object.getOwnPropertyDescriptor(htmlElement, reactPropsKey)?.value as {
-          onClick?: (event?: { stopPropagation?: () => void }) => void;
-          onChange?: (event?: {
-            currentTarget?: { value?: string };
-            target?: { value?: string };
-          }) => void;
-        })
+      ? Object.getOwnPropertyDescriptor(htmlElement, reactPropsKey)?.value
       : null;
-    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
+    const canBeDisabled =
+      htmlElement instanceof HTMLButtonElement ||
+      htmlElement instanceof HTMLInputElement ||
+      htmlElement instanceof HTMLTextAreaElement;
+    const hasValue =
+      htmlElement instanceof HTMLInputElement || htmlElement instanceof HTMLTextAreaElement;
+    const value = hasValue ? htmlElement.value : "";
     return {
       className: htmlElement.className,
       title: htmlElement.getAttribute("title"),
-      disabled: (htmlElement as HTMLButtonElement | HTMLInputElement).disabled,
-      value: (htmlElement as HTMLInputElement).value,
+      disabled: canBeDisabled ? htmlElement.disabled : false,
+      value,
       onClick: (event: { stopPropagation?: () => void } = {}) => {
         if (reactProps?.onClick) {
           reactProps.onClick(event);

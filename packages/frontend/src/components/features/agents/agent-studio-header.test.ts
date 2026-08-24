@@ -1,3 +1,4 @@
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
@@ -10,23 +11,18 @@ import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-heade
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
-// SAFETY: This test controls the fixture and supplies `typeof requestAnimationFrame` used by this case.
-const immediateRequestAnimationFrame = ((callback: FrameRequestCallback): number => {
+const immediateRequestAnimationFrame: typeof requestAnimationFrame = (
+  callback: FrameRequestCallback,
+): number => {
   callback(0);
   return 1;
-}) as typeof requestAnimationFrame;
+};
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 beforeEach(() => {
   globalThis.requestAnimationFrame = immediateRequestAnimationFrame;
-  // SAFETY: This test controls the fixture and supplies `typeof cancelAnimationFrame` used by this case.
-  globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => {};
 });
 
 afterEach(() => {
@@ -1078,7 +1074,6 @@ describe("AgentStudioHeader", () => {
   });
 
   test("throws for invalid workflow tones instead of masking them as blocked", () => {
-    // SAFETY: This test creates the DOM fixture that supplies `never` before this lookup.
     expect(() =>
       renderToStaticMarkup(
         createElement(AgentStudioHeader, {
@@ -1090,7 +1085,8 @@ describe("AgentStudioHeader", () => {
                 label: "QA",
                 icon: roleIcon(3),
                 state: {
-                  tone: "broken" as never,
+                  // @ts-expect-error This negative test verifies fail-fast handling of an unknown tone.
+                  tone: "broken",
                   availability: "available" as const,
                   completion: "not_started" as const,
                   liveSession: "none" as const,

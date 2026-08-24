@@ -3,8 +3,8 @@ import {
   agentRuntimeEventSchema,
   agentSessionLiveSnapshotSchema,
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
-  hasRuntimeType,
 } from "@openducktor/contracts";
+import type { AgentEvent } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -45,6 +45,15 @@ const isApprovalRequiredEvent = <Event>(event: Event): event is Event & Approval
   return parsed.success && parsed.data.type === "approval_required";
 };
 
+const isQuestionRequiredEvent = (
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "question_required" }> =>
+  event.type === "question_required";
+
+const isSessionErrorEvent = (
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "session_error" }> => event.type === "session_error";
+
 class ReloadedParentWithChildTransport extends RecordingTransport {
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/loaded/list") {
@@ -53,8 +62,7 @@ class ReloadedParentWithChildTransport extends RecordingTransport {
     }
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
-      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const { sourceKinds } = request.params;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: [
@@ -109,7 +117,7 @@ describe("CodexAppServerAdapter approvals", () => {
       respondServerRequest,
     });
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("parent-thread"), (event) =>
       events.push(event),
     );
@@ -166,7 +174,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -178,15 +186,10 @@ describe("CodexAppServerAdapter approvals", () => {
       message: { id: 71, method: "attestation/generate", params: {} },
     });
 
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
     await waitForEvent(
       events,
       (event) =>
-        hasRuntimeType(event, "object") &&
-        event !== null &&
-        (event as { type?: unknown; message?: unknown }).type === "session_error" &&
-        hasRuntimeType((event as { message?: unknown }).message, "string") &&
-        (event as { message: string }).message.includes("missing a thread identifier"),
+        isSessionErrorEvent(event) && event.message.includes("missing a thread identifier"),
     );
     unsubscribe();
   });
@@ -201,7 +204,7 @@ describe("CodexAppServerAdapter approvals", () => {
 
     await adapter.startSession(codexStartSessionInput());
 
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -255,7 +258,7 @@ describe("CodexAppServerAdapter approvals", () => {
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-live"),
       (event) => events.push(event),
@@ -328,7 +331,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -385,7 +388,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -414,16 +417,8 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
-    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        hasRuntimeType(event, "object") &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
-    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
-    const requestId = (question as { requestId: string }).requestId;
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
+    const requestId = question.requestId;
     const reply = {
       runtimeId: "runtime-live",
       externalSessionId: "thread/start-runtime-live",
@@ -459,7 +454,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -510,7 +505,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -539,16 +534,8 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
-    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        hasRuntimeType(event, "object") &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
-    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
-    const requestId = (question as { requestId: string }).requestId;
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
+    const requestId = question.requestId;
     const reply = {
       runtimeId: "runtime-live",
       externalSessionId: "thread/start-runtime-live",
@@ -596,7 +583,7 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
-    const replayedEvents: unknown[] = [];
+    const replayedEvents: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       replayedEvents.push(event),
     );
@@ -640,7 +627,7 @@ describe("CodexAppServerAdapter approvals", () => {
     await adapter.prepareRuntime("runtime-live");
 
     await adapter.startSession(codexStartSessionInput());
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
       events.push(event),
     );
@@ -675,14 +662,7 @@ describe("CodexAppServerAdapter approvals", () => {
         },
       },
     });
-    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
-    const question = await waitForEvent(
-      events,
-      (event) =>
-        hasRuntimeType(event, "object") &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
-    );
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
 
     const snapshot = await adapter.readSessionRuntimeSnapshot({
       repoPath: "/repo",
@@ -692,8 +672,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
     expect(snapshot.classification).toBe("waiting_for_question");
     expect(snapshot.pendingQuestions).toHaveLength(1);
-    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
-    const requestId = (question as { requestId: string }).requestId;
+    const { requestId } = question;
     if (!requestId) {
       throw new Error("expected pending question");
     }

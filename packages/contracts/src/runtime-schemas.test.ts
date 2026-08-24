@@ -88,8 +88,7 @@ type RuntimeDescriptorInvalidCase = {
 const isJsonObject = (value: JsonValue): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-// SAFETY: This test controls the fixture and supplies `T` used by this case.
-const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const cloneJson = <T>(value: T): T => structuredClone(value);
 
 const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase["patch"]): void => {
   for (const operation of patch) {
@@ -109,9 +108,8 @@ const applyJsonPatch = (target: JsonObject, patch: RuntimeDescriptorInvalidCase[
   }
 };
 
-// SAFETY: This test controls the fixture and supplies `RuntimeDescriptorInvalidCase[]` used by this case.
-const invalidRuntimeDescriptorCases =
-  runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
+const invalidRuntimeDescriptorCases: RuntimeDescriptorInvalidCase[] =
+  runtimeDescriptorInvalidCasesFixture;
 
 describe("runtime schemas", () => {
   test("formats runtime descriptor schema issues with capability ownership", () => {
@@ -231,8 +229,7 @@ describe("runtime schemas", () => {
   test.each(invalidRuntimeDescriptorCases)(
     "shared invalid runtime descriptor fixture is rejected: $name",
     (fixtureCase) => {
-      // SAFETY: This test controls the fixture and supplies `JsonObject` used by this case.
-      const descriptor = cloneJson(opencodeRuntimeDescriptorFixture) as JsonObject;
+      const descriptor: JsonObject = cloneJson(opencodeRuntimeDescriptorFixture);
       applyJsonPatch(descriptor, fixtureCase.patch);
 
       const result = runtimeDescriptorSchema.safeParse(descriptor);
@@ -1072,9 +1069,8 @@ describe("runtime schemas", () => {
     expect(result.error.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "unrecognized_keys",
-          keys: ["odt_set_specc"],
-          path: ["workflowToolAliasesByCanonical"],
+          code: "invalid_key",
+          path: ["workflowToolAliasesByCanonical", "odt_set_specc"],
         }),
       ]),
     );

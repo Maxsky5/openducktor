@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
-import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
+import {
+  claudeHistoryMessagesFixture,
+  claudeSessionMessageFixture as toSessionMessage,
+} from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history assistant turns", () => {
   test("hydrates one Claude response from split reasoning, text, and tool snapshots", () => {
@@ -175,9 +178,8 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("does not duplicate normalized final assistant text repeated by a successful result", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-final",
@@ -202,7 +204,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -216,9 +218,8 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("hydrates peer responses as intermediate and the closing task response as final", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "user",
           uuid: "human-user",
@@ -365,7 +366,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           usage: { input_tokens: 1, output_tokens: 1 },
           origin: { kind: "task-notification" },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -449,9 +450,8 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("finalizes result text repeated by an intermediate assistant response", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-draft",
@@ -475,7 +475,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 3 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -496,9 +496,8 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("removes Claude history messages retracted by supersedes and refusal fallback notices", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "assistant",
           uuid: "assistant-refused",
@@ -557,7 +556,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           timestamp: "2026-06-26T11:03:19.000Z",
           retracted_message_uuids: ["assistant-refused", "tool-result-refused"],
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 
@@ -576,9 +575,8 @@ describe("claude-agent-sdk-history assistant turns", () => {
   });
 
   test("hydrates repeated same-text result-only replies across separate user turns", () => {
-    // SAFETY: This test controls the fixture and supplies `Parameters<typeof toClaudeHistoryMessages>[0]` used by this case.
     const history = toClaudeHistoryMessages(
-      [
+      claudeHistoryMessagesFixture([
         toSessionMessage({
           type: "user",
           uuid: "user-1",
@@ -625,7 +623,7 @@ describe("claude-agent-sdk-history assistant turns", () => {
           terminal_reason: "completed",
           usage: { input_tokens: 2, output_tokens: 2 },
         },
-      ] as Parameters<typeof toClaudeHistoryMessages>[0],
+      ]),
       () => "2026-06-26T12:00:00.000Z",
     );
 

@@ -318,8 +318,10 @@ describe("electron dev script", () => {
       _tag: "ElectronOperationError",
       operation: "electron.dev.stop-electron",
     });
-    // SAFETY: This test drives the failure path that supplies `Error` before this assertion.
-    expect((error as Error).message).toContain("Electron did not exit after forced shutdown");
+    if (!(error instanceof Error)) {
+      throw new TypeError("Expected an Error instance.");
+    }
+    expect(error.message).toContain("Electron did not exit after forced shutdown");
   });
 
   test("runs the dev watcher and Electron process lifecycle as an Effect", async () => {

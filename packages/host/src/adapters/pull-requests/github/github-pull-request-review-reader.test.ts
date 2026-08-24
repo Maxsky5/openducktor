@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { GithubCommandDependencies } from "../../../application/tasks/support/github-pull-requests";
 import { HostOperationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import { createGithubPullRequestReviewReader } from "./github-pull-request-review-reader";
+import { createGithubReviewTestDependencies } from "./github-pull-request-review.test-support";
 
 type SerializableTestValue = object | string | number | boolean | null | undefined;
 
@@ -19,7 +19,7 @@ const createDependencies = ({
   commandActivity?: { active: number; maxActive: number };
   commandDelayMs?: number;
   commands?: string[][];
-  pullRequestViewResponse?: SerializableTestValue;
+  pullRequestViewResponse?: object;
   reviewThreadNodes?: SerializableTestValue[];
   reviewThreadResponse?: (args: string[]) => SerializableTestValue;
   checksResponse?: {
@@ -48,93 +48,80 @@ const createDependencies = ({
         stderr: "",
       };
     });
-  const systemCommands: Pick<SystemCommandPort, "runCommandAllowFailure"> = {
-    runCommandAllowFailure: (_command, args) => {
-      commands.push(args);
-      const command = args.join(" ");
-      if (command.includes("pr checks")) {
-        if (checksResponse) {
-          return Effect.succeed({
-            ok: checksResponse.ok,
-            stdout: checksResponse.rawStdout ?? JSON.stringify(checksResponse.stdout),
-            stderr: checksResponse.stderr ?? "",
-            exitCode: checksResponse.exitCode,
-          });
-        }
-        return succeed([
-          {
-            name: "lint",
-            workflow: "CI",
-            state: "SUCCESS",
-            bucket: "pass",
-            link: "https://github.com/openai/openducktor/actions/runs/1",
-          },
-          {
-            name: "test",
-            workflow: "CI",
-            state: "FAILURE",
-            bucket: "fail",
-            link: "https://github.com/openai/openducktor/actions/runs/2",
-          },
-        ]);
+  return createGithubReviewTestDependencies((_command, args) => {
+    commands.push(args);
+    const command = args.join(" ");
+    if (command.includes("pr checks")) {
+      if (checksResponse) {
+        return Effect.succeed({
+          ok: checksResponse.ok,
+          stdout: checksResponse.rawStdout ?? JSON.stringify(checksResponse.stdout),
+          stderr: checksResponse.stderr ?? "",
+          exitCode: checksResponse.exitCode,
+        });
       }
-      if (command.includes("api graphql")) {
-        if (command.includes("PullRequestReviewOverview")) {
-          // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-          const view = pullRequestViewResponse as Record<string, unknown>;
-          // SAFETY: test fixture stdout payloads are JSON-compatible wire data.
-          return succeed({
-            data: {
-              repository: {
-                pullRequest: {
-                  ...view,
-                  comments: {
-                    nodes: view.comments ?? [],
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
-                  reviews: {
-                    nodes: view.reviews ?? [],
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
+      return succeed([
+        {
+          name: "lint",
+          workflow: "CI",
+          state: "SUCCESS",
+          bucket: "pass",
+          link: "https://github.com/openai/openducktor/actions/runs/1",
+        },
+        {
+          name: "test",
+          workflow: "CI",
+          state: "FAILURE",
+          bucket: "fail",
+          link: "https://github.com/openai/openducktor/actions/runs/2",
+        },
+      ]);
+    }
+    if (command.includes("api graphql")) {
+      if (command.includes("PullRequestReviewOverview")) {
+        const comments =
+          "comments" in pullRequestViewResponse ? pullRequestViewResponse.comments : [];
+        const reviews = "reviews" in pullRequestViewResponse ? pullRequestViewResponse.reviews : [];
+        return succeed({
+          data: {
+            repository: {
+              pullRequest: {
+                ...pullRequestViewResponse,
+                comments: {
+                  nodes: comments ?? [],
+                  pageInfo: { hasNextPage: false, endCursor: null },
                 },
-              },
-            },
-          });
-        }
-        return succeed(
-          reviewThreadResponse?.(args) ?? {
-            data: {
-              repository: {
-                pullRequest: {
-                  reviewThreads: {
-                    nodes: reviewThreadNodes,
-                    pageInfo: { hasNextPage: false, endCursor: null },
-                  },
+                reviews: {
+                  nodes: reviews ?? [],
+                  pageInfo: { hasNextPage: false, endCursor: null },
                 },
               },
             },
           },
-        );
+        });
       }
-      return Effect.fail(
-        new HostOperationError({
-          operation: "gh",
-          message: `Unexpected gh command: ${command}`,
-        }),
+      return succeed(
+        reviewThreadResponse?.(args) ?? {
+          data: {
+            repository: {
+              pullRequest: {
+                reviewThreads: {
+                  nodes: reviewThreadNodes,
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            },
+          },
+        },
       );
-    },
-  };
-
-  // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-  return {
-    resolveGithubCommand: () =>
-      Effect.succeed({
-        ghCommand: "gh",
-        systemCommands: systemCommands as SystemCommandPort,
+    }
+    return Effect.fail(
+      new HostOperationError({
+        operation: "gh",
+        message: `Unexpected gh command: ${command}`,
       }),
-    systemCommands: systemCommands as SystemCommandPort,
-    toolDiscovery: {} as GithubCommandDependencies["toolDiscovery"],
-  };
+    );
+  });
 };
 
 const reviewerAvatarUrl = "https://avatars.githubusercontent.com/u/1?v=4";
@@ -460,10 +447,9 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("uses the full review history", async () => {
     const provider = createGithubPullRequestReviewReader();
-    // SAFETY: This test controls the fixture and supplies `{ reviews: unknown[]; }` used by this case.
-    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
+    const pullRequestViewResponse: {
       reviews: unknown[];
-    };
+    } = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push({
       id: "review-2",
       author: { login: "reviewer" },
@@ -498,21 +484,21 @@ describe("createGithubPullRequestReviewReader", () => {
   test("omits a bodyless commented review when its inline comments are loaded separately", async () => {
     const provider = createGithubPullRequestReviewReader();
     const commands: string[][] = [];
-    // SAFETY: This test controls the fixture and supplies `{ reviews: unknown[]; }` used by this case.
-    const pullRequestViewResponse = defaultPullRequestViewResponse() as {
-      reviews: unknown[];
-    };
+    const pullRequestViewResponse: Omit<
+      ReturnType<typeof defaultPullRequestViewResponse>,
+      "reviews"
+    > & { reviews: unknown[] } = defaultPullRequestViewResponse();
     pullRequestViewResponse.reviews.push(
       {
         id: "review-inline-only",
-        author: { login: "reviewer" },
+        author: { login: "reviewer", avatarUrl: "https://example.com/reviewer.png" },
         body: "",
         state: "COMMENTED",
         submittedAt: "2026-07-08T10:03:00Z",
       },
       {
         id: "review-standalone",
-        author: { login: "reviewer" },
+        author: { login: "reviewer", avatarUrl: "https://example.com/reviewer.png" },
         body: "",
         state: "COMMENTED",
         submittedAt: "2026-07-08T10:04:00Z",
@@ -1170,9 +1156,8 @@ describe("createGithubPullRequestReviewReader", () => {
 
   test("returns malformed review contexts through the typed error channel", async () => {
     const provider = createGithubPullRequestReviewReader();
-    // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
     const malformedView = {
-      ...(defaultPullRequestViewResponse() as Record<string, unknown>),
+      ...defaultPullRequestViewResponse(),
       url: "not-a-url",
     };
 

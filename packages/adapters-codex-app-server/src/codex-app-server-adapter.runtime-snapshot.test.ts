@@ -1,10 +1,10 @@
-import { hasRuntimeType } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { CodexAppServerThreadStatus, CodexAppServerJsonValue } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY, type AgentEvent } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexLocalSessionsForTest,
   codexThreadFixture,
   codexThreadStartResultFixture,
   codexTurnFixture,
@@ -14,6 +14,7 @@ import {
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
+  requestThreadId,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
@@ -38,9 +39,8 @@ const withRuntimeReceivedAt = (event: RuntimeEventInput) => ({
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
-      // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
       return {
-        threadId: (request.params as { threadId: string }).threadId,
+        threadId: requestThreadId(request.params),
         startedAt: "2026-05-07T00:00:00.000Z",
       };
     }
@@ -85,8 +85,7 @@ class ChildThreadListTransport extends RecordingTransport {
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/list") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `{ sourceKinds?: unknown }` used by this case.
-      const sourceKinds = (request.params as { sourceKinds?: unknown }).sourceKinds;
+      const sourceKinds = request.params.sourceKinds;
       const includesSubagents = Array.isArray(sourceKinds) && sourceKinds.includes("subAgent");
       return {
         data: includesSubagents
@@ -145,8 +144,7 @@ class IdleThreadResumeActiveListTransport extends MutableThreadListTransport {
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "thread/resume") {
       this.calls.push(request);
-      // SAFETY: This test controls the fixture and supplies `{ threadId: string }` used by this case.
-      const threadId = (request.params as { threadId: string }).threadId;
+      const threadId = requestThreadId(request.params);
       return {
         ...codexThreadStartResultFixture(threadId, "thread/resume"),
         thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }),
@@ -240,12 +238,6 @@ class RestoredUsageStreamTransport extends StoredIdleHistoryTransport {
     return super.request(request);
   }
 }
-
-// SAFETY: This test controls the fixture and supplies `{ localSessions: { has(externalSessionId: string): boolean } }` used by this case.
-const localSessions = (
-  adapter: CodexAppServerAdapter,
-): { has(externalSessionId: string): boolean } =>
-  (adapter as { localSessions: { has(externalSessionId: string): boolean } }).localSessions;
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -402,7 +394,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       }),
     });
 
-    expect(localSessions(adapter).has("thread-saved")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(false);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/loaded/list",
     );
@@ -445,7 +437,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       availability: "runtime",
       classification: "idle",
     });
-    expect(localSessions(adapter).has("thread-idle")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(true);
   });
 
   test("keeps real pending input visible after a Codex idle history load", async () => {
@@ -461,7 +453,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
     transport.loaded = true;
     transport.threadStatus = { type: "active", activeFlags: ["waitingOnUserInput"] };
-    const events: unknown[] = [];
+    const events: AgentEvent[] = [];
     await adapter.subscribeEvents(codexSessionRuntimeRef("thread-idle"), (event) =>
       events.push(event),
     );
@@ -490,13 +482,10 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         },
       },
     });
-    // SAFETY: This test controls the fixture and supplies `{ type?: unknown }` used by this case.
     const question = await waitForEvent(
       events,
-      (event) =>
-        hasRuntimeType(event, "object") &&
-        event !== null &&
-        (event as { type?: unknown }).type === "question_required",
+      (event): event is Extract<AgentEvent, { type: "question_required" }> =>
+        event.type === "question_required",
     );
 
     await adapter.loadSessionHistory({
@@ -508,7 +497,6 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
     });
 
-    // SAFETY: This test controls the fixture and supplies `{ requestId: string }` used by this case.
     await expect(
       adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
@@ -519,9 +507,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     ).resolves.toMatchObject({
       availability: "runtime",
       classification: "waiting_for_question",
-      pendingQuestions: [
-        expect.objectContaining({ requestId: (question as { requestId: string }).requestId }),
-      ],
+      pendingQuestions: [expect.objectContaining({ requestId: question.requestId })],
     });
   });
 
@@ -548,7 +534,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
     ).resolves.toBeNull();
-    expect(localSessions(adapter).has("thread-idle")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(true);
 
     await flushCodexAdapterWork();
     expect(adapter.listLiveSessionSnapshots("runtime-live")).toContainEqual(
@@ -675,7 +661,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
 
     await observeSessionState(adapter, "thread-saved");
 
-    expect(localSessions(adapter).has("thread-saved")).toBe(true);
+    expect(codexLocalSessionsForTest(adapter).has("thread-saved")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/resume",
     );
@@ -768,7 +754,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       }),
     ).rejects.toThrow(expectedMessage);
 
-    expect(localSessions(adapter).has("thread-idle")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("thread-idle")).toBe(false);
   });
 
   test("lists a completed unloaded child after reload", async () => {
@@ -805,8 +791,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
       externalSessionId: "parent-thread",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    const adapterState = adapter as {
+    const adapterState: {
       subagents: {
         upsertLink(input: {
           runtimeId: string;
@@ -817,7 +802,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         }): void;
       };
       pendingInput: CodexPendingInputState;
-    };
+    } = adapter;
     adapterState.subagents.upsertLink({
       runtimeId: "runtime-live",
       parentThreadId: "parent-thread",
@@ -867,16 +852,15 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
         ],
       }),
     );
-    expect(localSessions(adapter).has("child-thread")).toBe(false);
-    expect(localSessions(adapter).has("grandchild-thread")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("child-thread")).toBe(false);
+    expect(codexLocalSessionsForTest(adapter).has("grandchild-thread")).toBe(false);
   });
 
   test("replays mirrored pending input when subscribing an idle parent without a local session", async () => {
     const { adapter } = createHarness({
       transportFactory: mock(() => new IdleParentThreadListTransport("runtime-live", false)),
     });
-    // SAFETY: This test controls the fixture and supplies `{ pendingInput: CodexPendingInputState }` used by this case.
-    const adapterState = adapter as { pendingInput: CodexPendingInputState };
+    const adapterState: { pendingInput: CodexPendingInputState } = adapter;
     adapterState.pendingInput.addQuestion({
       runtimeId: "runtime-live",
       threadId: "child-thread",

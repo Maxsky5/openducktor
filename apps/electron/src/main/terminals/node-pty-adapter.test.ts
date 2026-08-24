@@ -6,10 +6,9 @@ import { createNodePtyPort } from "./node-pty-adapter";
 describe("createNodePtyPort", () => {
   test("maps raw output, resize, pause, resume, input, exit, and cleanup", async () => {
     const calls: string[] = [];
-    let dataListener: (data: string) => void = () => undefined;
+    let dataListener: (data: string | Buffer) => void = () => undefined;
     let exitListener: (event: { exitCode: number; signal?: number }) => void = () => undefined;
     const disposable = () => ({ dispose: () => calls.push("dispose") });
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const port = createNodePtyPort({
       processTreeInspector: (pid) =>
         Effect.sync(() => {
@@ -22,11 +21,11 @@ describe("createNodePtyPort", () => {
           exitListener({ exitCode: 0, signal: 15 });
         }),
       nodePty: {
-        spawn: ((_shell: string, _args: string[], options: { encoding?: string | null }) => {
+        spawn: (_shell, _args, options) => {
           expect(options.encoding).toBeNull();
           return {
             pid: 42,
-            onData: (listener: (data: string) => void) => {
+            onData: (listener: (data: string | Buffer) => void) => {
               dataListener = listener;
               return disposable();
             },
@@ -38,9 +37,8 @@ describe("createNodePtyPort", () => {
             resize: (columns: number, rows: number) => calls.push(`resize:${columns}x${rows}`),
             pause: () => calls.push("pause"),
             resume: () => calls.push("resume"),
-            kill: () => calls.push("kill"),
           };
-        }) as never,
+        },
       },
     });
     const output: number[][] = [];
@@ -62,8 +60,7 @@ describe("createNodePtyPort", () => {
         },
       ),
     );
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
-    dataListener(Buffer.from([1, 2]) as never);
+    dataListener(Buffer.from([1, 2]));
     await Effect.runPromise(handle.write(new Uint8Array([65])));
     await Effect.runPromise(handle.resize({ columns: 120, rows: 40 }));
     await Effect.runPromise(handle.pauseOutput());
@@ -88,9 +85,8 @@ describe("createNodePtyPort", () => {
   });
 
   test("surfaces an invalid raw-output contract before terminating the PTY", async () => {
-    let dataListener: (data: string) => void = () => undefined;
+    let dataListener: (data: string | Buffer) => void = () => undefined;
     const calls: string[] = [];
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const port = createNodePtyPort({
       processTreeTerminator: (input) =>
         Effect.sync(() => {
@@ -98,9 +94,9 @@ describe("createNodePtyPort", () => {
           exitListener({ exitCode: 1, signal: 15 });
         }),
       nodePty: {
-        spawn: (() => ({
+        spawn: () => ({
           pid: 42,
-          onData: (listener: (data: string) => void) => {
+          onData: (listener: (data: string | Buffer) => void) => {
             dataListener = listener;
             return { dispose: () => undefined };
           },
@@ -109,8 +105,7 @@ describe("createNodePtyPort", () => {
           resize: () => undefined,
           pause: () => undefined,
           resume: () => undefined,
-          kill: () => calls.push("kill"),
-        })) as never,
+        }),
       },
     });
     const failures: string[] = [];

@@ -34,6 +34,10 @@ type OpencodeFileSearchInput = OpencodeRuntimeClientInput & {
   query: string;
 };
 
+type ClientFactoryFor<Namespace extends keyof ReturnType<ClientFactory>> = (
+  input: Parameters<ClientFactory>[0],
+) => Pick<ReturnType<ClientFactory>, Namespace>;
+
 const resolveAgentColor = (
   agentName: string,
   explicitColor: string | undefined,
@@ -52,7 +56,7 @@ const resolveAgentColor = (
 };
 
 const readAgentList = async (
-  client: ReturnType<ClientFactory>,
+  client: Pick<ReturnType<ClientFactory>, "app">,
   workingDirectory: string,
 ): Promise<ParsedOpencodeAgent[]> => {
   const payload = unwrapData(
@@ -98,7 +102,7 @@ const toFileSearchResults = (
 };
 
 export const listAvailableModels = async (
-  createClient: ClientFactory,
+  createClient: ClientFactoryFor<"app" | "config">,
   input: OpencodeRuntimeClientInput,
 ): Promise<AgentModelCatalog> => {
   const client = createClient({
@@ -133,7 +137,7 @@ export const listAvailableModels = async (
 };
 
 export const listAvailableSubagents = async (
-  createClient: ClientFactory,
+  createClient: ClientFactoryFor<"app">,
   input: OpencodeRuntimeClientInput,
 ): Promise<AgentSubagentCatalog> => {
   try {
@@ -167,7 +171,7 @@ export const listAvailableSubagents = async (
 };
 
 export const listAvailableSlashCommands = async (
-  createClient: ClientFactory,
+  createClient: ClientFactoryFor<"command">,
   input: OpencodeRuntimeClientInput,
 ): Promise<AgentSlashCommandCatalog> => {
   try {
@@ -214,7 +218,7 @@ export const listAvailableSlashCommands = async (
 };
 
 export const searchFiles = async (
-  createClient: ClientFactory,
+  createClient: ClientFactoryFor<"find">,
   input: OpencodeFileSearchInput,
 ): Promise<AgentFileSearchResult[]> => {
   try {

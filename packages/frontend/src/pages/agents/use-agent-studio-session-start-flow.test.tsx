@@ -4,6 +4,7 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -403,28 +404,21 @@ describe("useAgentStudioSessionStartFlow", () => {
         effectiveWorktreeBasePath: "/repo/worktrees",
       },
     ];
-    // SAFETY: This test controls the fixture and supplies `Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>` used by this case.
     host.workspaceGetRepoConfig = async () =>
-      ({
+      repoConfigSchema.parse({
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
         defaultRuntimeKind: "opencode",
-        worktreeBasePath: undefined,
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: { providers: {} },
         hooks: { preStart: [], postComplete: [] },
         devServers: [],
         worktreeCopyPaths: [],
-        agentDefaults: {
-          spec: undefined,
-          planner: undefined,
-          build: undefined,
-          qa: undefined,
-        },
+        agentDefaults: {},
         promptOverrides: {},
-      }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
+      });
     host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
     host.taskWorktreeGet = async () => ({
       workingDirectory: "/repo/worktrees/task-1",
@@ -580,17 +574,15 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
-    // SAFETY: This test controls the fixture and supplies `HookArgs & { input?: string }` used by this case.
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
       selectionForNewSession: null,
-      input: "",
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
         sendAgentMessage,
       }),
-    } as HookArgs & { input?: string });
+    });
 
     await harness.mount();
 

@@ -13,6 +13,12 @@ import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type HorizontalTabDropPosition = "before" | "after";
+type HorizontalTabDragStartEvent = {
+  active: Pick<DragStartEvent["active"], "id">;
+};
+type HorizontalTabDragEndEvent = HorizontalTabDragStartEvent & {
+  over: Pick<NonNullable<DragEndEvent["over"]>, "id"> | null;
+};
 
 export const horizontalTabDropAnimation = {
   duration: 220,
@@ -59,7 +65,7 @@ export const useHorizontalSortableTabs = ({
       selectionSuppressionFrameRef.current = null;
     });
   }, []);
-  const handleDragStart = useCallback((event: DragStartEvent): void => {
+  const handleDragStart = useCallback((event: HorizontalTabDragStartEvent): void => {
     const id = String(event.active.id);
     suppressedSelectionIdRef.current = id;
     setActiveId(id);
@@ -69,7 +75,7 @@ export const useHorizontalSortableTabs = ({
     scheduleSelectionSuppressionClear();
   }, [scheduleSelectionSuppressionClear]);
   const handleDragEnd = useCallback(
-    (event: DragEndEvent): void => {
+    (event: HorizontalTabDragEndEvent): void => {
       const draggedId = String(event.active.id);
       const targetId = event.over ? String(event.over.id) : null;
       setActiveId(null);

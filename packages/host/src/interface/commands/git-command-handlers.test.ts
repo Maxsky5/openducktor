@@ -337,8 +337,7 @@ const createRecordingGitService = () => {
       });
     },
   };
-  // SAFETY: This test controls the fixture and supplies `GitService` used by this case.
-  const service = promiseService as GitService;
+  const service: GitService = promiseService;
   return { calls, service };
 };
 describe("createGitCommandHandlers", () => {

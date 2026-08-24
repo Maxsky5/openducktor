@@ -81,17 +81,17 @@ describe("encodeClaudePromptText", () => {
   });
 
   test("rejects slash-command parts without a native Claude trigger", () => {
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     expect(() =>
       encodeClaudePromptText([
         {
           kind: "slash_command",
+          // @ts-expect-error This malformed command verifies the missing-trigger error path.
           command: {
             id: "review",
             title: "Review",
             source: "command",
             hints: [],
-          } as never,
+          },
         },
       ]),
     ).toThrow("cannot encode a slash command without a trigger");

@@ -33,12 +33,7 @@ const createFakeFilesystem = ({
     Effect.tryPromise({
       try: async () => {
         if (path.includes("missing")) {
-          // SAFETY: This test drives the failure path that supplies `Error & { code: string; }` before this assertion.
-          const error = new Error("not found") as Error & {
-            code: string;
-          };
-          error.code = "ENOENT";
-          throw error;
+          throw Object.assign(new Error("not found"), { code: "ENOENT" });
         }
         return canonical[path] ?? path;
       },
@@ -158,11 +153,9 @@ describe("createFilesystemService", () => {
     ]);
   });
   test("omits directory entries whose targets disappeared before stat", async () => {
-    // SAFETY: This test drives the failure path that supplies `Error & { code: string; }` before this assertion.
-    const missingTargetError = new Error("no such file or directory") as Error & {
-      code: string;
-    };
-    missingTargetError.code = "ENOENT";
+    const missingTargetError = Object.assign(new Error("no such file or directory"), {
+      code: "ENOENT",
+    });
     const filesystem = createFakeFilesystem({
       canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
       stats: {
@@ -187,9 +180,7 @@ describe("createFilesystemService", () => {
     ]);
   });
   test("keeps non-missing entry stat failures actionable", async () => {
-    // SAFETY: This test drives the failure path that supplies `Error & { code: string }` before this assertion.
-    const accessError = new Error("permission denied") as Error & { code: string };
-    accessError.code = "EACCES";
+    const accessError = Object.assign(new Error("permission denied"), { code: "EACCES" });
     const filesystem = createFakeFilesystem({
       canonical: { "/workspace": "/workspace", "/home/dev": "/home/dev" },
       stats: { "/workspace": true },

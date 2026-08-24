@@ -33,17 +33,8 @@ interface ParsedContract {
   value: (() => void) | null;
 }
 
-// SAFETY: This test controls the fixture and supplies `KeyboardEvent` used by this case.
-const keyEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
-  ({
-    altKey: false,
-    ctrlKey: false,
-    key: "",
-    metaKey: false,
-    shiftKey: false,
-    type: "keydown",
-    ...overrides,
-  }) as KeyboardEvent;
+const keyEvent = (overrides: KeyboardEventInit): KeyboardEvent =>
+  new KeyboardEvent("keydown", overrides);
 
 describe("InteractiveTerminal policies", () => {
   test("shows the latest output on first reveal without changing later scroll positions", () => {
@@ -263,12 +254,11 @@ describe("InteractiveTerminal policies", () => {
     const stageFile = async () => {
       throw new Error("Oversized images must not be staged.");
     };
-    // SAFETY: This test controls the fixture and supplies `File` used by this case.
-    const largeImage = {
-      name: "large.png",
-      size: 20 * 1024 * 1024 + 1,
-      type: "image/png",
-    } as File;
+    const largeImage = new File([], "large.png", { type: "image/png" });
+    Object.defineProperty(largeImage, "size", {
+      configurable: true,
+      value: 20 * 1024 * 1024 + 1,
+    });
     await expect(
       pasteDroppedTerminalImages({
         files: [largeImage],

@@ -12,8 +12,7 @@ let consoleErrorMock: ReturnType<typeof mock>;
 
 beforeEach(() => {
   consoleErrorMock = mock(() => {});
-  // SAFETY: This test controls the fixture and supplies `typeof console.error` used by this case.
-  console.error = consoleErrorMock as typeof console.error;
+  console.error = consoleErrorMock;
 });
 
 afterEach(() => {
@@ -456,17 +455,15 @@ describe("AppCrashShell", () => {
     test("removes listeners on unmount", () => {
       const originalRemoveEventListener = window.removeEventListener;
       const removedListeners: string[] = [];
-      const removeListenerSpy = mock((type: string, ...args: unknown[]) => {
+      const removeListenerSpy: typeof window.removeEventListener = (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | EventListenerOptions,
+      ) => {
         removedListeners.push(type);
-        // SAFETY: This test controls the fixture and supplies `[EventListenerOrEventListenerObject]` used by this case.
-        return originalRemoveEventListener.call(
-          window,
-          type,
-          ...(args as [EventListenerOrEventListenerObject]),
-        );
-      });
-      // SAFETY: This test controls the fixture and supplies `typeof window.removeEventListener` used by this case.
-      window.removeEventListener = removeListenerSpy as typeof window.removeEventListener;
+        return originalRemoveEventListener.call(window, type, listener, options);
+      };
+      window.removeEventListener = removeListenerSpy;
 
       try {
         const { unmount } = render(
@@ -487,19 +484,17 @@ describe("AppCrashShell", () => {
     test("does not re-register listeners on rerender", () => {
       const originalAddEventListener = window.addEventListener;
       let addCount = 0;
-      const addListenerSpy = mock((type: string, ...args: unknown[]) => {
+      const addListenerSpy: typeof window.addEventListener = (
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) => {
         if (type === "error" || type === "unhandledrejection") {
           addCount++;
         }
-        // SAFETY: This test controls the fixture and supplies `[EventListenerOrEventListenerObject]` used by this case.
-        return originalAddEventListener.call(
-          window,
-          type,
-          ...(args as [EventListenerOrEventListenerObject]),
-        );
-      });
-      // SAFETY: This test controls the fixture and supplies `typeof window.addEventListener` used by this case.
-      window.addEventListener = addListenerSpy as typeof window.addEventListener;
+        return originalAddEventListener.call(window, type, listener, options);
+      };
+      window.addEventListener = addListenerSpy;
 
       try {
         const { rerender } = render(
@@ -534,8 +529,7 @@ describe("AppCrashShell", () => {
       errorMock: ReturnType<typeof mock>,
       sourceFilter: string,
     ): unknown[] {
-      // SAFETY: This test controls the fixture and supplies `unknown[][]` used by this case.
-      const calls = errorMock.mock.calls as unknown[][];
+      const calls: unknown[][] = errorMock.mock.calls;
       const match = calls.find(
         (args) => hasRuntimeType(args[0], "string") && args[0].includes(sourceFilter),
       );
@@ -555,11 +549,13 @@ describe("AppCrashShell", () => {
       });
 
       const structuredCall = findStructuredLogCall(consoleErrorMock, "[AppCrashShell]");
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
-      expect(context.source).toBe("boundary");
-      expect(context.rawValue).toBeInstanceOf(Error);
-      expect(context.timestamp).toBeDefined();
+      expect(structuredCall.at(-1)).toEqual(
+        expect.objectContaining({
+          source: "boundary",
+          rawValue: expect.any(Error),
+          timestamp: expect.any(String),
+        }),
+      );
     });
 
     test("logs structured context with raw event on browser error", async () => {
@@ -585,10 +581,9 @@ describe("AppCrashShell", () => {
         consoleErrorMock,
         "[AppCrashShell] Fatal error (error)",
       );
-      // SAFETY: This test controls the fixture and supplies `Record<string, unknown>` used by this case.
-      const context = structuredCall[structuredCall.length - 1] as Record<string, unknown>;
-      expect(context.source).toBe("error");
-      expect(context.rawValue).toBeInstanceOf(ErrorEvent);
+      expect(structuredCall.at(-1)).toEqual(
+        expect.objectContaining({ source: "error", rawValue: expect.any(ErrorEvent) }),
+      );
     });
   });
 });

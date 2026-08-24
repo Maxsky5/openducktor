@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { installReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
@@ -13,12 +14,6 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 interface LatestResultRefContract {
   current: HookResult | null;
 }
-
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const actEnvironment = globalThis as typeof globalThis & {
-  IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
-const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 type HarnessProps = {
   rows: AgentChatTranscriptRow[];
@@ -79,17 +74,14 @@ const triggerResizeObservers = (targetElement?: Element): void => {
       continue;
     }
 
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    controller.callback(
-      observedElements.map((target) => ({
-        borderBoxSize: [] as ResizeObserverSize[],
-        contentBoxSize: [] as ResizeObserverSize[],
-        contentRect: {} as DOMRectReadOnly,
-        devicePixelContentBoxSize: [] as ResizeObserverSize[],
-        target,
-      })),
-      controller.observer,
-    );
+    const entries: ResizeObserverEntry[] = observedElements.map((target) => ({
+      borderBoxSize: [],
+      contentBoxSize: [],
+      contentRect: new DOMRect(),
+      devicePixelContentBoxSize: [],
+      target,
+    }));
+    controller.callback(entries, controller.observer);
   }
 };
 
@@ -97,28 +89,28 @@ const createTurnRows = (
   turnCount: number,
   externalSessionId = "session-1",
 ): AgentChatTranscriptRow[] =>
-  Array.from({ length: turnCount }, (_, turnIndex) => [
+  Array.from({ length: turnCount }, (_, turnIndex): AgentChatTranscriptRow[] => [
     {
-      kind: "message" as const,
+      kind: "message",
       key: `${externalSessionId}:user-${turnIndex}`,
       message: {
         id: `user-${turnIndex}`,
-        role: "user" as const,
+        role: "user",
         content: `Question ${turnIndex}`,
         timestamp: "2026-02-20T10:01:00.000Z",
       },
     },
     {
-      kind: "message" as const,
+      kind: "message",
       key: `${externalSessionId}:assistant-${turnIndex}`,
       message: {
         id: `assistant-${turnIndex}`,
-        role: "assistant" as const,
+        role: "assistant",
         content: `Answer ${turnIndex}`,
         timestamp: "2026-02-20T10:01:01.000Z",
         meta: {
-          kind: "assistant" as const,
-          agentRole: "spec" as const,
+          kind: "assistant",
+          agentRole: "spec",
           isFinal: true,
           profileId: "Hephaestus (Deep Agent)",
           durationMs: 1_000,
@@ -138,11 +130,11 @@ const createSingleTurnRows = (
   return Array.from({ length: rowCount }, (_, rowIndex) => {
     if (rowIndex === 0) {
       return {
-        kind: "message" as const,
+        kind: "message",
         key: `${externalSessionId}:user-0`,
         message: {
           id: "user-0",
-          role: "user" as const,
+          role: "user",
           content: "Question",
           timestamp: "2026-02-20T10:01:00.000Z",
         },
@@ -150,16 +142,16 @@ const createSingleTurnRows = (
     }
 
     return {
-      kind: "message" as const,
+      kind: "message",
       key: `${externalSessionId}:assistant-${rowIndex}`,
       message: {
         id: `assistant-${rowIndex}`,
-        role: "assistant" as const,
+        role: "assistant",
         content: `Answer chunk ${rowIndex}`,
         timestamp: "2026-02-20T10:01:01.000Z",
         meta: {
-          kind: "assistant" as const,
-          agentRole: "spec" as const,
+          kind: "assistant",
+          agentRole: "spec",
           isFinal: true,
           profileId: "Hephaestus (Deep Agent)",
         },
@@ -359,22 +351,17 @@ const dispatchPointerDown = async (container: HTMLDivElement): Promise<void> => 
 
 describe("useAgentChatWindow", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
+  let restoreReactActEnvironment = (): void => {};
 
   beforeEach(() => {
-    actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
+    restoreReactActEnvironment = installReactActEnvironment();
     mockResizeObserverControllers.clear();
-    // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
-    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver;
     animationFrameDriver.install();
   });
 
   afterEach(() => {
-    if (previousActEnvironment === undefined) {
-      delete actEnvironment.IS_REACT_ACT_ENVIRONMENT;
-    } else {
-      actEnvironment.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
-    }
-
+    restoreReactActEnvironment();
     globalThis.ResizeObserver = originalResizeObserver;
     animationFrameDriver.restore();
   });
@@ -2322,8 +2309,9 @@ describe("useAgentChatWindow", () => {
   test("syncBottomAfterComposerLayoutRef keeps the transcript pinned while following", async () => {
     const rows = createTurnRows(8);
     const extraContentHeightPx = { current: 0 };
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
+    const syncBottomAfterComposerLayoutRef: NonNullable<
+      HarnessProps["syncBottomAfterComposerLayoutRef"]
+    > = { current: null };
     const harness = await mountHarness(
       {
         rows,
@@ -2339,7 +2327,8 @@ describe("useAgentChatWindow", () => {
     if (!container) {
       throw new Error("Expected messages container");
     }
-    if (!syncBottomAfterComposerLayoutRef.current) {
+    const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
+    if (!syncBottomAfterComposerLayout) {
       throw new Error("Expected sync callback");
     }
 
@@ -2351,7 +2340,7 @@ describe("useAgentChatWindow", () => {
 
     extraContentHeightPx.current = 200;
     await act(async () => {
-      syncBottomAfterComposerLayoutRef.current?.();
+      syncBottomAfterComposerLayout();
       await flush();
     });
     await animationFrameDriver.flushFrames();
@@ -2365,8 +2354,9 @@ describe("useAgentChatWindow", () => {
   test("syncBottomAfterComposerLayoutRef does not override manual scroll position", async () => {
     const rows = createTurnRows(8);
     const extraContentHeightPx = { current: 0 };
-    // SAFETY: This test controls the fixture and supplies `(() => void) | null` used by this case.
-    const syncBottomAfterComposerLayoutRef = { current: null as (() => void) | null };
+    const syncBottomAfterComposerLayoutRef: NonNullable<
+      HarnessProps["syncBottomAfterComposerLayoutRef"]
+    > = { current: null };
     const harness = await mountHarness(
       {
         rows,
@@ -2382,7 +2372,8 @@ describe("useAgentChatWindow", () => {
     if (!container) {
       throw new Error("Expected messages container");
     }
-    if (!syncBottomAfterComposerLayoutRef.current) {
+    const syncBottomAfterComposerLayout = syncBottomAfterComposerLayoutRef.current;
+    if (!syncBottomAfterComposerLayout) {
       throw new Error("Expected sync callback");
     }
 
@@ -2395,7 +2386,7 @@ describe("useAgentChatWindow", () => {
 
     extraContentHeightPx.current = 200;
     await act(async () => {
-      syncBottomAfterComposerLayoutRef.current?.();
+      syncBottomAfterComposerLayout();
       await flush();
     });
     await animationFrameDriver.flushFrames();

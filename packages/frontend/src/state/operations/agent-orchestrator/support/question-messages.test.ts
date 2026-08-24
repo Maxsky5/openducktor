@@ -70,8 +70,11 @@ describe("agent-orchestrator-question-messages", () => {
       throw new Error("Expected tool meta on latest message");
     }
     expect(latest.meta.metadata?.requestId).toBe("question-1");
-    // SAFETY: This test controls the fixture and supplies `string[][] | undefined` used by this case.
-    expect((latest.meta.metadata?.answers as string[][] | undefined)?.[0]?.[0]).toBe("yes");
+    const answers = latest.meta.metadata?.answers;
+    if (!Array.isArray(answers) || !Array.isArray(answers[0])) {
+      throw new Error("Expected nested question answers in tool metadata.");
+    }
+    expect(answers[0][0]).toBe("yes");
   });
 
   test("does not overwrite mismatched question metadata request id", () => {

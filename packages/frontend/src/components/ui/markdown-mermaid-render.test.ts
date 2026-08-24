@@ -9,16 +9,15 @@ describe("renderMermaidSvg", () => {
     try {
       renderSpy.mockImplementation(async (_id, _source, container) => {
         renderContainer = container;
+        if (!(container instanceof HTMLElement)) {
+          throw new TypeError("Expected Mermaid to receive an HTML render container.");
+        }
         expect(container?.isConnected).toBe(true);
         expect(container?.getAttribute("aria-hidden")).toBe("true");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
-        expect((container as HTMLElement | undefined)?.style.position).toBe("fixed");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
-        expect((container as HTMLElement | undefined)?.style.inset).toBe("0");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
-        expect((container as HTMLElement | undefined)?.style.overflow).toBe("hidden");
-        // SAFETY: This test creates the DOM fixture that supplies `HTMLElement | undefined` before this lookup.
-        expect((container as HTMLElement | undefined)?.style.pointerEvents).toBe("none");
+        expect(container.style.position).toBe("fixed");
+        expect(container.style.inset).toBe("0");
+        expect(container.style.overflow).toBe("hidden");
+        expect(container.style.pointerEvents).toBe("none");
 
         return {
           diagramType: "flowchart-v2",

@@ -9,8 +9,11 @@ const pressEnter = (element: HTMLElement): void => {
     if (element.tagName === "BUTTON") {
       fireEvent.click(element);
     } else {
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLFormElement` before this lookup.
-      fireEvent.submit(element.closest("form") as HTMLFormElement);
+      const form = element.closest<HTMLFormElement>("form");
+      if (!form) {
+        throw new Error("Expected the dialog field to belong to a form.");
+      }
+      fireEvent.submit(form);
     }
   }
 };

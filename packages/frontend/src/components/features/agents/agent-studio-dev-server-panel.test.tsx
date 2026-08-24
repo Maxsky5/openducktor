@@ -213,10 +213,7 @@ describe("AgentStudioDevServerPanel", () => {
     );
 
     try {
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const button = screen.getByTestId(
-        "agent-studio-dev-server-start-button",
-      ) as HTMLButtonElement;
+      const button: HTMLButtonElement = screen.getByTestId("agent-studio-dev-server-start-button");
 
       expect(button.disabled).toBe(false);
       expect(button.getAttribute("aria-disabled")).toBe("true");
@@ -246,10 +243,10 @@ describe("AgentStudioDevServerPanel", () => {
     );
 
     try {
-      // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
-      const button = screen.getByTestId(
-        "agent-studio-dev-server-start-button",
-      ) as HTMLButtonElement;
+      const button = screen.getByTestId("agent-studio-dev-server-start-button");
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error("Expected the dev-server start control to be a button");
+      }
 
       expect(button.disabled).toBe(false);
       expect(button.getAttribute("aria-disabled")).toBe("true");

@@ -34,6 +34,11 @@ type LiveContextUsageRefreshInput = {
   timestamp: string;
 };
 
+type ClaudeContextUsageResponse = Pick<
+  Awaited<ReturnType<ClaudeSession["query"]["getContextUsage"]>>,
+  "maxTokens" | "totalTokens"
+>;
+
 const refreshStates = new WeakMap<ClaudeSession, ContextUsageRefreshState>();
 
 const waitBeforeNextContextUsageRefresh = async (): Promise<void> => {
@@ -43,9 +48,9 @@ const waitBeforeNextContextUsageRefresh = async (): Promise<void> => {
   await new Promise<void>((resolve) => setTimeout(resolve, CONTEXT_USAGE_REFRESH_MIN_INTERVAL_MS));
 };
 
-export const readClaudeContextUsageFromQuery = async (
-  sdkQuery: Pick<ClaudeSession["query"], "getContextUsage">,
-): Promise<{ usedTokens: number; maxTokens: number } | null> => {
+export const readClaudeContextUsageFromQuery = async (sdkQuery: {
+  getContextUsage(): Promise<ClaudeContextUsageResponse>;
+}): Promise<{ usedTokens: number; maxTokens: number } | null> => {
   const contextUsage = contextUsageFromClaudeControlResponse(
     await withTimeout(
       sdkQuery.getContextUsage(),

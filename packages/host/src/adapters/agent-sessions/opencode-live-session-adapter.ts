@@ -32,9 +32,20 @@ import { refKey, requireRuntime, toSessionRef } from "./opencode-live-session-no
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
 
+export type PreparedOpenCodeLiveSessionAdapter = Omit<
+  PreparedRuntimeLiveSessionAdapter,
+  "adapter"
+> & {
+  readonly adapter: AgentSessionRuntimeAdapterPort;
+};
+
 export type OpenCodeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
 ) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
+
+export type OpenCodeRuntimeSessionAdapterPreparer = (
+  runtime: RuntimeInstanceSummary,
+) => Effect.Effect<PreparedOpenCodeLiveSessionAdapter, HostError>;
 
 export type CreateOpenCodeLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<
@@ -75,7 +86,7 @@ const runtimeActivityFromTranscriptEvent = (
 export const createOpenCodeLiveSessionAdapterPreparer = ({
   liveSessionLifecycle,
   prepareRuntime = createPrepareOpencodeSessionRuntime(),
-}: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeLiveSessionAdapterPreparer => {
+}: CreateOpenCodeLiveSessionAdapterPreparerInput): OpenCodeRuntimeSessionAdapterPreparer => {
   let nextOccurrence = 1;
 
   return (runtimeInput) =>
@@ -420,6 +431,6 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
               }),
           }),
         discard: () => releaseAdapter().pipe(Effect.asVoid),
-      } satisfies PreparedRuntimeLiveSessionAdapter;
+      } satisfies PreparedOpenCodeLiveSessionAdapter;
     });
 };

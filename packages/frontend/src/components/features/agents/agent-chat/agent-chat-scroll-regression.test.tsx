@@ -2,16 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useRef, useState } from "react";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { COMPOSER_EDITOR_MIN_HEIGHT_PX, useAgentChatLayout } from "./use-agent-chat-layout";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-(
-  globalThis as typeof globalThis & {
-    IS_REACT_ACT_ENVIRONMENT?: boolean;
-  }
-).IS_REACT_ACT_ENVIRONMENT = true;
+enableReactActEnvironment();
 
 type MockResizeObserverController = {
   callback: ResizeObserverCallback;
@@ -21,16 +17,16 @@ type MockResizeObserverController = {
 
 const createRows = (count: number): AgentChatTranscriptRow[] =>
   Array.from({ length: count }, (_, index) => ({
-    kind: "message" as const,
+    kind: "message",
     key: `session-1:msg-${index}`,
     message: {
       id: `msg-${index}`,
-      role: "assistant" as const,
+      role: "assistant",
       content: `Message ${index}`,
       timestamp: "2026-02-20T10:01:00.000Z",
       meta: {
-        kind: "assistant" as const,
-        agentRole: "spec" as const,
+        kind: "assistant",
+        agentRole: "spec",
         isFinal: true,
         profileId: "Hephaestus (Deep Agent)",
         durationMs: 1000,
@@ -71,17 +67,16 @@ const triggerResizeObservers = (): void => {
       continue;
     }
 
-    // SAFETY: This test controls the fixture and supplies the asserted shape used by this case.
-    controller.callback(
-      Array.from(controller.observedElements).map((target) => ({
-        borderBoxSize: [] as ResizeObserverSize[],
-        contentBoxSize: [] as ResizeObserverSize[],
-        contentRect: {} as DOMRectReadOnly,
-        devicePixelContentBoxSize: [] as ResizeObserverSize[],
+    const entries: ResizeObserverEntry[] = Array.from(controller.observedElements).map(
+      (target) => ({
+        borderBoxSize: [],
+        contentBoxSize: [],
+        contentRect: new DOMRect(),
+        devicePixelContentBoxSize: [],
         target,
-      })),
-      controller.observer,
+      }),
     );
+    controller.callback(entries, controller.observer);
   }
 };
 
@@ -178,8 +173,7 @@ describe("agent chat scroll regression", () => {
 
   beforeEach(() => {
     mockResizeObserverControllers.clear();
-    // SAFETY: This test controls the fixture and supplies `typeof ResizeObserver` used by this case.
-    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
+    globalThis.ResizeObserver = MockResizeObserver;
     animationFrameDriver.install();
   });
 
@@ -191,19 +185,9 @@ describe("agent chat scroll regression", () => {
   test("keeps the transcript pinned after returning to bottom and growing the composer", async () => {
     render(<ChatScrollRegressionHarness />);
 
-    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
-    const container = screen.getByTestId("messages-container") as HTMLDivElement & {
-      scrollTo: (options: ScrollToOptions) => void;
-      scrollTop: number;
-      scrollHeight: number;
-      clientHeight: number;
-    };
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement & { scrollHeight: number; }` before this lookup.
-    const content = screen.getByTestId("messages-content") as HTMLDivElement & {
-      scrollHeight: number;
-    };
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLTextAreaElement` before this lookup.
-    const textarea = screen.getByTestId("composer") as HTMLTextAreaElement;
+    const container = screen.getByTestId("messages-container");
+    const content = screen.getByTestId("messages-content");
+    const textarea = screen.getByTestId("composer");
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
       writable: true,
@@ -257,7 +241,7 @@ describe("agent chat scroll regression", () => {
     });
     expect(textarea.dataset.multiline).toBe("true");
 
-    container.clientHeight = 220;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 220 });
     await animationFrameDriver.flushFrames();
     await act(async () => {
       triggerResizeObservers();
@@ -271,21 +255,9 @@ describe("agent chat scroll regression", () => {
   test("keeps the transcript pinned after growing the contenteditable composer", async () => {
     render(<ChatEditorScrollRegressionHarness />);
 
-    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
-    const container = screen.getByTestId("messages-container") as HTMLDivElement & {
-      scrollTop: number;
-      scrollHeight: number;
-      clientHeight: number;
-    };
-    // SAFETY: This test creates the DOM fixture that supplies `HTMLDivElement & { scrollHeight: number; }` before this lookup.
-    const content = screen.getByTestId("messages-content") as HTMLDivElement & {
-      scrollHeight: number;
-    };
-    // SAFETY: This test creates the DOM fixture that supplies the asserted shape before this lookup.
-    const editor = screen.getByTestId("composer-editor") as HTMLDivElement & {
-      scrollHeight: number;
-      getBoundingClientRect: () => { height: number };
-    };
+    const container = screen.getByTestId("messages-container");
+    const content = screen.getByTestId("messages-content");
+    const editor = screen.getByTestId("composer-editor");
 
     Object.defineProperty(container, "scrollHeight", {
       configurable: true,
@@ -346,7 +318,7 @@ describe("agent chat scroll regression", () => {
     });
     expect(editor.dataset.multiline).toBe("true");
 
-    container.clientHeight = 220;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 220 });
     await animationFrameDriver.flushFrames();
     await act(async () => {
       triggerResizeObservers();

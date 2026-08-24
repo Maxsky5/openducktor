@@ -9,12 +9,6 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioDiffVisibilityRefresh>[0];
 
-type WindowEventTargetOverride = typeof globalThis & {
-  addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
-  removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => void;
-  dispatchEvent: (event: Event) => boolean;
-};
-
 const createVisibilityStateController = () => {
   let visibilityState: DocumentVisibilityState = "visible";
   const windowTarget = new EventTarget();
@@ -37,15 +31,23 @@ const createVisibilityStateController = () => {
     writable: true,
     value: EventTarget.prototype.dispatchEvent.bind(document),
   });
-  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-  (globalThis as WindowEventTargetOverride).addEventListener =
-    windowTarget.addEventListener.bind(windowTarget);
-  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-  (globalThis as WindowEventTargetOverride).removeEventListener =
-    windowTarget.removeEventListener.bind(windowTarget);
-  // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-  (globalThis as WindowEventTargetOverride).dispatchEvent =
-    windowTarget.dispatchEvent.bind(windowTarget);
+  Object.defineProperties(globalThis, {
+    addEventListener: {
+      configurable: true,
+      writable: true,
+      value: windowTarget.addEventListener.bind(windowTarget),
+    },
+    removeEventListener: {
+      configurable: true,
+      writable: true,
+      value: windowTarget.removeEventListener.bind(windowTarget),
+    },
+    dispatchEvent: {
+      configurable: true,
+      writable: true,
+      value: windowTarget.dispatchEvent.bind(windowTarget),
+    },
+  });
 
   return {
     set(value: DocumentVisibilityState) {
@@ -62,12 +64,9 @@ const createVisibilityStateController = () => {
       } else {
         Reflect.deleteProperty(document, "dispatchEvent");
       }
-      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-      (globalThis as WindowEventTargetOverride).addEventListener = originalAddEventListener;
-      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-      (globalThis as WindowEventTargetOverride).removeEventListener = originalRemoveEventListener;
-      // SAFETY: This test creates the DOM fixture that supplies `WindowEventTargetOverride` before this lookup.
-      (globalThis as WindowEventTargetOverride).dispatchEvent = originalDispatchEvent;
+      globalThis.addEventListener = originalAddEventListener;
+      globalThis.removeEventListener = originalRemoveEventListener;
+      globalThis.dispatchEvent = originalDispatchEvent;
     },
   };
 };

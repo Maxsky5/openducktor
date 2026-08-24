@@ -1,5 +1,6 @@
 import { Cause, Effect } from "effect";
 import { HostOperationError } from "../effect/host-errors";
+import type { RuntimeRegistryPort } from "../ports/runtime-registry-port";
 import {
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
@@ -17,6 +18,29 @@ const createLogger = (): HostLifecycleLogger & { infos: string[]; errors: string
     error: (message) => Effect.sync(() => errors.push(message)),
   };
 };
+
+const createRuntimeRegistry = (
+  stopAllRuntimes: RuntimeRegistryPort["stopAllRuntimes"],
+): RuntimeRegistryPort => ({
+  ensureWorkspaceRuntime: () => Effect.die("unused"),
+  findRuntimeById: () => Effect.succeed(null),
+  findWorkspaceRuntime: () => Effect.succeed(null),
+  listRuntimes: () => Effect.succeed([]),
+  listRuntimesByRepo: () => Effect.succeed([]),
+  stopRuntime: () => Effect.succeed(false),
+  stopAllRuntimes,
+  stopSession: () => Effect.void,
+  probeSessionStatus: () => Effect.succeed({ supported: false, hasLiveSession: false }),
+  probeMcpStatus: () =>
+    Effect.succeed({
+      supported: false,
+      connected: false,
+      serverStatus: null,
+      toolIds: [],
+      detail: null,
+      failureKind: null,
+    }),
+});
 
 describe("host lifecycle shutdown", () => {
   test("continues independent shutdown steps and rejects with labeled failures", async () => {
@@ -159,11 +183,8 @@ describe("host lifecycle shutdown", () => {
       operation: "runtimeRegistry.stopAllRuntimes",
       message: "runtime child is still running",
     });
-    // SAFETY: This test controls the fixture and supplies `never` used by this case.
     const step = createStopRuntimesStep(
-      {
-        stopAllRuntimes: () => Effect.fail(runtimeError),
-      } as never,
+      createRuntimeRegistry(() => Effect.fail(runtimeError)),
       {
         error: () => Effect.fail(persistenceError),
         info: () => Effect.fail(persistenceError),

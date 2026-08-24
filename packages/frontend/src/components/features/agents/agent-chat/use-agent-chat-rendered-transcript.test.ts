@@ -10,10 +10,9 @@ import {
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const actEnvironment = globalThis as typeof globalThis & {
+const actEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 const previousActEnvironment = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
 
 beforeEach(() => {

@@ -9,8 +9,7 @@ import type {
 } from "./types";
 
 const createClient: ClientFactory = () => {
-  // SAFETY: This test controls the fixture and supplies `OpencodeClient` used by this case.
-  return {} as OpencodeClient;
+  return {} satisfies OpencodeClient;
 };
 
 describe("types", () => {

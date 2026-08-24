@@ -183,7 +183,6 @@ const waitForProcessExit = async (pid: number, timeoutMs: number): Promise<boole
   }
 };
 
-// SAFETY: This test drives the failure path that supplies `NodeJS.ErrnoException` before this assertion.
 const forceStopProcessTree = (pid: number) =>
   process.platform === "win32"
     ? terminateProcessTree({
@@ -207,7 +206,7 @@ const forceStopProcessTree = (pid: number) =>
           try {
             process.kill(pid, "SIGKILL");
           } catch (cause) {
-            if ((cause as NodeJS.ErrnoException).code !== "ESRCH") {
+            if (!(cause instanceof Error && "code" in cause && cause.code === "ESRCH")) {
               throw cause;
             }
           }
@@ -812,8 +811,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       expect(processIsAlive(childPid)).toBe(true);
 
       await Effect.runPromise(handle.stop());
-      // SAFETY: This test controls the fixture and supplies `number` used by this case.
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
@@ -857,8 +856,8 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         ),
       ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
       childPid = Number(await readFile(childPidPath, "utf8"));
-      // SAFETY: This test controls the fixture and supplies `number` used by this case.
-      await waitFor(() => !processIsAlive(childPid as number));
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid));
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");

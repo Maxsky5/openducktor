@@ -48,7 +48,6 @@ const notStartedRuntimeHealth = {
   mcp: null,
 } as const;
 
-// SAFETY: This test controls the fixture and supplies `string[]` used by this case.
 const reconnectingRuntimeHealth = {
   ...readyRuntimeHealth,
   status: "checking",
@@ -57,7 +56,7 @@ const reconnectingRuntimeHealth = {
     status: "reconnecting",
     serverName: "openducktor",
     serverStatus: null,
-    toolIds: [] as string[],
+    toolIds: [] satisfies string[],
     detail: "The operation was aborted due to timeout",
     failureKind: "timeout",
   },

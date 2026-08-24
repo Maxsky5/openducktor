@@ -1,4 +1,3 @@
-import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { Effect } from "effect";
 import type {
@@ -14,7 +13,16 @@ import type {
 } from "../../ports/codex-app-server-protocol";
 import type { CodexAppServerTransport } from "./codex-app-server-transport-registry";
 
-export type CodexChildProcess = ChildProcessByStdio<Writable, Readable, Readable>;
+export type CodexChildProcess = {
+  readonly stdin: Writable;
+  readonly stdout: Readable;
+  readonly stderr: Readable;
+  once(event: "error", listener: (error: Error) => void): void;
+  once(
+    event: "close",
+    listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
+  ): void;
+};
 
 export type CodexTransportBaseError = HostOperationError | HostResourceError;
 export type CodexAppServerTransportError = CodexTransportBaseError | HostValidationError;

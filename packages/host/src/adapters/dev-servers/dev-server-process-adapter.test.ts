@@ -218,8 +218,8 @@ setInterval(() => {}, 1000);
       expect(processIsAlive(childPid)).toBe(true);
 
       await handle.stop();
-      // SAFETY: This test controls the fixture and supplies `number` used by this case.
-      await waitFor(() => !processIsAlive(childPid as number), 1_000);
+      const stoppedPid = childPid;
+      await waitFor(() => !processIsAlive(stoppedPid), 1_000);
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");

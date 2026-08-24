@@ -19,6 +19,7 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     "function readObject(input: unknown) { if (!isPlainObject(input)) return null; return input.name; }",
     "function readText(input: unknown): string | null { return typeof input === 'string' ? input : null; }",
     "function readError(input: unknown): Error | null { if (!(input instanceof Error)) return null; return input; }",
+    "function readObject(input: unknown) { if (!isPlainObject(input) || input.disabled === true) return null; return input.name; }",
     "function normalizeText(input: unknown): string { const value = typeof input === 'string' ? input : ''; return value.trim(); }",
     "function compare(left: unknown, right: unknown): boolean { if (typeof left !== 'string') return false; if (typeof right !== 'string') return false; return left === right; }",
     "const isLabel = (input: unknown): boolean => typeof input === 'string';",
@@ -53,6 +54,26 @@ tester.run("anti-slop/no-unknown-parameters", noUnknownParametersRule, {
     },
     {
       code: "function load(input: unknown) { const parsed = userSchema.parse(input); return input; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown): User { const parsed = userSchema.parse(input); return input as User; }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown): User { return choose(userSchema.parse(input), input as User); }",
+      errors: [error],
+    },
+    {
+      code: "function load(input: unknown): User { if (!isUser(input) && allowRaw) return fallback; return input as User; }",
+      errors: [error],
+    },
+    {
+      code: "function isUser(input: unknown): input is User { return true; }",
+      errors: [error],
+    },
+    {
+      code: "function isUser(input: unknown): input is User { return hasUserShape(input) || allowRaw; }",
       errors: [error],
     },
     {

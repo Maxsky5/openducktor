@@ -10,6 +10,8 @@ export {
   type CreateOpenCodeLiveSessionAdapterPreparerInput,
   createOpenCodeLiveSessionAdapterPreparer,
   type OpenCodeLiveSessionAdapterPreparer,
+  type OpenCodeRuntimeSessionAdapterPreparer,
+  type PreparedOpenCodeLiveSessionAdapter,
 } from "./adapters/agent-sessions/opencode-live-session-adapter";
 export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attachment-adapter";
 export type { McpBridgeDiscoveryMode } from "./adapters/mcp/mcp-bridge-discovery-file";

@@ -904,9 +904,7 @@ describe("useRepoSessionReadModel", () => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
-    // SAFETY: This test controls the fixture and supplies `typeof state.queryClient.invalidateQueries` used by this case.
-    state.queryClient.invalidateQueries =
-      invalidateQueries as typeof state.queryClient.invalidateQueries;
+    state.queryClient.invalidateQueries = invalidateQueries;
 
     try {
       await state.harness.mount();
@@ -937,9 +935,7 @@ describe("useRepoSessionReadModel", () => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
-    // SAFETY: This test controls the fixture and supplies `typeof state.queryClient.invalidateQueries` used by this case.
-    state.queryClient.invalidateQueries =
-      invalidateQueries as typeof state.queryClient.invalidateQueries;
+    state.queryClient.invalidateQueries = invalidateQueries;
     const catalog = {
       commands: [
         {
@@ -956,7 +952,6 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       await state.harness.run(async () => {
-        // SAFETY: This test controls the fixture and supplies `AgentSessionLiveEnvelope` used by this case.
         state.emit({
           type: "slash_command_catalog_updated",
           scope: {
@@ -965,7 +960,7 @@ describe("useRepoSessionReadModel", () => {
             workingDirectory: "/repo/worktree",
           },
           catalog,
-        } as AgentSessionLiveEnvelope);
+        } satisfies AgentSessionLiveEnvelope);
       });
 
       expect(

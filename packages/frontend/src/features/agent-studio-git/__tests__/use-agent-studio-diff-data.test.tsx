@@ -293,16 +293,10 @@ describe("useAgentStudioDiffData", () => {
         originalDocumentRemoveEventListener(type, listener, options);
       },
     );
-    // SAFETY: This test controls the fixture and supplies `typeof globalThis.addEventListener` used by this case.
-    globalThis.addEventListener = windowAddEventListenerMock as typeof globalThis.addEventListener;
-    // SAFETY: This test controls the fixture and supplies `typeof globalThis.removeEventListener` used by this case.
-    globalThis.removeEventListener =
-      windowRemoveEventListenerMock as typeof globalThis.removeEventListener;
-    // SAFETY: This test controls the fixture and supplies `typeof document.addEventListener` used by this case.
-    document.addEventListener = documentAddEventListenerMock as typeof document.addEventListener;
-    // SAFETY: This test controls the fixture and supplies `typeof document.removeEventListener` used by this case.
-    document.removeEventListener =
-      documentRemoveEventListenerMock as typeof document.removeEventListener;
+    globalThis.addEventListener = windowAddEventListenerMock;
+    globalThis.removeEventListener = windowRemoveEventListenerMock;
+    document.addEventListener = documentAddEventListenerMock;
+    document.removeEventListener = documentRemoveEventListenerMock;
 
     const scheduledRefreshArgs = {
       ...createBaseArgs(),

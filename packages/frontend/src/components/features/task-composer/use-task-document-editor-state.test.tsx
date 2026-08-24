@@ -1,14 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import {
-  type TaskDocumentSection,
-  useTaskDocumentEditorState,
-} from "./use-task-document-editor-state";
+import { useTaskDocumentEditorState } from "./use-task-document-editor-state";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironment = globalThis as typeof globalThis & {
+const reactActEnvironment: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 const originalConsoleError = console.error;
@@ -282,8 +278,7 @@ describe("useTaskDocumentEditorState", () => {
     expect(harness.getLatest().documents.spec.error).toContain("first failure");
 
     await harness.run(async () => {
-      // SAFETY: This test creates the DOM fixture that supplies `TaskDocumentSection` before this lookup.
-      await harness.getLatest().loadSection("spec" as TaskDocumentSection, true);
+      await harness.getLatest().loadSection("spec", true);
     });
     await harness.waitFor((state) => state.documents.spec.loaded);
 

@@ -6,7 +6,11 @@ import type {
 import { createElectronUpdaterAdapter } from "./electron-updater-adapter";
 import type { GitHubReleaseSource } from "./github-release-source";
 
-type NativeUpdaterEventPayload = ElectronUpdaterEventMap[keyof ElectronUpdaterEventMap];
+type NativeUpdaterListeners = {
+  [EventName in keyof ElectronUpdaterEventMap]: Set<
+    (payload: ElectronUpdaterEventMap[EventName]) => void
+  >;
+};
 
 class FakeNativeUpdater {
   allowPrerelease = false;
@@ -21,24 +25,38 @@ class FakeNativeUpdater {
     versionInfo: { version: "0.5.0" },
   }));
   downloadUpdate = mock(async (): Promise<string[]> => ["/tmp/OpenDucktor-update"]);
-  private readonly listeners = new Map<string, Set<(payload: never) => void>>();
+  private readonly listeners: NativeUpdaterListeners = {
+    error: new Set(),
+    "download-progress": new Set(),
+  };
 
-  on = mock((eventName: string, listener: (payload: never) => void) => {
-    const listeners = this.listeners.get(eventName) ?? new Set();
-    listeners.add(listener);
-    this.listeners.set(eventName, listeners);
-    return this;
-  });
+  on = mock(
+    <EventName extends keyof ElectronUpdaterEventMap>(
+      eventName: EventName,
+      listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
+    ) => {
+      const listeners = this.listeners[eventName];
+      listeners.add(listener);
+      return this;
+    },
+  );
   quitAndInstall = mock(() => {});
-  removeListener = mock((eventName: string, listener: (payload: never) => void) => {
-    this.listeners.get(eventName)?.delete(listener);
-    return this;
-  });
+  removeListener = mock(
+    <EventName extends keyof ElectronUpdaterEventMap>(
+      eventName: EventName,
+      listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
+    ) => {
+      this.listeners[eventName].delete(listener);
+      return this;
+    },
+  );
 
-  emit(eventName: string, payload: NativeUpdaterEventPayload): void {
-    for (const listener of this.listeners.get(eventName) ?? []) {
-      // SAFETY: This test controls the fixture and supplies `never` used by this case.
-      listener(payload as never);
+  emit<EventName extends keyof ElectronUpdaterEventMap>(
+    eventName: EventName,
+    payload: ElectronUpdaterEventMap[EventName],
+  ): void {
+    for (const listener of this.listeners[eventName]) {
+      listener(payload);
     }
   }
 }

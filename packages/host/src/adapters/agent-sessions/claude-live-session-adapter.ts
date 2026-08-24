@@ -30,11 +30,7 @@ import type {
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
 import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
-import type {
-  ClaudeAgentSdkEvent,
-  ClaudeSessionContext,
-  ClaudeSessionStore,
-} from "../claude/claude-agent-sdk-types";
+import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 import {
@@ -58,15 +54,41 @@ type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
   readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
 };
 
+export type PreparedClaudeLiveSessionAdapter = Omit<
+  PreparedRuntimeLiveSessionAdapter,
+  "adapter"
+> & {
+  readonly adapter: AgentSessionRuntimeAdapterPort;
+};
+
 export type ClaudeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
 ) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
 
+export type ClaudeRuntimeSessionAdapterPreparer = (
+  runtime: RuntimeInstanceSummary,
+) => Effect.Effect<PreparedClaudeLiveSessionAdapter, HostError>;
+
 export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly eventHub: ClaudeAgentSdkEventHub;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
-  readonly service: ClaudeAgentSdkService;
-  readonly sessionStore: ClaudeSessionStore;
+  readonly service: Pick<
+    ClaudeAgentSdkService,
+    | "forkSession"
+    | "loadSessionContextUsage"
+    | "prepareApprovalReply"
+    | "prepareQuestionReply"
+    | "releaseSession"
+    | "resumeSession"
+    | "sendUserMessage"
+    | "startSession"
+    | "stopSession"
+    | "stopSessionsForRuntime"
+    | "updateSessionModel"
+  >;
+  readonly sessionStore: {
+    get(externalSessionId: string): ClaudeSessionContext | undefined;
+  };
   readonly workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
 };
 
@@ -123,7 +145,7 @@ export const createClaudeLiveSessionAdapterPreparer =
     service,
     sessionStore,
     workingDirectoryDependencies,
-  }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeLiveSessionAdapterPreparer =>
+  }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeRuntimeSessionAdapterPreparer =>
   (runtimeInput) =>
     Effect.gen(function* () {
       const runtime = yield* requireRuntime(runtimeInput);
@@ -467,5 +489,5 @@ export const createClaudeLiveSessionAdapterPreparer =
         adapter,
         startForwarding: eventCoordinator.startForwarding,
         discard: () => adapter.releaseRuntime().pipe(Effect.asVoid),
-      } satisfies PreparedRuntimeLiveSessionAdapter;
+      } satisfies PreparedClaudeLiveSessionAdapter;
     });

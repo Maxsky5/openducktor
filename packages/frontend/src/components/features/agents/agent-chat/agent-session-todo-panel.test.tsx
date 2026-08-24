@@ -4,10 +4,9 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { buildTodoItem } from "./agent-chat-test-fixtures";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 
-// SAFETY: This test controls the fixture and supplies `typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean; }` used by this case.
-const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
+const reactActEnvironmentGlobal: typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
-};
+} = globalThis;
 const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
 
 beforeAll(() => {

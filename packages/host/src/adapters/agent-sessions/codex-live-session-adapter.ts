@@ -36,6 +36,7 @@ import type {
 } from "../../ports/runtime-live-session-lifecycle-port";
 import { stopCodexSession } from "../codex/codex-session-stop";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
+import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 
 type CodexSessionController = Pick<
@@ -269,6 +270,7 @@ export const createCodexLiveSessionAdapterPreparer =
         return resolveRuntimePolicy(sessionScope).pipe(
           Effect.map((policy) => ({
             ...input,
+            runtimeKind: "codex" as const,
             sessionScope,
             runtimePolicy: { kind: "codex" as const, policy },
           })),
@@ -387,48 +389,60 @@ export const createCodexLiveSessionAdapterPreparer =
         releaseRuntime,
         startSession: (input) =>
           bindControlPolicy(input, "start-session").pipe(
-            Effect.flatMap((boundInput) =>
-              runControlSummary("codex-live-session.start-session", () =>
-                controller.startSession(
-                  boundInput as Parameters<CodexSessionController["startSession"]>[0],
-                ),
-              ),
-            ),
+            Effect.flatMap((boundInput) => {
+              const { model, ...requiredInput } = boundInput;
+              return runControlSummary("codex-live-session.start-session", () =>
+                controller.startSession({
+                  ...requiredInput,
+                  ...(model !== undefined ? { model } : undefined),
+                }),
+              );
+            }),
           ),
         resumeSession: (input) =>
           bindControlPolicy(input, "resume-session").pipe(
-            Effect.flatMap((boundInput) =>
-              runControlSummary("codex-live-session.resume-session", () =>
-                controller.resumeSession(
-                  boundInput as Parameters<CodexSessionController["resumeSession"]>[0],
-                ),
-              ),
-            ),
+            Effect.flatMap((boundInput) => {
+              const { model, systemPrompt, ...requiredInput } = boundInput;
+              return runControlSummary("codex-live-session.resume-session", () =>
+                controller.resumeSession({
+                  ...requiredInput,
+                  ...(model !== undefined ? { model } : undefined),
+                  ...(systemPrompt !== undefined ? { systemPrompt } : undefined),
+                }),
+              );
+            }),
           ),
         forkSession: (input) =>
           bindControlPolicy(input, "fork-session").pipe(
-            Effect.flatMap((boundInput) =>
-              runControlSummary("codex-live-session.fork-session", () =>
-                controller.forkSession(
-                  boundInput as Parameters<CodexSessionController["forkSession"]>[0],
-                ),
-              ),
-            ),
+            Effect.flatMap((boundInput) => {
+              const { model, runtimeHistoryAnchor, ...requiredInput } = boundInput;
+              return runControlSummary("codex-live-session.fork-session", () =>
+                controller.forkSession({
+                  ...requiredInput,
+                  ...(model !== undefined ? { model } : undefined),
+                  ...(runtimeHistoryAnchor !== undefined ? { runtimeHistoryAnchor } : undefined),
+                }),
+              );
+            }),
           ),
         sendUserMessage: (input) =>
           bindControlPolicy(input, "send-user-message").pipe(
-            Effect.flatMap((boundInput) =>
-              Effect.tryPromise({
+            Effect.flatMap((boundInput) => {
+              const { model, parts, systemPrompt, ...requiredInput } = boundInput;
+              return Effect.tryPromise({
                 try: () =>
-                  controller.sendUserMessage(
-                    boundInput as Parameters<CodexSessionController["sendUserMessage"]>[0],
-                  ),
+                  controller.sendUserMessage({
+                    ...requiredInput,
+                    parts: parts.map(toCodexUserMessagePart),
+                    ...(model !== undefined ? { model } : undefined),
+                    ...(systemPrompt !== undefined ? { systemPrompt } : undefined),
+                  }),
                 catch: sessionError(
                   "codex-live-session.send-user-message",
                   input.externalSessionId,
                 ),
-              }),
-            ),
+              });
+            }),
             Effect.flatMap((value) =>
               parseOutput(
                 acceptedAgentUserMessageSchema,
@@ -444,11 +458,7 @@ export const createCodexLiveSessionAdapterPreparer =
           ),
         updateSessionModel: (input) =>
           Effect.tryPromise({
-            try: () =>
-              controller.updateSessionModel({
-                ...input,
-                ...(input.model ? { model: input.model } : undefined),
-              } as Parameters<CodexSessionController["updateSessionModel"]>[0]),
+            try: () => controller.updateSessionModel(input),
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         stopSession: (input) =>

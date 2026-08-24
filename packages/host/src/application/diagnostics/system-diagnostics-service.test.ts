@@ -2,6 +2,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   type GlobalConfig,
   type RepoStoreHealth,
+  RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeHealth,
 } from "@openducktor/contracts";
@@ -14,14 +15,12 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
-// SAFETY: This test controls the fixture and supplies `RuntimeDescriptor` used by this case.
 const runtimeDefinition = (kind: RuntimeDescriptor["kind"]): RuntimeDescriptor =>
-  ({
-    kind,
-  }) as RuntimeDescriptor;
+  RUNTIME_DESCRIPTORS_BY_KIND[kind];
 const runtimeHealth = (
   kind: RuntimeHealth["kind"],
   error: string | null = null,
@@ -33,7 +32,6 @@ const runtimeHealth = (
   version: error === null ? `${kind} 1.0.0` : null,
   error,
 });
-// SAFETY: This test drives the failure path that supplies `SettingsConfigPort` before this assertion.
 const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =>
   ({
     readConfig: () =>
@@ -78,7 +76,7 @@ const createSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort =
       }),
     pathExists: () => Effect.succeed(true),
     join: (...paths) => paths.join("/"),
-  }) as SettingsConfigPort;
+  }) satisfies SettingsConfigPort;
 const createRuntimeDefinitions = (
   kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
 ): RuntimeDefinitionsService => ({
@@ -151,8 +149,7 @@ const createSystemCommandPort = ({
           }),
       }),
   };
-  // SAFETY: This test controls the fixture and supplies `SystemCommandPort` used by this case.
-  return port as SystemCommandPort;
+  return port;
 };
 const createToolDiscoveryPort = ({
   missingCommands = [],
@@ -174,7 +171,6 @@ const healthyRepoStoreHealth: RepoStoreHealth = {
   detail: "SQLite task store is ready.",
   databasePath: "/config/task-stores/workspace-1/database.sqlite",
 };
-// SAFETY: This test drives the failure path that supplies `TaskStorePort` before this assertion.
 const createTaskStore = (
   health: RepoStoreHealth = healthyRepoStoreHealth,
   calls: Array<{
@@ -182,7 +178,7 @@ const createTaskStore = (
     prepare?: boolean;
   }> = [],
 ): TaskStorePort =>
-  ({
+  createTaskStoreTestDouble({
     diagnoseRepoStore: (input) =>
       Effect.tryPromise({
         try: async () => {
@@ -196,7 +192,7 @@ const createTaskStore = (
             cause: cause,
           }),
       }),
-  }) as TaskStorePort;
+  });
 const createSystemDiagnosticsServiceForTest = (
   input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
     toolDiscovery?: ToolDiscoveryPort;

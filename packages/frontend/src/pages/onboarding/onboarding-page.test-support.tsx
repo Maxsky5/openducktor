@@ -130,9 +130,8 @@ export const enterRuntimeStage = async (): Promise<void> => {
     await Promise.resolve();
   });
   await screen.findByRole("heading", { name: "Configure coding agents" });
-  // SAFETY: This test creates the DOM fixture that supplies `HTMLButtonElement` before this lookup.
   await waitFor(() =>
-    expect((screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement).disabled).toBe(
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
       false,
     ),
   );

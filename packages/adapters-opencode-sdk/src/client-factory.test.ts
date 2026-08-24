@@ -18,7 +18,6 @@ describe("client-factory", () => {
     });
 
     expect(runtimeTypeName(client.session.create)).toBe("function");
-    // SAFETY: This test controls the fixture and supplies `{ event?: unknown }` used by this case.
-    expect(runtimeTypeName((client.global as { event?: unknown }).event)).toBe("function");
+    expect(runtimeTypeName(client.global.event)).toBe("function");
   });
 });
